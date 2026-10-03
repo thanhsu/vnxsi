@@ -51,3 +51,8 @@ fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 12
 .subnav a[aria-current="page"] { background: var(--ink); color: var(--surface); }
 .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 14px; }
 .badge-approved, .badge-avail-open { border-color: var(--good); color: var(--good); }
+.portfolio-list { list-style: none; padding: 0; display: grid; gap: 12px; }
+.portfolio-list > li { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); }
+.portfolio-list h2, .portfolio-list h3 { margin: 0 0 4px; font-size: 18px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.row-actions form { margin: 0; }
