@@ -10,7 +10,6 @@ import { createUser, findUserByEmail, markLogin } from "../db/users.ts";
 import { getMailer } from "../email/index.ts";
 import { loginEmail } from "../email/templates/login.ts";
 import type { AppEnv } from "../env.ts";
-import { localizedPath } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { onLocalized } from "../http/localized.ts";
 import { safeNext } from "../http/next.ts";
@@ -77,7 +76,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     await markLogin(c.env.DB, user.id, { now: iso, isAdmin: adminEmails(c.env).has(email) });
     await writeAudit(c.env.DB, { actorUserId: user.id, action: "auth.login", entity: "user", entityId: user.id, data: { purpose: result.token.purpose }, now: iso });
     writeSessionCookie(c, await createSession(c.env.DB, user.id, now));
-    return c.redirect(safeNext(c.req.query("next")) ?? localizedPath(locale, "/"), 303);
+    return c.redirect(safeNext(c.req.query("next")) ?? "/", 303);
   });
 
   app.post("/logout", async (c) => {

@@ -12,6 +12,12 @@ describe("locale paths", () => {
     expect(localeFromPath("/zh-hant/p/x")).toEqual({ locale: "zh-Hant", rest: "/p/x" });
   });
 
+  it("never returns a rest starting with more than one slash", () => {
+    expect(localeFromPath("/vi//evil.com")).toEqual({ locale: "vi", rest: "/evil.com" });
+    expect(localeFromPath("/vi//")).toEqual({ locale: "vi", rest: "/" });
+    expect(localeFromPath("//evil.com")).toEqual({ locale: "en", rest: "/evil.com" });
+  });
+
   it("does not treat look-alike paths as locales", () => {
     expect(localeFromPath("/vietnam")).toEqual({ locale: "en", rest: "/vietnam" });
     expect(localeFromPath("/ZH-HANS/login")).toEqual({ locale: "en", rest: "/ZH-HANS/login" });

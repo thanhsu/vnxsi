@@ -25,7 +25,7 @@ export function createApp() {
   app.onError((err, c) => {
     const id = c.get("requestId");
     console.error(JSON.stringify({ requestId: id, path: c.req.path, error: String(err) }));
-    if (c.req.path.startsWith("/api/")) return c.json({ ok: false, error: "Internal error", requestId: id }, 500);
+    if (c.req.path.startsWith("/api/")) return c.json({ ok: false, requestId: id }, 500);
     return errorResponse(c, "server", 500);
   });
 

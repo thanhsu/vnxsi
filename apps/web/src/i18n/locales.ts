@@ -10,15 +10,20 @@ export function isLocale(value: unknown): value is Locale {
   return (LOCALES as readonly unknown[]).includes(value);
 }
 
+// A rest starting with "//" would render as a protocol-relative (off-site) link.
+function collapseSlashes(rest: string): string {
+  return rest.replace(/^\/+/, "/");
+}
+
 export function localeFromPath(pathname: string): { locale: Locale; rest: string } {
   for (const locale of LOCALES) {
     const prefix = PREFIX[locale];
     if (!prefix) continue;
     if (pathname === prefix || pathname.startsWith(prefix + "/")) {
-      return { locale, rest: pathname.slice(prefix.length) || "/" };
+      return { locale, rest: collapseSlashes(pathname.slice(prefix.length) || "/") };
     }
   }
-  return { locale: DEFAULT_LOCALE, rest: pathname };
+  return { locale: DEFAULT_LOCALE, rest: collapseSlashes(pathname) };
 }
 
 export function localizedPath(locale: Locale, path: string): string {

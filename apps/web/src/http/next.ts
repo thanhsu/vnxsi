@@ -1,9 +1,10 @@
+const NON_PRINTABLE_ASCII = /[^\x21-\x7e]/;
 const FORBIDDEN = /[\x00-\x20\x7f\\]/;
 
 /** Returns a same-site path or null. Blocks protocol-relative, absolute, backslash and control-char tricks. */
 export function safeNext(value: unknown): string | null {
   if (typeof value !== "string" || !/^\/(?![/\\])/.test(value)) return null;
-  if (FORBIDDEN.test(value)) return null;
+  if (FORBIDDEN.test(value) || NON_PRINTABLE_ASCII.test(value)) return null;
   let decoded: string;
   try {
     decoded = decodeURIComponent(value);

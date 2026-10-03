@@ -14,6 +14,12 @@ describe("localized error pages", () => {
     expect(html).toContain('href="https://vnx.si/zh-hant/khong-co"');
   });
 
+  it("does not emit protocol-relative links for //-prefixed paths", async () => {
+    const res = await createApp().request("https://vnx.si/vi//evil.com", {}, testEnv);
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain('href="//');
+  });
+
   it("renders a localized 500 with the reference id", async () => {
     const app = createApp();
     app.get("/zh-hans/boom", () => {

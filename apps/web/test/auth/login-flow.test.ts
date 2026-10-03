@@ -40,7 +40,7 @@ describe("magic link login", () => {
 
     const verify = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, {}, testEnv);
     expect(verify.status).toBe(303);
-    expect(verify.headers.get("location")).toBe("/vi/");
+    expect(verify.headers.get("location")).toBe("/");
     const setCookie = verify.headers.get("set-cookie") ?? "";
     expect(setCookie).toMatch(/__Host-vnx_session=/);
     expect(setCookie).toMatch(/HttpOnly/i);

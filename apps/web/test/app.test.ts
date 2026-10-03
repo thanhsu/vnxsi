@@ -39,4 +39,30 @@ describe("app skeleton", () => {
     expect(res.status).toBe(500);
     expect(await res.text()).toContain("ray-123");
   });
+
+  it("returns a JSON 500 without an English error string for /api failures", async () => {
+    const brokenEnv = {
+      ...testEnv,
+      TURNSTILE_SECRET: undefined,
+      DB: {
+        prepare() {
+          throw new Error("db down");
+        },
+      },
+    } as unknown as typeof testEnv;
+    const res = await createApp().request(
+      "https://vnx.si/api/waitlist",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://vnx.si", "cf-ray": "ray-api" },
+        body: JSON.stringify({ email: "a@example.com", personas: ["developer"], consent: true, lang: "vi" }),
+      },
+      brokenEnv,
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(typeof body.requestId).toBe("string");
+    expect("error" in body).toBe(false);
+  });
 });
