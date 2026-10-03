@@ -31,4 +31,17 @@ describe("users", () => {
     const row = await testEnv.DB.prepare("SELECT action, data FROM audit_log WHERE entity_id = 'x'").first<{ action: string; data: string }>();
     expect(row).toEqual({ action: "test.action", data: '{"a":1}' });
   });
+
+  it("normalizes email case and whitespace", async () => {
+    const created = await createUser(testEnv.DB, { email: "  Mixed@Example.VN ", locale: "en", now: NOW });
+    expect(created.email).toBe("mixed@example.vn");
+    const found = await findUserByEmail(testEnv.DB, "MIXED@example.vn");
+    expect(found?.id).toBe(created.id);
+  });
+
+  it("schema rejects non-lowercase emails", async () => {
+    await expect(
+      testEnv.DB.prepare("INSERT INTO users (id, email, created_at, updated_at) VALUES ('RAW1', 'Upper@Example.VN', ?1, ?1)").bind(NOW).run(),
+    ).rejects.toThrow();
+  });
 });

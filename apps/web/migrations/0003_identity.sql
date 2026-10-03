@@ -1,7 +1,7 @@
 -- Wave 1 identity (spec §6.1). Additive only.
 CREATE TABLE users (
   id            TEXT PRIMARY KEY,
-  email         TEXT NOT NULL UNIQUE,
+  email         TEXT NOT NULL UNIQUE CHECK (email = lower(email)),
   display_name  TEXT,
   locale        TEXT NOT NULL DEFAULT 'en',
   is_admin      INTEGER NOT NULL DEFAULT 0,

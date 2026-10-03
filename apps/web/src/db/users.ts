@@ -12,8 +12,12 @@ export interface UserRow {
   updated_at: string;
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 export function findUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
-  return db.prepare("SELECT * FROM users WHERE email = ?1").bind(email).first<UserRow>();
+  return db.prepare("SELECT * FROM users WHERE email = ?1").bind(normalizeEmail(email)).first<UserRow>();
 }
 
 export function findUserById(db: D1Database, id: string): Promise<UserRow | null> {
@@ -24,7 +28,7 @@ export async function createUser(db: D1Database, input: { email: string; locale:
   const id = ulid(Date.parse(input.now));
   await db
     .prepare("INSERT INTO users (id, email, locale, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)")
-    .bind(id, input.email, input.locale, input.now)
+    .bind(id, normalizeEmail(input.email), input.locale, input.now)
     .run();
   const row = await findUserById(db, id);
   if (!row) throw new Error("user insert failed");
