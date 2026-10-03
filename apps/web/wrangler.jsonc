@@ -1,12 +1,13 @@
 {
-  // Phase 0: static landing + /api/waitlist on one Worker.
+  // vnxsi-web: Hono app + static assets on one Worker (ADR-001).
   "name": "vnxsi-web",
-  "main": "src/worker.ts",
+  "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    // Every request reaches Hono first; unmatched paths fall back to ASSETS (app.notFound).
+    "run_worker_first": true
   },
   "d1_databases": [
     {
@@ -16,11 +17,16 @@
       "migrations_dir": "migrations"
     }
   ],
+  "vars": {
+    // Used to build absolute links in emails.
+    "APP_ORIGIN": "https://vnx.si"
+  },
   "workers_dev": true,
   "routes": [
     { "pattern": "vnx.si", "custom_domain": true },
     { "pattern": "www.vnx.si", "custom_domain": true }
   ],
   "observability": { "enabled": true }
-  // Optional secret: TURNSTILE_SECRET (wrangler secret put TURNSTILE_SECRET)
+  // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.
+  // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
 }

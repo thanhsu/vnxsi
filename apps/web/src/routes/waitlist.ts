@@ -1,10 +1,7 @@
-import { MESSAGES, parseWaitlist, type WaitlistEntry } from "./waitlist.ts";
+import { MESSAGES, parseWaitlist, type WaitlistEntry } from "../waitlist.ts";
+import type { Bindings } from "../env.ts";
 
-export interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-  TURNSTILE_SECRET?: string;
-}
+type WaitlistEnv = Pick<Bindings, "DB" | "TURNSTILE_SECRET">;
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -58,7 +55,7 @@ export async function saveEntry(db: D1Database, entry: WaitlistEntry, country: s
     .run();
 }
 
-export async function handleWaitlist(request: Request, env: Env): Promise<Response> {
+export async function handleWaitlist(request: Request, env: WaitlistEnv): Promise<Response> {
   if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
 
   let body: unknown;
@@ -85,13 +82,3 @@ export async function handleWaitlist(request: Request, env: Env): Promise<Respon
   await saveEntry(env.DB, parsed.entry, country, new Date().toISOString());
   return json({ ok: true });
 }
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    if (url.pathname === "/api/waitlist") return handleWaitlist(request, env);
-    if (url.pathname === "/api/health") return json({ ok: true });
-    if (url.pathname.startsWith("/api/")) return json({ ok: false, error: "Not found" }, 404);
-    return env.ASSETS.fetch(request);
-  },
-} satisfies ExportedHandler<Env>;

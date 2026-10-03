@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseWaitlist } from "../src/waitlist.ts";
-import { handleWaitlist, type Env } from "../src/worker.ts";
+import { handleWaitlist } from "../src/routes/waitlist.ts";
+import type { Bindings as Env } from "../src/env.ts";
 
 const valid = {
   email: "  Lan.Nguyen@Example.vn ",
