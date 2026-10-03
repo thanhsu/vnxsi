@@ -119,4 +119,10 @@ export const zhHans: Messages = {
   "portfolio.moveUp": "上移",
   "portfolio.moveDown": "下移",
   "portfolio.back": "返回作品集",
+  "bprofile.skills": "技能",
+  "bprofile.aiTools": "AI 工具",
+  "bprofile.languages": "工作语言",
+  "bprofile.rate": "{amount}/小时",
+  "bprofile.website": "网站",
+  "bprofile.portfolio": "作品集",
 };

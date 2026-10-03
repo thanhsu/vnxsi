@@ -175,3 +175,15 @@ export async function setBuilderStatus(
     .first<BuilderRow>();
   return row ? toBuilder(row) : null;
 }
+
+/** Public = approved builder on an active account (spec §7.1, §8.2). Anything else reads as missing. */
+export async function findPublicBuilderByHandle(db: D1Database, handle: string): Promise<Builder | null> {
+  const row = await db
+    .prepare(
+      `SELECT b.* FROM builders b JOIN users u ON u.id = b.user_id
+       WHERE b.handle = ?1 AND b.status = 'approved' AND u.status = 'active'`,
+    )
+    .bind(handle)
+    .first<BuilderRow>();
+  return row ? toBuilder(row) : null;
+}

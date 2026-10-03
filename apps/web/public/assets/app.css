@@ -56,3 +56,11 @@ fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 12
 .portfolio-list h2, .portfolio-list h3 { margin: 0 0 4px; font-size: 18px; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .row-actions form { margin: 0; }
+.profile { max-width: 860px; }
+.profile .lead { font-size: 18px; color: var(--ink-2); }
+.rate { margin-left: 8px; }
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
+.chips li { padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
+.facts dd { margin: 0; }
+@media (max-width: 560px) { .facts { grid-template-columns: 1fr; } }

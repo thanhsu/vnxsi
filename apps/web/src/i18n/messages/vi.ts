@@ -119,4 +119,10 @@ export const vi: Messages = {
   "portfolio.moveUp": "Lên trên",
   "portfolio.moveDown": "Xuống dưới",
   "portfolio.back": "Quay lại portfolio",
+  "bprofile.skills": "Kỹ năng",
+  "bprofile.aiTools": "Công cụ AI",
+  "bprofile.languages": "Ngôn ngữ làm việc",
+  "bprofile.rate": "{amount}/giờ",
+  "bprofile.website": "Website",
+  "bprofile.portfolio": "Portfolio",
 };

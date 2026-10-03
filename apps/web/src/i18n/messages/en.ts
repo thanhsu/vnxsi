@@ -117,6 +117,12 @@ export const en = {
   "portfolio.moveUp": "Move up",
   "portfolio.moveDown": "Move down",
   "portfolio.back": "Back to portfolio",
+  "bprofile.skills": "Skills",
+  "bprofile.aiTools": "AI tools",
+  "bprofile.languages": "Works in",
+  "bprofile.rate": "{amount}/hour",
+  "bprofile.website": "Website",
+  "bprofile.portfolio": "Portfolio",
 } as const;
 
 export type MessageKey = keyof typeof en;
