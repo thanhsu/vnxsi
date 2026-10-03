@@ -178,7 +178,7 @@ Dành cho client chưa tìm thấy product hay builder phù hợp. Vào từ `/r
 
 Quy ước: ID là ULID (text). Tiền là số nguyên cent USD. Thời gian là ISO-8601 UTC (text). Danh sách đơn giản lưu JSON trong cột text. Mọi bảng có `created_at`, `updated_at` trừ khi ghi khác.
 
-### 6.1 Làm ở dự án 1 (migration `0003_marketplace.sql`)
+### 6.1 Làm ở dự án 1 (migration `0003_identity.sql` cho nhóm danh tính; các nhóm sau dùng `0004+`, mỗi milestone một migration)
 
 **`users`**: `id`, `email` (unique, lowercase), `display_name`, `locale`, `is_admin` (0/1), `status` (`active`/`suspended`), `last_login_at`.
 Client = user. Không có bảng client riêng.

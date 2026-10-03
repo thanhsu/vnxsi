@@ -28,21 +28,21 @@
 |---|---|---|---|
 | VNX-0001 | Commit nền cho repo | HUMAN | ✅ |
 | VNX-0002 | TypeScript, Hono, Vitest + workers pool; chuyển test waitlist | AGENT, FOUNDATION | ✅ |
-| VNX-0003 | Khung app Hono + test kiến trúc | AGENT, FOUNDATION | 🔄 |
-| VNX-0004 | CI test + security CI | AGENT | ⏳ |
+| VNX-0003 | Khung app Hono + test kiến trúc | AGENT, FOUNDATION | ✅ |
+| VNX-0004 | CI test + security CI | AGENT | ✅ |
 | VNX-0005 | Blueprint, ADR, quy trình `.ai/` | Reviewer | ✅ |
 
 ## EPIC 1 — Nền tảng sản phẩm: i18n, giao diện, danh tính
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|
-| VNX-0101 | ULID, render văn bản thuần | AGENT, FOUNDATION | ⏳ |
-| VNX-0102 | i18n 4 locale, route theo locale, hreflang, parity | AGENT, FOUNDATION | ⏳ |
-| VNX-0103 | Layout, CSS token, trang lỗi, PlainText | AGENT, FOUNDATION | ⏳ |
-| VNX-0104 | Migration danh tính, users, audit, rate limit D1 | AGENT, FOUNDATION | ⏳ |
-| VNX-0105 | Mailer port (Resend/Fake/Console), email đăng nhập | AGENT | ⏳ |
-| VNX-0106 | Token, session, cookie, middleware, origin check | AGENT, HIGH-RISK | ⏳ |
-| VNX-0107 | Route login / verify / logout, admin bootstrap | AGENT, HIGH-RISK | ⏳ |
+| VNX-0101 | ULID, render văn bản thuần | AGENT, FOUNDATION | ✅ |
+| VNX-0102 | i18n 4 locale, route theo locale, hreflang, parity | AGENT, FOUNDATION | ✅ |
+| VNX-0103 | Layout, CSS token, trang lỗi, PlainText | AGENT, FOUNDATION | ✅ |
+| VNX-0104 | Migration danh tính, users, audit, rate limit D1 | AGENT, FOUNDATION | ✅ |
+| VNX-0105 | Mailer port (Resend/Fake/Console), email đăng nhập | AGENT | ✅ |
+| VNX-0106 | Token, session, cookie, middleware, origin check | AGENT, HIGH-RISK | ✅ |
+| VNX-0107 | Route login / verify / logout, admin bootstrap | AGENT, HIGH-RISK | ✅ |
 
 ## EPIC 2 — Builder
 
@@ -84,6 +84,7 @@
 | VNX-0503 | Hộp thư Hub; `/me` | AGENT | ⏳ |
 | VNX-0504 | Email thông báo theo locale, gửi lại qua `notified_at` | AGENT | ⏳ |
 | VNX-0505 | Cron hằng ngày: nhắc, báo admin, dọn dẹp | AGENT | ⏳ |
+| VNX-0506 | Trang trung gian `/auth/verify` với nút POST xác nhận | AGENT, HIGH-RISK | ⏳ |
 
 ## EPIC 6 — Post a request
 

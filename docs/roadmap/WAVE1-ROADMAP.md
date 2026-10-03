@@ -107,6 +107,7 @@ Plan: cùng file với M0.
 | VNX-0503 | Hộp thư trong Hub; `/me` cho client | AGENT |
 | VNX-0504 | Email thông báo theo locale, cơ chế gửi lại qua `notified_at` | AGENT |
 | VNX-0505 | Cron hằng ngày: nhắc 3 ngày, báo admin 7 ngày, dọn token/session/rate limit | AGENT |
+| VNX-0506 | Trang trung gian `/auth/verify` với nút POST xác nhận (chống trình quét link email tiêu token) | AGENT, HIGH-RISK |
 
 **Cổng ra M5:**
 - Inquiry từ client chưa đăng nhập đi hết vòng: xác nhận email → builder trả lời → client thấy trong `/me`.
