@@ -1,12 +1,13 @@
 {
-  // Phase 0: static landing + /api/waitlist on one Worker.
+  // vnxsi-web: Hono app + static assets on one Worker (ADR-001).
   "name": "vnxsi-web",
-  "main": "src/worker.ts",
+  "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    // Every request reaches Hono first; unmatched paths fall back to ASSETS (app.notFound).
+    "run_worker_first": true
   },
   "d1_databases": [
     {
@@ -16,11 +17,27 @@
       "migrations_dir": "migrations"
     }
   ],
+  "vars": {
+    // Used to build absolute links in emails.
+    "APP_ORIGIN": "https://vnx.si"
+  },
   "workers_dev": true,
   "routes": [
     { "pattern": "vnx.si", "custom_domain": true },
     { "pattern": "www.vnx.si", "custom_domain": true }
   ],
   "observability": { "enabled": true }
-  // Optional secret: TURNSTILE_SECRET (wrangler secret put TURNSTILE_SECRET)
+  // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.
+  // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
+  //
+  // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity)
+  //   2. wrangler secret put ADMIN_EMAILS
+  //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
+  //   3. npm run deploy
+  // Until this order is followed, deploying main also publishes /login and /auth/verify,
+  // which will fail (missing tables / missing mail credentials).
+  //
+  // MAIL_DRIVER selects the mailer. Local dev: set MAIL_DRIVER=console in apps/web/.dev.vars.
+  // Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.
 }

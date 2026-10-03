@@ -2,6 +2,7 @@
 
 Đọc trước khi làm bất cứ việc gì:
 
+0. `docs/blueprint/README.md`: chỉ mục toàn bộ blueprint (charter, module, domain, NFR, UI, quy ước, master backlog).
 1. `.ai/context/CURRENT-STATUS.md`: trạng thái hiện tại, task đang làm, nghĩa vụ còn treo.
 2. `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`: spec Wave 1 (nguồn sự thật cho hành vi sản phẩm).
 3. `docs/architecture/ARCHITECTURE.md` và `docs/architecture/AI-ARCHITECTURE.md`.
