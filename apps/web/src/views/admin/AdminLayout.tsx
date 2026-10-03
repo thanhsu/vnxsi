@@ -4,9 +4,12 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { Layout } from "../Layout.tsx";
 
-export type AdminSection = "builders";
+export type AdminSection = "builders" | "invites";
 
-const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [{ key: "builders", path: "/admin/builders", label: "admin.nav.builders" }];
+const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [
+  { key: "builders", path: "/admin/builders", label: "admin.nav.builders" },
+  { key: "invites", path: "/admin/invites", label: "admin.nav.invites" },
+];
 
 export const AdminLayout: FC<PropsWithChildren<{ locale: Locale; origin: string; title: string; rest: string; active: AdminSection }>> = (p) => {
   const tr = translator(p.locale);
