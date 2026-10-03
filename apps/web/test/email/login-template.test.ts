@@ -14,5 +14,6 @@ describe("loginEmail", () => {
   it("escapes HTML in the link", () => {
     const mail = loginEmail("en", 'https://vnx.si/"><script>x</script>');
     expect(mail.html).not.toContain("<script>");
+    expect(mail.html).toContain("&quot;&gt;&lt;script&gt;");
   });
 });
