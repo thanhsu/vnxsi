@@ -43,7 +43,7 @@ export async function createLoginToken(
 
 type Row = { email: string; purpose: TokenPurpose; locale: string; inquiry_id: string | null; request_id: string | null; invite_code_hash: string | null };
 
-export async function consumeLoginToken(db: D1Database, raw: string, now: Date): Promise<ConsumeResult> {
+export async function consumeLoginToken(db: D1Database, raw: string, now: Date, expectedPurpose: TokenPurpose): Promise<ConsumeResult> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return { ok: false, reason: "invalid" };
   const hash = await sha256Hex(raw);
   const iso = now.toISOString();
@@ -51,10 +51,10 @@ export async function consumeLoginToken(db: D1Database, raw: string, now: Date):
   const row = await db
     .prepare(
       `UPDATE login_tokens SET used_at = ?2
-       WHERE token_hash = ?1 AND used_at IS NULL AND expires_at > ?2
+       WHERE token_hash = ?1 AND used_at IS NULL AND expires_at > ?2 AND purpose = ?3
        RETURNING email, purpose, locale, inquiry_id, request_id, invite_code_hash`,
     )
-    .bind(hash, iso)
+    .bind(hash, iso, expectedPurpose)
     .first<Row>();
   if (row) {
     return {
@@ -69,7 +69,7 @@ export async function consumeLoginToken(db: D1Database, raw: string, now: Date):
       },
     };
   }
-  const existing = await db.prepare("SELECT used_at FROM login_tokens WHERE token_hash = ?1").bind(hash).first<{ used_at: string | null }>();
+  const existing = await db.prepare("SELECT used_at FROM login_tokens WHERE token_hash = ?1 AND purpose = ?2").bind(hash, expectedPurpose).first<{ used_at: string | null }>();
   if (!existing) return { ok: false, reason: "invalid" };
   return { ok: false, reason: existing.used_at ? "used" : "expired" };
 }

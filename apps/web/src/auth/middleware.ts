@@ -5,9 +5,19 @@ import { errorResponse } from "../views/error-response.tsx";
 import { readSessionCookie } from "./cookies.ts";
 import { getSessionUser } from "./sessions.ts";
 
+const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
 export const sessionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const raw = readSessionCookie(c);
-  c.set("user", raw ? await getSessionUser(c.env.DB, raw, new Date()) : null);
+  let user = null;
+  if (raw && TOKEN_SHAPE.test(raw)) {
+    try {
+      user = await getSessionUser(c.env.DB, raw, new Date());
+    } catch (err) {
+      console.error(JSON.stringify({ requestId: c.get("requestId"), event: "session.lookup_failed", error: String(err) }));
+    }
+  }
+  c.set("user", user);
   await next();
 };
 
