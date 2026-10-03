@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { findBuilderByUserId } from "../db/builders.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { errorResponse } from "../views/error-response.tsx";
@@ -36,5 +37,15 @@ export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = c.get("user");
   if (!user) return toLogin(c);
   if (!user.isAdmin) return errorResponse(c, "forbidden", 403);
+  await next();
+};
+
+/** Loads the signed-in user's builder row; users without one go to the application form. */
+export const requireBuilder: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const user = c.get("user");
+  if (!user) return toLogin(c);
+  const builder = await findBuilderByUserId(c.env.DB, user.id);
+  if (!builder) return c.redirect(localizedPath(c.get("locale"), "/hub/apply"), 303);
+  c.set("builder", builder);
   await next();
 };

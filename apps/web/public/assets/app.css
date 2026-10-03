@@ -36,3 +36,13 @@ main { padding: 32px 16px 64px; }
 .error-msg { color: #b42318; }
 .prose p { white-space: pre-line; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.card.wide { max-width: 760px; }
+.field textarea, .field select { font: inherit; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.field select { min-height: 44px; }
+.field textarea { min-height: 140px; resize: vertical; }
+fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.choice { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.hint, .muted { color: var(--muted); }
+.hint { margin: 0; font-size: 14px; }
+.notice { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--ground); }
+.notice.good { border-color: var(--good); }
