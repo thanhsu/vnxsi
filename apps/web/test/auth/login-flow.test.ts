@@ -118,4 +118,12 @@ describe("magic link login", () => {
       .first<{ n: number }>();
     expect(left?.n).toBe(0);
   });
+
+  it("ignores a next that smuggles a tab past safeNext", async () => {
+    const app = createApp();
+    await app.request(formPost("/login", { email: "tab@vnx.si" }), undefined, testEnv);
+    const res = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2F%09%2Fevil.com`, {}, testEnv);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/");
+  });
 });

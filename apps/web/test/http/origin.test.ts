@@ -20,4 +20,10 @@ describe("originCheck", () => {
     expect((await post("https://evil.example")).status).toBe(403);
     expect((await post("https://vnx.si")).status).toBe(200);
   });
+
+  it("also accepts APP_ORIGIN when the request URL host differs (wrangler dev routes)", async () => {
+    const post = (origin: string) => app.request("http://vnx.si/x", { method: "POST", headers: { origin } }, testEnv);
+    expect((await post("https://vnx.si")).status).toBe(200);
+    expect((await post("https://evil.example")).status).toBe(403);
+  });
 });
