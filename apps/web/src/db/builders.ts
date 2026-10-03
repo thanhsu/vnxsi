@@ -1,4 +1,4 @@
-import type { Builder, BuilderProfile, BuilderStatus } from "../domain/builder.ts";
+import type { Builder, BuilderAccount, BuilderProfile, BuilderStatus } from "../domain/builder.ts";
 import { consumeInviteStatement } from "./invites.ts";
 
 export type BuilderRow = {
@@ -186,4 +186,23 @@ export async function findPublicBuilderByHandle(db: D1Database, handle: string):
     .bind(handle)
     .first<BuilderRow>();
   return row ? toBuilder(row) : null;
+}
+
+type AccountRow = BuilderRow & { email: string; user_locale: string; user_status: "active" | "suspended" };
+
+const ACCOUNT_SELECT = "SELECT b.*, u.email, u.locale AS user_locale, u.status AS user_status FROM builders b JOIN users u ON u.id = b.user_id";
+
+function toAccount(r: AccountRow): BuilderAccount {
+  return { ...toBuilder(r), email: r.email, userLocale: r.user_locale, userStatus: r.user_status };
+}
+
+export async function findBuilderAccount(db: D1Database, userId: string): Promise<BuilderAccount | null> {
+  const row = await db.prepare(`${ACCOUNT_SELECT} WHERE b.user_id = ?1`).bind(userId).first<AccountRow>();
+  return row ? toAccount(row) : null;
+}
+
+/** Oldest first, so the review queue is first come, first served. */
+export async function listBuildersByStatus(db: D1Database, status: BuilderStatus, limit = 200): Promise<BuilderAccount[]> {
+  const { results } = await db.prepare(`${ACCOUNT_SELECT} WHERE b.status = ?1 ORDER BY b.created_at, b.user_id LIMIT ?2`).bind(status, limit).all<AccountRow>();
+  return results.map(toAccount);
 }

@@ -64,3 +64,6 @@ fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 12
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
 .facts dd { margin: 0; }
 @media (max-width: 560px) { .facts { grid-template-columns: 1fr; } }
+.table-wrap { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; background: var(--surface); }
+table.data th, table.data td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }

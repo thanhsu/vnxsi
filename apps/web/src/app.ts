@@ -10,6 +10,7 @@ import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerBuilderProfileRoutes } from "./routes/builder-profile.tsx";
+import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
 import { handleWaitlist } from "./routes/waitlist.ts";
 import { errorResponse } from "./views/error-response.tsx";
@@ -27,6 +28,7 @@ export function createApp() {
   registerHubRoutes(app);
   registerPortfolioRoutes(app);
   registerBuilderProfileRoutes(app);
+  registerAdminRoutes(app);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));
