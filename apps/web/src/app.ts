@@ -1,5 +1,7 @@
 import { Hono } from "hono";
+import { sessionMiddleware } from "./auth/middleware.ts";
 import type { AppEnv } from "./env.ts";
+import { originCheck } from "./http/origin.ts";
 import { requestId } from "./http/request-id.ts";
 import { localeFromPath } from "./i18n/locales.ts";
 import { localeMiddleware } from "./i18n/middleware.ts";
@@ -10,6 +12,8 @@ export function createApp() {
   const app = new Hono<AppEnv>();
   app.use("*", requestId);
   app.use("*", localeMiddleware);
+  app.use("*", originCheck);
+  app.use("*", sessionMiddleware);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));

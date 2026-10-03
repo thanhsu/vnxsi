@@ -1,4 +1,5 @@
 import type { Locale } from "./i18n/locales.ts";
+import type { SessionUser } from "./auth/sessions.ts";
 
 export interface Bindings {
   DB: D1Database;
@@ -16,5 +17,6 @@ export type AppEnv = {
   Variables: {
     requestId: string;
     locale: Locale;
+    user: SessionUser | null;
   };
 };
