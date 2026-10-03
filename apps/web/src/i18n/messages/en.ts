@@ -181,6 +181,11 @@ export const en = {
   "users.col.builder": "Builder",
   "users.status.active": "Active",
   "users.status.suspended": "Suspended",
+  "nav.hub": "Builder Hub",
+  "portfolio.editItem": "Edit {title}",
+  "portfolio.moveUpItem": "Move {title} up",
+  "portfolio.moveDownItem": "Move {title} down",
+  "portfolio.deleteItem": "Delete {title}",
 } as const;
 
 export type MessageKey = keyof typeof en;

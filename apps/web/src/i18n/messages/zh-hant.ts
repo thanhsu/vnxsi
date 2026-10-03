@@ -183,4 +183,9 @@ export const zhHant: Messages = {
   "users.col.builder": "Builder",
   "users.status.active": "正常",
   "users.status.suspended": "已停用",
+  "nav.hub": "Builder 中心",
+  "portfolio.editItem": "編輯 {title}",
+  "portfolio.moveUpItem": "上移 {title}",
+  "portfolio.moveDownItem": "下移 {title}",
+  "portfolio.deleteItem": "刪除 {title}",
 };

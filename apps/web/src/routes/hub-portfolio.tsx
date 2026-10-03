@@ -49,6 +49,7 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/hub/portfolio/:id", requireBuilder, async (c) => {
     const item = await ownedItem(c);
     if (!item) return errorResponse(c, "notFound", 404);
+    if (!canEditProfile(c.get("builder").status)) return errorResponse(c, "conflict", 409);
     return page(c, <PortfolioEditPage locale={c.get("locale")} origin={requestOrigin(c)} item={item} values={portfolioValuesFromItem(item)} errors={{}} />);
   });
 

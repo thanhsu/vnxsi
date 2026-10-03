@@ -24,7 +24,8 @@ const Schema = z.object({
   description: z.string().trim().max(500),
 });
 
-const str = (value: unknown) => (typeof value === "string" ? value : "");
+/** Browsers submit textarea newlines as CRLF; store and count them as LF. */
+const str = (value: unknown) => (typeof value === "string" ? value.replace(/\r\n?/g, "\n") : "");
 
 export function portfolioValuesFromBody(body: Record<string, unknown>): PortfolioFormValues {
   return { title: str(body.title), url: str(body.url), description: str(body.description) };

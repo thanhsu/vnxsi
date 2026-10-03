@@ -46,6 +46,19 @@ describe("Builder Hub overview (spec §5.3)", () => {
   });
 });
 
+describe("Hub link in the header", () => {
+  it("shows the Builder Hub link to signed-in users only", async () => {
+    await makeBuilder("nav-hub@vnx.si", "nav-hub", "approved");
+    const { cookie } = await signIn("nav-hub@vnx.si");
+    const profile = await (await app().request(getReq("/b/nav-hub", cookie), undefined, testEnv)).text();
+    expect(profile).toContain('<a href="/hub">Builder Hub</a>');
+    const vi = await (await app().request(getReq("/vi/hub", cookie), undefined, testEnv)).text();
+    expect(vi).toContain('<a href="/vi/hub">Builder Hub</a>');
+    const anon = await (await app().request(getReq("/b/nav-hub"), undefined, testEnv)).text();
+    expect(anon).not.toContain('href="/hub"');
+  });
+});
+
 describe("Builder Hub profile", () => {
   it("prefills the form and lets a pending builder change the handle", async () => {
     const { builder, cookie } = await asBuilder("prof-pending@vnx.si", "prof-pending");
@@ -63,6 +76,8 @@ describe("Builder Hub profile", () => {
     expect(await (await app().request(getReq("/hub/profile", cookie), undefined, testEnv)).text()).toContain("readonly");
     await app().request(formPost("/hub/profile", profileValues({ handle: "something-else", headline: "New headline" }), { cookie }), undefined, testEnv);
     expect(await findBuilderByUserId(testEnv.DB, builder.userId)).toMatchObject({ handle: "prof-approved", headline: "New headline", status: "approved" });
+    const audit = await testEnv.DB.prepare("SELECT entity_id FROM audit_log WHERE action = 'builder.profile_update'").all<{ entity_id: string }>();
+    expect(audit.results.filter((r) => r.entity_id === builder.userId)).toHaveLength(1);
   });
 
   it("re-renders errors (400) and refuses a taken handle (409)", async () => {

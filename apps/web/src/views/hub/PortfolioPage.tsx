@@ -51,10 +51,10 @@ type ListProps = { locale: Locale; origin: string; items: PortfolioItem[]; value
 export const PortfolioPage: FC<ListProps> = (p) => {
   const tr = translator(p.locale);
   const base = localizedPath(p.locale, "/hub/portfolio");
-  const move = (item: PortfolioItem, direction: "up" | "down", label: MessageKey) => (
+  const move = (item: PortfolioItem, direction: "up" | "down", label: MessageKey, aria: MessageKey) => (
     <form method="post" action={`${base}/${item.id}/move`}>
       <input type="hidden" name="direction" value={direction} />
-      <button class="link" type="submit">
+      <button class="link" type="submit" aria-label={tr(aria, { title: item.title })}>
         {tr(label)}
       </button>
     </form>
@@ -80,11 +80,13 @@ export const PortfolioPage: FC<ListProps> = (p) => {
               {item.description ? <PlainText text={item.description} /> : null}
               {p.editable ? (
                 <div class="row-actions">
-                  <a href={`${base}/${item.id}`}>{tr("portfolio.edit")}</a>
-                  {index > 0 ? move(item, "up", "portfolio.moveUp") : null}
-                  {index < p.items.length - 1 ? move(item, "down", "portfolio.moveDown") : null}
+                  <a href={`${base}/${item.id}`} aria-label={tr("portfolio.editItem", { title: item.title })}>
+                    {tr("portfolio.edit")}
+                  </a>
+                  {index > 0 ? move(item, "up", "portfolio.moveUp", "portfolio.moveUpItem") : null}
+                  {index < p.items.length - 1 ? move(item, "down", "portfolio.moveDown", "portfolio.moveDownItem") : null}
                   <form method="post" action={`${base}/${item.id}/delete`}>
-                    <button class="link" type="submit">
+                    <button class="link" type="submit" aria-label={tr("portfolio.deleteItem", { title: item.title })}>
                       {tr("portfolio.delete")}
                     </button>
                   </form>

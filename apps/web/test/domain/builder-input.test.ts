@@ -70,6 +70,18 @@ describe("builder profile input", () => {
     expect(formValuesFromBody({})).toMatchObject({ handle: "", workLanguages: [], hourlyRate: "" });
   });
 
+  it("counts and stores CRLF from a browser textarea as LF (2000 limit)", () => {
+    // 1000 lines of one character: 1999 chars with LF, 2998 with CRLF.
+    const bio = Array.from({ length: 1000 }, () => "a").join("\r\n");
+    expect(bio.length).toBeGreaterThan(2000);
+    const result = parseBuilderProfile(formValuesFromBody({ ...profileValues(), bio }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.profile.bio).not.toContain("\r");
+      expect(result.profile.bio.length).toBe(1999);
+    }
+  });
+
   it("knows the 249 ISO 3166-1 alpha-2 codes", () => {
     expect(COUNTRY_CODES).toHaveLength(249);
     expect(new Set(COUNTRY_CODES).size).toBe(249);

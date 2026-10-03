@@ -61,7 +61,7 @@ export async function decide(c: Context<AppEnv>, action: BuilderAction) {
   const policy = REASON[action];
   if (policy !== "none") {
     const body = await c.req.parseBody();
-    const parsed = ReasonSchema[policy].safeParse(typeof body.reason === "string" ? body.reason : "");
+    const parsed = ReasonSchema[policy].safeParse(typeof body.reason === "string" ? body.reason.replace(/\r\n?/g, "\n") : "");
     if (!parsed.success) {
       return page(c, <BuilderDetailPage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} notice={null} reasonError={action} />, 400);
     }
@@ -82,7 +82,7 @@ export async function decide(c: Context<AppEnv>, action: BuilderAction) {
     now,
   });
 
-  const mailed = action === "approve" || action === "reject" ? await notify(c, builder, action, reason) : true;
+  const mailed = action === "approve" || action === "reject" ? await notify(c, { ...builder, ...updated }, action, reason) : true;
   return c.redirect(localizedPath(c.get("locale"), `/admin/builders/${builder.userId}?done=${mailed ? "1" : "mail_failed"}`), 303);
 }
 

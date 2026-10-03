@@ -28,6 +28,15 @@ describe("suspending builders (spec §7.1)", () => {
     expect(await status("/b/sus-b")).toBe(200);
   });
 
+  it("counts a CRLF reason as LF against the 500 limit and stores it with LF", async () => {
+    const b = await makeBuilder("sus-crlf@vnx.si", "sus-crlf", "approved");
+    const { cookie } = await admin();
+    const reason = Array.from({ length: 250 }, () => "x").join("\r\n");
+    const res = await app().request(formPost(`/admin/builders/${b.userId}/suspend`, { reason }, { cookie }), undefined, testEnv);
+    expect(res.status).toBe(303);
+    expect((await findBuilderByUserId(testEnv.DB, b.userId))?.reviewNote).toBe(Array.from({ length: 250 }, () => "x").join("\n"));
+  });
+
   it("cannot suspend a pending builder (409)", async () => {
     const b = await makeBuilder("sus-pending@vnx.si", "sus-pending");
     const { cookie } = await admin();
@@ -57,6 +66,26 @@ describe("suspending users (spec §5.5, §8.2)", () => {
 
     await app().request(formPost(`/admin/users/${b.userId}/unsuspend`, {}, { cookie }), undefined, testEnv);
     expect(await status("/b/sus-u")).toBe(200);
+  });
+
+  it("409s on a second suspend and writes no second audit row", async () => {
+    const b = await makeBuilder("sus-twice@vnx.si", "sus-twice", "approved");
+    const { cookie } = await admin();
+    expect((await app().request(formPost(`/admin/users/${b.userId}/suspend`, {}, { cookie }), undefined, testEnv)).status).toBe(303);
+    expect((await app().request(formPost(`/admin/users/${b.userId}/suspend`, {}, { cookie }), undefined, testEnv)).status).toBe(409);
+    const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'user.suspend' AND entity_id = ?1").bind(b.userId).first<{ n: number }>();
+    expect(audit?.n).toBe(1);
+  });
+
+  it("shows Admin = No for a stored admin who is no longer in ADMIN_EMAILS", async () => {
+    const stale = await ensureUser("stale-admin@vnx.si");
+    await testEnv.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?1").bind(stale.id).run();
+    const { cookie } = await admin();
+    const html = await (await app().request(getReq("/admin/users?q=stale-admin", cookie), undefined, testEnv)).text();
+    expect(html).toContain("stale-admin@vnx.si");
+    expect(html).toMatch(/stale-admin@vnx.si<\/td><td>[^<]*<\/td><td>No<\/td>/);
+    const own = await (await app().request(getReq("/admin/users?q=owner%40vnx.si", cookie), undefined, testEnv)).text();
+    expect(own).toMatch(/owner@vnx.si<\/td><td>[^<]*<\/td><td>Yes<\/td>/);
   });
 
   it("does not let an admin suspend themselves (409)", async () => {

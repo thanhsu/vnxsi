@@ -183,4 +183,9 @@ export const vi: Messages = {
   "users.col.builder": "Builder",
   "users.status.active": "Đang hoạt động",
   "users.status.suspended": "Đã khóa",
+  "nav.hub": "Builder Hub",
+  "portfolio.editItem": "Sửa {title}",
+  "portfolio.moveUpItem": "Chuyển {title} lên trên",
+  "portfolio.moveDownItem": "Chuyển {title} xuống dưới",
+  "portfolio.deleteItem": "Xóa {title}",
 };

@@ -68,4 +68,22 @@ describe("Hub portfolio (spec §5.3)", () => {
     const { cookie } = await signIn("pf-susp@vnx.si");
     expect((await app().request(formPost("/hub/portfolio", { title: "X", url: "", description: "" }, { cookie }), undefined, testEnv)).status).toBe(409);
   });
+
+  it("does not open the edit form while suspended (409), but still 404s for a missing item", async () => {
+    const b = await makeBuilder("pf-susp-edit@vnx.si", "pf-susp-edit", "suspended");
+    const item = await addPortfolioItem(testEnv.DB, { builderId: b.userId, item: { title: "Mine", url: null, description: "" }, now: new Date().toISOString() });
+    const { cookie } = await signIn("pf-susp-edit@vnx.si");
+    const id = (await listPortfolio(testEnv.DB, b.userId))[0]!.id;
+    expect(item).toBeTruthy();
+    expect((await app().request(getReq(`/hub/portfolio/${id}`, cookie), undefined, testEnv)).status).toBe(409);
+    expect((await app().request(getReq("/hub/portfolio/01ARZ3NDEKTSV4RRFFQ69G5FAV", cookie), undefined, testEnv)).status).toBe(404);
+  });
+
+  it("names the item in the Edit, Move and Delete controls", async () => {
+    const b = await makeBuilder("pf-aria@vnx.si", "pf-aria");
+    for (const title of ["Alpha", "Beta"]) await addPortfolioItem(testEnv.DB, { builderId: b.userId, item: { title, url: null, description: "" }, now: new Date().toISOString() });
+    const { cookie } = await signIn("pf-aria@vnx.si");
+    const html = await (await app().request(getReq("/hub/portfolio", cookie), undefined, testEnv)).text();
+    for (const label of ["Edit Alpha", "Move Alpha down", "Delete Alpha", "Edit Beta", "Move Beta up", "Delete Beta"]) expect(html).toContain(`aria-label="${label}"`);
+  });
 });

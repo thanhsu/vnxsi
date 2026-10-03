@@ -45,9 +45,8 @@ export async function markLogin(db: D1Database, id: string, input: { now: string
     .run();
 }
 
-export async function setUserStatus(db: D1Database, input: { id: string; from: UserStatus; to: UserStatus; now: string }): Promise<boolean> {
-  const res = await db.prepare("UPDATE users SET status = ?3, updated_at = ?4 WHERE id = ?1 AND status = ?2").bind(input.id, input.from, input.to, input.now).run();
-  return res.meta.changes === 1;
+export function setUserStatusStatement(db: D1Database, input: { id: string; from: UserStatus; to: UserStatus; now: string }): D1PreparedStatement {
+  return db.prepare("UPDATE users SET status = ?3, updated_at = ?4 WHERE id = ?1 AND status = ?2").bind(input.id, input.from, input.to, input.now);
 }
 
 /** Substring match on e-mail; % and _ in the query are literal. Newest accounts first. */

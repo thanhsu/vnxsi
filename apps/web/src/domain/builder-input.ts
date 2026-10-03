@@ -31,7 +31,8 @@ export type BuilderField = keyof BuilderFormValues;
 export type FieldError = "invalid" | "reserved" | "taken";
 export type FieldErrors = Partial<Record<BuilderField, FieldError>>;
 
-const str = (value: unknown) => (typeof value === "string" ? value : "");
+/** Browsers submit textarea newlines as CRLF; store and count them as LF. */
+const str = (value: unknown) => (typeof value === "string" ? value.replace(/\r\n?/g, "\n") : "");
 
 export function formValuesFromBody(body: Record<string, unknown>): BuilderFormValues {
   const langs = body.workLanguages;
