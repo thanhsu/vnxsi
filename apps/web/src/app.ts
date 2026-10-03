@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./env.ts";
 import { requestId } from "./http/request-id.ts";
+import { localeMiddleware } from "./i18n/middleware.ts";
 import { handleWaitlist } from "./routes/waitlist.ts";
 
 export function createApp() {
   const app = new Hono<AppEnv>();
   app.use("*", requestId);
+  app.use("*", localeMiddleware);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));

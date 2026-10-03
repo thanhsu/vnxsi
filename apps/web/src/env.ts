@@ -1,3 +1,5 @@
+import type { Locale } from "./i18n/locales.ts";
+
 export interface Bindings {
   DB: D1Database;
   ASSETS: Fetcher;
@@ -13,5 +15,6 @@ export type AppEnv = {
   Bindings: Bindings;
   Variables: {
     requestId: string;
+    locale: Locale;
   };
 };
