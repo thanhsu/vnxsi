@@ -22,7 +22,8 @@ export const sessionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
 };
 
 function toLogin(c: Parameters<MiddlewareHandler<AppEnv>>[0]) {
-  const target = `/login?next=${encodeURIComponent(c.req.path)}`;
+  const url = new URL(c.req.url);
+  const target = `/login?next=${encodeURIComponent(url.pathname + url.search)}`;
   return c.redirect(localizedPath(c.get("locale"), target), 303);
 }
 

@@ -6,6 +6,7 @@ import { requestId } from "./http/request-id.ts";
 import { localeFromPath } from "./i18n/locales.ts";
 import { localeMiddleware } from "./i18n/middleware.ts";
 import { registerAuthRoutes } from "./routes/auth.tsx";
+import { registerJoinRoutes } from "./routes/join.ts";
 import { handleWaitlist } from "./routes/waitlist.ts";
 import { errorResponse } from "./views/error-response.tsx";
 
@@ -17,6 +18,7 @@ export function createApp() {
   app.use("*", sessionMiddleware);
 
   registerAuthRoutes(app);
+  registerJoinRoutes(app);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));

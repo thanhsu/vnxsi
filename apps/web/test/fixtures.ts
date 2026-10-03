@@ -1,4 +1,5 @@
-import { createBuilder, setBuilderStatus } from "../src/db/builders.ts";
+import { createSession } from "../src/auth/sessions.ts";
+import { createBuilder,setBuilderStatus } from "../src/db/builders.ts";
 import { createUser, findUserByEmail, type UserRow } from "../src/db/users.ts";
 import type { Builder, BuilderProfile, BuilderStatus } from "../src/domain/builder.ts";
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
@@ -42,4 +43,11 @@ export async function makeBuilder(email: string, handle: string, status: Builder
   const moved = await setBuilderStatus(testEnv.DB, { userId: user.id, from: "pending", to: status, reviewNote: status === "rejected" ? "Add a portfolio" : null, now });
   if (!moved) throw new Error("status change failed");
   return moved;
+}
+
+/** Creates (or reuses) a user and a live session; returns the Cookie header value. */
+export async function signIn(email: string, opts: { admin?: boolean; locale?: string } = {}): Promise<{ user: UserRow; cookie: string }> {
+  const user = await ensureUser(email, opts.locale);
+  if (opts.admin) await testEnv.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?1").bind(user.id).run();
+  return { user, cookie: `__Host-vnx_session=${await createSession(testEnv.DB, user.id, new Date())}` };
 }
