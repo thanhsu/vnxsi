@@ -1,0 +1,26 @@
+{
+  // Phase 0: static landing + /api/waitlist on one Worker.
+  "name": "vnxsi-web",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "vnxsi",
+      "database_id": "40caf091-7723-4278-9f46-c07069440e73",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "vnx.si", "custom_domain": true },
+    { "pattern": "www.vnx.si", "custom_domain": true }
+  ],
+  "observability": { "enabled": true }
+  // Optional secret: TURNSTILE_SECRET (wrangler secret put TURNSTILE_SECRET)
+}

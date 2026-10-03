@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VNX — AI that works, not just chats · Early access</title>
+<meta name="description" content="Give VNX a goal. It plans the work, executes it with real tools and verifies the result, with you in control. Join early access for the Developer Agent.">
+<link rel="canonical" href="https://vnx.si/">
+<link rel="alternate" hreflang="en" href="https://vnx.si/?lang=en">
+<link rel="alternate" hreflang="vi" href="https://vnx.si/?lang=vi">
+<link rel="alternate" hreflang="x-default" href="https://vnx.si/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="VNX">
+<meta property="og:title" content="VNX — AI that works, not just chats">
+<meta property="og:description" content="Turn a goal into finished, verified work, with you in control. The execution layer for AI agents. Early access.">
+<meta property="og:url" content="https://vnx.si/">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b0e11">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238fe388'/%3E%3Cpath d='M11 9l8 7-8 7' stroke='%230b0e11' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "name": "VNX",
+      "url": "https://vnx.si/",
+      "email": "contact@vnx.si"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "VNX",
+      "url": "https://vnx.si/",
+      "applicationCategory": "DeveloperApplication",
+      "description": "The execution layer for AI agents: give it a goal, it plans, asks for approval before risky actions, executes with real tools, verifies the result and records every step.",
+      "inLanguage": ["en", "vi"]
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Dark-first developer tool. Green = done/approved, amber = waiting for a human, red = blocked. */
+:root {
+  --bg: #0b0e11; --surface: #12171c; --surface-2: #181e24;
+  --ink: #e8ecef; --ink-2: #9ba6b0; --ink-3: #8492a0; --rule: #232b33;
+  --accent: #8fe388; --accent-ink: #0b0e11; --accent-soft: #15291a;
+  --wait: #f2b551; --wait-soft: #2c2212; --block: #f2786b; --block-soft: #2e1714;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 88px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f6f7f8; --surface: #ffffff; --surface-2: #f0f2f4;
+    --ink: #11161b; --ink-2: #4c5761; --ink-3: #5d6873; --rule: #dde2e6;
+    --accent: #1f7a2e; --accent-ink: #ffffff; --accent-soft: #e3f3e5;
+    --wait: #9a5b00; --wait-soft: #fbefdc; --block: #b3332a; --block-soft: #fbe5e2;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f6f7f8; --surface: #ffffff; --surface-2: #f0f2f4;
+  --ink: #11161b; --ink-2: #4c5761; --ink-3: #5d6873; --rule: #dde2e6;
+  --accent: #1f7a2e; --accent-ink: #ffffff; --accent-soft: #e3f3e5;
+  --wait: #9a5b00; --wait-soft: #fbefdc; --block: #b3332a; --block-soft: #fbe5e2;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 16px/1.6 var(--f-body);
+  margin: 0; padding-inline: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1120px; margin-inline: auto; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; letter-spacing: -0.02em; line-height: 1.15; }
+p { margin: 0; }
+.eyebrow { font: 500 12px/1.2 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 16px; top: 16px; background: var(--surface); padding: 8px 12px; z-index: 30; }
+
+/* Header */
+.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); margin-inline: -16px; padding-inline: 16px; border-bottom: 1px solid transparent; }
+.top.scrolled { border-bottom-color: var(--rule); }
+.top-in { max-width: 1120px; margin-inline: auto; display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); min-height: 68px; }
+.brand { display: flex; align-items: center; gap: var(--s-2); text-decoration: none; color: var(--ink); font: 700 20px/1 var(--f-mono); letter-spacing: 0.02em; }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 15px; }
+.nav { display: flex; align-items: center; gap: var(--s-5); }
+.nav-links { display: flex; gap: var(--s-5); }
+.nav-links a { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+.nav-links a:hover { color: var(--ink); }
+.nav-end { display: flex; align-items: center; gap: var(--s-3); }
+.lang { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.lang button { font: 500 12px/1 var(--f-mono); background: transparent; color: var(--ink-2); border: 0; padding: 0 10px; min-height: 40px; min-width: 40px; cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+.menu-btn { display: none; background: transparent; border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); width: 44px; height: 40px; cursor: pointer; place-items: center; }
+.menu-btn svg { width: 20px; height: 20px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
+  font: 600 15px/1 var(--f-body); text-decoration: none; cursor: pointer; white-space: nowrap;
+  padding: 0 18px; border-radius: 8px; border: 1px solid transparent; min-height: 48px;
+}
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:disabled { opacity: 0.7; cursor: progress; }
+.btn-ghost { border-color: var(--rule); color: var(--ink); background: transparent; }
+.btn-ghost:hover { background: var(--surface); }
+.top .btn { min-height: 40px; font-size: 14px; padding: 0 14px; }
+@media (max-width: 900px) {
+  .menu-btn { display: inline-grid; }
+  .nav-links { display: none; position: absolute; left: 0; right: 0; top: 100%; flex-direction: column; gap: 0; background: var(--bg); border-bottom: 1px solid var(--rule); padding: 8px 16px 16px; }
+  .nav-links.open { display: flex; }
+  .nav-links a { padding: 12px 0; font-size: 16px; border-bottom: 1px solid var(--rule); }
+  .nav-links a:last-child { border-bottom: 0; }
+}
+@media (max-width: 460px) { .top .btn { display: none; } }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: var(--s-7); align-items: center; padding-block: var(--s-7) var(--s-8); }
+.hero > *, .grid-3 > *, .work > *, .ctrl > *, .dev > * { min-width: 0; }
+.badge { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 7px 12px; border-radius: 999px; }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+.hero h1 { font-size: clamp(40px, 6.4vw, 66px); font-weight: 700; margin-block: var(--s-5) var(--s-5); }
+html[lang="vi"] .hero h1 { font-size: clamp(36px, 5.2vw, 56px); }
+.hero h1 em, h2 em { font-style: normal; color: var(--accent); }
+.lede { font-size: 18px; color: var(--ink-2); max-width: 50ch; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: var(--s-6); padding-block: var(--s-5) var(--s-7); } }
+
+/* Signup */
+.join-form { margin-top: var(--s-6); display: grid; gap: var(--s-2); max-width: 480px; }
+.join-form label.lbl { font-size: 14px; font-weight: 600; }
+.row { display: flex; gap: 10px; }
+input[type=email] {
+  flex: 1; min-width: 0; font: 400 16px/1.4 var(--f-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; min-height: 48px;
+}
+input[type=email]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.note { font-size: 14px; color: var(--ink-3); }
+.note a { color: var(--ink-2); }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.status { min-height: 22px; font-size: 14px; }
+.status.ok { color: var(--accent); }
+.status.err { color: var(--block); }
+@media (max-width: 480px) { .row { flex-direction: column; } }
+
+/* Stage strip: Goal → … → Done, synced with the task mockup */
+.stages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: var(--s-6); padding: 0; list-style: none; font: 500 12.5px/1 var(--f-mono); }
+.stages li { position: relative; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--rule); color: var(--ink-3); transition: color .3s, border-color .3s, background .3s; }
+.stages li + li::before { content: "→"; position: absolute; left: -16px; color: var(--ink-3); }
+.stages li.past { color: var(--ink-2); }
+.stages li.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: var(--accent-soft); }
+.stages li.on.human { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 50%, transparent); background: var(--wait-soft); }
+
+/* Task mockup */
+.task { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.6); }
+.task-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); padding: 12px 16px; border-bottom: 1px solid var(--rule); font: 500 12px/1.3 var(--f-mono); color: var(--ink-3); }
+.dots { display: inline-flex; gap: 6px; margin-right: 10px; vertical-align: middle; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--rule); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; font: 500 11px/1.4 var(--f-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill-ok { background: var(--accent-soft); color: var(--accent); }
+.pill-wait { background: var(--wait-soft); color: var(--wait); }
+.pill-block { background: var(--block-soft); color: var(--block); }
+.pill-run { background: var(--surface-2); color: var(--ink-2); }
+.pill-soon { background: var(--surface-2); color: var(--ink-3); }
+.task-goal { padding: 16px 16px 6px; }
+.k { font: 500 11px/1 var(--f-mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.task-goal p { margin-top: 6px; font-weight: 600; font-size: 17px; }
+.steps { list-style: none; margin: 0; padding: 8px 16px 12px; font: 400 13.5px/1.5 var(--f-mono); }
+.steps li { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; padding: 6px 0; align-items: baseline; color: var(--ink-3); transition: color .25s; }
+.steps .ic { text-align: center; }
+.steps .ic::before { content: "○"; }
+.steps li.done { color: var(--ink); }
+.steps li.done .ic::before { content: "✓"; color: var(--accent); }
+.steps li.run { color: var(--ink); }
+.steps li.run .ic::before { content: "●"; color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.steps li.wait { color: var(--ink); }
+.steps li.wait .ic::before { content: "●"; color: var(--wait); animation: pulse 1.2s ease-in-out infinite; }
+.steps .meta { color: var(--ink-3); font-size: 12px; }
+.approve { margin: 0 16px 16px; border: 1px solid color-mix(in srgb, var(--wait) 45%, transparent); background: var(--wait-soft); border-radius: 10px; padding: 12px; }
+.approve[hidden] { display: none; }
+.approve .row2 { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font: 500 12.5px/1.5 var(--f-mono); }
+.approve .row2 b { color: var(--wait); font-weight: 600; }
+.plan { margin: 8px 0 0; padding-left: 18px; font: 400 12.5px/1.6 var(--f-mono); color: var(--ink-2); }
+.acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.fake-btn { font: 600 13px/1 var(--f-body); padding: 9px 14px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); transition: transform .15s, filter .15s; }
+.fake-btn.go { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.fake-btn.go.press { transform: scale(0.95); filter: brightness(1.15); }
+.task-foot { padding: 10px 16px; border-top: 1px solid var(--rule); font: 400 12px/1.4 var(--f-mono); color: var(--ink-3); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+/* Sections */
+section { padding-block: var(--s-8); border-top: 1px solid var(--rule); }
+.sec-head { max-width: 720px; margin-bottom: var(--s-7); }
+.sec-head h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 700; margin-top: var(--s-3); }
+.sec-head p { margin-top: var(--s-4); color: var(--ink-2); font-size: 17px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: var(--s-5); }
+.card h3 { font-size: 18px; font-weight: 600; }
+.card p { margin-top: var(--s-2); color: var(--ink-2); font-size: 15px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-4); }
+.why .num { font: 500 12px/1 var(--f-mono); color: var(--accent); }
+.why h3 { margin-top: var(--s-3); }
+@media (max-width: 760px) { .grid-3 { grid-template-columns: 1fr; } }
+
+/* How it works pipeline */
+.pipe { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-6) var(--s-4); counter-reset: p; }
+.pipe li { counter-increment: p; position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: var(--s-5); }
+.pipe li::before { content: "0" counter(p); font: 500 12px/1 var(--f-mono); color: var(--ink-3); }
+.pipe li.human { border-color: color-mix(in srgb, var(--wait) 50%, transparent); }
+.pipe li.human::before { color: var(--wait); }
+.pipe h3 { font: 700 15px/1.2 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; margin-top: var(--s-3); }
+.pipe p { font-size: 15px; color: var(--ink-2); margin-top: var(--s-2); }
+.pipe .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-4); }
+.tag { font: 500 12px/1 var(--f-mono); padding: 6px 8px; border-radius: 6px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--rule); }
+/* Connectors between cards in the same row */
+.pipe li:not(:nth-child(3n))::after { content: "→"; position: absolute; right: -14px; top: 50%; transform: translate(50%, -50%); color: var(--ink-3); font-family: var(--f-mono); background: var(--bg); padding: 2px 0; }
+@media (max-width: 860px) {
+  .pipe { grid-template-columns: 1fr; gap: var(--s-5); }
+  .pipe li:not(:nth-child(3n))::after { content: none; }
+  .pipe li:not(:last-child)::after { content: "↓"; position: absolute; left: 50%; right: auto; top: auto; bottom: calc(-1 * var(--s-5)); transform: translate(-50%, 50%); color: var(--ink-3); font-family: var(--f-mono); background: var(--bg); padding: 0 6px; }
+}
+
+/* Developer Agent */
+.dev { display: grid; grid-template-columns: 1fr 1.1fr; gap: var(--s-7); align-items: center; }
+.dev .sec-head { margin-bottom: 0; }
+.dev ul { list-style: none; padding: 0; margin: var(--s-5) 0 0; display: grid; gap: var(--s-3); color: var(--ink-2); }
+.dev ul li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; }
+.dev ul li::before { content: "✓"; color: var(--accent); font-family: var(--f-mono); }
+.dev .btn { margin-top: var(--s-6); }
+.chain { list-style: none; margin: 0; padding: var(--s-5); display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-3) var(--s-6); counter-reset: c; font: 500 14px/1.3 var(--f-mono); }
+.chain li { counter-increment: c; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--rule); position: relative; }
+.chain li::before { content: counter(c); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: var(--ink-3); border: 1px solid var(--rule); flex: none; }
+.chain li.human { border-color: color-mix(in srgb, var(--wait) 50%, transparent); background: var(--wait-soft); color: var(--wait); }
+.chain li.end { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); color: var(--accent); }
+.chain small { margin-left: auto; color: var(--ink-3); font-size: 11.5px; font-weight: 400; }
+.chain li.human small, .chain li.end small { color: inherit; opacity: 0.8; }
+@media (max-width: 900px) { .dev { grid-template-columns: 1fr; gap: var(--s-6); } }
+@media (max-width: 480px) { .chain { grid-template-columns: 1fr; } }
+
+/* Built for real work */
+.work { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-4); }
+.work .card { display: flex; flex-direction: column; }
+.work .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.work h3 { font: 700 14px/1 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; }
+.work ul { list-style: none; padding: var(--s-4) 0 0; margin: var(--s-4) 0 0; border-top: 1px solid var(--rule); display: grid; gap: 10px; font: 400 14px/1.4 var(--f-mono); color: var(--ink-2); }
+.work ul li::before { content: "› "; color: var(--accent); }
+.work .later ul li::before { color: var(--ink-3); }
+.work .later h3 { color: var(--ink-2); }
+@media (max-width: 960px) { .work { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .work { grid-template-columns: 1fr; } }
+
+/* Control */
+.ctrl { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--s-5); align-items: start; }
+.levels { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
+.levels li { display: grid; grid-template-columns: 130px 1fr auto; gap: var(--s-4); align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--rule); }
+.levels li:last-child { border-bottom: 0; }
+.levels b { font: 600 13px/1.4 var(--f-mono); }
+.levels .ex { font: 400 13px/1.5 var(--f-mono); color: var(--ink-2); }
+@media (max-width: 600px) { .levels li { grid-template-columns: 1fr auto; } .levels .ex { grid-column: 1 / -1; grid-row: 2; } }
+.ladder { display: grid; gap: 0; }
+.rung { border-radius: 10px; padding: var(--s-4); border: 1px solid var(--rule); background: var(--surface); }
+.rung .pill { margin-bottom: var(--s-2); }
+.rung p { color: var(--ink-2); font-size: 14.5px; }
+.rung.auto { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.rung.appr { border-color: color-mix(in srgb, var(--wait) 45%, transparent); }
+.rung.blk { border-color: color-mix(in srgb, var(--block) 45%, transparent); }
+.ladder .down { text-align: center; color: var(--ink-3); font-family: var(--f-mono); line-height: 28px; }
+.ctrl-note { margin-top: var(--s-5); color: var(--ink-3); font-size: 14px; max-width: 72ch; }
+@media (max-width: 860px) { .ctrl { grid-template-columns: 1fr; } }
+
+/* Final CTA */
+.final { text-align: center; }
+.final .sec-head { margin-inline: auto; margin-bottom: 0; }
+.final .join-form { margin-inline: auto; text-align: left; }
+.dev-opt { display: flex; align-items: center; gap: 10px; margin-top: var(--s-2); font-size: 14px; color: var(--ink-2); cursor: pointer; }
+.dev-opt input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); flex: none; }
+
+/* Footer */
+footer { border-top: 1px solid var(--rule); padding-block: var(--s-6); color: var(--ink-3); font-size: 14px; display: grid; gap: var(--s-3); }
+footer .line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-3); }
+footer a { color: var(--ink-2); }
+footer .privacy { font-size: 13px; max-width: 80ch; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+<header class="top" id="top">
+  <div class="top-in">
+    <a class="brand" href="#" aria-label="VNX"><span class="brand-mark" aria-hidden="true">›</span>VNX</a>
+    <nav class="nav" aria-label="Primary">
+      <div class="nav-links" id="nav-links">
+        <a href="#product" data-i18n="nav.product">Product</a>
+        <a href="#how" data-i18n="nav.how">How it works</a>
+        <a href="#developer-agent" data-i18n="nav.dev">Developer Agent</a>
+        <a href="#security" data-i18n="nav.security">Security</a>
+      </div>
+      <div class="nav-end">
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang="vi" aria-pressed="false">VI</button>
+        </div>
+        <a class="btn btn-primary" href="#join" data-i18n="nav.cta">Join early access</a>
+        <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Menu" data-i18n-attr="aria-label:nav.menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+<main id="main">
+
+<div class="hero">
+  <div>
+    <span class="badge" data-i18n="hero.badge">Early access</span>
+    <h1 data-i18n-html="hero.title">AI that <em>works</em>,<br>not just chats.</h1>
+    <p class="lede" data-i18n="hero.lede">Give VNX a goal. It plans the work, executes it with real tools and verifies the result — with you in control.</p>
+
+    <form class="join-form" id="join" novalidate>
+      <label class="lbl" for="email-hero" data-i18n="form.label">Your email</label>
+      <div class="row">
+        <input id="email-hero" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+        <button class="btn btn-primary" type="submit" data-i18n="form.submit">Join early access</button>
+      </div>
+      <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+      <p class="note"><span data-i18n="form.note">Be one of the first to try VNX.</span> <a href="#privacy" data-i18n="form.privacy">Privacy</a></p>
+      <p class="status" role="status" aria-live="polite"></p>
+    </form>
+
+    <ol class="stages" id="stages" aria-label="Goal, Plan, Approve, Execute, Verify, Done" data-i18n-attr="aria-label:stages.label">
+      <li data-stage="goal" data-i18n="st.goal">Goal</li>
+      <li data-stage="plan" data-i18n="st.plan">Plan</li>
+      <li data-stage="approve" class="human" data-i18n="st.approve">Approve</li>
+      <li data-stage="execute" data-i18n="st.execute">Execute</li>
+      <li data-stage="verify" data-i18n="st.verify">Verify</li>
+      <li data-stage="done" data-i18n="st.done">Done</li>
+    </ol>
+  </div>
+
+  <div class="task" id="task" role="img" aria-label="Example: the VNX Developer Agent working on ticket ABC-123 and waiting for you to approve its plan" data-i18n-attr="aria-label:mock.label">
+    <div class="task-head">
+      <span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>VNX / Developer Agent</span>
+      <span class="pill pill-wait" id="task-pill" data-i18n="mock.waiting">Waiting approval</span>
+    </div>
+    <div class="task-goal">
+      <span class="k" data-i18n="mock.goal">Goal</span>
+      <p data-i18n="mock.goalText">“Implement ABC-123”</p>
+    </div>
+    <ol class="steps" id="steps">
+      <li class="done" data-stage="plan"><span class="ic"></span><span data-i18n="mock.s1">Read Jira ticket</span><span class="meta">jira.read</span></li>
+      <li class="done" data-stage="plan"><span class="ic"></span><span data-i18n="mock.s2">Analyze repository</span><span class="meta">git · files</span></li>
+      <li class="done" data-stage="plan"><span class="ic"></span><span data-i18n="mock.s3">Find affected classes</span><span class="meta">3 files</span></li>
+      <li class="wait" data-stage="approve" data-gate><span class="ic"></span><span data-i18n="mock.s4">Generate implementation plan</span><span class="meta">plan</span></li>
+      <li data-stage="execute"><span class="ic"></span><span data-i18n="mock.s5">Edit code</span><span class="meta">WRITE</span></li>
+      <li data-stage="verify"><span class="ic"></span><span data-i18n="mock.s6">Run tests</span><span class="meta">EXECUTE</span></li>
+      <li data-stage="verify"><span class="ic"></span><span data-i18n="mock.s7">Summarize diff</span><span class="meta"></span></li>
+    </ol>
+    <div class="approve" id="approve">
+      <div class="row2"><b data-i18n="mock.planReady">Plan ready for review</b><span>3 files · 2 tests</span></div>
+      <ol class="plan">
+        <li data-i18n="mock.p1">Add validation to OrderService</li>
+        <li data-i18n="mock.p2">Update OrderController response</li>
+        <li data-i18n="mock.p3">Add unit tests for the new rule</li>
+      </ol>
+      <div class="acts" aria-hidden="true">
+        <span class="fake-btn go" id="approve-btn" data-i18n="mock.approve">Approve plan</span>
+        <span class="fake-btn" data-i18n="mock.edit">Edit</span>
+        <span class="fake-btn" data-i18n="mock.reject">Reject</span>
+      </div>
+    </div>
+    <div class="task-foot"><span data-i18n="mock.foot">Illustrative preview</span><span id="task-meta">00:42 · $0.04</span></div>
+  </div>
+</div>
+
+<section id="product" aria-labelledby="product-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="what.eyebrow">What is VNX?</p>
+    <h2 id="product-title" data-i18n="what.title">The execution layer for AI agents.</h2>
+    <p data-i18n="what.lede">AI models are great at answers, but real work still means copying context between chat, editor, Git and the browser. VNX sits above the models and tools and carries a task from goal to verified result.</p>
+  </div>
+  <div class="grid-3">
+    <div class="card why"><span class="num">01</span><h3 data-i18n="why.1t">Context</h3><p data-i18n="why.1d">Stop copying context between tools.</p></div>
+    <div class="card why"><span class="num">02</span><h3 data-i18n="why.2t">Execution</h3><p data-i18n="why.2d">Agents use the tools your work actually depends on.</p></div>
+    <div class="card why"><span class="num">03</span><h3 data-i18n="why.3t">Verification</h3><p data-i18n="why.3d">Nothing is “done” until the checks pass.</p></div>
+  </div>
+</section>
+
+<section id="how" aria-labelledby="how-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="how.eyebrow">How it works</p>
+    <h2 id="how-title" data-i18n="how.title">From goal to verified result, with you at the checkpoint.</h2>
+  </div>
+  <ol class="pipe">
+    <li><h3 data-i18n="st.goal">Goal</h3><p data-i18n="how.1d">Describe the outcome in plain language: “Fix the login bug.”</p></li>
+    <li><h3 data-i18n="st.plan">Plan</h3><p data-i18n="how.2d">VNX reads the context and creates an execution plan.</p><div class="tags"><span class="tag" data-i18n="tag.context">Context</span><span class="tag" data-i18n="tag.steps">Steps</span><span class="tag" data-i18n="tag.risks">Risks</span></div></li>
+    <li class="human"><h3 data-i18n="st.approve">Approve</h3><p data-i18n="how.3d">You decide: approve, edit or reject before anything runs.</p></li>
+    <li><h3 data-i18n="st.execute">Execute</h3><p data-i18n="how.4d">The agent works with real tools.</p><div class="tags"><span class="tag">Git</span><span class="tag" data-i18n="tag.files">Files</span><span class="tag">Shell</span></div></li>
+    <li><h3 data-i18n="st.verify">Verify</h3><p data-i18n="how.5d">Checks run before anything is called done.</p><div class="tags"><span class="tag" data-i18n="tag.tests">Tests</span><span class="tag" data-i18n="tag.checks">Checks</span><span class="tag" data-i18n="tag.review">Review</span></div></li>
+    <li><h3 data-i18n="how.6t">Result</h3><p data-i18n="how.6d">You get the work and the full record of how it was done.</p><div class="tags"><span class="tag">Diff</span><span class="tag" data-i18n="tag.summary">Summary</span><span class="tag" data-i18n="tag.audit">Audit log</span></div></li>
+  </ol>
+</section>
+
+<section id="developer-agent" aria-labelledby="dev-title">
+  <div class="dev">
+    <div class="sec-head">
+      <p class="eyebrow" data-i18n="dev.eyebrow">Meet your first VNX agent</p>
+      <h2 id="dev-title" data-i18n-html="dev.title">The <em>Developer Agent</em>.</h2>
+      <p data-i18n="dev.lede">Your AI developer that actually works inside your project — from ticket to tested diff.</p>
+      <ul>
+        <li data-i18n="dev.b1">Reads the ticket and the repository, not just the prompt</li>
+        <li data-i18n="dev.b2">Shows you the plan before it touches any code</li>
+        <li data-i18n="dev.b3">Runs your tests and hands back a reviewable diff</li>
+      </ul>
+      <a class="btn btn-primary" href="#join-final" data-dev-cta data-i18n="dev.cta">Join the Developer Agent preview</a>
+    </div>
+    <ol class="chain card" aria-label="Developer Agent workflow" data-i18n-attr="aria-label:dev.chainLabel">
+      <li>Jira <small data-i18n="dev.c1">ticket</small></li>
+      <li data-i18n-html="dev.c2">Repository <small>git</small></li>
+      <li data-i18n-html="dev.c3">Understand <small>context</small></li>
+      <li data-i18n-html="dev.c4">Plan <small>steps</small></li>
+      <li class="human" data-i18n-html="dev.c5">Approve <small>you</small></li>
+      <li data-i18n-html="dev.c6">Code <small>edit</small></li>
+      <li data-i18n-html="dev.c7">Test <small>verify</small></li>
+      <li class="end" data-i18n-html="dev.c8">Diff <small>result</small></li>
+    </ol>
+  </div>
+</section>
+
+<section aria-labelledby="work-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="work.eyebrow">Not a chatbot</p>
+    <h2 id="work-title" data-i18n="work.title">Built for real work.</h2>
+    <p data-i18n="work.lede">VNX connects agents to the systems your work lives in. Code comes first; the rest follow on the same runtime.</p>
+  </div>
+  <div class="work">
+    <div class="card">
+      <div class="head"><h3 data-i18n="work.code">Code</h3><span class="pill pill-ok" data-i18n="work.first">First</span></div>
+      <ul><li>Git</li><li>GitHub · GitLab</li><li>Jira</li><li>Shell</li><li data-i18n="work.tests">Tests</li></ul>
+    </div>
+    <div class="card later">
+      <div class="head"><h3 data-i18n="work.data">Data</h3><span class="pill pill-soon" data-i18n="work.next">Next</span></div>
+      <ul><li>SQL</li><li>APIs</li><li data-i18n="work.docs">Documents</li><li>RAG</li></ul>
+    </div>
+    <div class="card later">
+      <div class="head"><h3 data-i18n="work.research">Research</h3><span class="pill pill-soon" data-i18n="work.next">Next</span></div>
+      <ul><li data-i18n="work.search">Web search</li><li data-i18n="work.sources">Sources</li><li data-i18n="work.reports">Reports</li></ul>
+    </div>
+    <div class="card later">
+      <div class="head"><h3 data-i18n="work.auto">Automation</h3><span class="pill pill-soon" data-i18n="work.next">Next</span></div>
+      <ul><li>MCP</li><li>Webhooks</li><li data-i18n="work.sched">Scheduled tasks</li></ul>
+    </div>
+  </div>
+</section>
+
+<section id="security" aria-labelledby="sec-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="sec.eyebrow">You stay in control</p>
+    <h2 id="sec-title" data-i18n="sec.title">Agents can act. You decide how much.</h2>
+    <p data-i18n="sec.lede">Every tool declares what it can do. A policy decides whether each action runs on its own, waits for your approval or is blocked.</p>
+  </div>
+  <div class="ctrl">
+    <ul class="levels">
+      <li><b data-i18n="lvl.read">Read</b><span class="ex">files · git diff · tickets</span><span class="pill pill-ok" data-i18n="pol.auto">Auto</span></li>
+      <li><b data-i18n="lvl.write">Write</b><span class="ex">edit files · git commit</span><span class="pill pill-wait" data-i18n="pol.approve">Approve</span></li>
+      <li><b data-i18n="lvl.exec">Execute</b><span class="ex">npm test · build</span><span class="pill pill-ok" data-i18n="pol.allow">Auto if allowlisted</span></li>
+      <li><b data-i18n="lvl.ext">External actions</b><span class="ex">git push · comment · email</span><span class="pill pill-wait" data-i18n="pol.approve">Approve</span></li>
+      <li><b data-i18n="lvl.destr">Destructive</b><span class="ex">drop table · rm -rf · deploy prod</span><span class="pill pill-block" data-i18n="pol.block">Block</span></li>
+    </ul>
+    <div class="ladder">
+      <div class="rung auto"><span class="pill pill-ok" data-i18n="pol.auto">Auto</span><p data-i18n="rung.auto">Safe actions run on their own, so you are not clicking “yes” all day.</p></div>
+      <div class="down" aria-hidden="true">↓</div>
+      <div class="rung appr"><span class="pill pill-wait" data-i18n="pol.approve">Approve</span><p data-i18n="rung.appr">Anything that changes your work waits for you, with the exact change shown.</p></div>
+      <div class="down" aria-hidden="true">↓</div>
+      <div class="rung blk"><span class="pill pill-block" data-i18n="pol.block">Block</span><p data-i18n="rung.blk">Some actions never run, no matter what the model asks for.</p></div>
+    </div>
+  </div>
+  <p class="ctrl-note" data-i18n="sec.note">Agents work inside a sandboxed workspace and never see raw secrets. Every step is recorded with its model, tokens, duration and cost.</p>
+</section>
+
+<section class="final" aria-labelledby="final-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="final.eyebrow">Early access</p>
+    <h2 id="final-title" data-i18n="final.title">Ready to let AI do the work?</h2>
+    <p data-i18n="final.lede">VNX is opening early access in small batches, starting with the Developer Agent.</p>
+  </div>
+  <form class="join-form" id="join-final" novalidate>
+    <label class="lbl" for="email-final" data-i18n="form.label">Your email</label>
+    <div class="row">
+      <input id="email-final" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+      <button class="btn btn-primary" type="submit" data-i18n="final.submit">Join the waitlist</button>
+    </div>
+    <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <label class="dev-opt"><input type="checkbox" name="developer"><span data-i18n="final.dev">I'm a developer — send me Developer Agent updates</span></label>
+    <p class="status" role="status" aria-live="polite"></p>
+  </form>
+</section>
+
+</main>
+
+<footer>
+  <div class="line">
+    <span>VNX · <span data-i18n="footer.tag">AI that works</span></span>
+    <a href="mailto:contact@vnx.si">contact@vnx.si</a>
+    <span>© 2026 vnx.si</span>
+  </div>
+  <p class="privacy" id="privacy" data-i18n-html="footer.privacy">Privacy: when you join, we store your email only to send early-access invites and product updates. You can ask for it to be deleted at any time at <a href="mailto:contact@vnx.si">contact@vnx.si</a>.</p>
+</footer>
+</div>
+
+<script>
+(() => {
+  const VI = {
+    "skip": "Bỏ qua tới nội dung",
+    "nav.product": "Sản phẩm", "nav.how": "Cách hoạt động", "nav.dev": "Developer Agent", "nav.security": "Bảo mật",
+    "nav.cta": "Đăng ký sớm", "nav.menu": "Menu",
+    "hero.badge": "Early access",
+    "hero.title": "AI không chỉ trò chuyện.<br>AI thực sự <em>làm việc</em>.",
+    "hero.lede": "Giao cho VNX một mục tiêu. VNX lập kế hoạch, thực thi bằng các công cụ thực tế và kiểm tra kết quả — trong khi bạn luôn giữ quyền kiểm soát.",
+    "form.label": "Email của bạn", "form.submit": "Đăng ký dùng sớm",
+    "form.note": "Trở thành một trong những người đầu tiên dùng thử VNX.", "form.privacy": "Quyền riêng tư",
+    "stages.label": "Mục tiêu, Kế hoạch, Duyệt, Thực thi, Kiểm tra, Xong",
+    "st.goal": "Mục tiêu", "st.plan": "Kế hoạch", "st.approve": "Duyệt", "st.execute": "Thực thi", "st.verify": "Kiểm tra", "st.done": "Xong",
+    "mock.label": "Ví dụ: Developer Agent của VNX đang làm ticket ABC-123 và chờ bạn duyệt kế hoạch",
+    "mock.waiting": "Chờ duyệt", "mock.running": "Đang chạy", "mock.done": "Hoàn tất",
+    "mock.goal": "Mục tiêu", "mock.goalText": "“Implement ABC-123”",
+    "mock.s1": "Đọc ticket Jira", "mock.s2": "Phân tích repository", "mock.s3": "Tìm các class bị ảnh hưởng",
+    "mock.s4": "Lập kế hoạch triển khai", "mock.s5": "Sửa code", "mock.s6": "Chạy test", "mock.s7": "Tóm tắt diff",
+    "mock.planReady": "Kế hoạch chờ bạn xem",
+    "mock.p1": "Thêm validation vào OrderService", "mock.p2": "Cập nhật response của OrderController", "mock.p3": "Thêm unit test cho rule mới",
+    "mock.approve": "Duyệt kế hoạch", "mock.edit": "Sửa", "mock.reject": "Từ chối",
+    "mock.foot": "Minh họa",
+    "what.eyebrow": "VNX là gì?",
+    "what.title": "Lớp thực thi cho AI agent.",
+    "what.lede": "Model AI trả lời rất giỏi, nhưng làm việc thật vẫn phải chép ngữ cảnh qua lại giữa chat, editor, Git và trình duyệt. VNX nằm phía trên các model và công cụ, đưa một việc đi từ mục tiêu tới kết quả đã kiểm chứng.",
+    "why.1t": "Ngữ cảnh", "why.1d": "Thôi chép ngữ cảnh qua lại giữa các công cụ.",
+    "why.2t": "Thực thi", "why.2d": "Agent dùng đúng những công cụ mà công việc của bạn cần.",
+    "why.3t": "Kiểm chứng", "why.3d": "Chưa qua kiểm tra thì chưa gọi là “xong”.",
+    "how.eyebrow": "Cách hoạt động",
+    "how.title": "Từ mục tiêu tới kết quả đã kiểm chứng, bạn nắm điểm duyệt.",
+    "how.1d": "Mô tả kết quả bằng ngôn ngữ thường: “Sửa lỗi đăng nhập.”",
+    "how.2d": "VNX đọc ngữ cảnh và lập kế hoạch thực thi.",
+    "how.3d": "Bạn quyết định: duyệt, sửa hoặc từ chối trước khi chạy.",
+    "how.4d": "Agent làm việc bằng công cụ thật.",
+    "how.5d": "Chạy kiểm tra trước khi báo xong.",
+    "how.6t": "Kết quả", "how.6d": "Bạn nhận kết quả cùng nhật ký đầy đủ về cách nó được làm.",
+    "tag.context": "Ngữ cảnh", "tag.steps": "Các bước", "tag.risks": "Rủi ro", "tag.files": "File",
+    "tag.tests": "Test", "tag.checks": "Kiểm tra", "tag.review": "Review", "tag.summary": "Tóm tắt", "tag.audit": "Audit log",
+    "dev.eyebrow": "Agent đầu tiên của VNX",
+    "dev.title": "<em>Developer Agent</em>.",
+    "dev.lede": "Lập trình viên AI thực sự làm việc bên trong project của bạn — từ ticket tới diff đã chạy test.",
+    "dev.b1": "Đọc ticket và repository, không chỉ đọc prompt",
+    "dev.b2": "Cho bạn xem kế hoạch trước khi đụng vào code",
+    "dev.b3": "Chạy test của bạn và trả về diff để review",
+    "dev.cta": "Đăng ký dùng thử Developer Agent",
+    "dev.chainLabel": "Quy trình của Developer Agent",
+    "dev.c1": "ticket", "dev.c2": "Repository <small>git</small>", "dev.c3": "Hiểu <small>ngữ cảnh</small>",
+    "dev.c4": "Kế hoạch <small>các bước</small>", "dev.c5": "Duyệt <small>bạn</small>", "dev.c6": "Code <small>sửa</small>",
+    "dev.c7": "Test <small>kiểm tra</small>", "dev.c8": "Diff <small>kết quả</small>",
+    "work.eyebrow": "Không phải chatbot",
+    "work.title": "Làm việc thật.",
+    "work.lede": "VNX kết nối agent với những hệ thống mà công việc của bạn đang dùng. Code đi trước; các mảng khác chạy trên cùng runtime.",
+    "work.code": "Code", "work.data": "Dữ liệu", "work.research": "Nghiên cứu", "work.auto": "Tự động hóa",
+    "work.first": "Đầu tiên", "work.next": "Tiếp theo",
+    "work.tests": "Test", "work.docs": "Tài liệu", "work.search": "Tìm kiếm web", "work.sources": "Nguồn", "work.reports": "Báo cáo", "work.sched": "Tác vụ theo lịch",
+    "sec.eyebrow": "Bạn luôn nắm quyền",
+    "sec.title": "Agent được hành động. Bạn quyết định tới đâu.",
+    "sec.lede": "Mỗi công cụ khai báo nó làm được gì. Chính sách quyết định mỗi thao tác được tự chạy, phải chờ bạn duyệt hay bị chặn.",
+    "lvl.read": "Đọc", "lvl.write": "Ghi", "lvl.exec": "Chạy lệnh", "lvl.ext": "Tác động bên ngoài", "lvl.destr": "Phá hủy",
+    "pol.auto": "Tự động", "pol.approve": "Cần duyệt", "pol.allow": "Tự động nếu trong allowlist", "pol.block": "Chặn",
+    "rung.auto": "Thao tác an toàn tự chạy, bạn không phải bấm “đồng ý” cả ngày.",
+    "rung.appr": "Mọi thứ làm thay đổi công việc của bạn đều chờ bạn duyệt, kèm đúng thay đổi sẽ áp dụng.",
+    "rung.blk": "Có những thao tác không bao giờ được chạy, dù model yêu cầu thế nào.",
+    "sec.note": "Agent làm việc trong workspace sandbox và không bao giờ thấy secret thô. Mỗi bước đều được ghi lại kèm model, token, thời gian và chi phí.",
+    "final.eyebrow": "Early access",
+    "final.title": "Sẵn sàng để AI làm việc thay bạn?",
+    "final.lede": "VNX mở đăng ký dùng sớm theo từng đợt nhỏ, bắt đầu với Developer Agent.",
+    "final.submit": "Vào danh sách chờ",
+    "final.dev": "Tôi là lập trình viên — gửi tôi tin cập nhật về Developer Agent",
+    "footer.tag": "AI làm việc thật",
+    "footer.privacy": 'Quyền riêng tư: khi đăng ký, chúng tôi chỉ lưu email của bạn để gửi lời mời dùng sớm và tin cập nhật sản phẩm. Bạn có thể yêu cầu xóa bất cứ lúc nào qua <a href="mailto:contact@vnx.si">contact@vnx.si</a>.',
+  };
+  const UI = {
+    en: {
+      email: "That email address doesn't look right.",
+      sending: "Sending…",
+      ok: "You're on the list. We'll email you when your invite is ready.",
+      offline: "This preview isn't connected to a server, so your email wasn't saved.",
+      network: "Couldn't reach the server. Check your connection and try again.",
+      title: "VNX — AI that works, not just chats · Early access",
+    },
+    vi: {
+      email: "Email chưa đúng định dạng.",
+      sending: "Đang gửi…",
+      ok: "Bạn đã có tên trong danh sách. Chúng tôi sẽ gửi email khi lời mời sẵn sàng.",
+      offline: "Bản xem trước này chưa kết nối máy chủ, nên chưa lưu được email.",
+      network: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.",
+      title: "VNX — AI làm việc thật, không chỉ trò chuyện · Early access",
+    },
+  };
+  const META_VI = "Giao cho VNX một mục tiêu. VNX lập kế hoạch, thực thi bằng công cụ thật và kiểm tra kết quả, trong khi bạn luôn giữ quyền kiểm soát. Đăng ký dùng sớm Developer Agent.";
+
+  const $ = id => document.getElementById(id);
+  const meta = document.querySelector('meta[name="description"]');
+  const META_EN = meta.content;
+
+  // English lives in the markup; capture it once so switching back is lossless.
+  const EN = { "mock.running": "Running", "mock.done": "Done" };
+  for (const el of document.querySelectorAll("[data-i18n]")) EN[el.dataset.i18n] = el.textContent;
+  for (const el of document.querySelectorAll("[data-i18n-html]")) EN[el.dataset.i18nHtml] = el.innerHTML;
+  for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+    const [attr, key] = el.dataset.i18nAttr.split(":");
+    EN[key] = el.getAttribute(attr);
+  }
+
+  let lang = "en";
+  const t = key => (lang === "vi" ? VI[key] : undefined) ?? EN[key];
+  function apply(next) {
+    lang = next === "vi" ? "vi" : "en";
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-html]")) el.innerHTML = t(el.dataset.i18nHtml);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      const [attr, key] = el.dataset.i18nAttr.split(":");
+      el.setAttribute(attr, t(key));
+    }
+    document.documentElement.lang = lang;
+    document.title = UI[lang].title;
+    meta.content = lang === "vi" ? META_VI : META_EN;
+    for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
+    for (const s of document.querySelectorAll(".status")) s.textContent = "";
+    renderPill();
+  }
+  function initialLang() {
+    const q = new URLSearchParams(location.search).get("lang");
+    if (q === "en" || q === "vi") return q;
+    try { const s = localStorage.getItem("vnx.lang"); if (s === "en" || s === "vi") return s; } catch {}
+    return (navigator.language || "").toLowerCase().startsWith("vi") ? "vi" : "en";
+  }
+
+  // ---- Header: sticky border + mobile menu ----
+  const top = $("top"), links = $("nav-links"), menuBtn = document.querySelector(".menu-btn");
+  const onScroll = () => top.classList.toggle("scrolled", scrollY > 8);
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  const setMenu = open => { links.classList.toggle("open", open); menuBtn.setAttribute("aria-expanded", String(open)); };
+  menuBtn.addEventListener("click", () => setMenu(!links.classList.contains("open")));
+  links.addEventListener("click", e => { if (e.target.closest("a")) setMenu(false); });
+  addEventListener("keydown", e => { if (e.key === "Escape") setMenu(false); });
+
+  // ---- Task mockup: steps tick through, pause at the approval gate, then finish and loop ----
+  const steps = [...$("steps").children], approve = $("approve"), approveBtn = $("approve-btn");
+  const pill = $("task-pill"), taskMeta = $("task-meta"), stages = [...$("stages").children];
+  const ORDER = stages.map(s => s.dataset.stage);
+  let pillState = "wait";
+  function renderPill() {
+    pill.className = "pill " + (pillState === "wait" ? "pill-wait" : pillState === "done" ? "pill-ok" : "pill-run");
+    pill.textContent = t(pillState === "wait" ? "mock.waiting" : pillState === "done" ? "mock.done" : "mock.running");
+  }
+  function setStage(stage) {
+    const i = ORDER.indexOf(stage);
+    stages.forEach((s, j) => { s.classList.toggle("on", j === i); s.classList.toggle("past", j < i); });
+  }
+  // The markup shows the paused-at-approval frame, which is also the reduced-motion frame.
+  setStage("approve");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  async function loop() {
+    for (;;) {
+      steps.forEach(s => s.className = ""); approve.hidden = true;
+      pillState = "run"; renderPill(); setStage("goal"); taskMeta.textContent = "00:00 · $0.00";
+      await wait(1200);
+      for (const [i, s] of steps.entries()) {
+        setStage(s.dataset.stage === "approve" ? "plan" : s.dataset.stage);
+        s.className = "run";
+        await wait(900);
+        if (s.hasAttribute("data-gate")) {
+          s.className = "wait"; pillState = "wait"; renderPill(); setStage("approve");
+          approve.hidden = false; taskMeta.textContent = "00:42 · $0.04";
+          await wait(3800);
+          approveBtn.classList.add("press"); await wait(250); approveBtn.classList.remove("press");
+          await wait(300); approve.hidden = true; pillState = "run"; renderPill();
+        }
+        s.className = "done";
+        if (i === steps.length - 1) taskMeta.textContent = "03:18 · $0.11";
+      }
+      pillState = "done"; renderPill(); setStage("done");
+      await wait(4000);
+    }
+  }
+  if (!reduce) {
+    // Start only once the mockup is on screen so the first frame isn't missed.
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); setTimeout(loop, 1500); } });
+    io.observe($("task"));
+  }
+
+  for (const b of document.querySelectorAll("[data-lang]")) {
+    b.addEventListener("click", () => { apply(b.dataset.lang); try { localStorage.setItem("vnx.lang", lang); } catch {} });
+  }
+  apply(initialLang());
+
+  // ---- Waitlist ----
+  // The Developer Agent CTA pre-ticks the developer option on the final form.
+  for (const a of document.querySelectorAll("[data-dev-cta]")) {
+    a.addEventListener("click", () => { $("join-final").developer.checked = true; setTimeout(() => $("email-final").focus({ preventScroll: true }), 400); });
+  }
+  const params = new URLSearchParams(location.search);
+  for (const f of document.querySelectorAll(".join-form")) {
+    f.addEventListener("submit", async e => {
+      e.preventDefault();
+      const ui = UI[lang], status = f.querySelector(".status"), btn = f.querySelector("button[type=submit]");
+      const body = {
+        email: f.email.value,
+        // Submitting is the opt-in; the privacy note next to every form says what we store.
+        consent: true,
+        personas: f.developer && f.developer.checked ? ["developer"] : [],
+        website: f.website.value,
+        lang,
+        referrer: document.referrer || undefined,
+        utmSource: params.get("utm_source") || undefined,
+        utmMedium: params.get("utm_medium") || undefined,
+        utmCampaign: params.get("utm_campaign") || undefined,
+      };
+      const fail = msg => { status.className = "status err"; status.textContent = msg; f.email.focus(); };
+      status.className = "status"; status.textContent = "";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email.trim())) return fail(ui.email);
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = ui.sending;
+      try {
+        const res = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok) { status.className = "status ok"; status.textContent = ui.ok; f.reset(); }
+        else if (data && data.error) fail(data.error);
+        else fail(ui.offline);
+      } catch { fail(ui.network); }
+      finally { btn.disabled = false; btn.textContent = label; }
+    });
+  }
+})();
+</script>
+</body>
+</html>

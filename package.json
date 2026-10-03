@@ -1,0 +1,11 @@
+{
+  "name": "vnxsi",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev -w apps/web",
+    "deploy": "npm run deploy -w apps/web"
+  },
+  "engines": { "node": ">=22.18" }
+}

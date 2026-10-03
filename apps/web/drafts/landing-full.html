@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VNX — AI that works</title>
+<meta name="description" content="Give VNX a goal. It plans, asks for approval, executes with real tools, verifies the result and shows every step with its cost.">
+<meta property="og:title" content="VNX — AI that works, not just chats">
+<meta property="og:description" content="An execution layer for AI agents: plan, approve, execute, verify. Every step observable, every risky action approved.">
+<meta property="og:url" content="https://vnx.si/">
+<meta name="theme-color" content="#0b0e11">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Dark-first developer tool. One accent (signal green = done/approved),
+   amber only for "waiting for a human", red only for "blocked". */
+:root {
+  --bg: #0b0e11;
+  --surface: #12171c;
+  --surface-2: #181e24;
+  --ink: #e8ecef;
+  --ink-2: #9ba6b0;
+  --ink-3: #6c7782;
+  --rule: #232b33;
+  --accent: #8fe388;
+  --accent-ink: #0b0e11;
+  --accent-soft: #15291a;
+  --wait: #f2b551;
+  --wait-soft: #2c2212;
+  --block: #f2786b;
+  --block-soft: #2e1714;
+
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 88px;
+  --radius: 10px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f6f7f8; --surface: #ffffff; --surface-2: #f0f2f4;
+    --ink: #11161b; --ink-2: #4c5761; --ink-3: #6f7a84; --rule: #dde2e6;
+    --accent: #1f7a2e; --accent-ink: #ffffff; --accent-soft: #e3f3e5;
+    --wait: #9a5b00; --wait-soft: #fbefdc; --block: #b3332a; --block-soft: #fbe5e2;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f6f7f8; --surface: #ffffff; --surface-2: #f0f2f4;
+  --ink: #11161b; --ink-2: #4c5761; --ink-3: #6f7a84; --rule: #dde2e6;
+  --accent: #1f7a2e; --accent-ink: #ffffff; --accent-soft: #e3f3e5;
+  --wait: #9a5b00; --wait-soft: #fbefdc; --block: #b3332a; --block-soft: #fbe5e2;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 16px/1.6 var(--f-body);
+  margin: 0; padding-inline: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1120px; margin-inline: auto; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; letter-spacing: -0.02em; line-height: 1.15; }
+p { margin: 0; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font: 500 12px/1.2 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--ink-2); }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 16px; top: 16px; background: var(--surface); padding: 8px 12px; z-index: 10; }
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding-block: var(--s-5); }
+.brand { display: flex; align-items: center; gap: var(--s-2); text-decoration: none; color: var(--ink); font: 700 20px/1 var(--f-mono); letter-spacing: 0.02em; }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 15px; }
+.nav { display: flex; align-items: center; gap: var(--s-5); }
+.nav-links { display: flex; gap: var(--s-5); }
+.nav-links a { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+.nav-links a:hover { color: var(--ink); }
+.lang { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.lang button { font: 500 12px/1 var(--f-mono); background: transparent; color: var(--ink-2); border: 0; padding: 8px 10px; cursor: pointer; min-height: 32px; }
+.lang button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
+  font: 600 15px/1 var(--f-body); text-decoration: none; cursor: pointer;
+  padding: 12px 18px; border-radius: 8px; border: 1px solid transparent; min-height: 44px;
+}
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { border-color: var(--rule); color: var(--ink); background: transparent; }
+.btn-ghost:hover { background: var(--surface); }
+.top .btn { padding: 10px 14px; min-height: 40px; font-size: 14px; }
+@media (max-width: 860px) { .nav-links { display: none; } }
+@media (max-width: 420px) { .top .btn { display: none; } }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: var(--s-7); align-items: center; padding-block: var(--s-7) var(--s-8); }
+.hero h1 { font-size: clamp(38px, 6vw, 64px); font-weight: 700; margin-block: var(--s-4) var(--s-5); }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lede { font-size: 18px; color: var(--ink-2); max-width: 52ch; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-6); }
+.hero-note { margin-top: var(--s-4); font-size: 13px; color: var(--ink-3); }
+/* Grid children default to min-width:auto; the pre-formatted diff would stretch the column. */
+.hero > *, .compare > *, .obs > *, .join > *, .flow > *, .modes > *, .agents > * { min-width: 0; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: var(--s-6); padding-block: var(--s-5) var(--s-7); } }
+
+/* Task mockup */
+.task { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.6); }
+.task-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); padding: 12px 16px; border-bottom: 1px solid var(--rule); font: 500 12px/1.3 var(--f-mono); color: var(--ink-3); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; font: 500 11px/1.4 var(--f-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill-wait { background: var(--wait-soft); color: var(--wait); }
+.pill-ok { background: var(--accent-soft); color: var(--accent); }
+.pill-block { background: var(--block-soft); color: var(--block); }
+.task-goal { padding: 16px 16px 6px; }
+.task-goal .k { font: 500 11px/1 var(--f-mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.task-goal p { margin-top: 6px; font-weight: 600; }
+.steps { list-style: none; margin: 0; padding: 8px 16px 12px; font: 400 13.5px/1.5 var(--f-mono); }
+.steps li { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; padding: 6px 0; align-items: baseline; }
+.steps .ic { text-align: center; }
+.steps .done .ic { color: var(--accent); }
+.steps .wait .ic { color: var(--wait); }
+.steps .todo { color: var(--ink-3); }
+.steps .meta { color: var(--ink-3); font-size: 12px; }
+.steps .wait .ic { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.approve { margin: 0 16px 16px; border: 1px solid color-mix(in srgb, var(--wait) 45%, transparent); background: var(--wait-soft); border-radius: var(--radius); padding: 12px; }
+.approve .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font: 500 12.5px/1.5 var(--f-mono); }
+.approve .row b { color: var(--wait); font-weight: 600; }
+.diff { margin-top: 8px; font: 400 12px/1.55 var(--f-mono); background: var(--bg); border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: pre; }
+.diff .add { color: var(--accent); }
+.approve .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.fake-btn { font: 600 12.5px/1 var(--f-body); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); }
+.fake-btn.go { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+/* Sections */
+section { padding-block: var(--s-8); border-top: 1px solid var(--rule); }
+.sec-head { max-width: 720px; margin-bottom: var(--s-7); }
+.sec-head h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; margin-top: var(--s-3); }
+.sec-head p { margin-top: var(--s-4); color: var(--ink-2); font-size: 17px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: var(--s-5); }
+.card h3 { font-size: 18px; font-weight: 600; }
+.card p { margin-top: var(--s-2); color: var(--ink-2); font-size: 15px; }
+
+/* Problem */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5); }
+.chain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: var(--s-4); font: 500 13px/1 var(--f-mono); }
+.chip { padding: 8px 10px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--rule); }
+.chip.paste { color: var(--block); border-style: dashed; background: transparent; }
+.chip.vnx { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
+.chip.ok { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.arrow { color: var(--ink-3); }
+@media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+
+/* Flow */
+.flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s-3); list-style: none; padding: 0; margin: 0; counter-reset: f; }
+.flow li { counter-increment: f; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: var(--s-4); }
+.flow li::before { content: "0" counter(f); font: 500 12px/1 var(--f-mono); color: var(--ink-3); }
+.flow li.human { border-color: color-mix(in srgb, var(--wait) 50%, transparent); }
+.flow li.human::before { color: var(--wait); }
+.flow h3 { font-size: 16px; margin-top: var(--s-3); }
+.flow p { font-size: 14px; color: var(--ink-2); margin-top: var(--s-2); }
+@media (max-width: 1000px) { .flow { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px) { .flow { grid-template-columns: 1fr; } }
+
+/* Policy */
+.policy { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; font-size: 15px; }
+.policy th, .policy td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.policy tr:last-child td { border-bottom: 0; }
+.policy th { font: 500 12px/1.2 var(--f-mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; background: var(--surface-2); }
+.policy td:first-child { font: 600 13px/1.5 var(--f-mono); white-space: nowrap; }
+.policy .tools { font: 400 13px/1.6 var(--f-mono); color: var(--ink-2); }
+.policy-note { margin-top: var(--s-4); color: var(--ink-3); font-size: 14px; }
+@media (max-width: 680px) {
+  .policy thead { display: none; }
+  .policy, .policy tbody, .policy tr, .policy td { display: block; width: 100%; }
+  .policy tr { border-bottom: 1px solid var(--rule); padding: 12px 16px; }
+  .policy td { border: 0; padding: 3px 0; }
+}
+
+/* Observability */
+.obs { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--s-5); align-items: start; }
+.timeline { list-style: none; margin: 0; padding: 0; font: 400 13px/1.5 var(--f-mono); }
+.timeline li { display: grid; grid-template-columns: 74px 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1px dashed var(--rule); }
+.timeline li:last-child { border-bottom: 0; }
+.timeline .t { color: var(--ink-3); }
+.timeline .c { color: var(--ink-2); text-align: right; white-space: nowrap; }
+.timeline .ev-wait { color: var(--wait); }
+.cost { font: 400 14px/1.5 var(--f-mono); margin: 0; }
+.cost div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.cost dt { color: var(--ink-2); }
+.cost dd { margin: 0; }
+.cost .total { border-bottom: 0; font-weight: 600; color: var(--ink); }
+.cost .total dt { color: var(--ink); }
+.example { margin-top: var(--s-4); font-size: 12.5px; color: var(--ink-3); }
+@media (max-width: 860px) { .obs { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .timeline li { grid-template-columns: 1fr auto; } .timeline .t { grid-column: 1 / -1; } }
+
+/* Router */
+.modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-3); }
+.mode { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: var(--s-4); }
+.mode b { font: 600 14px/1 var(--f-mono); }
+.mode p { font-size: 14px; color: var(--ink-2); margin-top: var(--s-2); }
+@media (max-width: 960px) { .modes { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .modes { grid-template-columns: 1fr; } }
+
+/* Agents */
+.agents { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-4); }
+.agent .tag { margin-bottom: var(--s-3); }
+.agent .pipe { margin-top: var(--s-3); font: 400 12.5px/1.6 var(--f-mono); color: var(--ink-3); }
+.agent.later { opacity: 0.78; }
+.tag-soon { background: var(--surface-2); color: var(--ink-3); }
+@media (max-width: 1000px) { .agents { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .agents { grid-template-columns: 1fr; } }
+
+/* Roadmap */
+.road { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border-left: 2px solid var(--rule); }
+.road li { position: relative; padding: 0 0 var(--s-6) var(--s-6); }
+.road li:last-child { padding-bottom: 0; }
+.road li::before { content: ""; position: absolute; left: -7px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg); border: 2px solid var(--ink-3); }
+.road li.now::before { background: var(--accent); border-color: var(--accent); }
+.road .v { font: 600 13px/1 var(--f-mono); color: var(--ink-3); }
+.road li.now .v { color: var(--accent); }
+.road h3 { font-size: 18px; margin-top: var(--s-2); }
+.road p { color: var(--ink-2); margin-top: var(--s-1); font-size: 15px; max-width: 64ch; }
+
+/* Join */
+.join { display: grid; grid-template-columns: 1fr 1.15fr; gap: var(--s-7); align-items: start; }
+.join .points { list-style: none; padding: 0; margin: var(--s-5) 0 0; display: grid; gap: var(--s-3); color: var(--ink-2); }
+.join .points li { display: grid; grid-template-columns: 20px 1fr; gap: 8px; }
+.join .points li::before { content: "→"; color: var(--accent); font-family: var(--f-mono); }
+.form { display: grid; gap: var(--s-5); }
+.field { display: grid; gap: var(--s-2); }
+.field > label, .field > legend { font-weight: 600; font-size: 14px; padding: 0; }
+fieldset { border: 0; padding: 0; margin: 0; }
+input[type=email], textarea, select {
+  font: 400 16px/1.4 var(--f-body); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 12px; width: 100%;
+}
+input[type=email]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+textarea { min-height: 96px; resize: vertical; }
+.checks { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2); }
+.check { position: relative; }
+.check input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.check span { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; border: 1px solid var(--rule); border-radius: 999px; font-size: 14px; color: var(--ink-2); }
+.check input:checked + span { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+.check input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.consent { display: grid; grid-template-columns: 22px 1fr; gap: 10px; font-size: 14px; color: var(--ink-2); align-items: start; }
+.consent input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.status { min-height: 24px; font-size: 14px; }
+.status.ok { color: var(--accent); }
+.status.err { color: var(--block); }
+.hint { font-size: 13px; color: var(--ink-3); font-weight: 400; }
+@media (max-width: 900px) { .join { grid-template-columns: 1fr; gap: var(--s-6); } }
+
+/* Footer */
+footer { border-top: 1px solid var(--rule); padding-block: var(--s-6); color: var(--ink-3); font-size: 14px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-4); }
+footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="#" aria-label="VNX">
+    <span class="brand-mark" aria-hidden="true">›</span>VNX
+  </a>
+  <nav class="nav" aria-label="Primary">
+    <div class="nav-links">
+      <a href="#how" data-i18n="nav.how">How it works</a>
+      <a href="#control" data-i18n="nav.control">Control</a>
+      <a href="#observe" data-i18n="nav.observe">Observability</a>
+      <a href="#roadmap" data-i18n="nav.roadmap">Roadmap</a>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="vi" aria-pressed="false">VI</button>
+    </div>
+    <a class="btn btn-primary" href="#join" data-i18n="nav.cta">Get early access</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<div class="hero">
+  <div>
+    <p class="eyebrow" data-i18n="hero.eyebrow">AI execution layer</p>
+    <h1 data-i18n-html="hero.title">AI that <em>works</em>,<br>not just chats.</h1>
+    <p class="lede" data-i18n="hero.lede">Give VNX a goal. It plans the work, asks before anything risky, executes with real tools, verifies the result and shows you every step with its cost.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#join" data-i18n="hero.cta">Join early access</a>
+      <a class="btn btn-ghost" href="#how" data-i18n="hero.cta2">See how it works</a>
+    </div>
+    <p class="hero-note" data-i18n="hero.note">In development. Dogfooded on our own repositories first.</p>
+  </div>
+
+  <div class="task" role="img" aria-label="Example of a VNX task waiting for approval" data-i18n-attr="aria-label:hero.mockLabel">
+    <div class="task-head">
+      <span>developer-agent · task_01J9</span>
+      <span class="pill pill-wait" data-i18n="mock.waiting">Waiting approval</span>
+    </div>
+    <div class="task-goal">
+      <span class="k" data-i18n="mock.goal">Goal</span>
+      <p data-i18n="mock.goalText">Add per-IP rate limiting to /api/waitlist and cover it with tests</p>
+    </div>
+    <ol class="steps">
+      <li class="done"><span class="ic">✓</span><span data-i18n="mock.s1">Read worker.ts and tests</span><span class="meta">2.1s</span></li>
+      <li class="done"><span class="ic">✓</span><span data-i18n="mock.s2">Draft plan · approved</span><span class="meta">$0.02</span></li>
+      <li class="done"><span class="ic">✓</span><span data-i18n="mock.s3">Write failing test</span><span class="meta">$0.03</span></li>
+      <li class="wait"><span class="ic">●</span><span data-i18n="mock.s4">Edit src/worker.ts</span><span class="meta">WRITE</span></li>
+      <li class="todo"><span class="ic">○</span><span data-i18n="mock.s5">Run npm test</span><span class="meta"></span></li>
+      <li class="todo"><span class="ic">○</span><span data-i18n="mock.s6">Verify and summarize diff</span><span class="meta"></span></li>
+    </ol>
+    <div class="approve">
+      <div class="row"><b>filesystem.write</b><span>src/worker.ts · +14 −1</span></div>
+      <div class="diff"><span class="add">+ const limited = await rateLimit(env, ip, 5, 60);</span>
+<span class="add">+ if (limited) return json({ ok: false }, 429);</span></div>
+      <div class="acts" aria-hidden="true">
+        <span class="fake-btn go" data-i18n="mock.approve">Approve</span>
+        <span class="fake-btn" data-i18n="mock.edit">Edit</span>
+        <span class="fake-btn" data-i18n="mock.reject">Reject</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section aria-labelledby="problem-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="problem.eyebrow">The problem</p>
+    <h2 id="problem-title" data-i18n="problem.title">AI is great at answers. You still do the work in between.</h2>
+    <p data-i18n="problem.lede">A real task crosses five tools, and you are the glue: copying context in, pasting results out, checking that nothing broke.</p>
+  </div>
+  <div class="compare">
+    <div class="card">
+      <h3 data-i18n="problem.today">Today</h3>
+      <div class="chain" aria-label="Chat, copy, another model, copy, IDE, Git, tracker, browser">
+        <span class="chip">ChatGPT</span><span class="chip paste" data-i18n="problem.copy">copy</span>
+        <span class="chip">Claude</span><span class="chip paste" data-i18n="problem.copy">copy</span>
+        <span class="chip">IDE</span><span class="arrow">→</span>
+        <span class="chip">Git</span><span class="arrow">→</span>
+        <span class="chip" data-i18n="problem.tracker">Tracker</span><span class="arrow">→</span>
+        <span class="chip" data-i18n="problem.browser">Browser</span>
+      </div>
+      <p data-i18n="problem.todayText">Every hop loses context. Nobody records what was run, which model said what, or what it cost.</p>
+    </div>
+    <div class="card">
+      <h3 data-i18n="problem.with">With VNX</h3>
+      <div class="chain">
+        <span class="chip" data-i18n="problem.goal">Goal</span><span class="arrow">→</span>
+        <span class="chip vnx">VNX</span><span class="arrow">→</span>
+        <span class="chip ok" data-i18n="problem.result">Verified result</span>
+      </div>
+      <p data-i18n="problem.withText">One goal in. VNX drives the models and tools, stops at the checkpoints you set, and hands back a result it has already checked.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how" aria-labelledby="how-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="how.eyebrow">How it works</p>
+    <h2 id="how-title" data-i18n="how.title">From goal to verified result, with you at the checkpoints.</h2>
+  </div>
+  <ol class="flow">
+    <li><h3 data-i18n="how.1t">Goal</h3><p data-i18n="how.1d">Describe the outcome in plain language.</p></li>
+    <li><h3 data-i18n="how.2t">Plan</h3><p data-i18n="how.2d">VNX reads the context and breaks the work into steps.</p></li>
+    <li class="human"><h3 data-i18n="how.3t">Approve</h3><p data-i18n="how.3d">You approve, edit or reject the plan before anything runs.</p></li>
+    <li><h3 data-i18n="how.4t">Execute</h3><p data-i18n="how.4d">The agent works with real tools: files, Git, shell.</p></li>
+    <li><h3 data-i18n="how.5t">Verify</h3><p data-i18n="how.5d">Tests and checks run before anything is called done.</p></li>
+    <li><h3 data-i18n="how.6t">Result</h3><p data-i18n="how.6d">A summary, the diff, and a full record of every step.</p></li>
+  </ol>
+</section>
+
+<section id="control" aria-labelledby="control-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="control.eyebrow">Human in control</p>
+    <h2 id="control-title" data-i18n="control.title">Agents act. Risky actions wait for you.</h2>
+    <p data-i18n="control.lede">Every tool declares what it can do. A policy decides whether it runs on its own, asks first, or never runs at all.</p>
+  </div>
+  <table class="policy">
+    <thead>
+      <tr><th data-i18n="control.thLevel">Level</th><th data-i18n="control.thTools">Example tools</th><th data-i18n="control.thPolicy">Default policy</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>READ</td><td class="tools">filesystem.read · git.diff · git.status</td><td><span class="pill pill-ok" data-i18n="control.auto">Auto</span></td></tr>
+      <tr><td>WRITE</td><td class="tools">filesystem.write · git.commit</td><td><span class="pill pill-wait" data-i18n="control.approval">Approval</span></td></tr>
+      <tr><td>EXECUTE</td><td class="tools">shell.execute</td><td><span class="pill pill-ok" data-i18n="control.allow">Auto if allowlisted</span> <span class="pill pill-wait" data-i18n="control.approval">Approval</span></td></tr>
+      <tr><td>EXTERNAL</td><td class="tools">git.push · send email · post comment</td><td><span class="pill pill-wait" data-i18n="control.approval">Approval</span></td></tr>
+      <tr><td>DESTRUCTIVE</td><td class="tools">database.drop · rm -rf · deploy prod</td><td><span class="pill pill-block" data-i18n="control.block">Blocked</span></td></tr>
+    </tbody>
+  </table>
+  <p class="policy-note" data-i18n="control.note">Agents run inside a workspace sandbox, never see raw secrets, and every decision lands in an audit log.</p>
+</section>
+
+<section id="observe" aria-labelledby="observe-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="observe.eyebrow">Observable by default</p>
+    <h2 id="observe-title" data-i18n="observe.title">See every step, every model call, every cent.</h2>
+    <p data-i18n="observe.lede">Each task keeps a timeline. Open any step to see its input, output, model, tokens, duration and cost.</p>
+  </div>
+  <div class="obs">
+    <div class="card">
+      <ol class="timeline">
+        <li><span class="t">18:30:01</span><span data-i18n="observe.e1">task started</span><span class="c"></span></li>
+        <li><span class="t">18:30:02</span><span>filesystem.read src/worker.ts</span><span class="c">0.1s</span></li>
+        <li><span class="t">18:30:09</span><span>planner · sonnet</span><span class="c">4.2k tok · $0.02</span></li>
+        <li><span class="t ev-wait">18:30:10</span><span class="ev-wait" data-i18n="observe.e2">approval required · plan</span><span class="c"></span></li>
+        <li><span class="t">18:32:44</span><span data-i18n="observe.e3">plan approved</span><span class="c"></span></li>
+        <li><span class="t">18:32:51</span><span>filesystem.write test/rate-limit.test.ts</span><span class="c">$0.03</span></li>
+        <li><span class="t">18:33:02</span><span>shell.execute npm test</span><span class="c">3.8s</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3 data-i18n="observe.costTitle">Task cost</h3>
+      <dl class="cost">
+        <div><dt data-i18n="observe.planning">Planning</dt><dd>$0.02</dd></div>
+        <div><dt data-i18n="observe.coding">Coding</dt><dd>$0.09</dd></div>
+        <div><dt data-i18n="observe.verify">Verification</dt><dd>$0.01</dd></div>
+        <div><dt data-i18n="observe.tools">Tools</dt><dd>$0.00</dd></div>
+        <div class="total"><dt data-i18n="observe.total">Total</dt><dd>$0.12</dd></div>
+      </dl>
+      <p class="example" data-i18n="observe.example">Illustrative example, not a benchmark.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="router-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="router.eyebrow">Model router · coming</p>
+    <h2 id="router-title" data-i18n="router.title">The right model for each step, not the most expensive one for all.</h2>
+    <p data-i18n="router.lede">Classifying a file doesn't need the same model as designing a migration. Pick a mode per project or per task.</p>
+  </div>
+  <div class="modes">
+    <div class="mode"><b>Auto</b><p data-i18n="router.auto">VNX picks per step by task type.</p></div>
+    <div class="mode"><b>Cheap</b><p data-i18n="router.cheap">Smallest model that passes the checks.</p></div>
+    <div class="mode"><b>Balanced</b><p data-i18n="router.balanced">Strong models only where they matter.</p></div>
+    <div class="mode"><b>Best</b><p data-i18n="router.best">Top reasoning models throughout.</p></div>
+    <div class="mode"><b>Local only</b><p data-i18n="router.local">Nothing leaves your machine.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="agents-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="agents.eyebrow">Agents</p>
+    <h2 id="agents-title" data-i18n="agents.title">One excellent agent first. Then the rest.</h2>
+    <p data-i18n="agents.lede">Every agent runs on the same runtime: same planner, same policy, same timeline.</p>
+  </div>
+  <div class="agents">
+    <div class="card agent">
+      <span class="pill pill-ok tag" data-i18n="agents.first">Building now</span>
+      <h3 data-i18n="agents.devT">Developer Agent</h3>
+      <p data-i18n="agents.devD">Reads the repo, plans the change, edits code, runs tests, hands you a diff.</p>
+      <p class="pipe">analyze → implement → test → diff</p>
+    </div>
+    <div class="card agent later">
+      <span class="pill tag tag-soon" data-i18n="agents.later">Later</span>
+      <h3 data-i18n="agents.revT">Code Reviewer</h3>
+      <p data-i18n="agents.revD">Architecture, bugs, security and performance on every diff.</p>
+      <p class="pipe">diff → bugs → security → review</p>
+    </div>
+    <div class="card agent later">
+      <span class="pill tag tag-soon" data-i18n="agents.later">Later</span>
+      <h3 data-i18n="agents.resT">Research Agent</h3>
+      <p data-i18n="agents.resD">Searches, collects sources, cross-checks and writes the report.</p>
+      <p class="pipe">question → sources → verify → report</p>
+    </div>
+    <div class="card agent later">
+      <span class="pill tag tag-soon" data-i18n="agents.later">Later</span>
+      <h3 data-i18n="agents.conT">Content Agent</h3>
+      <p data-i18n="agents.conD">From topic to script, translation and a publish-ready package.</p>
+      <p class="pipe">topic → outline → script → package</p>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" aria-labelledby="roadmap-title">
+  <div class="sec-head">
+    <p class="eyebrow" data-i18n="road.eyebrow">Roadmap</p>
+    <h2 id="roadmap-title" data-i18n="road.title">Built in small, working steps.</h2>
+  </div>
+  <ol class="road">
+    <li class="now"><span class="v">v0.1 · <span data-i18n="road.now">now</span></span><h3 data-i18n="road.1t">Developer Agent runtime</h3><p data-i18n="road.1d">Planner, executor, verifier, approvals, sandboxed file/Git/shell tools, timeline and cost tracking.</p></li>
+    <li><span class="v">v0.2</span><h3 data-i18n="road.2t">Multi-model and MCP</h3><p data-i18n="road.2d">Claude, OpenAI, Gemini and local models behind one router. Plug in any MCP server: GitHub, GitLab, Jira, browser.</p></li>
+    <li><span class="v">v0.3</span><h3 data-i18n="road.3t">Memory and knowledge</h3><p data-i18n="road.3d">Project memory, code and document indexing, semantic search.</p></li>
+    <li><span class="v">v0.4</span><h3 data-i18n="road.4t">Automation</h3><p data-i18n="road.4d">Schedules, triggers and webhooks. “Every morning at 8, check the open issues and send me a report.”</p></li>
+  </ol>
+</section>
+
+<section id="join" aria-labelledby="join-title">
+  <div class="join">
+    <div>
+      <p class="eyebrow" data-i18n="join.eyebrow">Early access</p>
+      <h2 id="join-title" style="font-size: clamp(28px, 4vw, 40px); margin-top: 12px;" data-i18n="join.title">Help shape what VNX does first.</h2>
+      <ul class="points">
+        <li data-i18n="join.p1">Invites go out in small batches as v0.1 stabilizes.</li>
+        <li data-i18n="join.p2">Early users get free access during the beta.</li>
+        <li data-i18n="join.p3">Tell us the task you'd hand off first. It decides what we build next.</li>
+        <li><span data-i18n-html="join.p4">Questions or partnerships: <a href="mailto:contact@vnx.si">contact@vnx.si</a></span></li>
+      </ul>
+    </div>
+    <form class="card form" id="waitlist" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@company.com">
+      </div>
+      <fieldset class="field">
+        <legend data-i18n="join.iam">I am</legend>
+        <div class="checks">
+          <label class="check"><input type="checkbox" name="personas" value="developer"><span data-i18n="persona.developer">Developer</span></label>
+          <label class="check"><input type="checkbox" name="personas" value="tech-lead"><span data-i18n="persona.techLead">Tech lead</span></label>
+          <label class="check"><input type="checkbox" name="personas" value="devops"><span>DevOps</span></label>
+          <label class="check"><input type="checkbox" name="personas" value="ai-builder"><span data-i18n="persona.aiBuilder">AI builder</span></label>
+          <label class="check"><input type="checkbox" name="personas" value="other"><span data-i18n="persona.other">Other</span></label>
+        </div>
+      </fieldset>
+      <div class="field">
+        <label for="message"><span data-i18n="join.task">What would you hand off to an agent?</span> <span class="hint" data-i18n="join.optional">(optional)</span></label>
+        <textarea id="message" name="message" maxlength="1000" placeholder="Review my merge requests and run the tests before I look" data-i18n-attr="placeholder:join.taskPh"></textarea>
+      </div>
+      <div class="field">
+        <label for="spendBand"><span data-i18n="join.spend">Monthly AI spend today</span> <span class="hint" data-i18n="join.optional">(optional)</span></label>
+        <select id="spendBand" name="spendBand">
+          <option value="" data-i18n="spend.unset">Prefer not to say</option>
+          <option value="none" data-i18n="spend.none">Nothing yet</option>
+          <option value="lt20">&lt; $20</option>
+          <option value="20-100">$20–100</option>
+          <option value="100-500">$100–500</option>
+          <option value="gt500">&gt; $500</option>
+        </select>
+      </div>
+      <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+      <label class="consent"><input type="checkbox" name="consent"><span data-i18n-html="join.consent">I agree that VNX stores my email to send early-access invites and product updates. I can ask for it to be deleted at any time by writing to <a href="mailto:contact@vnx.si">contact@vnx.si</a>.</span></label>
+      <div>
+        <button class="btn btn-primary" id="join-btn" type="submit" data-i18n="join.submit">Join early access</button>
+      </div>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <span>© 2026 VNX · vnx.si</span>
+  <span><span data-i18n="footer.contact">Contact</span>: <a href="mailto:contact@vnx.si">contact@vnx.si</a></span>
+  <span data-i18n="footer.tag">AI that works, not just chats.</span>
+</footer>
+</div>
+
+<script>
+(() => {
+  const VI = {
+    "skip": "Bỏ qua tới nội dung",
+    "nav.how": "Cách hoạt động", "nav.control": "Kiểm soát", "nav.observe": "Quan sát", "nav.roadmap": "Lộ trình", "nav.cta": "Đăng ký sớm",
+    "hero.eyebrow": "Lớp thực thi cho AI",
+    "hero.title": "AI <em>làm việc</em>,<br>không chỉ trò chuyện.",
+    "hero.lede": "Giao cho VNX một mục tiêu. VNX lập kế hoạch, hỏi bạn trước mọi thao tác rủi ro, thực thi bằng công cụ thật, tự kiểm chứng kết quả và cho bạn xem từng bước kèm chi phí.",
+    "hero.cta": "Đăng ký dùng sớm", "hero.cta2": "Xem cách hoạt động",
+    "hero.note": "Đang phát triển. Đang dùng thử trên chính các repo của chúng tôi.",
+    "hero.mockLabel": "Ví dụ một task VNX đang chờ duyệt",
+    "mock.waiting": "Chờ duyệt", "mock.goal": "Mục tiêu",
+    "mock.goalText": "Thêm giới hạn tần suất theo IP cho /api/waitlist, kèm test",
+    "mock.s1": "Đọc worker.ts và test", "mock.s2": "Lập kế hoạch · đã duyệt", "mock.s3": "Viết test đang fail",
+    "mock.s4": "Sửa src/worker.ts", "mock.s5": "Chạy npm test", "mock.s6": "Kiểm chứng và tóm tắt diff",
+    "mock.approve": "Duyệt", "mock.edit": "Sửa", "mock.reject": "Từ chối",
+    "problem.eyebrow": "Vấn đề",
+    "problem.title": "AI trả lời rất giỏi. Phần việc ở giữa vẫn do bạn làm.",
+    "problem.lede": "Một việc thật đi qua năm công cụ, và bạn là chất keo: chép ngữ cảnh vào, dán kết quả ra, rồi kiểm tra xem có gì hỏng không.",
+    "problem.today": "Hiện nay", "problem.copy": "copy", "problem.tracker": "Tracker", "problem.browser": "Trình duyệt",
+    "problem.todayText": "Mỗi lần chuyển là mất ngữ cảnh. Không ai ghi lại đã chạy gì, model nào nói gì, tốn bao nhiêu.",
+    "problem.with": "Với VNX", "problem.goal": "Mục tiêu", "problem.result": "Kết quả đã kiểm chứng",
+    "problem.withText": "Đưa vào một mục tiêu. VNX điều phối model và công cụ, dừng ở những điểm bạn đặt, và trả về kết quả đã được kiểm tra.",
+    "how.eyebrow": "Cách hoạt động",
+    "how.title": "Từ mục tiêu đến kết quả đã kiểm chứng, bạn nắm các điểm dừng.",
+    "how.1t": "Mục tiêu", "how.1d": "Mô tả kết quả bạn muốn bằng ngôn ngữ thường.",
+    "how.2t": "Kế hoạch", "how.2d": "VNX đọc ngữ cảnh và chia việc thành từng bước.",
+    "how.3t": "Duyệt", "how.3d": "Bạn duyệt, sửa hoặc từ chối kế hoạch trước khi chạy.",
+    "how.4t": "Thực thi", "how.4d": "Agent làm việc với công cụ thật: file, Git, shell.",
+    "how.5t": "Kiểm chứng", "how.5d": "Chạy test và kiểm tra trước khi báo xong.",
+    "how.6t": "Kết quả", "how.6d": "Bản tóm tắt, diff và nhật ký đầy đủ từng bước.",
+    "control.eyebrow": "Con người nắm quyền",
+    "control.title": "Agent hành động. Thao tác rủi ro phải chờ bạn.",
+    "control.lede": "Mỗi công cụ khai báo nó làm được gì. Chính sách quyết định nó tự chạy, hỏi trước, hay không bao giờ được chạy.",
+    "control.thLevel": "Mức", "control.thTools": "Ví dụ công cụ", "control.thPolicy": "Chính sách mặc định",
+    "control.auto": "Tự động", "control.approval": "Cần duyệt", "control.allow": "Tự động nếu trong allowlist", "control.block": "Chặn",
+    "control.note": "Agent chạy trong sandbox của workspace, không bao giờ thấy secret thô, và mọi quyết định đều được ghi vào audit log.",
+    "observe.eyebrow": "Quan sát được từ đầu",
+    "observe.title": "Thấy từng bước, từng lần gọi model, từng xu.",
+    "observe.lede": "Mỗi task có một timeline. Mở bất kỳ bước nào để xem input, output, model, token, thời gian và chi phí.",
+    "observe.e1": "task bắt đầu", "observe.e2": "cần duyệt · kế hoạch", "observe.e3": "kế hoạch đã duyệt",
+    "observe.costTitle": "Chi phí task", "observe.planning": "Lập kế hoạch", "observe.coding": "Viết code",
+    "observe.verify": "Kiểm chứng", "observe.tools": "Công cụ", "observe.total": "Tổng",
+    "observe.example": "Ví dụ minh họa, không phải benchmark.",
+    "router.eyebrow": "Model router · sắp có",
+    "router.title": "Đúng model cho từng bước, không phải model đắt nhất cho mọi bước.",
+    "router.lede": "Phân loại một file không cần cùng model với thiết kế một migration. Chọn chế độ theo project hoặc theo task.",
+    "router.auto": "VNX tự chọn theo loại việc của từng bước.", "router.cheap": "Model nhỏ nhất vẫn qua được kiểm tra.",
+    "router.balanced": "Chỉ dùng model mạnh ở chỗ cần.", "router.best": "Dùng model suy luận tốt nhất xuyên suốt.",
+    "router.local": "Không dữ liệu nào rời khỏi máy bạn.",
+    "agents.eyebrow": "Agent",
+    "agents.title": "Làm một agent thật tốt trước. Rồi mới tới các agent khác.",
+    "agents.lede": "Mọi agent chạy trên cùng một runtime: cùng planner, cùng chính sách, cùng timeline.",
+    "agents.first": "Đang xây", "agents.later": "Sau này",
+    "agents.devT": "Developer Agent", "agents.devD": "Đọc repo, lập kế hoạch thay đổi, sửa code, chạy test, trả về diff.",
+    "agents.revT": "Code Reviewer", "agents.revD": "Kiến trúc, bug, bảo mật và hiệu năng trên mọi diff.",
+    "agents.resT": "Research Agent", "agents.resD": "Tìm kiếm, thu thập nguồn, đối chiếu và viết báo cáo.",
+    "agents.conT": "Content Agent", "agents.conD": "Từ chủ đề tới kịch bản, bản dịch và gói nội dung sẵn để đăng.",
+    "road.eyebrow": "Lộ trình", "road.title": "Xây từng bước nhỏ, bước nào cũng chạy được.", "road.now": "hiện tại",
+    "road.1t": "Runtime cho Developer Agent", "road.1d": "Planner, executor, verifier, cơ chế duyệt, công cụ file/Git/shell trong sandbox, timeline và theo dõi chi phí.",
+    "road.2t": "Đa model và MCP", "road.2d": "Claude, OpenAI, Gemini và model chạy local sau một router. Cắm bất kỳ MCP server nào: GitHub, GitLab, Jira, trình duyệt.",
+    "road.3t": "Bộ nhớ và tri thức", "road.3d": "Bộ nhớ theo project, index code và tài liệu, tìm kiếm ngữ nghĩa.",
+    "road.4t": "Tự động hóa", "road.4d": "Lịch chạy, trigger và webhook. “8 giờ sáng mỗi ngày, xem các issue đang mở rồi gửi báo cáo cho tôi.”",
+    "join.eyebrow": "Dùng sớm", "join.title": "Cùng quyết định VNX làm gì trước.",
+    "join.p1": "Lời mời được gửi theo từng đợt nhỏ khi v0.1 ổn định.",
+    "join.p2": "Người dùng sớm được dùng miễn phí trong giai đoạn beta.",
+    "join.p3": "Cho chúng tôi biết việc đầu tiên bạn muốn giao. Nó quyết định chúng tôi xây gì tiếp theo.",
+    "join.p4": 'Câu hỏi hoặc hợp tác: <a href="mailto:contact@vnx.si">contact@vnx.si</a>',
+    "join.iam": "Tôi là",
+    "persona.developer": "Lập trình viên", "persona.techLead": "Tech lead", "persona.aiBuilder": "Người làm AI", "persona.other": "Khác",
+    "join.task": "Bạn muốn giao việc gì cho agent?", "join.optional": "(không bắt buộc)",
+    "join.taskPh": "Review merge request của tôi và chạy test trước khi tôi xem",
+    "join.spend": "Chi phí AI hằng tháng hiện nay",
+    "spend.unset": "Không muốn trả lời", "spend.none": "Chưa tốn gì",
+    "join.consent": 'Tôi đồng ý để VNX lưu email của tôi nhằm gửi lời mời dùng sớm và tin cập nhật sản phẩm. Tôi có thể yêu cầu xóa bất cứ lúc nào qua <a href="mailto:contact@vnx.si">contact@vnx.si</a>.',
+    "join.submit": "Đăng ký dùng sớm",
+    "footer.contact": "Liên hệ",
+    "footer.tag": "AI làm việc, không chỉ trò chuyện.",
+  };
+
+  const UI = {
+    en: {
+      email: "That email address doesn't look right.",
+      personas: "Pick at least one option under “I am”.",
+      consent: "Tick the consent box so we can store your email.",
+      sending: "Sending…",
+      ok: "You're on the list. We'll email your invite.",
+      offline: "This preview isn't connected to a server, so your email wasn't saved.",
+      network: "Couldn't reach the server. Check your connection and try again.",
+      title: "VNX — AI that works",
+    },
+    vi: {
+      email: "Email chưa đúng định dạng.",
+      personas: "Chọn ít nhất một mục ở phần “Tôi là”.",
+      consent: "Đánh dấu ô đồng ý để chúng tôi lưu email của bạn.",
+      sending: "Đang gửi…",
+      ok: "Bạn đã có tên trong danh sách. Chúng tôi sẽ gửi lời mời qua email.",
+      offline: "Bản xem trước này chưa kết nối máy chủ, nên chưa lưu được email.",
+      network: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.",
+      title: "VNX — AI làm việc thật",
+    },
+  };
+  const META_VI = "Giao cho VNX một mục tiêu. VNX lập kế hoạch, hỏi trước thao tác rủi ro, thực thi bằng công cụ thật, kiểm chứng kết quả và cho xem từng bước kèm chi phí.";
+
+  const $ = id => document.getElementById(id);
+  const meta = document.querySelector('meta[name="description"]');
+
+  // English lives in the markup; capture it once so switching back is lossless.
+  const EN = {};
+  for (const el of document.querySelectorAll("[data-i18n]")) EN[el.dataset.i18n] = el.textContent;
+  for (const el of document.querySelectorAll("[data-i18n-html]")) EN[el.dataset.i18nHtml] = el.innerHTML;
+  for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+    const [attr, key] = el.dataset.i18nAttr.split(":");
+    EN[key] = el.getAttribute(attr);
+  }
+  const META_EN = meta.content;
+
+  let lang = "en";
+
+  function apply(next) {
+    lang = next === "vi" ? "vi" : "en";
+    const dict = lang === "vi" ? VI : EN;
+    const t = key => dict[key] ?? EN[key];
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-html]")) el.innerHTML = t(el.dataset.i18nHtml);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      const [attr, key] = el.dataset.i18nAttr.split(":");
+      el.setAttribute(attr, t(key));
+    }
+    document.documentElement.lang = lang;
+    document.title = UI[lang].title;
+    meta.content = lang === "vi" ? META_VI : META_EN;
+    for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
+    $("status").textContent = "";
+  }
+
+  function initialLang() {
+    const q = new URLSearchParams(location.search).get("lang");
+    if (q === "en" || q === "vi") return q;
+    try { const s = localStorage.getItem("vnx.lang"); if (s === "en" || s === "vi") return s; } catch {}
+    return (navigator.language || "").toLowerCase().startsWith("vi") ? "vi" : "en";
+  }
+
+  for (const b of document.querySelectorAll("[data-lang]")) {
+    b.addEventListener("click", () => {
+      apply(b.dataset.lang);
+      try { localStorage.setItem("vnx.lang", lang); } catch {}
+    });
+  }
+  apply(initialLang());
+
+  // ---- Waitlist ----
+  const params = new URLSearchParams(location.search);
+  $("waitlist").addEventListener("submit", async e => {
+    e.preventDefault();
+    const ui = UI[lang];
+    const status = $("status");
+    const btn = $("join-btn");
+    const f = e.target;
+    const body = {
+      email: f.email.value,
+      personas: [...f.querySelectorAll("input[name=personas]:checked")].map(x => x.value),
+      message: f.message.value,
+      spendBand: f.spendBand.value || undefined,
+      consent: f.consent.checked,
+      website: f.website.value,
+      lang,
+      referrer: document.referrer || undefined,
+      utmSource: params.get("utm_source") || undefined,
+      utmMedium: params.get("utm_medium") || undefined,
+      utmCampaign: params.get("utm_campaign") || undefined,
+    };
+    const fail = (msg, focus) => { status.className = "status err"; status.textContent = msg; if (focus) focus.focus(); };
+    status.className = "status"; status.textContent = "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email.trim())) return fail(ui.email, f.email);
+    if (!body.personas.length) return fail(ui.personas);
+    if (!body.consent) return fail(ui.consent, f.consent);
+
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = ui.sending;
+    try {
+      const res = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && data.ok) { status.className = "status ok"; status.textContent = ui.ok; f.reset(); }
+      else if (data && data.error) fail(data.error);
+      else fail(ui.offline);
+    } catch {
+      fail(ui.network);
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
+  });
+})();
+</script>
+</body>
+</html>

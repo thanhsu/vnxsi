@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VNX — Something new is coming</title>
+<meta name="description" content="VNX is quietly building something new in AI and software. Be the first to know when it launches, or get in touch.">
+<link rel="canonical" href="https://vnx.si/">
+<link rel="alternate" hreflang="en" href="https://vnx.si/?lang=en">
+<link rel="alternate" hreflang="vi" href="https://vnx.si/?lang=vi">
+<link rel="alternate" hreflang="x-default" href="https://vnx.si/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="VNX">
+<meta property="og:title" content="VNX — Something new is coming">
+<meta property="og:description" content="Something new in AI and software is being built. Be the first to know.">
+<meta property="og:url" content="https://vnx.si/">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b0e11">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238fe388'/%3E%3Cpath d='M11 9l8 7-8 7' stroke='%230b0e11' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script type="application/ld+json">
+{ "@context": "https://schema.org", "@type": "Organization", "name": "VNX", "url": "https://vnx.si/", "email": "contact@vnx.si" }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;800&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+:root {
+  --bg: #0b0e11; --surface: #12171c; --surface-2: #181e24;
+  --ink: #e8ecef; --ink-2: #9ba6b0; --ink-3: #8492a0; --rule: #232b33;
+  --accent: #8fe388; --accent-2: #5fd0c5; --accent-ink: #0b0e11; --accent-soft: #15291a; --block: #f2786b;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f6f7f8; --surface: #ffffff; --surface-2: #f0f2f4;
+    --ink: #11161b; --ink-2: #4c5761; --ink-3: #5d6873; --rule: #dde2e6;
+    --accent: #1f7a2e; --accent-2: #0f7a72; --accent-ink: #ffffff; --accent-soft: #e3f3e5; --block: #b3332a;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f6f7f8; --surface: #ffffff; --surface-2: #f0f2f4;
+  --ink: #11161b; --ink-2: #4c5761; --ink-3: #5d6873; --rule: #dde2e6;
+  --accent: #1f7a2e; --accent-2: #0f7a72; --accent-ink: #ffffff; --accent-soft: #e3f3e5; --block: #b3332a;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 16px/1.6 var(--f-body);
+  margin: 0; padding-inline: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 960px; margin-inline: auto; min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+p { margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.top { display: flex; align-items: center; justify-content: space-between; padding-block: 24px; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font: 600 20px/1 var(--f-mono); }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 15px; }
+.lang { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.lang button { font: 500 12px/1 var(--f-mono); background: transparent; color: var(--ink-2); border: 0; padding: 0 12px; min-height: 40px; min-width: 44px; cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+
+/* Particle stage: thousands of dots assemble into the wordmark; the cursor pushes them away. */
+.stage { position: relative; height: clamp(200px, min(42vh, 64vw), 420px); margin-inline: -16px; touch-action: pan-y; cursor: crosshair; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage-hint { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); font: 500 11px/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); opacity: 0; transition: opacity 0.6s; pointer-events: none; white-space: nowrap; }
+.stage.ready .stage-hint { opacity: 1; }
+.stage.touched .stage-hint { opacity: 0; }
+.hint-touch { display: none; }
+@media (hover: none) { .hint-mouse { display: none; } .hint-touch { display: inline; } }
+
+main { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 28px 0 48px; }
+.soon { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 7px 12px; border-radius: 999px; }
+.soon::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+h1 { font-size: clamp(30px, 5.4vw, 48px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; margin: 18px 0 0; text-wrap: balance; }
+h1 .caret { display: inline-block; width: 0.08em; height: 0.9em; margin-left: 0.08em; vertical-align: -0.08em; background: var(--accent); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.lede { margin-top: 16px; font-size: 18px; color: var(--ink-2); max-width: 46ch; text-wrap: pretty; }
+
+/* Reveal content after the particles settle. */
+.reveal { opacity: 0; transform: translateY(12px); transition: opacity 0.8s ease, transform 0.8s ease; }
+.revealed .reveal { opacity: 1; transform: none; }
+.revealed .reveal:nth-child(2) { transition-delay: 0.12s; }
+.revealed .reveal:nth-child(3) { transition-delay: 0.24s; }
+.revealed .reveal:nth-child(4) { transition-delay: 0.36s; }
+.revealed .reveal:nth-child(5) { transition-delay: 0.48s; }
+
+.form { margin-top: 32px; width: 100%; max-width: 520px; display: grid; gap: 12px; text-align: left; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 20px; }
+.form h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.form .sub { font-size: 14px; color: var(--ink-2); margin-top: -4px; }
+input[type=email], textarea {
+  width: 100%; font: 400 16px/1.4 var(--f-body); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px;
+}
+input[type=email] { min-height: 48px; }
+textarea { min-height: 84px; resize: vertical; }
+input[type=email]:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.btn { font: 600 15px/1 var(--f-body); background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 0 20px; min-height: 48px; cursor: pointer; justify-self: start; }
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.7; cursor: progress; }
+.consent { display: grid; grid-template-columns: 22px 1fr; gap: 10px; font-size: 13.5px; color: var(--ink-2); align-items: start; }
+.consent input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.status { min-height: 22px; font-size: 14px; margin: 0; }
+.status.ok { color: var(--accent); }
+.status.err { color: var(--block); }
+.contact { margin-top: 24px; color: var(--ink-2); font-size: 15px; }
+
+footer { padding-block: 24px; border-top: 1px solid var(--rule); color: var(--ink-3); font-size: 13px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .soon::before, h1 .caret { animation: none; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="brand" href="/" aria-label="VNX"><span class="brand-mark" aria-hidden="true">›</span>VNX</a>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="en" aria-pressed="true">EN</button>
+    <button type="button" data-lang="vi" aria-pressed="false">VI</button>
+  </div>
+</header>
+
+<div class="stage" id="stage" aria-hidden="true">
+  <canvas id="particles"></canvas>
+  <span class="stage-hint"><span class="hint-mouse" data-i18n="hint">Move your cursor · click to scatter</span><span class="hint-touch" data-i18n="hintTouch">Tap to scatter</span></span>
+</div>
+
+<main id="main">
+  <span class="sr-only">VNX</span>
+  <span class="soon reveal" data-i18n="soon">Coming soon</span>
+  <h1 class="reveal"><span data-i18n="title">Something new is being built.</span><span class="caret" aria-hidden="true"></span></h1>
+  <p class="lede reveal" data-i18n="lede">We're quietly working on something in AI and software. It isn't ready to show yet, but you can be the first to know.</p>
+
+  <form class="form reveal" id="contact" novalidate>
+    <h2 data-i18n="formTitle">Curious? Say hello.</h2>
+    <p class="sub" data-i18n="formSub">Leave your email to hear first when we launch, or send us a note. We read everything.</p>
+    <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@company.com" aria-label="Email">
+    <textarea id="message" name="message" maxlength="1000" placeholder="Your message (optional)" aria-label="Message" data-i18n-attr="placeholder:msgPh"></textarea>
+    <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+    <label class="consent"><input type="checkbox" name="consent"><span data-i18n="consent">VNX may store my email to reply to me and to tell me when it launches. I can ask for it to be deleted at any time.</span></label>
+    <button class="btn" id="send-btn" type="submit" data-i18n="submit">Send</button>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </form>
+
+  <p class="contact reveal"><span data-i18n="contact">Or email us directly:</span> <a href="mailto:contact@vnx.si">contact@vnx.si</a></p>
+</main>
+
+<footer>© 2026 VNX · vnx.si</footer>
+</div>
+
+<script>
+(() => {
+  // ---------- i18n ----------
+  const VI = {
+    hint: "Di chuột · bấm để làm tan",
+    hintTouch: "Chạm để làm tan",
+    soon: "Sắp ra mắt",
+    title: "Một điều mới đang được xây dựng.",
+    lede: "Chúng tôi đang lặng lẽ làm một thứ trong lĩnh vực AI và phần mềm. Chưa đến lúc giới thiệu, nhưng bạn có thể là người biết đầu tiên.",
+    formTitle: "Tò mò? Chào chúng tôi một câu.",
+    formSub: "Để lại email để được báo đầu tiên khi ra mắt, hoặc gửi cho chúng tôi vài dòng. Chúng tôi đọc tất cả.",
+    msgPh: "Lời nhắn của bạn (không bắt buộc)",
+    consent: "VNX được lưu email của tôi để trả lời và báo cho tôi khi ra mắt. Tôi có thể yêu cầu xóa bất cứ lúc nào.",
+    submit: "Gửi",
+    contact: "Hoặc email trực tiếp:",
+  };
+  const UI = {
+    en: {
+      email: "That email address doesn't look right.",
+      consent: "Tick the box so we can store your email.",
+      sending: "Sending…",
+      ok: "Thanks! We got it and will be in touch.",
+      offline: "This preview isn't connected to a server, so nothing was sent.",
+      network: "Couldn't reach the server. Check your connection and try again.",
+      title: "VNX — Something new is coming",
+      meta: "VNX is quietly building something new in AI and software. Be the first to know when it launches, or get in touch.",
+    },
+    vi: {
+      email: "Email chưa đúng định dạng.",
+      consent: "Đánh dấu ô đồng ý để chúng tôi lưu email của bạn.",
+      sending: "Đang gửi…",
+      ok: "Cảm ơn bạn! Chúng tôi đã nhận được và sẽ liên hệ lại.",
+      offline: "Bản xem trước này chưa kết nối máy chủ, nên chưa gửi được.",
+      network: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.",
+      title: "VNX — Một điều mới sắp ra mắt",
+      meta: "VNX đang lặng lẽ xây dựng một thứ mới trong lĩnh vực AI và phần mềm. Hãy là người biết đầu tiên, hoặc liên hệ với chúng tôi.",
+    },
+  };
+  const $ = id => document.getElementById(id);
+  const meta = document.querySelector('meta[name="description"]');
+  const EN = {};
+  for (const el of document.querySelectorAll("[data-i18n]")) EN[el.dataset.i18n] = el.textContent;
+  for (const el of document.querySelectorAll("[data-i18n-attr]")) { const [a, k] = el.dataset.i18nAttr.split(":"); EN[k] = el.getAttribute(a); }
+
+  let lang = "en";
+  function apply(next) {
+    lang = next === "vi" ? "vi" : "en";
+    const d = lang === "vi" ? VI : EN;
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = d[el.dataset.i18n] ?? EN[el.dataset.i18n];
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) { const [a, k] = el.dataset.i18nAttr.split(":"); el.setAttribute(a, d[k] ?? EN[k]); }
+    document.documentElement.lang = lang;
+    document.title = UI[lang].title;
+    meta.content = UI[lang].meta;
+    for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
+    $("status").textContent = "";
+  }
+  function initialLang() {
+    const q = new URLSearchParams(location.search).get("lang");
+    if (q === "en" || q === "vi") return q;
+    try { const s = localStorage.getItem("vnx.lang"); if (s === "en" || s === "vi") return s; } catch {}
+    return (navigator.language || "").toLowerCase().startsWith("vi") ? "vi" : "en";
+  }
+  for (const b of document.querySelectorAll("[data-lang]")) {
+    b.addEventListener("click", () => { apply(b.dataset.lang); try { localStorage.setItem("vnx.lang", lang); } catch {} });
+  }
+  apply(initialLang());
+
+  // ---------- Particles: scatter → assemble into "VNX" → react to the pointer ----------
+  const stage = $("stage"), canvas = $("particles"), ctx = canvas.getContext("2d");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const revealAll = () => document.body.classList.add("revealed");
+  let W = 0, H = 0, dpr = 1, parts = [], colors = [], pointer = { x: -1e4, y: -1e4, active: false };
+  let running = false, visible = true, raf = 0, lastKick = 0, settledAt = 0;
+
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    colors = [cs.getPropertyValue("--accent").trim(), cs.getPropertyValue("--accent-2").trim(), cs.getPropertyValue("--ink-3").trim()];
+  }
+
+  // Sample the wordmark from an offscreen canvas into target points.
+  function targets() {
+    const off = document.createElement("canvas");
+    off.width = W; off.height = H;
+    const o = off.getContext("2d");
+    const size = Math.min(W * 0.34, H * 0.78);
+    o.fillStyle = "#000";
+    o.font = `800 ${size}px "Be Vietnam Pro", system-ui, sans-serif`;
+    o.textAlign = "center"; o.textBaseline = "middle";
+    o.fillText("VNX", W / 2, H / 2 + size * 0.04);
+    const data = o.getImageData(0, 0, W, H).data;
+    const gap = Math.max(3, Math.round(Math.sqrt((W * H) / 2600) * 0.62));
+    const pts = [];
+    for (let y = 0; y < H; y += gap) for (let x = 0; x < W; x += gap) if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
+    return { pts, gap };
+  }
+
+  function build() {
+    const r = stage.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const { pts, gap } = targets();
+    const size = Math.max(1.6, gap * 0.62);
+    const next = [];
+    for (let i = 0; i < pts.length; i++) {
+      const old = parts[i];
+      const p = old || {
+        x: Math.random() * W, y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6,
+        delay: Math.random() * 45, tw: Math.random() * Math.PI * 2,
+        c: Math.random() < 0.82 ? 0 : 1,
+      };
+      p.tx = pts[i][0]; p.ty = pts[i][1]; p.s = size;
+      next.push(p);
+    }
+    // A few loose "dust" particles keep drifting around the wordmark.
+    const dust = Math.round(pts.length * 0.06);
+    for (let i = 0; i < dust; i++) next.push({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, dust: true, s: size * 0.7, tw: Math.random() * 6.28, c: 2 });
+    parts = next;
+  }
+
+  function scatter(cx, cy, power) {
+    for (const p of parts) {
+      if (p.dust) continue;
+      const dx = p.x - cx, dy = p.y - cy, d = Math.hypot(dx, dy) || 1;
+      const f = power * (0.4 + Math.random() * 0.8) / Math.max(0.6, d / 120);
+      p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+    }
+    settledAt = 0;
+  }
+
+  function step(t) {
+    ctx.clearRect(0, 0, W, H);
+    const R = Math.min(110, W * 0.14), R2 = R * R;
+    let moving = 0;
+    for (const p of parts) {
+      if (p.dust) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x += W; if (p.x > W) p.x -= W; if (p.y < 0) p.y += H; if (p.y > H) p.y -= H;
+      } else {
+        if (p.delay > 0) { p.delay--; p.x += p.vx; p.y += p.vy; p.vx *= 0.97; p.vy *= 0.97; }
+        else {
+          p.vx += (p.tx - p.x) * 0.018; p.vy += (p.ty - p.y) * 0.018;
+          if (pointer.active) {
+            const dx = p.x - pointer.x, dy = p.y - pointer.y, d2 = dx * dx + dy * dy;
+            if (d2 < R2) { const d = Math.sqrt(d2) || 1, f = (1 - d / R) * 3.2; p.vx += (dx / d) * f; p.vy += (dy / d) * f; }
+          }
+          p.vx *= 0.86; p.vy *= 0.86;
+          p.x += p.vx; p.y += p.vy;
+        }
+        if (Math.abs(p.vx) + Math.abs(p.vy) > 0.25) moving++;
+      }
+      const a = p.dust ? 0.35 + 0.25 * Math.sin(t / 900 + p.tw) : 0.72 + 0.28 * Math.sin(t / 700 + p.tw);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = colors[p.c];
+      ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+    }
+    ctx.globalAlpha = 1;
+    // Once the wordmark has formed, reveal the copy and occasionally ripple it from a random point.
+    if (moving < parts.length * 0.03) {
+      if (!settledAt) settledAt = t;
+      revealAll(); stage.classList.add("ready");
+      if (!pointer.active && t - lastKick > 9000 && t - settledAt > 3500) {
+        lastKick = t;
+        scatter(W * (0.2 + Math.random() * 0.6), H * (0.25 + Math.random() * 0.5), 2.2);
+      }
+    }
+  }
+
+  function loop(t) { if (!running) return; step(t); raf = requestAnimationFrame(loop); }
+  function start() { if (running || reduced.matches || !visible || document.hidden) return; running = true; raf = requestAnimationFrame(loop); }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+
+  function drawStatic() {
+    // Reduced motion: draw the finished wordmark once, no movement.
+    for (const p of parts) if (!p.dust) { p.x = p.tx; p.y = p.ty; p.vx = p.vy = 0; p.delay = 0; }
+    stop(); step(0); revealAll(); stage.classList.add("ready");
+  }
+
+  function init() {
+    readColors(); build();
+    if (reduced.matches) drawStatic(); else start();
+    // Safety net: never leave the copy hidden if the animation can't run.
+    setTimeout(revealAll, 2600);
+  }
+
+  const local = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  stage.addEventListener("pointermove", e => { const q = local(e); pointer.x = q.x; pointer.y = q.y; pointer.active = true; });
+  stage.addEventListener("pointerleave", () => { pointer.active = false; pointer.x = pointer.y = -1e4; });
+  stage.addEventListener("pointerdown", e => {
+    stage.classList.add("touched");
+    if (reduced.matches) return;
+    const q = local(e); scatter(q.x, q.y, 9);
+    if (e.pointerType !== "mouse") setTimeout(() => { pointer.active = false; }, 60);
+  });
+
+  let rt = 0;
+  addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { build(); if (reduced.matches) drawStatic(); }, 150); });
+  document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+  new IntersectionObserver(([en]) => { visible = en.isIntersecting; visible ? start() : stop(); }).observe(stage);
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { readColors(); if (reduced.matches) drawStatic(); });
+  reduced.addEventListener("change", () => (reduced.matches ? drawStatic() : start()));
+
+  (document.fonts && document.fonts.load ? document.fonts.load('800 100px "Be Vietnam Pro"').catch(() => {}) : Promise.resolve()).then(init);
+
+  // ---------- Contact form → /api/waitlist (email + optional message) ----------
+  const params = new URLSearchParams(location.search);
+  $("contact").addEventListener("submit", async e => {
+    e.preventDefault();
+    const ui = UI[lang], status = $("status"), btn = $("send-btn"), f = e.target;
+    const body = {
+      email: f.email.value,
+      message: f.message.value,
+      consent: f.consent.checked,
+      website: f.website.value,
+      lang,
+      referrer: document.referrer || undefined,
+      utmSource: params.get("utm_source") || undefined,
+      utmMedium: params.get("utm_medium") || undefined,
+      utmCampaign: params.get("utm_campaign") || undefined,
+    };
+    const fail = (msg, focus) => { status.className = "status err"; status.textContent = msg; if (focus) focus.focus(); };
+    status.className = "status"; status.textContent = "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email.trim())) return fail(ui.email, f.email);
+    if (!body.consent) return fail(ui.consent, f.consent);
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = ui.sending;
+    try {
+      const res = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && data.ok) {
+        status.className = "status ok"; status.textContent = ui.ok; f.reset();
+        if (!reduced.matches) { const r = canvas.getBoundingClientRect(); scatter(r.width / 2, r.height / 2, 12); }
+      } else if (data && data.error) fail(data.error);
+      else fail(ui.offline);
+    } catch { fail(ui.network); }
+    finally { btn.disabled = false; btn.textContent = label; }
+  });
+})();
+</script>
+</body>
+</html>
