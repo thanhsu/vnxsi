@@ -48,11 +48,11 @@
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|
-| VNX-0201 | Migration builders, portfolio, invites; state machine builder; test sở hữu bảng theo module | AGENT, FOUNDATION | ⏳ |
-| VNX-0202 | `/join/:code`, invite đi kèm magic link, `/hub/apply` | AGENT | ⏳ |
-| VNX-0203 | Khung Builder Hub, sửa hồ sơ, portfolio | AGENT | ⏳ |
-| VNX-0204 | Trang `/b/:handle` | AGENT | ⏳ |
-| VNX-0205 | Admin: hàng chờ builder, invite, khóa/mở khóa | AGENT, HIGH-RISK | ⏳ |
+| VNX-0201 | Migration builders, portfolio, invites; state machine builder; test sở hữu bảng theo module | AGENT, FOUNDATION | ✅ |
+| VNX-0202 | `/join/:code`, invite đi kèm magic link, `/hub/apply` (0202a, 0202b) | AGENT | ✅ |
+| VNX-0203 | Khung Builder Hub, sửa hồ sơ, portfolio (0203a, 0203b) | AGENT | ✅ |
+| VNX-0204 | Trang `/b/:handle` | AGENT | ✅ |
+| VNX-0205 | Admin: hàng chờ builder, invite, khóa/mở khóa (0205a–c) | AGENT, HIGH-RISK | ✅ |
 
 ## EPIC 3 — Product
 
