@@ -3,7 +3,7 @@ import type { BuilderAccount, BuilderAction } from "../../domain/builder.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 import { countryName } from "../country.ts";
-import { KIND_KEY, STATUS_KEY } from "../labels.ts";
+import { KIND_KEY, STATUS_KEY, USER_STATUS_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { AdminLayout } from "./AdminLayout.tsx";
 
@@ -35,6 +35,8 @@ export const BuilderDetailPage: FC<Props> = ({ locale, origin, builder: b, notic
         <dd>{b.handle}</dd>
         <dt>{tr("admin.col.email")}</dt>
         <dd>{b.email}</dd>
+        <dt>{tr("admin.col.account")}</dt>
+        <dd>{tr(USER_STATUS_KEY[b.userStatus])}</dd>
         <dt>{tr("builder.field.kind")}</dt>
         <dd>{tr(KIND_KEY[b.kind])}</dd>
         <dt>{tr("builder.field.headline")}</dt>
@@ -95,6 +97,35 @@ export const BuilderDetailPage: FC<Props> = ({ locale, origin, builder: b, notic
             </button>
           </form>
         </div>
+      ) : null}
+      {b.status === "approved" ? (
+        <form method="post" action={action("suspend")} class="card">
+          <div class="field">
+            <label for="suspend-reason">{tr("admin.reasonOptional")}</label>
+            <textarea
+              id="suspend-reason"
+              name="reason"
+              maxlength={500}
+              aria-invalid={reasonError === "suspend" ? "true" : undefined}
+              aria-describedby={reasonError === "suspend" ? "suspend-reason-error" : undefined}
+            ></textarea>
+            {reasonError === "suspend" ? (
+              <p id="suspend-reason-error" class="error-msg">
+                {tr("admin.error.reason")}
+              </p>
+            ) : null}
+          </div>
+          <button class="btn" type="submit">
+            {tr("admin.suspend")}
+          </button>
+        </form>
+      ) : null}
+      {b.status === "suspended" ? (
+        <form method="post" action={action("unsuspend")}>
+          <button class="btn" type="submit">
+            {tr("admin.unsuspend")}
+          </button>
+        </form>
       ) : null}
     </AdminLayout>
   );

@@ -167,6 +167,20 @@ export const en = {
   "invites.error.maxUses": "Enter a whole number from 1 to 1000.",
   "invites.error.days": "Enter a whole number from 1 to 90.",
   "invites.error.note": "Keep the note under 200 characters.",
+  "admin.nav.users": "Users",
+  "admin.col.account": "Account",
+  "admin.suspend": "Suspend",
+  "admin.unsuspend": "Unsuspend",
+  "admin.reasonOptional": "Reason (optional, admins only)",
+  "users.title": "Users",
+  "users.search": "Search by email",
+  "users.searchSubmit": "Search",
+  "users.empty": "No users found.",
+  "users.col.status": "Status",
+  "users.col.admin": "Admin",
+  "users.col.builder": "Builder",
+  "users.status.active": "Active",
+  "users.status.suspended": "Suspended",
 } as const;
 
 export type MessageKey = keyof typeof en;

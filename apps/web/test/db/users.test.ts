@@ -18,12 +18,14 @@ describe("users", () => {
     await expect(createUser(testEnv.DB, { email: "dup@example.vn", locale: "en", now: NOW })).rejects.toThrow();
   });
 
-  it("markLogin sets last_login_at and only ever raises is_admin", async () => {
+  it("markLogin sets last_login_at and syncs is_admin both ways (ADMIN_EMAILS is the source of truth)", async () => {
     const u = await createUser(testEnv.DB, { email: "a@vnx.si", locale: "en", now: NOW });
     await markLogin(testEnv.DB, u.id, { now: NOW, isAdmin: true });
     await markLogin(testEnv.DB, u.id, { now: NOW, isAdmin: false });
     const after = await findUserByEmail(testEnv.DB, "a@vnx.si");
-    expect(after).toMatchObject({ last_login_at: NOW, is_admin: 1 });
+    expect(after).toMatchObject({ last_login_at: NOW, is_admin: 0 });
+    await markLogin(testEnv.DB, u.id, { now: NOW, isAdmin: true });
+    expect(await findUserByEmail(testEnv.DB, "a@vnx.si")).toMatchObject({ is_admin: 1 });
   });
 
   it("writes audit rows", async () => {

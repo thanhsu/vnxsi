@@ -32,3 +32,7 @@ export async function getSessionUser(db: D1Database, raw: string, now: Date): Pr
 export async function deleteSession(db: D1Database, raw: string): Promise<void> {
   await db.prepare("DELETE FROM sessions WHERE id_hash = ?1").bind(await sha256Hex(raw)).run();
 }
+
+export async function deleteUserSessions(db: D1Database, userId: string): Promise<void> {
+  await db.prepare("DELETE FROM sessions WHERE user_id = ?1").bind(userId).run();
+}

@@ -1,4 +1,5 @@
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
+import type { UserStatus } from "../domain/user.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 
 export const KIND_KEY: Record<BuilderKind, MessageKey> = {
@@ -31,4 +32,9 @@ export const STATUS_BODY_KEY: Record<BuilderStatus, MessageKey> = {
   approved: "hub.status.approved.body",
   rejected: "hub.status.rejected.body",
   suspended: "hub.status.suspended.body",
+};
+
+export const USER_STATUS_KEY: Record<UserStatus, MessageKey> = {
+  active: "users.status.active",
+  suspended: "users.status.suspended",
 };

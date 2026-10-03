@@ -47,6 +47,8 @@ export function registerAdminRoutes(app: Hono<AppEnv>) {
 
   onLocalized(app, "post", "/admin/builders/:userId/approve", requireAdmin, (c) => decide(c, "approve"));
   onLocalized(app, "post", "/admin/builders/:userId/reject", requireAdmin, (c) => decide(c, "reject"));
+  onLocalized(app, "post", "/admin/builders/:userId/suspend", requireAdmin, (c) => decide(c, "suspend"));
+  onLocalized(app, "post", "/admin/builders/:userId/unsuspend", requireAdmin, (c) => decide(c, "unsuspend"));
 }
 
 /** Shared by every admin action on a builder: validate, compare-and-set, audit, notify. */

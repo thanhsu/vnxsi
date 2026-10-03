@@ -12,6 +12,7 @@ import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerBuilderProfileRoutes } from "./routes/builder-profile.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
+import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
 import { handleWaitlist } from "./routes/waitlist.ts";
 import { errorResponse } from "./views/error-response.tsx";
@@ -31,6 +32,7 @@ export function createApp() {
   registerBuilderProfileRoutes(app);
   registerAdminRoutes(app);
   registerInviteAdminRoutes(app);
+  registerUserAdminRoutes(app);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));
