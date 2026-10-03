@@ -13,5 +13,6 @@ export function safeNext(value: unknown): string | null {
   if (FORBIDDEN.test(decoded) || decoded.startsWith("//")) return null;
   const u = new URL(value, "https://vnx.invalid");
   if (u.origin !== "https://vnx.invalid") return null;
-  return u.pathname + u.search + u.hash;
+  if (u.pathname.startsWith("//") || u.pathname.startsWith("/\\")) return null;
+  return value;
 }
