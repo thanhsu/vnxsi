@@ -21,6 +21,7 @@ Owner muốn builder và client gửi được câu hỏi, góp ý, đề nghị
 5. `/admin/feedback`: danh sách, chi tiết, đánh dấu đã xử lý / spam.
 6. Header (mục Contact), footer (Company → Contact), sitemap.
 7. Privacy: thêm đúng các câu ở mục "Privacy" (vào `docs/legal/privacy.md` và `src/legal/content.ts`).
+8. `apps/web/wrangler.jsonc`: đặt `"TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X"` (site key công khai của widget `vnx.si`, Owner tạo 2026-10-04). Secret `TURNSTILE_SECRET` do Owner đặt bằng `wrangler secret put`, không nằm trong repo.
 
 **Ngoài phạm vi**
 - Trả lời trong web (Owner trả lời bằng email).
