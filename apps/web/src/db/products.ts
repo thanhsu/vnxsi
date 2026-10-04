@@ -192,3 +192,12 @@ export async function updateProductFields(
     throw err;
   }
 }
+
+/** Product counts per status for the Hub overview (archived excluded). */
+export async function countBuilderProductsByStatus(db: D1Database, builderId: string): Promise<Partial<Record<ProductStatus, number>>> {
+  const { results } = await db
+    .prepare("SELECT status, COUNT(*) AS n FROM products WHERE builder_id = ?1 AND status != 'archived' GROUP BY status")
+    .bind(builderId)
+    .all<{ status: ProductStatus; n: number }>();
+  return Object.fromEntries(results.map((r) => [r.status, r.n]));
+}

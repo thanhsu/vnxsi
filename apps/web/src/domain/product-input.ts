@@ -1,5 +1,5 @@
 import { isHttpsUrl, splitCsv } from "./builder-input.ts";
-import { CATEGORIES, DELIVERY_MODELS, LICENSES, PRODUCT_LANGS, type Product } from "./product.ts";
+import { CATEGORIES, DELIVERY_MODELS, LICENSES, PRODUCT_LANGS, type Product, type ReadinessGap } from "./product.ts";
 import { SLUG_RE } from "./slug.ts";
 
 /** The 9 editor steps in display order (spec §5.3). */
@@ -155,3 +155,20 @@ export function parseProductName(raw: unknown): { ok: true; name: string } | { o
   const result = parseField(STEP_FIELDS.product[0]!, str(raw));
   return result.ok ? { ok: true, name: result.value as string } : { ok: false, error: result.error };
 }
+
+/** Where the builder fixes each gap; null when it is not an editor step. */
+export const GAP_STEP: Record<ReadinessGap, ProductStep | null> = {
+  builder_not_approved: null,
+  name: "product",
+  tagline: "product",
+  description: "product",
+  category: "product",
+  delivery_model: "product",
+  problem: "problem",
+  target_users: "audience",
+  features: "features",
+  media: "demo",
+  pricing: "pricing",
+  license: "license",
+  support_policy: "support",
+};

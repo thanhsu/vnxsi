@@ -1,13 +1,14 @@
 import type { FC, PropsWithChildren } from "hono/jsx";
 import type { ProductStep } from "../../domain/product-input.ts";
 import { PRODUCT_STEPS } from "../../domain/product-input.ts";
-import type { EditLock, Product } from "../../domain/product.ts";
+import type { EditLock, Product, ReadinessGap } from "../../domain/product.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { PRODUCT_STATUS_KEY, STEP_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { HubLayout } from "./HubLayout.tsx";
+import { ProductActions } from "./ProductActions.tsx";
 
 const LOCK_KEY: Record<EditLock, MessageKey> = {
   in_review: "editor.locked.in_review",
@@ -15,7 +16,7 @@ const LOCK_KEY: Record<EditLock, MessageKey> = {
   builder_suspended: "editor.locked.builder_suspended",
 };
 
-type Props = { locale: Locale; origin: string; product: Product; step: ProductStep; lock: EditLock | null; saved: boolean };
+type Props = { locale: Locale; origin: string; product: Product; step: ProductStep; lock: EditLock | null; gaps: ReadinessGap[]; saved: boolean };
 
 /** Shared frame of every editor step: title, status, step navigation, lock and review notes. */
 export const EditorLayout: FC<PropsWithChildren<Props>> = (p) => {
@@ -33,6 +34,7 @@ export const EditorLayout: FC<PropsWithChildren<Props>> = (p) => {
           </a>
         ))}
       </nav>
+      <ProductActions locale={p.locale} product={p.product} gaps={p.gaps} lock={p.lock} />
       {p.saved ? (
         <p class="notice good" role="status">
           {tr("editor.saved")}

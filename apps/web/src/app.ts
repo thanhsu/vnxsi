@@ -32,9 +32,9 @@ export function createApp() {
   registerApplyRoutes(app);
   registerHubRoutes(app);
   registerPortfolioRoutes(app);
+  registerProductMediaRoutes(app);
   registerProductEditorRoutes(app);
   registerMediaRoutes(app);
-  registerProductMediaRoutes(app);
   registerBuilderProfileRoutes(app);
   registerAdminRoutes(app);
   registerInviteAdminRoutes(app);

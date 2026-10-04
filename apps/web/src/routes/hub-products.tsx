@@ -3,12 +3,12 @@ import { requireBuilder } from "../auth/middleware.ts";
 import { writeAudit } from "../db/audit.ts";
 import { listMedia } from "../db/media.ts";
 import { listTiers, replaceTiers } from "../db/pricing.ts";
-import { createProductDraft, findOwnedProduct, listBuilderProducts, updateProductFields } from "../db/products.ts";
+import { createProductDraft, findOwnedProduct, listBuilderProducts, setProductStatus, updateProductFields } from "../db/products.ts";
 import { revokeBadge } from "../db/verifications.ts";
 import { canEditProfile } from "../domain/builder.ts";
 import { isTextStep, parseProductName, parseStep, stepValuesFromBody, stepValuesFromProduct, type FieldErrorCode, type StepErrors, type StepValues, type TextStep } from "../domain/product-input.ts";
 import { parseTiers, tierValuesFromBody, tierValuesFromTiers, type TierErrors, type TierValues } from "../domain/pricing-input.ts";
-import { canChangeSlug, editLock, type Product } from "../domain/product.ts";
+import { canChangeSlug, editLock, submitGaps, transition, type EditLock, type Product, type ProductAction, type ReadinessGap } from "../domain/product.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { onLocalized } from "../http/localized.ts";
@@ -45,6 +45,16 @@ async function listPage(c: Context<AppEnv>, name: string, error: FieldErrorCode 
   );
 }
 
+/** Lock and submit gaps shown on every editor page. */
+export async function editorState(c: Context<AppEnv>, product: Product): Promise<{ lock: EditLock | null; gaps: ReadinessGap[] }> {
+  const builder = c.get("builder");
+  const [tiers, media] = await Promise.all([listTiers(c.env.DB, product.id), listMedia(c.env.DB, product.id)]);
+  return {
+    lock: editLock(product.status, builder.status),
+    gaps: submitGaps({ product, builderStatus: builder.status, tierCount: tiers.length, mediaCount: media.length }),
+  };
+}
+
 export type MediaError = MediaErrorCode;
 
 export async function stepPage(
@@ -56,7 +66,7 @@ export async function stepPage(
   status: 200 | 400 | 409 = 200,
   mediaError: MediaError | null = null,
 ) {
-  const lock = editLock(product.status, c.get("builder").status);
+  const { lock, gaps } = await editorState(c, product);
   const media = step === "demo" ? await listMedia(c.env.DB, product.id) : [];
   return page(
     c,
@@ -68,6 +78,7 @@ export async function stepPage(
       values={values}
       errors={errors}
       lock={lock}
+      gaps={gaps}
       saved={c.req.query("saved") === "1"}
       media={media}
       mediaError={mediaError}
@@ -76,16 +87,18 @@ export async function stepPage(
   );
 }
 
-function pricingPage(c: Context<AppEnv>, product: Product, values: TierValues, errors: TierErrors, status: 200 | 400 = 200) {
-  const lock = editLock(product.status, c.get("builder").status);
+async function pricingPage(c: Context<AppEnv>, product: Product, values: TierValues, errors: TierErrors, status: 200 | 400 = 200) {
+  const { lock, gaps } = await editorState(c, product);
   return page(
     c,
-    <EditorLayout locale={c.get("locale")} origin={requestOrigin(c)} product={product} step="pricing" lock={lock} saved={c.req.query("saved") === "1"}>
+    <EditorLayout locale={c.get("locale")} origin={requestOrigin(c)} product={product} step="pricing" lock={lock} gaps={gaps} saved={c.req.query("saved") === "1"}>
       {lock ? null : <PricingForm locale={c.get("locale")} action={editorPath(c, product.id, "pricing")} values={values} errors={errors} />}
     </EditorLayout>,
     status,
   );
 }
+
+const OWNER_ACTIONS = new Set<ProductAction>(["submit", "withdraw", "unlist", "relist", "archive"]);
 
 export function registerProductEditorRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/hub/products", requireBuilder, (c) => listPage(c, "", null));
@@ -176,5 +189,26 @@ export function registerProductEditorRoutes(app: Hono<AppEnv>) {
       await writeAudit(c.env.DB, { actorUserId: builder.userId, action: "product.edit", entity: "product", entityId: product.id, data: { step }, now });
     }
     return c.redirect(editorPath(c, product.id, step, "?saved=1"), 303);
+  });
+
+  // Registered last: `:action` must not shadow literal paths such as POST /hub/products/:id/media.
+  onLocalized(app, "post", "/hub/products/:id/:action", requireBuilder, async (c) => {
+    const action = c.req.param("action") as ProductAction;
+    const product = await ownedProduct(c);
+    if (!product || !OWNER_ACTIONS.has(action)) return errorResponse(c, "notFound", 404);
+    const builder = c.get("builder");
+    if (builder.status === "suspended") return errorResponse(c, "conflict", 409);
+    const next = transition(product.status, action, "owner");
+    if (!next.ok) return errorResponse(c, "conflict", 409);
+    if (action === "submit") {
+      const { gaps } = await editorState(c, product);
+      if (gaps.length > 0) return stepPage(c, product, "product", stepValuesFromProduct("product", product), {}, 400);
+    }
+    const now = new Date().toISOString();
+    const updated = await setProductStatus(c.env.DB, { id: product.id, from: product.status, to: next.status, reviewNote: product.reviewNote, now });
+    if (!updated) return errorResponse(c, "conflict", 409);
+    await writeAudit(c.env.DB, { actorUserId: builder.userId, action: `product.${action}`, entity: "product", entityId: product.id, data: { from: product.status, to: next.status }, now });
+    if (action === "archive") return c.redirect(localizedPath(c.get("locale"), "/hub/products"), 303);
+    return c.redirect(editorPath(c, product.id, "product"), 303);
   });
 }

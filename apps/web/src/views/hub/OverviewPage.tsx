@@ -1,12 +1,13 @@
 import type { FC } from "hono/jsx";
 import type { Builder } from "../../domain/builder.ts";
+import { PRODUCT_STATUSES, type ProductStatus } from "../../domain/product.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
-import { STATUS_BODY_KEY, STATUS_KEY } from "../labels.ts";
+import { PRODUCT_STATUS_KEY, STATUS_BODY_KEY, STATUS_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { HubLayout } from "./HubLayout.tsx";
 
-export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder }> = ({ locale, origin, builder }) => {
+export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder; productCounts: Partial<Record<ProductStatus, number>> }> = ({ locale, origin, builder, productCounts }) => {
   const tr = translator(locale);
   return (
     <HubLayout locale={locale} origin={origin} title={tr("hub.nav.overview")} rest="/hub" active="overview">
@@ -39,6 +40,23 @@ export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder
             </form>
           </>
         ) : null}
+      </section>
+      <section class="card wide">
+        <h2>{tr("hub.products.title")}</h2>
+        {Object.keys(productCounts).length === 0 ? (
+          <p class="muted">{tr("products.empty")}</p>
+        ) : (
+          <ul>
+            {PRODUCT_STATUSES.filter((s) => productCounts[s]).map((s) => (
+              <li>
+                {tr(PRODUCT_STATUS_KEY[s])}: {productCounts[s]}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>
+          <a href={localizedPath(locale, "/hub/products")}>{tr("hub.products.manage")}</a>
+        </p>
       </section>
     </HubLayout>
   );
