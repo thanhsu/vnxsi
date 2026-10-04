@@ -90,6 +90,13 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
 .cards h2 { font-size: 18px; }
 .pager { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 24px; }
 .pager a { display: inline-flex; align-items: center; min-height: 44px; }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.ask { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.messages { list-style: none; padding: 0; display: grid; gap: 12px; margin: 24px 0; }
+.messages > li { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; background: var(--surface); }
+.messages > li.from-builder { border-left: 4px solid var(--accent); }
+.badge-inquiry-open { border-color: var(--accent); color: var(--accent); }
+.badge-inquiry-answered { border-color: var(--good); color: var(--good); }
 /* Landing (VNX-0708). Badge tones follow 05-UI-SCOPE: Listed grey, Demo verified blue, In production green. */
 .landing { max-width: 960px; }
 .landing > section { padding: 32px 0; border-top: 1px solid var(--line); }
@@ -113,7 +120,6 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
 .waitlist-form { max-width: 480px; margin-top: 16px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .waitlist-form .choice { align-items: flex-start; padding: 10px 0; }
 .waitlist-form .choice input { flex: none; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--accent); }
-.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 @media (max-width: 640px) {
   .ways { grid-template-columns: 1fr; }
   .cta-row .btn { flex: 1 1 100%; }

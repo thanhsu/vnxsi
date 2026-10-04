@@ -7,6 +7,7 @@ declare global {
       APP_ORIGIN: string;
       ADMIN_EMAILS: string;
       MAIL_DRIVER: string;
+      TURNSTILE_DRIVER: string;
     }
   }
 }

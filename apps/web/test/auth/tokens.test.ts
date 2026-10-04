@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumeLoginToken, createLoginToken, LOGIN_TOKEN_TTL_MS } from "../../src/auth/tokens.ts";
+import { consumeLoginToken, createLoginToken, LOGIN_TOKEN_TTL_MS, peekLoginToken } from "../../src/auth/tokens.ts";
 import { testEnv } from "../helpers.ts";
 
 const now = new Date("2026-10-03T09:00:00Z");
@@ -43,5 +43,24 @@ describe("login tokens", () => {
     const row = await testEnv.DB.prepare("SELECT token_hash FROM login_tokens WHERE email = 'h@vnx.si'").first<{ token_hash: string }>();
     expect(row?.token_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(row?.token_hash).not.toBe(raw);
+  });
+});
+
+describe("peekLoginToken / consumeLoginToken with several purposes", () => {
+  it("peeks without spending the token, then consumes any allowed purpose once", async () => {
+    const now = new Date("2026-10-04T10:00:00.000Z");
+    const raw = await createLoginToken(testEnv.DB, { email: "peek@vnx.si", purpose: "inquiry_verify", locale: "vi" }, now);
+    for (let i = 0; i < 3; i++) expect(await peekLoginToken(testEnv.DB, raw, now, ["login", "inquiry_verify"])).toEqual({ ok: true, purpose: "inquiry_verify", locale: "vi" });
+    expect(await peekLoginToken(testEnv.DB, raw, now, ["login"])).toEqual({ ok: false, reason: "invalid" });
+    expect((await consumeLoginToken(testEnv.DB, raw, now, ["login", "inquiry_verify"])).ok).toBe(true);
+    expect(await peekLoginToken(testEnv.DB, raw, now, ["login", "inquiry_verify"])).toEqual({ ok: false, reason: "used" });
+    expect(await consumeLoginToken(testEnv.DB, raw, now, ["login", "inquiry_verify"])).toEqual({ ok: false, reason: "used" });
+  });
+
+  it("reports expired and malformed tokens", async () => {
+    const then = new Date("2026-10-04T10:00:00.000Z");
+    const raw = await createLoginToken(testEnv.DB, { email: "peek2@vnx.si", purpose: "login", locale: "en" }, then);
+    expect(await peekLoginToken(testEnv.DB, raw, new Date(then.getTime() + 16 * 60 * 1000), ["login"])).toEqual({ ok: false, reason: "expired" });
+    expect(await peekLoginToken(testEnv.DB, "short", then, ["login"])).toEqual({ ok: false, reason: "invalid" });
   });
 });

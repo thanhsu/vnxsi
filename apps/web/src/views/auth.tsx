@@ -53,16 +53,43 @@ export const LoginSentPage: FC<Base & { email: string }> = (props) => {
   );
 };
 
-export const InvalidLinkPage: FC<Base> = (props) => {
+export const InvalidLinkPage: FC<Base & { inquiryHint?: boolean }> = (props) => {
   const tr = translator(props.locale);
   return (
     <Layout locale={props.locale} title={tr("auth.invalidLink.title")} origin={props.origin} rest="/login" noindex>
       <section class="card">
         <h1>{tr("auth.invalidLink.title")}</h1>
         <p>{tr("auth.invalidLink.body")}</p>
+        {props.inquiryHint ? <p>{tr("auth.invalidLink.inquiryHint")}</p> : null}
         <a class="btn" href={localizedPath(props.locale, "/login")}>
           {tr("auth.invalidLink.cta")}
         </a>
+      </section>
+    </Layout>
+  );
+};
+
+const CONFIRM_KEYS = {
+  login: { title: "auth.confirm.login.title", body: "auth.confirm.login.body", submit: "auth.confirm.login.submit" },
+  inquiry: { title: "auth.confirm.inquiry.title", body: "auth.confirm.inquiry.body", submit: "auth.confirm.inquiry.submit" },
+} as const;
+
+/** VNX-0506: opening the e-mail link shows this page; only its button spends the token. */
+export const ConfirmLinkPage: FC<Base & { token: string; next: string | null; purpose: "login" | "inquiry" }> = (props) => {
+  const tr = translator(props.locale);
+  const keys = CONFIRM_KEYS[props.purpose];
+  return (
+    <Layout locale={props.locale} title={tr(keys.title)} origin={props.origin} rest="/login" noindex>
+      <section class="card">
+        <h1>{tr(keys.title)}</h1>
+        <p>{tr(keys.body)}</p>
+        <form method="post" action="/auth/verify">
+          <input type="hidden" name="t" value={props.token} />
+          {props.next ? <input type="hidden" name="next" value={props.next} /> : null}
+          <button class="btn" type="submit">
+            {tr(keys.submit)}
+          </button>
+        </form>
       </section>
     </Layout>
   );

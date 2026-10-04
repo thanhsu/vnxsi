@@ -3,7 +3,7 @@ import { createApp } from "../../src/app.ts";
 import { findBuilderByUserId } from "../../src/db/builders.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { ensureUser, makeBuilder, profileValues, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const admin = () => signIn("owner@vnx.si", { admin: true });
@@ -62,7 +62,7 @@ describe("suspending users (spec §5.5, §8.2)", () => {
 
     await app().request(formPost("/login", { email: "sus-u@vnx.si" }), undefined, testEnv);
     const token = /\/auth\/verify\?t=([A-Za-z0-9_-]{43})/.exec(outbox[0]!.text)![1];
-    expect((await app().request(getReq(`/auth/verify?t=${token}`), undefined, testEnv)).status).toBe(403);
+    expect((await followMagicLink(app(), `/auth/verify?t=${token}`, testEnv)).status).toBe(403);
 
     await app().request(formPost(`/admin/users/${b.userId}/unsuspend`, {}, { cookie }), undefined, testEnv);
     expect(await status("/b/sus-u")).toBe(200);
