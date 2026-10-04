@@ -356,7 +356,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
                 {tr("contact.sent")}
               </p>
             ) : (
-              <ContactForm locale={locale} from="landing" values={emptyFeedbackValues("landing", ask.email)} errors={{}} signedIn={signedIn} siteKey={ask.siteKey} widget={false} />
+              <ContactForm locale={locale} from="landing" values={emptyFeedbackValues("landing", ask.email)} errors={{}} signedIn={signedIn} siteKey={ask.siteKey} />
             )}
           </div>
         </div>

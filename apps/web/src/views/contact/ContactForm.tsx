@@ -52,13 +52,12 @@ type Props = {
   values: FeedbackFormValues;
   errors: FeedbackErrors;
   signedIn: boolean;
-  /** null when signed out and Turnstile is not configured: the form is not offered (fail closed, like the inquiry form). */
-  siteKey: string | null;
   /**
-   * false on the landing page: it makes no third-party request (VNX-0709 AC2), so the Turnstile widget is left out.
-   * A signed-out send from there fails the check and comes back on /contact with the values kept and the widget shown.
+   * null when signed out and Turnstile is not configured: the form is not offered (fail closed, like the inquiry form).
+   * Signed out with a key, the widget and its script are rendered on /contact and on the landing #ask block alike
+   * (VNX-0710 F1: the Turnstile script is the one third-party request the site allows).
    */
-  widget?: boolean;
+  siteKey: string | null;
   formError?: string;
 };
 
@@ -154,7 +153,7 @@ export const ContactForm: FC<Props> = (p) => {
         <label for={id("website")}>{tr("inquiry.form.website")}</label>
         <input id={id("website")} name="website" type="text" tabindex={-1} autocomplete="off" value="" />
       </div>
-      {p.signedIn || p.widget === false ? null : (
+      {p.signedIn ? null : (
         <>
           {/* Turnstile's default response field is cf-turnstile-response; the route reads it. */}
           <div class="cf-turnstile" data-sitekey={p.siteKey ?? ""}></div>
