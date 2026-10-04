@@ -33,6 +33,7 @@ import { InquiryFormPage, InquirySentPage, type InquiryTarget } from "../views/I
 import { page } from "../views/render.ts";
 
 const HOUR = 3600;
+const INQUIRY_HOURLY_LIMIT_PER_EMAIL = 5;
 
 type Resolved = InquiryTarget & { builderId: string; productId: string | null; allowed: readonly InquiryType[] };
 
@@ -98,11 +99,12 @@ async function submitForm(c: Context<AppEnv>) {
 
   const now = new Date();
   const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  const parsed = parseInquiryForm(values, { allowedTypes: target.allowed, needEmail: user === null, today: now.toISOString().slice(0, 10) });
+  if (!parsed.ok) return formPage(c, target, type, values, parsed.errors, 400);
+  // Only well-formed forms count: a person fixing typos must not be locked out (final review F4).
   const limit = await hitRateLimit(c.env.DB, `inquiry:ip:${ip}`, INQUIRY_HOURLY_LIMIT_PER_IP, HOUR, now.getTime());
   if (!limit.allowed) return formPage(c, target, type, values, {}, 429, tr("inquiry.error.rateLimited"));
 
-  const parsed = parseInquiryForm(values, { allowedTypes: target.allowed, needEmail: user === null, today: now.toISOString().slice(0, 10) });
-  if (!parsed.ok) return formPage(c, target, type, values, parsed.errors, 400);
   const input = parsed.input;
   const iso = now.toISOString();
 
@@ -119,6 +121,9 @@ async function submitForm(c: Context<AppEnv>) {
   if (captcha === "fail") return formPage(c, target, type, values, {}, 400, tr("inquiry.error.captcha"));
 
   const email = input.email!;
+  // One mailbox cannot be mailed more than 5 times an hour from here, whatever the IPs (final review F2). Same answer as success.
+  const byEmail = await hitRateLimit(c.env.DB, `inquiry:email:${await sha256Hex(email)}`, INQUIRY_HOURLY_LIMIT_PER_EMAIL, HOUR, now.getTime());
+  if (!byEmail.allowed) return sentPage(email);
   const existing = await findUserByEmail(c.env.DB, email);
   // A suspended account, or the builder's own login e-mail, gets the same answer as anyone else and nothing happens:
   // a different answer would reveal the account status or the private e-mail behind a public builder profile.

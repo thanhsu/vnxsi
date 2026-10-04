@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { listClientInquiries, listMessages } from "../../src/db/inquiries.ts";
 import { findUserByEmail } from "../../src/db/users.ts";
@@ -87,6 +87,7 @@ describe("inquiry form, signed in (spec §5.6 step 2)", () => {
 
 describe("inquiry form, signed out (spec §5.6 step 3)", () => {
   beforeEach(() => clearOutbox());
+  afterEach(() => vi.restoreAllMocks());
 
   it("creates a pending inquiry, sends a confirmation, and opens it when the link is confirmed", async () => {
     const { product } = await makeLiveProduct("if-out-b@vnx.si", "if-out", "Out Kit");
@@ -185,13 +186,34 @@ describe("inquiry form, signed out (spec §5.6 step 3)", () => {
 
   it("removes the pending inquiry when the confirmation cannot be sent", async () => {
     const { product } = await makeLiveProduct("if-mail-b@vnx.si", "if-mail", "Mail Kit");
-    const noMail = { ...testEnv, MAIL_DRIVER: undefined, RESEND_API_KEY: undefined } as Bindings;
+    // Without the fake mailer the fake Turnstile is off too (F3), so the check goes through a stubbed siteverify.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ success: true })));
+    const noMail = { ...testEnv, MAIL_DRIVER: undefined, RESEND_API_KEY: undefined, TURNSTILE_DRIVER: undefined, TURNSTILE_SITE_KEY: "site", TURNSTILE_SECRET: "secret" } as Bindings;
     const res = await post(`/p/${product.slug}/inquiry/buy`, signedOut("mailfail@client.example"), { env: noMail });
     expect(res.status).toBe(502);
     expect(await res.text()).toContain("We couldn&#39;t send the confirmation e-mail.");
     const user = (await findUserByEmail(testEnv.DB, "mailfail@client.example"))!;
     expect(await listClientInquiries(testEnv.DB, user.id)).toEqual([]);
   });
+
+  it("answers the same and sends nothing after 5 confirmations per e-mail per hour", async () => {
+    const { product } = await makeLiveProduct("if-cap5-b@vnx.si", "if-cap5", "Cap5 Kit");
+    for (let i = 0; i < 5; i++) expect((await post(`/p/${product.slug}/inquiry/buy`, signedOut("cap5@client.example"), { ip: `192.0.2.${10 + i}` })).status, String(i)).toBe(200);
+    expect(outbox).toHaveLength(5);
+    const sixth = await post(`/p/${product.slug}/inquiry/buy`, signedOut("cap5@client.example"), { ip: "192.0.2.99" });
+    expect(sixth.status).toBe(200);
+    expect(await sixth.text()).toContain("cap5@client.example");
+    expect(outbox).toHaveLength(5);
+    const user = (await findUserByEmail(testEnv.DB, "cap5@client.example"))!;
+    expect(await listClientInquiries(testEnv.DB, user.id)).toHaveLength(5);
+  }, 30_000);
+
+  it("counts only valid forms against the per-IP limit", async () => {
+    const { product } = await makeLiveProduct("if-inv-b@vnx.si", "if-inv", "Inv Kit");
+    const ip = "203.0.113.88";
+    for (let i = 0; i < 10; i++) expect((await post(`/p/${product.slug}/inquiry/buy`, { ...signedOut("inv@client.example"), message: "short" }, { ip })).status, String(i)).toBe(400);
+    expect((await post(`/p/${product.slug}/inquiry/buy`, signedOut("inv@client.example"), { ip })).status).toBe(200);
+  }, 30_000);
 
   it("allows 10 inquiries per hour per IP", async () => {
     const { product } = await makeLiveProduct("if-rl-b@vnx.si", "if-rl", "Rl Kit");

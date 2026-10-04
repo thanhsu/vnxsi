@@ -14,6 +14,13 @@ describe("Turnstile (spec §8.2; fail closed, Owner 2026-10-04)", () => {
     expect(await verifyTurnstile(testEnv, "nope", null)).toBe("fail");
   });
 
+  it("honours the fake driver only alongside the fake mailer", async () => {
+    const prodLike = { ...testEnv, MAIL_DRIVER: undefined, TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET: undefined } as Bindings;
+    expect(prodLike.TURNSTILE_DRIVER).toBe("fake");
+    expect(turnstileSiteKey(prodLike)).toBeNull();
+    expect(await verifyTurnstile(prodLike, FAKE_TURNSTILE_PASS, null)).toBe("unavailable");
+  });
+
   it("is unavailable without both keys", async () => {
     const noSecret = { ...real, TURNSTILE_SECRET: undefined } as Bindings;
     const noSite = { ...real, TURNSTILE_SITE_KEY: "" } as Bindings;
