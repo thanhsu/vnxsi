@@ -3,6 +3,7 @@ import { createApp } from "../../src/app.ts";
 import { findInquiryById, listMessages } from "../../src/db/inquiries.ts";
 import { findUserById } from "../../src/db/users.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
+import { zhHant } from "../../src/i18n/messages/zh-hant.ts";
 import { makeInquiry, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
 
@@ -97,6 +98,6 @@ describe("/me (spec §5.4)", () => {
     const { cookie } = await signIn("me-nav@vnx.si");
     const html = await (await get("/zh-hant/products", cookie)).text();
     const header = /<header class="site-header">([\s\S]*?)<\/header>/.exec(html)?.[1] ?? "";
-    expect(header).toContain('<a href="/zh-hant/me">我的詢問</a>');
+    expect(header).toContain(`<a href="/zh-hant/me">${zhHant["nav.me"]}</a>`);
   });
 });

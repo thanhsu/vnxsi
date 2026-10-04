@@ -110,6 +110,9 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
         <section id="notify" aria-labelledby="notify-title">
           <h2 id="notify-title">{tr("landing.clients.title")}</h2>
           <p>{tr("landing.clients.body")}</p>
+          <p>
+            {tr("landing.clients.request")} <a href={localizedPath(locale, "/request")}>{tr("request.cta")}</a>
+          </p>
           {joined ? (
             <p class="notice good" role="status">
               {tr("landing.form.joined")}

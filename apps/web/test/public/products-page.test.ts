@@ -9,6 +9,12 @@ const get = (path: string) => createApp().request(getReq(path), undefined, testE
 const slugs = (html: string) => [...html.matchAll(/<h2><a href="(?:\/[a-z-]+)?\/p\/([a-z0-9-]+)"/g)].map((m) => m[1]);
 
 describe("/products (spec §5.2)", () => {
+  it("offers to post a request when nothing matches", async () => {
+    const html = await (await get("/products?q=zzznomatchzzz")).text();
+    expect(html).toContain("No products match yet.");
+    expect(html).toContain('href="/request"');
+  });
+
   it("renders cards with name, tagline, category, builder, starting price, cover and checked badge", async () => {
     const { product } = await makeLiveProduct("pg-card@vnx.si", "pg-card", "Cardcheck Pro", { badges: ["demo_verified"] });
     const res = await get("/products?q=cardcheck");

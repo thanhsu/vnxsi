@@ -26,7 +26,8 @@ describe("/sitemap.xml (spec §8.8)", () => {
     expect(xml).toContain(`<loc>https://vnx.si/zh-hant/b/${builder.handle}</loc>`);
     for (const loc of ["https://vnx.si/products", "https://vnx.si/vi/builders"]) expect(xml, loc).toContain(`<loc>${loc}</loc>`);
     expect(xml).not.toContain("preview.workers.dev");
-    expect(xml).not.toContain("/request");
+    expect(xml).toContain("<loc>https://vnx.si/vi/request</loc>");
+    expect(xml).not.toContain("/me/requests");
   });
 
   it("lists the home page once per locale with hreflang alternates (VNX-0708)", async () => {

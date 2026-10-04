@@ -11,6 +11,8 @@ import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
 import { registerHubInquiryRoutes } from "./routes/hub-inquiries.tsx";
 import { registerMeRoutes } from "./routes/me.tsx";
+import { registerMeRequestRoutes } from "./routes/me-requests.tsx";
+import { registerRequestFormRoutes } from "./routes/request-form.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
@@ -47,6 +49,7 @@ export function createApp() {
   registerHubRoutes(app);
   registerHubInquiryRoutes(app);
   registerMeRoutes(app);
+  registerMeRequestRoutes(app);
   registerPortfolioRoutes(app);
   registerProductMediaRoutes(app);
   registerProductEditorRoutes(app);
@@ -56,6 +59,7 @@ export function createApp() {
   registerDirectoryRoutes(app);
   registerSeoRoutes(app);
   registerInquiryFormRoutes(app);
+  registerRequestFormRoutes(app);
   registerProductPageRoutes(app);
   registerAdminRoutes(app);
   registerAdminProductRoutes(app);

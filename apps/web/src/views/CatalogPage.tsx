@@ -13,7 +13,7 @@ type Props = { locale: Locale; origin: string; query: CatalogQuery; result: Page
 
 const usd = (cents: number | null) => (cents === null ? "" : String(cents / 100));
 
-/** Spec §5.2 catalogue. No "Post a request" link until /request exists (Owner decision 2026-10-04, M6). */
+/** Spec §5.2 catalogue; an empty result offers "Post a request" (Owner decision 2026-10-04, M6). */
 export const CatalogPage: FC<Props> = ({ locale, origin, query, result, signedIn }) => {
   const tr = translator(locale);
   const filtered = isCatalogFiltered(query);
@@ -62,7 +62,12 @@ export const CatalogPage: FC<Props> = ({ locale, origin, query, result, signedIn
           ))}
         </ul>
       ) : (
-        <p class="notice">{tr("catalog.empty")}</p>
+        <div class="notice">
+          <p>{tr("catalog.empty")}</p>
+          <p>
+            {tr("catalog.request")} <a href={localizedPath(locale, "/request")}>{tr("request.cta")}</a>
+          </p>
+        </div>
       )}
       <Pagination locale={locale} path="/products" page={query.page} total={result.total} href={(n) => catalogSearchParams(query, n)} />
     </Layout>

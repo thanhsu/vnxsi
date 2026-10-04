@@ -101,6 +101,11 @@ describe("landing page GET / (VNX-0708)", () => {
     }
   });
 
+  it("links to /request next to the waitlist form without replacing it (Owner 2026-10-04)", async () => {
+    const main = mainOf(await (await get("/vi")).text());
+    expect(main).toMatch(/<section id="notify"[\s\S]*href="\/vi\/request"[\s\S]*<form method="post" action="\/vi\/waitlist#notify"/);
+  });
+
   it("has the notify section with a labelled, accessible form and a hidden honeypot", async () => {
     const html = await (await get("/vi")).text();
     const main = mainOf(html);

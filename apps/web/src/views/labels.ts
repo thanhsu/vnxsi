@@ -1,5 +1,6 @@
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
 import type { BudgetBand, InquiryStatus, InquiryType } from "../domain/inquiry.ts";
+import type { RequestStatus } from "../domain/request.ts";
 import type { UserStatus } from "../domain/user.ts";
 import type { Badge, Billing, Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
 import type { ProductStep } from "../domain/product-input.ts";
@@ -131,4 +132,15 @@ export const INQUIRY_STATUS_KEY: Record<InquiryStatus, MessageKey> = {
   declined: "inquiry.status.declined",
   closed: "inquiry.status.closed",
   removed: "inquiry.status.removed",
+};
+
+export const REQUEST_STATUS_KEY: Record<RequestStatus, MessageKey> = {
+  pending_verification: "request.status.pending_verification",
+  submitted: "request.status.submitted",
+  matching: "request.status.matching",
+  builder_selected: "request.status.builder_selected",
+  rejected: "request.status.rejected",
+  expired: "request.status.expired",
+  closed: "request.status.closed",
+  removed: "request.status.removed",
 };

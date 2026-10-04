@@ -16,7 +16,7 @@ type Props = { locale: Locale; origin: string; query: DirectoryQuery; result: Pa
 
 const MAX_SKILLS = 6;
 
-/** Spec §5.2 directory. No "Post a request" button until /request exists (Owner decision 2026-10-04, M6). */
+/** Spec §5.2 directory, with the "Post a request" entry point (Owner decision 2026-10-04, M6). */
 export const DirectoryPage: FC<Props> = ({ locale, origin, query, result, countries, signedIn }) => {
   const tr = translator(locale);
   const filtered = isDirectoryFiltered(query);
@@ -32,6 +32,12 @@ export const DirectoryPage: FC<Props> = ({ locale, origin, query, result, countr
       signedIn={signedIn}
     >
       <h1>{tr("directory.title")}</h1>
+      <p class="cta-row">
+        {tr("directory.request")}{" "}
+        <a class="btn btn-secondary" href={localizedPath(locale, "/request")}>
+          {tr("request.cta")}
+        </a>
+      </p>
       <form class="filters" method="get" action={localizedPath(locale, "/builders")} role="search">
         <div class="field">
           <label for="d-q">{tr("directory.search")}</label>
