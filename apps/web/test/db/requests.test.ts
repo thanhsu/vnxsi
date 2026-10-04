@@ -97,6 +97,7 @@ describe("db/requests (VNX-0601)", () => {
     const outcome = end.read(results);
     expect(outcome.request).toMatchObject({ status: "closed", closedAt: now });
     expect(outcome.notSelected).toEqual([a!.id]);
+    expect(outcome.expired).toEqual([b!.id]);
     const invites = await listRequestInvites(db(), request.id);
     expect(invites.map((x) => [x.invite.id, x.invite.status])).toEqual([
       [a!.id, "not_selected"],
@@ -109,7 +110,7 @@ describe("db/requests (VNX-0601)", () => {
     // Lost compare-and-set (already closed): nothing else is written.
     const again = endRequestBatch(db(), { id: request.id, from: "matching", to: "expired", now: later(now) });
     const second = again.read(await db().batch([...again.statements, auditStatement(db(), { actorUserId: null, action: "request.expire", entity: "request", entityId: request.id, now: later(now) }, { requestId: request.id, status: "expired", updatedAt: later(now) })]));
-    expect(second).toEqual({ request: null, notSelected: [] });
+    expect(second).toEqual({ request: null, notSelected: [], expired: [] });
     const expireAudit = await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.expire' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
     expect(expireAudit?.n).toBe(0);
   });
@@ -161,7 +162,7 @@ describe("db/requests (VNX-0601)", () => {
     const inquiry = createInquiryStatements(db(), { clientUserId: ctx.client.id, clientName: "Minh Tran", builderId: ctx.builder.userId, productId: null, requestId: ctx.request.id, type: "request", message: "m", budgetBand: "2k-10k", deadline: null, status: "open", locale: "en", now: ctx.now }, { requestId: ctx.request.id, inviteId: ctx.invite.id, updatedAt: ctx.now });
     const end = endRequestBatch(db(), { id: ctx.request.id, from: "matching", to: "builder_selected", now: ctx.now, selectedInviteId: ctx.invite.id }, inquiry.statements);
     const audit = auditStatement(db(), { actorUserId: null, action: "request.select", entity: "request", entityId: ctx.request.id, now: ctx.now }, { requestId: ctx.request.id, status: "builder_selected", updatedAt: ctx.now });
-    expect(end.read(await db().batch([...end.statements, audit]))).toEqual({ request: null, notSelected: [] });
+    expect(end.read(await db().batch([...end.statements, audit]))).toEqual({ request: null, notSelected: [], expired: [] });
     expect(await findRequestById(db(), ctx.request.id)).toEqual(ctx.before);
     expect((await listRequestInvites(db(), ctx.request.id))[0]?.invite.status).toBe("proposed");
     expect(await findInquiryById(db(), inquiry.id)).toBeNull();
@@ -174,7 +175,7 @@ describe("db/requests (VNX-0601)", () => {
     const inquiry = createInquiryStatements(db(), { clientUserId: ctx.client.id, clientName: "Minh Tran", builderId: ctx.builder.userId, productId: null, requestId: ctx.request.id, type: "request", message: "m", budgetBand: "2k-10k", deadline: null, status: "open", locale: "en", now: ctx.now }, { requestId: ctx.request.id, inviteId: ctx.otherInvite.id, updatedAt: ctx.now });
     const end = endRequestBatch(db(), { id: ctx.request.id, from: "matching", to: "builder_selected", now: ctx.now, selectedInviteId: ctx.otherInvite.id }, inquiry.statements);
     const audit = auditStatement(db(), { actorUserId: null, action: "request.select", entity: "request", entityId: ctx.request.id, now: ctx.now }, { requestId: ctx.request.id, status: "builder_selected", updatedAt: ctx.now });
-    expect(end.read(await db().batch([...end.statements, audit]))).toEqual({ request: null, notSelected: [] });
+    expect(end.read(await db().batch([...end.statements, audit]))).toEqual({ request: null, notSelected: [], expired: [] });
     expect(await findRequestById(db(), ctx.request.id)).toEqual(ctx.before);
     expect((await listRequestInvites(db(), ctx.request.id))[0]?.invite.status).toBe("proposed");
     expect((await listRequestInvites(db(), ctx.otherInvite.requestId))[0]?.invite.status).toBe("proposed");

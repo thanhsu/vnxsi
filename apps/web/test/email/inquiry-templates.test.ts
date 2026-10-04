@@ -19,6 +19,17 @@ describe("inquiry e-mail templates (spec §8.3)", () => {
     expect(mail.html).toContain('href="https://vnx.si/auth/verify?t=abc"');
   });
 
+  it("renders the new-inquiry e-mail byte for byte (guards the move of the HTML helpers to email/parts.ts)", () => {
+    const mail = newInquiryEmail("en", { clientName: "Minh", type: "customize", productName: "Spa Booking", budgetBand: "2k-10k", deadline: "2026-12-01", message: "Line one\nLine <two>", url: "https://vnx.si/hub/inquiries/01J" });
+    expect(mail.html).toBe(
+      '<!doctype html><html lang="en"><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0D1526">' +
+        "<p>Minh sent you an inquiry (Customize) about Spa Booking.</p><p>Budget: $2,000 – $10,000</p><p>Deadline: 2026-12-01</p>" +
+        '<blockquote style="white-space:pre-line;border-left:3px solid #DCE0E6;margin:0;padding-left:12px">Line one\nLine &lt;two&gt;</blockquote>' +
+        "<p>Reply on VNX.SI (replies by e-mail are not delivered):</p>" +
+        '<p><a href="https://vnx.si/hub/inquiries/01J">https://vnx.si/hub/inquiries/01J</a></p></body></html>',
+    );
+  });
+
   it("tells the builder about a new inquiry with type, budget, deadline and the message", () => {
     const mail = newInquiryEmail("en", {
       clientName: "Minh",

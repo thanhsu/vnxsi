@@ -3,6 +3,7 @@ import type { Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { escapeHtml } from "../escape.ts";
+import { link, p, quote, wrap } from "../parts.ts";
 
 type Email = { subject: string; text: string; html: string };
 
@@ -14,19 +15,13 @@ const TYPE_KEY: Record<InquiryType, MessageKey> = {
   build_similar: "inquiry.type.build_similar",
   request: "inquiry.type.request",
 };
-const BUDGET_KEY: Record<BudgetBand, MessageKey> = {
+export const BUDGET_KEY: Record<BudgetBand, MessageKey> = {
   "<500": "inquiry.budget.lt500",
   "500-2k": "inquiry.budget.500-2k",
   "2k-10k": "inquiry.budget.2k-10k",
   ">10k": "inquiry.budget.gt10k",
   unsure: "inquiry.budget.unsure",
 };
-
-const p = (text: string) => `<p>${escapeHtml(text)}</p>`;
-const link = (href: string) => `<p><a href="${escapeHtml(href)}">${escapeHtml(href)}</a></p>`;
-const quote = (text: string) => `<blockquote style="white-space:pre-line;border-left:3px solid #DCE0E6;margin:0;padding-left:12px">${escapeHtml(text)}</blockquote>`;
-const wrap = (locale: string, parts: string[]) =>
-  `<!doctype html><html lang="${locale}"><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0D1526">${parts.join("")}</body></html>`;
 
 function target(locale: Locale, productName: string | null): string {
   return productName ?? translator(locale)("inquiry.profileTarget");

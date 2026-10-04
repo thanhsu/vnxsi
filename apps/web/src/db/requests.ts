@@ -203,20 +203,21 @@ export function endRequestBatch(
   db: D1Database,
   input: { id: string; from: RequestStatus; to: TerminalRequestStatus; now: string; adminNote?: string | null; selectedInviteId?: string | null },
   between: D1PreparedStatement[] = [],
-): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: ClientRequest | null; notSelected: string[] } } {
+): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: ClientRequest | null; notSelected: string[]; expired: string[] } } {
   const won = "EXISTS (SELECT 1 FROM requests WHERE id = ?1 AND status = ?2 AND updated_at = ?3)";
   const statements = [
     setRequestStatusStatement(db, input),
     ...between,
-    db.prepare(`UPDATE request_invites SET status = 'expired', updated_at = ?3 WHERE request_id = ?1 AND status = 'invited' AND ${won}`).bind(input.id, input.to, input.now),
+    db.prepare(`UPDATE request_invites SET status = 'expired', updated_at = ?3 WHERE request_id = ?1 AND status = 'invited' AND ${won} RETURNING id`).bind(input.id, input.to, input.now),
     db.prepare(`UPDATE request_invites SET status = 'not_selected', updated_at = ?3 WHERE request_id = ?1 AND status = 'proposed' AND ${won} RETURNING id`).bind(input.id, input.to, input.now),
   ];
-  const notSelectedAt = 1 + between.length + 1;
+  const expiredAt = 1 + between.length;
   return {
     statements,
     read: (results) => ({
       request: returnedRequest(results[0]),
-      notSelected: ((results[notSelectedAt]?.results ?? []) as { id: string }[]).map((r) => r.id),
+      notSelected: ((results[expiredAt + 1]?.results ?? []) as { id: string }[]).map((r) => r.id),
+      expired: ((results[expiredAt]?.results ?? []) as { id: string }[]).map((r) => r.id),
     }),
   };
 }
@@ -280,4 +281,32 @@ export async function listRequestInvites(db: D1Database, requestId: string): Pro
 /** Removes an unconfirmed request (its confirmation e-mail failed); never touches a confirmed one. */
 export function deletePendingRequestStatement(db: D1Database, id: string): D1PreparedStatement {
   return db.prepare("DELETE FROM requests WHERE id = ?1 AND status = 'pending_verification'").bind(id);
+}
+
+/** An invitation with its request and both parties' contact details. Used only as recipients and for the e-mail text. */
+export type InviteContext = {
+  invite: RequestInvite;
+  request: ClientRequest;
+  builder: { email: string; locale: string; name: string; handle: string };
+  client: { email: string; locale: string };
+};
+
+export async function findInviteContext(db: D1Database, inviteId: string): Promise<InviteContext | null> {
+  const row = await db
+    .prepare(
+      `SELECT x.*, b.name AS builder_name, b.handle AS builder_handle, bu.email AS builder_email, bu.locale AS builder_locale
+       FROM request_invites x JOIN builders b ON b.user_id = x.builder_id JOIN users bu ON bu.id = x.builder_id
+       WHERE x.id = ?1`,
+    )
+    .bind(inviteId)
+    .first<InviteRow & { builder_name: string; builder_handle: string; builder_email: string; builder_locale: string }>();
+  if (!row) return null;
+  const found = await findRequestWithClient(db, row.request_id);
+  if (!found) return null;
+  return {
+    invite: toInvite(row),
+    request: found.request,
+    builder: { email: row.builder_email, locale: row.builder_locale, name: row.builder_name, handle: row.builder_handle },
+    client: found.client,
+  };
 }

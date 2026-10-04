@@ -208,3 +208,12 @@ export function parseDeclineReason(raw: unknown): { ok: true; reason: string } |
   const reason = text(raw).trim();
   return reason.length > DECLINE_REASON_MAX ? { ok: false, error: "too_long" } : { ok: true, reason };
 }
+
+const EMAIL_LIKE = /[^\s@()<>,;]+@[^\s@()<>,;]+\.[^\s@()<>,;]+/g;
+
+/** The client's typed name as a builder may see it: any e-mail-like part becomes "•••" (Owner 2026-10-04), the rest is kept. */
+export type BuilderFacingName = string & { readonly __brand: "BuilderFacingName" };
+
+export function builderFacingName(name: string): BuilderFacingName {
+  return name.replace(EMAIL_LIKE, "•••") as BuilderFacingName;
+}
