@@ -103,10 +103,11 @@ const LangLinks: FC<{ locale: Locale; rest: string }> = ({ locale, rest }) => (
   </>
 );
 
-/** Sign in + CTA, or Builder Hub + sign out. */
+/** Sign in + CTA, or My inquiries + Builder Hub + sign out. */
 const Account: FC<{ locale: Locale; signedIn: boolean; tr: Translate }> = ({ locale, signedIn, tr }) =>
   signedIn ? (
     <>
+      <a class="nav-account" href={localizedPath(locale, "/me")}>{tr("nav.me")}</a>
       <a class="nav-account" href={localizedPath(locale, "/hub")}>{tr("nav.hub")}</a>
       <form method="post" action="/logout" class="signout">
         <button type="submit" class="btn btn-ghost">

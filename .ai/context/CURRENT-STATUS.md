@@ -6,7 +6,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
-- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. Đã merge vào `main` (`d297c72`, đã push). Tiếp theo: plan M5.
+- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. Đã merge vào `main` (`d297c72`, đã push). M5 (Inquiry) **xong** trên nhánh `feat/m5-inquiry`: 7 task + lượt sửa sau review toàn nhánh (F1–F8), đã gộp `main` hai lần (VNX-0708 ở `1f5ddc7`; VNX-0705a ở `482ef50`, hợp nhất hai cron thành một), 534/534 test, typecheck sạch. Review: `.ai/reviews/M5-review.md`. Đã merge vào `main` (`815e06e`, đã push). VNX-0508 (Privacy cho Inquiry và Turnstile) **xong**, đã merge vào `main` (`bcf95c6`, đã push). Tiếp theo: plan M6.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
 - **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 **Accepted** và phụ lục spec **Approved** (Owner duyệt văn bản 2026-10-04). Code theo lịch: `/go/` ở M7 (VNX-0707), phần còn lại ở EPIC 21–24. **Partner đầu tiên:** ElevenLabs (PartnerStack), sổ ở `docs/partners/registry.md`; lát mỏng EPIC 21 (phụ lục mục 3.8) làm ngay sau VNX-0708.
 - **Landing định vị (VNX-0708):** **xong** trên nhánh `feat/vnx-0708-landing` (worktree `.claude/worktrees/agent-a26fce7bca484621a`): 405/405 test, typecheck sạch, review APPROVE sau lượt sửa F1–F3 (`.ai/reviews/VNX-0708-review.md`). **Đã merge** vào `main` (`e4a932d`) và lên GitHub qua PR #2 (`ade9f4f`). Go-live: điều kiện deploy `main` đầy đủ + OQ-1 (`/privacy`) còn mở.
@@ -61,6 +61,18 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | Merge M4 vào `main` | ✅ | d297c72 | merge commit, Owner duyệt 2026-10-04; đã push |
 | VNX-0708 Landing định vị | ✅ | 2b78709, fb2ac44, 615ca6f, f5e7b56 | `/` SSR 4 locale, waitlist client (persona `client`), gỡ `/api/waitlist` JSON và `public/index.html`; sửa F1–F3 (referrer qua `ref`, `www.` nội bộ, giữ tick đồng ý) |
 | Merge VNX-0708 vào `main` | ✅ | e4a932d, ade9f4f | merge commit; lên GitHub qua PR #2 (merge `ade9f4f`, CI `test` + `gitleaks` xanh, `dependency-review` đỏ do chưa bật Dependency graph) |
+| VNX-0501 Dữ liệu, state machine Inquiry | ✅ | 1f44f3c, d0a1d82 | migration `0007_inquiries`; thêm `client_name`, `opened_at`, `kind`, `notify_attempts` ngoài spec 6.1 (plan duyệt) |
+| VNX-0504 Email thông báo, gửi lại | ✅ | 24adf04, a7e0db8 | `notify/` không bao giờ ném lỗi; tối đa 3 lần, lần 3 ghi audit |
+| VNX-0506 Trang xác nhận `/auth/verify` | ✅ | ed2edc6 | GET chỉ xem token, nút POST mới tiêu |
+| VNX-0502 Form Inquiry | ✅ | 94ffd27, 12fc174 | Turnstile fail closed, honeypot, rate limit; không lộ email đăng nhập của builder |
+| VNX-0503a Hộp thư Hub | ✅ | 2fc9e2c | trả lời / từ chối / đóng; `Cache-Control: no-store` cho `/hub`, `/me`, `/admin` |
+| VNX-0503b `/me`, admin Inquiry | ✅ | 625436b | test cổng ra M5 qua HTTP |
+| VNX-0505 Cron hằng ngày | ✅ | 3a698e4 | nhắc 3 ngày, báo admin 7 ngày, gửi lại, xóa Inquiry chờ và tài khoản ngầm |
+| Sửa sau review toàn nhánh M5 | ✅ | 86653c1, 8f5293e, 2c2fef0, cd420a1, 2174baa | "Gửi ngay" ở `/me`, trang link hết hạn theo locale, 5/giờ mỗi email, fake Turnstile chỉ khi mailer giả |
+| Gộp `main` vào M5 | ✅ | 1f5ddc7, 482ef50 | VNX-0708; VNX-0705a (một cron `0 1 * * *`: bước M5 thêm vào danh sách bước của VNX-0705a) |
+| Merge M5 vào `main` | ✅ | 815e06e | merge commit, Owner duyệt 2026-10-04; đã push |
+| VNX-0508 Privacy cho Inquiry, Turnstile | ✅ | 7602983, 5750640 | Owner duyệt câu chữ; review `.ai/reviews/VNX-0508-review.md` APPROVE; merge `bcf95c6`, đã push |
+| VNX-0507 Widget Turnstile | ⏳ | — | Owner tạo widget cho `vnx.si`, đưa site key; `wrangler secret put TURNSTILE_SECRET` |
 | VNX-0705a Terms, Privacy, Media Kit + cron dọn dữ liệu | ✅ | ab11c0e, 2430868, 79eca5f | review APPROVE (`.ai/reviews/VNX-0705a-review.md`); 432/432; nội dung từ `docs/legal/*.md` (Owner duyệt); cron `0 1 * * *` xóa `rate_limits` > 2 ngày, token/session hết hạn. Merge vào `main` qua PR #3 (`19115d3`) |
 | VNX-0709 Thiết kế lại đợt A (font, token, header, footer, logo B, landing v2) | ✅ | 953b507…628e61e | review APPROVE (`.ai/reviews/VNX-0709-review.md`); 468/468; font 344 KB tự host; `landing.js` 1.7 KB; audit `docs/design/2026-10-04-ui-audit-and-redesign.md`. Chưa merge |
 
@@ -68,13 +80,16 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 Theo thứ tự (cũng ghi trong `apps/web/wrangler.jsonc`):
 0. (khi có M3) `npx wrangler r2 bucket create vnxsi-media` — cần Owner bật R2 trước; wrangler từ chối deploy nếu binding trỏ tới bucket chưa có.
-1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, `0004_builders`, `0005_products`, và `0006_catalog` khi M4 đã merge). Từ `0006_catalog` trở đi, migration và `npm run deploy` phải chạy liền nhau: code trước M4 trả 409 khi sửa product đang publish nếu bảng đã có trigger FTS.
+1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, `0004_builders`, `0005_products`, `0006_catalog`, và `0007_inquiries` khi M5 đã merge; code M5 cần `0007` trước khi phục vụ `/hub`, `/me`). Từ `0006_catalog` trở đi, migration và `npm run deploy` phải chạy liền nhau: code trước M4 trả 409 khi sửa product đang publish nếu bảng đã có trigger FTS.
 2. Xác minh domain gửi mail trên Resend; `wrangler secret put RESEND_API_KEY`, `wrangler secret put ADMIN_EMAILS`.
 3. `npm run deploy`.
 
 Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để sửa nhanh landing: `/login` sẽ lỗi.
 
 ## Quyết định phát sinh
+
+- **Owner 2026-10-04 (M5):** Turnstile do Owner tạo widget, thiếu khóa thì form chưa đăng nhập đóng (fail closed); chỉ người chưa đăng nhập qua Turnstile; tài khoản ngầm chưa xác nhận bị xóa sau 48 giờ; builder thấy tên client gõ trên form (`client_name`), không thấy email. Sau review toàn nhánh: nút "Gửi ngay" ở `/me` cho Inquiry chờ xác nhận (phiên đăng nhập đã chứng minh email); 5 lần/giờ mỗi email cho email xác nhận khi chưa đăng nhập.
+- **Reviewer (M5):** form chưa đăng nhập trả cùng trang "kiểm tra email" cho email của builder, tài khoản bị khóa, honeypot và quá giới hạn email (không lộ trạng thái tài khoản); `notifyInquiryMessage` không bao giờ ném lỗi; driver Turnstile giả chỉ có hiệu lực khi `MAIL_DRIVER=fake`; builder bị khóa không trả lời / từ chối / đóng được; khi gộp VNX-0705a, giữ khung cron và hàm dọn dữ liệu của VNX-0705a (`deleteExpiredLoginTokens`, `RATE_LIMIT_KEEP_SECONDS` 2 ngày), thêm các bước M5 vào danh sách bước (khác gợi ý trong `.ai/reviews/VNX-0705a-review.md` mục "Xung đột", cùng hành vi; theo comment của chính `jobs/daily.ts` bên VNX-0705a).
 
 - **Owner 2026-10-04 (landing + partner đầu tiên):** bỏ ý định làm homepage M7 sớm; làm landing định vị VNX-0708 (CTA builder qua `/login` + waitlist client giữ bảng `waitlist`, khác spec 5.8). ElevenLabs hiển thị ở `/tools/elevenlabs` (không phải `/p/`); `/go/:merchantSlug` trỏ tới offer mặc định, cùng tồn tại với `/go/o/:offerId`; slug merchant không được là `p`, `o`; lát mỏng EPIC 21 làm sau VNX-0708, conversion/doanh thu xem tạm trên dashboard PartnerStack.
 
@@ -107,7 +122,7 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - **M5 merge (thêm, VNX-0709):** `Layout.tsx`, `app.css`, 4 file i18n đã viết lại; class và biến CSS cũ còn (alias) nên view M5 không vỡ; gộp i18n theo key, footer test dùng `footer.company`.
 - **Đợt B/C thiết kế:** catalogue, product, builder, Hub, Admin theo design system mới; thống nhất trọng lượng tiêu đề 600/700.
 - **Go-live (Owner muốn sớm, 2026-10-04):** ✅ Email Routing `contact@vnx.si` → ✅ merge VNX-0705a (PR #3) → Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → `npm run db:migrate:remote -w apps/web` → ✅ Resend domain `vnx.si` verified, ✅ secret `RESEND_API_KEY`, ✅ secret `ADMIN_EMAILS` = `thanhsu604@gmail.com` (2026-10-04) → Turnstile: ✅ widget `vnx.si` (site key `0x4AAAAAAFNhEcGnR8e56X8X`, vào `wrangler.jsonc` ở VNX-0710), ✅ secret `TURNSTILE_SECRET` (2026-10-04) → `npm run deploy` (đăng ký cron) → smoke `/`, `/vi`, `/terms`, `/privacy`, `/media-kit`, `/login`, `/robots.txt`, `/sitemap.xml`. OQ-1 của VNX-0708 đã đóng bằng VNX-0705a.
-- **M5 (merge sau VNX-0705a):** gộp cron theo `.ai/reviews/VNX-0705a-review.md` mục "Xung đột" (lấy `jobs/daily.ts`, `index.ts` của M5; một hàm xóa token `deleteExpiredTokens`; giữ `rate_limits` 2 ngày trừ khi Owner chọn khác); cập nhật `docs/legal/privacy.md` + `src/legal/content.ts` cho Inquiry và Turnstile trước khi M5 lên production.
+- ~~**M5 (merge sau VNX-0705a):** gộp cron theo `.ai/reviews/VNX-0705a-review.md` mục "Xung đột"~~ Đã gộp ở `482ef50` theo hướng ở mục Quyết định (Reviewer M5). Privacy cho Inquiry và Turnstile: xong ở VNX-0508. Ghi chú cũ: (lấy `jobs/daily.ts`, `index.ts` của M5; một hàm xóa token `deleteExpiredTokens`; giữ `rate_limits` 2 ngày trừ khi Owner chọn khác); cập nhật `docs/legal/privacy.md` + `src/legal/content.ts` cho Inquiry và Turnstile trước khi M5 lên production.
 - **Mọi task thêm dữ liệu cá nhân/cookie (M5, M6, M7, EPIC 21):** sửa `docs/legal/privacy.md` và `src/legal/content.ts` trong cùng task.
 
 - **M7 (VNX-0707):** secret mới `ANALYTICS_SALT`; thêm vào thứ tự deploy khi tới M7.
@@ -121,10 +136,10 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
 
 - **Deploy sau khi merge M2:** `db:migrate:remote` phải áp cả `0004_builders` (đã ghi trong `wrangler.jsonc`).
-- **Trước M5:** thêm `Cache-Control: no-store` cho `/hub*`, `/admin*`, `/me*` (trang có dữ liệu cá nhân).
 - **Quyết định sau (ADR nhỏ):** hash invite đang vừa là khóa DB vừa là giá trị cookie, nên người đọc được D1/audit có thể tự duyệt builder; thiết kế lại (cookie ≠ khóa DB, hoặc HMAC) nếu cần.
-- **M5 (VNX-0505):** cron dọn `sessions`, `login_tokens`, `rate_limits` hết hạn.
-- **M5 (VNX-0506, mới):** trang trung gian ở `/auth/verify` với nút POST xác nhận, để trình quét link trong email doanh nghiệp không tiêu token.
+- **VNX-0507 (Owner):** tạo widget Turnstile cho `vnx.si`, đưa site key để Claude đặt vào `wrangler.jsonc`; `wrangler secret put TURNSTILE_SECRET`. Thiếu thì form Inquiry khi chưa đăng nhập tự đóng.
+- **M6:** `deleteGhostUsers` phải xét thêm bảng `requests`; email `request_verify` dùng lại trang xác nhận (`VERIFY_PURPOSES`); nút "Post a request" (từ M4).
+- **M7:** đếm `inquiries` vào `product_daily_stats` khi Inquiry vào `open`; cron hằng giờ (`scheduled` hiện chỉ chạy job cho `0 1 * * *`).
 - **M7:** độ tương phản `.error-msg` ở dark mode, vùng chạm 44 px cho brand/sign-in, skip link.
 - **M8 (VNX-0804):** chuyển `www.vnx.si` → `vnx.si` (cookie `__Host-` gắn với host).
 - **Owner:** bật Dependency graph tại https://github.com/thanhsu/vnxsi/settings/security_analysis để job `dependency-review` chạy được (token hiện tại không có quyền Administration). `gitleaks` đã xanh, không cần license.
@@ -133,6 +148,11 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
 ## Ghi nhận (minor, chưa làm)
+
+- M5: có thể "gài" Inquiry chờ xác nhận vào tài khoản người khác (giảm bằng Turnstile, rate limit, xóa sau 48 giờ); email xác nhận không có nội dung tin nhắn.
+- M5: mở Inquiry ngay cả khi product / builder thôi công khai trong 15 phút chờ; thời gian phản hồi khác nhau giữa nhánh "không tạo gì" và nhánh tạo thật.
+- M5: thư báo admin quá 7 ngày chỉ tiếng Anh, gửi lại cho admin đầu danh sách nếu mailer lỗi giữa chừng; người đã đăng nhập không qua Turnstile (quyết định Owner).
+- M5: các minor còn lại (a11y, test nhánh phụ, regex tên): xem `.ai/reviews/M5-review.md`.
 
 - M4: danh bạ tìm từ khóa > ~46 byte theo tiền tố (giới hạn `LIKE` 50 byte của D1); nên đổi sang `instr(lower(cột), lower(?))`.
 - M4: `LIKE` cho từ 1–2 ký tự chỉ không phân biệt hoa thường với ASCII; nội dung product không chuẩn hóa NFC khi lưu.

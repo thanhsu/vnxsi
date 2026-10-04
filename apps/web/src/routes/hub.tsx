@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { requireBuilder } from "../auth/middleware.ts";
+import { countOpenInquiries } from "../db/inquiries.ts";
 import { writeAudit } from "../db/audit.ts";
 import { setBuilderStatus, updateBuilderProfile } from "../db/builders.ts";
 import { countBuilderProductsByStatus } from "../db/products.ts";
@@ -21,8 +22,8 @@ function profilePage(c: Context<AppEnv>, values: BuilderFormValues, errors: Fiel
 export function registerHubRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/hub", requireBuilder, async (c) => {
     const builder = c.get("builder");
-    const productCounts = await countBuilderProductsByStatus(c.env.DB, builder.userId);
-    return page(c, <OverviewPage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} productCounts={productCounts} />);
+    const [productCounts, openInquiries] = await Promise.all([countBuilderProductsByStatus(c.env.DB, builder.userId), countOpenInquiries(c.env.DB, builder.userId)]);
+    return page(c, <OverviewPage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} productCounts={productCounts} openInquiries={openInquiries} />);
   });
 
   onLocalized(app, "get", "/hub/profile", requireBuilder, (c) =>

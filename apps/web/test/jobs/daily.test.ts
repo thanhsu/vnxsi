@@ -16,6 +16,15 @@ const NOW = new Date("2026-10-04T01:00:00Z");
 const count = async (sql: string, ...params: unknown[]) =>
   (await testEnv.DB.prepare(sql).bind(...params).first<{ n: number }>())?.n ?? 0;
 const rateWindow = (key: string) => count("SELECT COUNT(*) AS n FROM rate_limits WHERE key = ?1", key);
+// The VNX-0505 (M5) inquiry steps run before the clean-up steps (test/jobs/daily-inquiries.test.ts covers them).
+// This file creates no inquiries and no ghost accounts, so they find nothing to do.
+const IDLE_INQUIRY_STEPS = [
+  { job: "daily", step: "remind", sent: 0 },
+  { job: "daily", step: "alert", sent: 0 },
+  { job: "daily", step: "resend", sent: 0 },
+  { job: "daily", step: "pending_inquiries", deleted: 0 },
+  { job: "daily", step: "ghost_users", deleted: 0 },
+];
 
 /** A DB whose statements on one table throw, to show one failing step does not stop the others. */
 function brokenOn(table: string): D1Database {
@@ -64,6 +73,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
 
     const results = await runDaily(testEnv, NOW);
     expect(results).toEqual([
+      ...IDLE_INQUIRY_STEPS,
       { job: "daily", step: "rate_limits", deleted: expected.rate_limits },
       { job: "daily", step: "login_tokens", deleted: expected.login_tokens },
       { job: "daily", step: "sessions", deleted: expected.sessions },
@@ -88,6 +98,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     await runDaily(testEnv, NOW);
     const second = await runDaily(testEnv, NOW);
     expect(second).toEqual([
+      ...IDLE_INQUIRY_STEPS,
       { job: "daily", step: "rate_limits", deleted: 0 },
       { job: "daily", step: "login_tokens", deleted: 0 },
       { job: "daily", step: "sessions", deleted: 0 },
@@ -98,8 +109,9 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     await runDaily(testEnv, NOW);
     const lines = log.mock.calls.map((call) => call[0] as string);
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(IDLE_INQUIRY_STEPS.length + 3);
     expect(lines.map((l) => JSON.parse(l))).toEqual([
+      ...IDLE_INQUIRY_STEPS,
       { job: "daily", step: "rate_limits", deleted: 0 },
       { job: "daily", step: "login_tokens", deleted: 0 },
       { job: "daily", step: "sessions", deleted: 0 },
@@ -113,9 +125,11 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     await createLoginToken(testEnv.DB, { email: "daily-after-fail@vnx.si", purpose: "login", locale: "en" }, new Date(NOW.getTime() - DAY_MS));
     const env = { ...testEnv, DB: brokenOn("rate_limits") } as Bindings;
     const results = await runDaily(env, NOW);
-    expect(results[0]).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
-    expect(results[1]).toEqual({ job: "daily", step: "login_tokens", deleted: 1 });
-    expect(results[2]).toEqual({ job: "daily", step: "sessions", deleted: 0 });
+    const at = IDLE_INQUIRY_STEPS.length;
+    expect(results.slice(0, at)).toEqual(IDLE_INQUIRY_STEPS);
+    expect(results[at]).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
+    expect(results[at + 1]).toEqual({ job: "daily", step: "login_tokens", deleted: 1 });
+    expect(results[at + 2]).toEqual({ job: "daily", step: "sessions", deleted: 0 });
     expect(error).toHaveBeenCalledTimes(1);
     expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
   });
@@ -133,6 +147,6 @@ describe("scheduled handler (VNX-0705a AC9)", () => {
     expect(pending).toHaveLength(1);
     await Promise.all(pending);
     expect(await rateWindow("daily:scheduled")).toBe(0);
-    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual(["rate_limits", "login_tokens", "sessions"]);
+    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual([...IDLE_INQUIRY_STEPS.map((r) => r.step), "rate_limits", "login_tokens", "sessions"]);
   });
 });

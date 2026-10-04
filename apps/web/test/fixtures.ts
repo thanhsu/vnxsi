@@ -1,5 +1,6 @@
 import { createSession } from "../src/auth/sessions.ts";
 import { createBuilder,setBuilderStatus } from "../src/db/builders.ts";
+import { createInquiry, setInquiryStatus } from "../src/db/inquiries.ts";
 import { addMedia } from "../src/db/media.ts";
 import { replaceTiers } from "../src/db/pricing.ts";
 import { createProductDraft, findProductById, setProductStatus, updateProductFields } from "../src/db/products.ts";
@@ -9,6 +10,7 @@ import type { Builder, BuilderProfile, BuilderStatus } from "../src/domain/build
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
 import type { TierInput } from "../src/domain/pricing-input.ts";
 import type { ProductFields } from "../src/domain/product-input.ts";
+import type { Inquiry, InquiryStatus, InquiryType } from "../src/domain/inquiry.ts";
 import type { BadgeKind, DeliveryModel, Product } from "../src/domain/product.ts";
 import { testEnv } from "./helpers.ts";
 
@@ -163,4 +165,36 @@ export async function makeLiveProduct(
 ): Promise<{ builder: Builder; product: Product }> {
   const builder = await makeBuilder(email, handle, "approved", opts.builder);
   return { builder, product: await addLiveProduct(builder, name, opts) };
+}
+
+/**
+ * A client, an approved builder (handle `<tag>-b`) with a live product "<tag> product" (unless `withProduct: false`),
+ * and an inquiry from the client in `status`.
+ */
+export async function makeInquiry(opts: { tag: string; status: InquiryStatus; type?: InquiryType; withProduct?: boolean; now?: string; clientLocale?: string; builderLocale?: string }) {
+  const now = opts.now ?? new Date().toISOString();
+  const client = await ensureUser(`${opts.tag}-c@vnx.si`, opts.clientLocale);
+  const builderUser = await ensureUser(`${opts.tag}-b@vnx.si`, opts.builderLocale);
+  const builder = await makeBuilder(builderUser.email, `${opts.tag}-b`, "approved", { name: `${opts.tag} builder` });
+  const product = opts.withProduct === false ? null : await addLiveProduct(builder, `${opts.tag} product`);
+  const { inquiry, firstMessageId } = await createInquiry(testEnv.DB, {
+    clientUserId: client.id,
+    clientName: "Minh Tran",
+    builderId: builder.userId,
+    productId: product?.id ?? null,
+    type: opts.type ?? (product ? "buy" : "hire"),
+    message: "We need online booking for three salons, please.",
+    budgetBand: "500-2k",
+    deadline: null,
+    status: opts.status === "pending_verification" ? "pending_verification" : "open",
+    locale: "en",
+    now,
+  });
+  let current: Inquiry = inquiry;
+  if (opts.status !== "open" && opts.status !== "pending_verification") {
+    const moved = await setInquiryStatus(testEnv.DB, { id: inquiry.id, from: "open", to: opts.status, now });
+    if (!moved) throw new Error("status change failed");
+    current = moved;
+  }
+  return { client, builder, product, inquiry: current, firstMessageId };
 }

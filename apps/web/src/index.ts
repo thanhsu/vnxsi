@@ -6,8 +6,8 @@ const app = createApp();
 
 export default {
   fetch: app.fetch,
-  // Cron `0 1 * * *` in wrangler.jsonc (spec §8.4).
+  // Cron `0 1 * * *` in wrangler.jsonc (spec §8.4 / ARCHITECTURE §5). The hourly "5 * * * *" job arrives with M7.
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(runDaily(env, new Date(controller.scheduledTime)));
+    if (controller.cron === "0 1 * * *") ctx.waitUntil(runDaily(env, new Date(controller.scheduledTime)));
   },
 } satisfies ExportedHandler<Bindings>;

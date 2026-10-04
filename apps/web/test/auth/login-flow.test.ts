@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { sha256Hex } from "../../src/auth/crypto.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
-import { formPost, testEnv } from "../helpers.ts";
+import { followMagicLink, formPost, testEnv } from "../helpers.ts";
 
 function tokenFrom(text: string): string {
   const m = /\/auth\/verify\?t=([A-Za-z0-9_-]{43})/.exec(text);
@@ -38,7 +38,7 @@ describe("magic link login", () => {
     expect(outbox[0]?.to).toBe("lan@example.vn");
     expect(outbox[0]?.subject).toBe("Link đăng nhập VNX.SI của bạn");
 
-    const verify = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, {}, testEnv);
+    const verify = await followMagicLink(app, `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, testEnv);
     expect(verify.status).toBe(303);
     expect(verify.headers.get("location")).toBe("/");
     const setCookie = verify.headers.get("set-cookie") ?? "";
@@ -60,8 +60,8 @@ describe("magic link login", () => {
     const app = createApp();
     await app.request(formPost("/login", { email: "reuse@vnx.si" }), undefined, testEnv);
     const url = `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`;
-    expect((await app.request(url, {}, testEnv)).status).toBe(303);
-    const again = await app.request(url, {}, testEnv);
+    expect((await followMagicLink(app, url, testEnv)).status).toBe(303);
+    const again = await followMagicLink(app, url, testEnv);
     expect(again.status).toBe(400);
     expect(await again.text()).toContain("This sign-in link no longer works");
   });
@@ -69,7 +69,7 @@ describe("magic link login", () => {
   it("makes ADMIN_EMAILS users admins, case-insensitively", async () => {
     const app = createApp();
     await app.request(formPost("/login", { email: "Owner@VNX.si" }), undefined, testEnv);
-    await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, {}, testEnv);
+    await followMagicLink(app, `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, testEnv);
     const row = await testEnv.DB.prepare("SELECT is_admin FROM users WHERE email = 'owner@vnx.si'").first<{ is_admin: number }>();
     expect(row?.is_admin).toBe(1);
   });
@@ -77,11 +77,11 @@ describe("magic link login", () => {
   it("follows a safe next and ignores an unsafe one", async () => {
     const app = createApp();
     await app.request(formPost("/login", { email: "n1@vnx.si", next: "/hub" }), undefined, testEnv);
-    const ok = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2Fhub`, {}, testEnv);
+    const ok = await followMagicLink(app, `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2Fhub`, testEnv);
     expect(ok.headers.get("location")).toBe("/hub");
     clearOutbox();
     await app.request(formPost("/login", { email: "n2@vnx.si" }), undefined, testEnv);
-    const bad = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2F%2Fevil.com`, {}, testEnv);
+    const bad = await followMagicLink(app, `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2F%2Fevil.com`, testEnv);
     expect(bad.headers.get("location")).toBe("/");
   });
 
@@ -108,7 +108,7 @@ describe("magic link login", () => {
   it("logs out and invalidates the session", async () => {
     const app = createApp();
     await app.request(formPost("/login", { email: "out@vnx.si" }), undefined, testEnv);
-    const verify = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, {}, testEnv);
+    const verify = await followMagicLink(app, `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}`, testEnv);
     const sid = cookieFrom(verify);
     const out = await app.request(formPost("/logout", {}, { cookie: `__Host-vnx_session=${sid}` }), undefined, testEnv);
     expect(out.status).toBe(303);
@@ -122,7 +122,7 @@ describe("magic link login", () => {
   it("ignores a next that smuggles a tab past safeNext", async () => {
     const app = createApp();
     await app.request(formPost("/login", { email: "tab@vnx.si" }), undefined, testEnv);
-    const res = await app.request(`https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2F%09%2Fevil.com`, {}, testEnv);
+    const res = await followMagicLink(app, `https://vnx.si/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2F%09%2Fevil.com`, testEnv);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/");
   });

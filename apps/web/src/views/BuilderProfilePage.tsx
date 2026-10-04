@@ -14,7 +14,7 @@ const EXTERNAL = "nofollow ugc noopener";
 
 type Props = { locale: Locale; origin: string; builder: Builder; portfolio: PortfolioItem[]; products: Product[]; signedIn: boolean };
 
-/** The Hire button arrives with M5. */
+/** Spec §5.2 builder profile. */
 export const BuilderProfilePage: FC<Props> = ({ locale, origin, builder, portfolio, products, signedIn }) => {
   const tr = translator(locale);
   return (
@@ -26,6 +26,11 @@ export const BuilderProfilePage: FC<Props> = ({ locale, origin, builder, portfol
             @{builder.handle} · {tr(KIND_KEY[builder.kind])} · {countryName(locale, builder.country)}
           </p>
           <p class="lead">{builder.headline}</p>
+          <p class="ask">
+            <a class="btn" href={localizedPath(locale, `/b/${builder.handle}/hire`)}>
+              {tr("bprofile.hire", { name: builder.name })}
+            </a>
+          </p>
           <p>
             <span class={`badge badge-avail-${builder.availability}`}>{tr(AVAILABILITY_KEY[builder.availability])}</span>
             {builder.hourlyRateCents !== null ? <span class="rate">{tr("bprofile.rate", { amount: formatUsd(locale, builder.hourlyRateCents) })}</span> : null}

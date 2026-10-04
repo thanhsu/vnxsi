@@ -16,6 +16,7 @@ export default defineConfig(async () => {
             APP_ORIGIN: "https://vnx.si",
             ADMIN_EMAILS: "owner@vnx.si",
             MAIL_DRIVER: "fake",
+            TURNSTILE_DRIVER: "fake",
           },
         },
       }),

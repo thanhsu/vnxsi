@@ -3,14 +3,14 @@ import { createApp } from "../../src/app.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
 import { signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
 
 async function login(email: string, env: Bindings) {
   clearOutbox();
   const app = createApp();
   await app.request(formPost("/login", { email }), undefined, env);
   const token = /\/auth\/verify\?t=([A-Za-z0-9_-]{43})/.exec(outbox[0]!.text)![1];
-  await app.request(getReq(`/auth/verify?t=${token}`), undefined, env);
+  await followMagicLink(app, `/auth/verify?t=${token}`, env);
 }
 
 const isAdmin = async (email: string) =>
