@@ -134,7 +134,7 @@ export const ProductPage: FC<Props> = ({ locale, origin, item, tiers, media, bad
           <h2>{tr("productPage.ask")}</h2>
           <p class="ask">
             {PRODUCT_INQUIRY_TYPES.filter((t) => t !== "customize" || p.customizable).map((t, i) => (
-              <a class={i === 0 ? "btn" : "btn secondary"} href={localizedPath(locale, `/p/${p.slug}/inquiry/${t}`)}>
+              <a class={i === 0 ? "btn" : "btn btn-secondary"} href={localizedPath(locale, `/p/${p.slug}/inquiry/${t}`)}>
                 {tr(INQUIRY_TYPE_KEY[t])}
               </a>
             ))}

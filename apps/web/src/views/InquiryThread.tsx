@@ -96,7 +96,7 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
                     </p>
                   ) : null}
                 </div>
-                <button class="btn secondary" type="submit">
+                <button class="btn btn-secondary" type="submit">
                   {tr("thread.decline")}
                 </button>
               </form>
