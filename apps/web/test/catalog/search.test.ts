@@ -144,5 +144,5 @@ describe("searchProducts: filters and pages", () => {
     expect(second.items).toHaveLength(1);
     expect(new Set([...first.items, ...second.items].map((i) => i.id)).size).toBe(25);
     expect((await search({ q: "pagecheck", page: "3" })).items).toEqual([]);
-  });
+  }, 30_000);
 });

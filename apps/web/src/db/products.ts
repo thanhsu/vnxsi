@@ -123,7 +123,7 @@ export async function listBuilderProducts(db: D1Database, builderId: string): Pr
 
 /**
  * "This request's compare-and-set on the product went through": the product is in `status` and was last written at
- * `updatedAt`. Statements batched after the compare-and-set use it so that a lost race (0 rows changed) writes nothing.
+ * `updatedAt`. Statements batched after the compare-and-set use it so that a lost race (no row returned) writes nothing.
  */
 export type ProductGuard = { productId: string; status: ProductStatus; updatedAt: string };
 
