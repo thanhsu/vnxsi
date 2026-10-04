@@ -62,6 +62,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | VNX-0708 Landing định vị | ✅ | 2b78709, fb2ac44, 615ca6f, f5e7b56 | `/` SSR 4 locale, waitlist client (persona `client`), gỡ `/api/waitlist` JSON và `public/index.html`; sửa F1–F3 (referrer qua `ref`, `www.` nội bộ, giữ tick đồng ý) |
 | Merge VNX-0708 vào `main` | ✅ | e4a932d, ade9f4f | merge commit; lên GitHub qua PR #2 (merge `ade9f4f`, CI `test` + `gitleaks` xanh, `dependency-review` đỏ do chưa bật Dependency graph) |
 | VNX-0705a Terms, Privacy, Media Kit + cron dọn dữ liệu | ✅ | ab11c0e, 2430868, 79eca5f | review APPROVE (`.ai/reviews/VNX-0705a-review.md`); 432/432; nội dung từ `docs/legal/*.md` (Owner duyệt); cron `0 1 * * *` xóa `rate_limits` > 2 ngày, token/session hết hạn. Merge vào `main` qua PR #3 (`19115d3`) |
+| VNX-0709 Thiết kế lại đợt A (font, token, header, footer, logo B, landing v2) | ✅ | 953b507…628e61e | review APPROVE (`.ai/reviews/VNX-0709-review.md`); 468/468; font 344 KB tự host; `landing.js` 1.7 KB; audit `docs/design/2026-10-04-ui-audit-and-redesign.md`. Chưa merge |
 
 ## Điều kiện trước khi deploy `main`
 
@@ -102,6 +103,8 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Header hiện link Builder Hub khi đã đăng nhập (người chưa là builder được đưa sang `/hub/apply`).
 
 ## Nghĩa vụ để lại
+- **M5 merge (thêm, VNX-0709):** `Layout.tsx`, `app.css`, 4 file i18n đã viết lại; class và biến CSS cũ còn (alias) nên view M5 không vỡ; gộp i18n theo key, footer test dùng `footer.company`.
+- **Đợt B/C thiết kế:** catalogue, product, builder, Hub, Admin theo design system mới; thống nhất trọng lượng tiêu đề 600/700.
 - **Go-live (Owner muốn sớm, 2026-10-04):** ✅ Email Routing `contact@vnx.si` → ✅ merge VNX-0705a (PR #3) → Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → `npm run db:migrate:remote -w apps/web` → Resend xác minh domain, `wrangler secret put RESEND_API_KEY`, `wrangler secret put ADMIN_EMAILS` → `npm run deploy` (đăng ký cron) → smoke `/`, `/vi`, `/terms`, `/privacy`, `/media-kit`, `/login`, `/robots.txt`, `/sitemap.xml`. OQ-1 của VNX-0708 đã đóng bằng VNX-0705a.
 - **M5 (merge sau VNX-0705a):** gộp cron theo `.ai/reviews/VNX-0705a-review.md` mục "Xung đột" (lấy `jobs/daily.ts`, `index.ts` của M5; một hàm xóa token `deleteExpiredTokens`; giữ `rate_limits` 2 ngày trừ khi Owner chọn khác); cập nhật `docs/legal/privacy.md` + `src/legal/content.ts` cho Inquiry và Turnstile trước khi M5 lên production.
 - **Mọi task thêm dữ liệu cá nhân/cookie (M5, M6, M7, EPIC 21):** sửa `docs/legal/privacy.md` và `src/legal/content.ts` trong cùng task.
