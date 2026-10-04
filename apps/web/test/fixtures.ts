@@ -1,8 +1,10 @@
 import { createSession } from "../src/auth/sessions.ts";
 import { createBuilder,setBuilderStatus } from "../src/db/builders.ts";
+import { createProductDraft } from "../src/db/products.ts";
 import { createUser, findUserByEmail, type UserRow } from "../src/db/users.ts";
 import type { Builder, BuilderProfile, BuilderStatus } from "../src/domain/builder.ts";
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
+import type { Product } from "../src/domain/product.ts";
 import { testEnv } from "./helpers.ts";
 
 export function profileValues(overrides: Partial<BuilderFormValues> = {}): BuilderFormValues {
@@ -50,4 +52,11 @@ export async function signIn(email: string, opts: { admin?: boolean; locale?: st
   const user = await ensureUser(email, opts.locale);
   if (opts.admin) await testEnv.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?1").bind(user.id).run();
   return { user, cookie: `__Host-vnx_session=${await createSession(testEnv.DB, user.id, new Date())}` };
+}
+
+/** A builder (default approved) with one fresh draft product. */
+export async function makeDraft(email: string, handle: string, name: string, builderStatus: BuilderStatus = "approved"): Promise<{ builder: Builder; product: Product }> {
+  const builder = await makeBuilder(email, handle, builderStatus);
+  const product = await createProductDraft(testEnv.DB, { builderId: builder.userId, name, now: new Date().toISOString() });
+  return { builder, product };
 }
