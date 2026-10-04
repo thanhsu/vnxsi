@@ -77,15 +77,19 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m2-builder.md` (task 0202, 0203, 
 
 ## M3 — Product
 
+Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md`. Editor sinh form từ bảng đặc tả field, nên không chia theo "bước 1–5 / 6–9" mà theo: 8 bước văn bản (0303), Pricing (0304a), điều kiện submit + vòng đời (0304b).
+
 | Task | Nội dung | Tag |
 |---|---|---|
-| VNX-0301 | Migration product, pricing tier, media, verification; state machine product | AGENT, FOUNDATION |
+| VNX-0301 | Migration `0005_products` (product, pricing tier, media, verification); state machine product; slug | AGENT, FOUNDATION |
+| VNX-0303 | Product trong Hub, tạo nháp, editor 8 bước văn bản, tự thu hồi `demo_verified` khi đổi demo URL | AGENT |
 | VNX-0302 | R2: upload (kiểm magic bytes, ≤2MB, ≤8 ảnh), `/media/*` | AGENT, HIGH-RISK |
-| VNX-0303 | Editor bước 1–5 | AGENT |
-| VNX-0304 | Editor bước 6–9, điều kiện submit | AGENT |
-| VNX-0305 | Admin: duyệt product, review note, huy hiệu, mục "mới chỉnh sửa", tự thu hồi `demo_verified` | AGENT |
-| VNX-0306 | Trang `/p/:slug`, JSON-LD, Open Graph | AGENT |
-| VNX-0307 | Owner tạo bucket R2 `vnxsi-media` và binding | HUMAN |
+| VNX-0304a | Bước Pricing (≤ 5 tier) | AGENT |
+| VNX-0304b | Điều kiện submit, submit / rút lại / ẩn / hiện / lưu trữ; đếm product ở Hub | AGENT |
+| VNX-0305a | Admin: duyệt / yêu cầu sửa / khóa product, huy hiệu `listed`, email | AGENT |
+| VNX-0305b | Admin: gắn / thu hồi huy hiệu, mục "mới chỉnh sửa" | AGENT |
+| VNX-0306 | Trang `/p/:slug`, JSON-LD, Open Graph; product trên `/b/:handle` | AGENT |
+| VNX-0307 | Owner bật R2 trên tài khoản; Claude tạo bucket `vnxsi-media` | HUMAN |
 
 **Cổng ra M3:**
 - Product đi đủ vòng `draft` → `in_review` → `published` và hiện ở `/p/:slug`.

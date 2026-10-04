@@ -6,7 +6,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
-- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong** trên nhánh `feat/m2-builder` (chưa push, chưa merge): 9 task + lượt sửa sau review toàn nhánh, 192/192 test, typecheck sạch. Review: `.ai/reviews/M2-review.md`. Tiếp theo: Owner quyết định push/PR/merge, rồi viết plan M3.
+- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product): plan `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md` **chờ Owner duyệt**, nhánh `feat/m3-product`.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
 
@@ -50,6 +50,8 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 
 ## Quyết định phát sinh
 
+- **Owner 2026-10-04 (M3):** product `in_review` bị khóa, có nút Rút lại (`withdraw` → draft); `primary_lang` gồm `en`, `vi`, `zh-Hans`, `zh-Hant`; Claude tạo bucket R2 sau khi Owner bật R2 (lần thử 2026-10-04 lỗi 10042: tài khoản chưa bật R2).
+
 - Rate limit bằng bảng D1 `rate_limits` (Workers Rate Limiting binding chỉ có chu kỳ 10/60 giây).
 - `consumeLoginToken(db, raw, now, expectedPurpose)`: token của mục đích khác không được dùng và không bị tiêu.
 - `getMailer`: `fake` / `console` chỉ khi đặt `MAIL_DRIVER`; có `RESEND_API_KEY` → Resend; còn lại → báo lỗi, không log link.
@@ -66,6 +68,8 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Header hiện link Builder Hub khi đã đăng nhập (người chưa là builder được đưa sang `/hub/apply`).
 
 ## Nghĩa vụ để lại
+
+- **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
 
 - **Deploy sau khi merge M2:** `db:migrate:remote` phải áp cả `0004_builders` (đã ghi trong `wrangler.jsonc`).
 - **M4 (VNX-0404):** canonical/hreflang của `/b/:handle` lấy origin từ request; chuyển sang `APP_ORIGIN` cùng SEO toàn site.
