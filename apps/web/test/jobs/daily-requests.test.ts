@@ -255,6 +255,26 @@ describe("suspension expires invitations at once and silently (spec §7.6, Owner
 });
 
 describe("every system-driven invitation expiry is audited (M6 review F3)", () => {
+  it("a failing audit batch never costs the lapse e-mails", async () => {
+    clearOutbox();
+    await adminCookie();
+    const { request } = await makeRequest({ tag: "au-fail", now: daysAgo(8) });
+    const [a] = await builders("au-fail", ["a"]);
+    const [ia] = await inviteBuilders(request, [a!], daysAgo(8));
+    // Only the audit batch (the lone lapse here) is rejected; D1 methods are bound to the real binding.
+    const failing = new Proxy(testEnv.DB, {
+      get(target, prop) {
+        if (prop === "batch") return (statements: D1PreparedStatement[]) => (statements.length === 1 ? Promise.reject(new Error("audit down")) : target.batch(statements));
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const results = await runDaily({ ...testEnv, DB: failing } as typeof testEnv, NOW);
+    expect(results.find((r) => r.step === "invites_expire")).toHaveProperty("expired");
+    expect((await inviteOf(request.id, ia!.id)).status).toBe("expired");
+    expect(subjectsTo("au-fail-a@vnx.si")).toEqual([`Invitation ended: ${request.title}`]);
+  });
+
   beforeEach(async () => {
     clearOutbox();
     await adminCookie();

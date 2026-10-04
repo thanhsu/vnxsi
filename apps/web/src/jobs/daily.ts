@@ -107,8 +107,15 @@ async function expireInvites(env: Bindings, now: Date): Promise<number> {
     ...inviteExpiryAuditStatements(env.DB, swept, { actorUserId: null, reason: "builder_inactive", now: iso }),
     ...inviteExpiryAuditStatements(env.DB, lapsed, { actorUserId: null, reason: "lapsed", now: iso }),
   ];
-  if (audits.length > 0) await env.DB.batch(audits);
+  // The notices go first: a rerun finds nothing left to expire, so a failed audit must never cost the lapse e-mails.
   await notifyInviteExpired(env, lapsed.map((x) => x.id));
+  if (audits.length > 0) {
+    try {
+      await env.DB.batch(audits);
+    } catch (err) {
+      console.error(JSON.stringify({ event: "jobs.daily.invite_expiry_audit_failed", invites: audits.length, error: String(err) }));
+    }
+  }
   return swept.length + lapsed.length;
 }
 
