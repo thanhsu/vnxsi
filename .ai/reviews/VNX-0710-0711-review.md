@@ -43,3 +43,17 @@ VNX-0710 AC1–AC13 ✓ theo bảng bằng chứng trong báo cáo, đã chạy 
 - Deploy: `npm run db:migrate:remote -w apps/web` (áp `0003`–`0007`, `0009`) trước `npm run deploy`.
 - Khi Owner bật R2: `npx wrangler r2 bucket create vnxsi-media`, bỏ comment `r2_buckets`, deploy.
 - Nhánh M6 (`feat/m6-request`) khi merge: gộp i18n, Layout (mục Contact, tài khoản), Privacy (mục contact form đã thêm).
+
+## Re-review lượt sửa F1 (2026-10-05)
+
+- **Diff:** `37fe64f..76f965e` (`204eb13` test, `c6fcf8b` fix, `76f965e` báo cáo). Chỉ bỏ `widget={false}` ở landing; `ContactForm` render widget giống `/contact`; test `assets` chỉ cho phép đúng `https://challenges.cloudflare.com/turnstile/v0/api.js`, mọi host khác (kể cả host giả `challenges.cloudflare.com.evil.example`, iframe/stylesheet/preconnect ngoài) vẫn bị từ chối. F2–F4 không đổi.
+- **Lệnh chạy lại:** typecheck exit 0; `npm test` → 88 file, **644/644**.
+- **Xem tay:** `wrangler dev` với cặp key thử của Turnstile: landing chưa đăng nhập có đúng 1 script Turnstile và widget nằm giữa ô đồng ý và nút gửi trong khối `#ask` (ảnh 1280 px), bố cục đúng design system.
+
+| # | Kết quả |
+|---|---|
+| F1 | ✓ Đã sửa |
+
+## Verdict cuối
+
+**APPROVE** cho VNX-0709 (đã duyệt trước), VNX-0710, VNX-0711. Sẵn sàng merge và deploy theo quyết định Owner (deploy khi chưa có R2).
