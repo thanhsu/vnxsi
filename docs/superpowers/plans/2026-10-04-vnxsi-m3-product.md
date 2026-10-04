@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Đọc `AGENTS.md` trước khi bắt đầu.
 
-- **Trạng thái:** Draft — chờ Owner duyệt
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04
 - **Roadmap:** `docs/roadmap/WAVE1-ROADMAP.md` → M3 (VNX-0301 … VNX-0307, tách nhỏ thành 8 task code + 1 việc của Owner)
 - **Nhánh:** `feat/m3-product` (tách từ `main` @ `3bde074`)
 
