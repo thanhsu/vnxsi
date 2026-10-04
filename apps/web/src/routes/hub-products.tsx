@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import { requireBuilder } from "../auth/middleware.ts";
 import { writeAudit } from "../db/audit.ts";
+import { listMedia } from "../db/media.ts";
 import { createProductDraft, findOwnedProduct, listBuilderProducts, updateProductFields } from "../db/products.ts";
 import { revokeBadge } from "../db/verifications.ts";
 import { canEditProfile } from "../domain/builder.ts";
@@ -12,6 +13,7 @@ import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { EditorPage } from "../views/hub/EditorPage.tsx";
+import type { MediaErrorCode } from "../views/hub/MediaSection.tsx";
 import { ProductsPage } from "../views/hub/ProductsPage.tsx";
 import { page } from "../views/render.ts";
 
@@ -39,11 +41,33 @@ async function listPage(c: Context<AppEnv>, name: string, error: FieldErrorCode 
   );
 }
 
-function stepPage(c: Context<AppEnv>, product: Product, step: TextStep, values: StepValues, errors: StepErrors, status: 200 | 400 | 409 = 200) {
+export type MediaError = MediaErrorCode;
+
+export async function stepPage(
+  c: Context<AppEnv>,
+  product: Product,
+  step: TextStep,
+  values: StepValues,
+  errors: StepErrors,
+  status: 200 | 400 | 409 = 200,
+  mediaError: MediaError | null = null,
+) {
   const lock = editLock(product.status, c.get("builder").status);
+  const media = step === "demo" ? await listMedia(c.env.DB, product.id) : [];
   return page(
     c,
-    <EditorPage locale={c.get("locale")} origin={requestOrigin(c)} product={product} step={step} values={values} errors={errors} lock={lock} saved={c.req.query("saved") === "1"} />,
+    <EditorPage
+      locale={c.get("locale")}
+      origin={requestOrigin(c)}
+      product={product}
+      step={step}
+      values={values}
+      errors={errors}
+      lock={lock}
+      saved={c.req.query("saved") === "1"}
+      media={media}
+      mediaError={mediaError}
+    />,
     status,
   );
 }

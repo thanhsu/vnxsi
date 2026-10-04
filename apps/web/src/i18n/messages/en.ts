@@ -267,6 +267,19 @@ export const en = {
   "product.error.choice": "Choose one of the options.",
   "product.error.slug": "Use 3–60 lowercase letters, numbers or hyphens, starting and ending with a letter or number.",
   "product.error.slug_taken": "This address is already taken.",
+  "media.title": "Screenshots",
+  "media.empty": "No images yet.",
+  "media.file": "Image file",
+  "media.hint": "JPEG, PNG or WebP, up to 2 MB, about 1600 px wide. Up to 8 images; the first one is the cover.",
+  "media.alt": "Short description of the image",
+  "media.upload": "Upload image",
+  "media.delete": "Delete",
+  "media.deleteItem": "Delete image: {alt}",
+  "media.error.missing": "Choose an image file.",
+  "media.error.type": "Only JPEG, PNG or WebP images are accepted.",
+  "media.error.size": "This image is larger than 2 MB.",
+  "media.error.full": "You already have 8 images. Delete one to add another.",
+  "media.error.alt": "Keep the description under 150 characters.",
 } as const;
 
 export type MessageKey = keyof typeof en;

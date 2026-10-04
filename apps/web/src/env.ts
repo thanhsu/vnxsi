@@ -5,6 +5,7 @@ import type { SessionUser } from "./auth/sessions.ts";
 export interface Bindings {
   DB: D1Database;
   ASSETS: Fetcher;
+  MEDIA: R2Bucket;
   APP_ORIGIN: string;
   ADMIN_EMAILS?: string;
   MAIL_DRIVER?: string;

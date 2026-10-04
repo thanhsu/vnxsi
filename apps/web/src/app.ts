@@ -9,7 +9,9 @@ import { registerAuthRoutes } from "./routes/auth.tsx";
 import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
+import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
+import { registerMediaRoutes } from "./routes/media.ts";
 import { registerBuilderProfileRoutes } from "./routes/builder-profile.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
@@ -31,6 +33,8 @@ export function createApp() {
   registerHubRoutes(app);
   registerPortfolioRoutes(app);
   registerProductEditorRoutes(app);
+  registerMediaRoutes(app);
+  registerProductMediaRoutes(app);
   registerBuilderProfileRoutes(app);
   registerAdminRoutes(app);
   registerInviteAdminRoutes(app);

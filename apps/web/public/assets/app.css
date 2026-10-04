@@ -69,3 +69,6 @@ table.data { border-collapse: collapse; width: 100%; background: var(--surface);
 table.data th, table.data td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .badge-published { border-color: var(--good); color: var(--good); }
 .subnav a[aria-current="step"] { background: var(--ink); color: var(--surface); }
+.media-section { margin-top: 24px; }
+.media-grid { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.media-grid img { display: block; width: 160px; height: auto; border: 1px solid var(--line); border-radius: 8px; }
