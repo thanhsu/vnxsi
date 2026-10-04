@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sessionMiddleware } from "./auth/middleware.ts";
 import type { AppEnv } from "./env.ts";
+import { noStorePrivate } from "./http/no-store.ts";
 import { originCheck } from "./http/origin.ts";
 import { requestId } from "./http/request-id.ts";
 import { localeFromPath } from "./i18n/locales.ts";
@@ -8,6 +9,7 @@ import { localeMiddleware } from "./i18n/middleware.ts";
 import { registerAuthRoutes } from "./routes/auth.tsx";
 import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
+import { registerHubInquiryRoutes } from "./routes/hub-inquiries.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
@@ -32,11 +34,13 @@ export function createApp() {
   app.use("*", localeMiddleware);
   app.use("*", originCheck);
   app.use("*", sessionMiddleware);
+  app.use("*", noStorePrivate);
 
   registerAuthRoutes(app);
   registerJoinRoutes(app);
   registerApplyRoutes(app);
   registerHubRoutes(app);
+  registerHubInquiryRoutes(app);
   registerPortfolioRoutes(app);
   registerProductMediaRoutes(app);
   registerProductEditorRoutes(app);

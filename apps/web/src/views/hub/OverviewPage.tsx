@@ -7,7 +7,7 @@ import { PRODUCT_STATUS_KEY, STATUS_BODY_KEY, STATUS_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { HubLayout } from "./HubLayout.tsx";
 
-export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder; productCounts: Partial<Record<ProductStatus, number>> }> = ({ locale, origin, builder, productCounts }) => {
+export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder; productCounts: Partial<Record<ProductStatus, number>>; openInquiries: number }> = ({ locale, origin, builder, productCounts, openInquiries }) => {
   const tr = translator(locale);
   return (
     <HubLayout locale={locale} origin={origin} title={tr("hub.nav.overview")} rest="/hub" active="overview">
@@ -56,6 +56,13 @@ export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder
         )}
         <p>
           <a href={localizedPath(locale, "/hub/products")}>{tr("hub.products.manage")}</a>
+        </p>
+      </section>
+      <section class="card wide">
+        <h2>{tr("hub.nav.inquiries")}</h2>
+        <p>{tr("hub.inquiries.open", { n: openInquiries })}</p>
+        <p>
+          <a href={localizedPath(locale, "/hub/inquiries")}>{tr("inbox.title")}</a>
         </p>
       </section>
     </HubLayout>
