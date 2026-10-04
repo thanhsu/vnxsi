@@ -1,9 +1,10 @@
 import type { FC } from "hono/jsx";
+import { PRODUCT_INQUIRY_TYPES } from "../domain/inquiry.ts";
 import type { Badge, PricingTier, ProductMedia, ProductWithBuilder } from "../domain/product.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { formatUsd } from "./format.ts";
-import { BADGE_KEY, BILLING_KEY, CATEGORY_KEY, DELIVERY_KEY, LICENSE_KEY } from "./labels.ts";
+import { BADGE_KEY, BILLING_KEY, CATEGORY_KEY, DELIVERY_KEY, INQUIRY_TYPE_KEY, LICENSE_KEY } from "./labels.ts";
 import { Layout } from "./Layout.tsx";
 import { PlainText } from "./PlainText.tsx";
 
@@ -20,7 +21,7 @@ type Props = {
   signedIn: boolean;
 };
 
-/** Spec §5.2. The Buy / Customize / Hire / Build Similar buttons arrive with the Inquiry form in M5. */
+/** Spec §5.2. */
 export const ProductPage: FC<Props> = ({ locale, origin, item, tiers, media, badges, jsonLd, signedIn }) => {
   const tr = translator(locale);
   const p = item.product;
@@ -129,6 +130,16 @@ export const ProductPage: FC<Props> = ({ locale, origin, item, tiers, media, bad
           <PlainText text={p.supportPolicy} />
         </section>
 
+        <section>
+          <h2>{tr("productPage.ask")}</h2>
+          <p class="ask">
+            {PRODUCT_INQUIRY_TYPES.filter((t) => t !== "customize" || p.customizable).map((t, i) => (
+              <a class={i === 0 ? "btn" : "btn secondary"} href={localizedPath(locale, `/p/${p.slug}/inquiry/${t}`)}>
+                {tr(INQUIRY_TYPE_KEY[t])}
+              </a>
+            ))}
+          </p>
+        </section>
         <aside class="card">
           <p class="muted">{tr("productPage.builder")}</p>
           <p>

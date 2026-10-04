@@ -12,6 +12,8 @@ export interface Bindings {
   MAIL_FROM?: string;
   RESEND_API_KEY?: string;
   TURNSTILE_SECRET?: string;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_DRIVER?: string;
 }
 
 export type AppEnv = {

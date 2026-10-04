@@ -90,3 +90,6 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
 .cards h2 { font-size: 18px; }
 .pager { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 24px; }
 .pager a { display: inline-flex; align-items: center; min-height: 44px; }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.ask { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.btn.secondary { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }

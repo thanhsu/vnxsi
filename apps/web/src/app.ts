@@ -17,6 +17,7 @@ import { registerCatalogRoutes } from "./routes/catalog.tsx";
 import { registerDirectoryRoutes } from "./routes/directory.tsx";
 import { registerSeoRoutes } from "./routes/seo.ts";
 import { registerProductPageRoutes } from "./routes/product-page.tsx";
+import { registerInquiryFormRoutes } from "./routes/inquiry-form.tsx";
 import { registerAdminProductRoutes } from "./routes/admin-products.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
@@ -44,6 +45,7 @@ export function createApp() {
   registerCatalogRoutes(app);
   registerDirectoryRoutes(app);
   registerSeoRoutes(app);
+  registerInquiryFormRoutes(app);
   registerProductPageRoutes(app);
   registerAdminRoutes(app);
   registerAdminProductRoutes(app);
