@@ -481,4 +481,13 @@ export const zhHant: Messages = {
   "thread.closed": "此詢問已結束，無法再傳送訊息。",
   "thread.error.required": "請先填寫內容。",
   "thread.error.too_long": "內容過長。",
+  "nav.me": "我的詢問",
+  "me.title": "我的詢問",
+  "me.pending": "等待你確認電子郵件。請在收件匣中尋找連結。",
+  "admin.nav.inquiries": "詢問",
+  "admin.inquiries.filter": "狀態",
+  "admin.inquiries.client": "客戶",
+  "admin.inquiries.builder": "開發者",
+  "admin.inquiries.message": "內容",
+  "admin.inquiries.remove": "標記為垃圾（移除）",
 };

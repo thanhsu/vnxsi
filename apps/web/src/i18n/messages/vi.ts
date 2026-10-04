@@ -481,4 +481,13 @@ export const vi: Messages = {
   "thread.closed": "Yêu cầu này đã kết thúc; không gửi thêm tin được.",
   "thread.error.required": "Hãy viết nội dung trước.",
   "thread.error.too_long": "Nội dung quá dài.",
+  "nav.me": "Yêu cầu của tôi",
+  "me.title": "Yêu cầu của tôi",
+  "me.pending": "Đang chờ bạn xác nhận email. Hãy tìm link trong hộp thư.",
+  "admin.nav.inquiries": "Yêu cầu",
+  "admin.inquiries.filter": "Trạng thái",
+  "admin.inquiries.client": "Client",
+  "admin.inquiries.builder": "Builder",
+  "admin.inquiries.message": "Nội dung",
+  "admin.inquiries.remove": "Đánh dấu spam (gỡ)",
 };

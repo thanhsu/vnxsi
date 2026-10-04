@@ -10,6 +10,7 @@ import { registerAuthRoutes } from "./routes/auth.tsx";
 import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
 import { registerHubInquiryRoutes } from "./routes/hub-inquiries.tsx";
+import { registerMeRoutes } from "./routes/me.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
@@ -21,6 +22,7 @@ import { registerSeoRoutes } from "./routes/seo.ts";
 import { registerProductPageRoutes } from "./routes/product-page.tsx";
 import { registerInquiryFormRoutes } from "./routes/inquiry-form.tsx";
 import { registerAdminProductRoutes } from "./routes/admin-products.tsx";
+import { registerAdminInquiryRoutes } from "./routes/admin-inquiries.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
@@ -41,6 +43,7 @@ export function createApp() {
   registerApplyRoutes(app);
   registerHubRoutes(app);
   registerHubInquiryRoutes(app);
+  registerMeRoutes(app);
   registerPortfolioRoutes(app);
   registerProductMediaRoutes(app);
   registerProductEditorRoutes(app);
@@ -53,6 +56,7 @@ export function createApp() {
   registerProductPageRoutes(app);
   registerAdminRoutes(app);
   registerAdminProductRoutes(app);
+  registerAdminInquiryRoutes(app);
   registerInviteAdminRoutes(app);
   registerUserAdminRoutes(app);
 

@@ -57,6 +57,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
             </nav>
             {signedIn ? (
               <>
+                <a href={localizedPath(locale, "/me")}>{tr("nav.me")}</a>
                 <a href={localizedPath(locale, "/hub")}>{tr("nav.hub")}</a>
                 <form method="post" action="/logout">
                   <button type="submit" class="link">

@@ -479,6 +479,15 @@ export const en = {
   "thread.closed": "This inquiry is finished; no more messages can be sent.",
   "thread.error.required": "Write a message first.",
   "thread.error.too_long": "This is too long.",
+  "nav.me": "My inquiries",
+  "me.title": "My inquiries",
+  "me.pending": "Waiting for you to confirm your e-mail. Check your inbox for the link.",
+  "admin.nav.inquiries": "Inquiries",
+  "admin.inquiries.filter": "Status",
+  "admin.inquiries.client": "Client",
+  "admin.inquiries.builder": "Builder",
+  "admin.inquiries.message": "Message",
+  "admin.inquiries.remove": "Mark as spam (remove)",
 } as const;
 
 export type MessageKey = keyof typeof en;

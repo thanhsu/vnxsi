@@ -481,4 +481,13 @@ export const zhHans: Messages = {
   "thread.closed": "此咨询已结束，无法再发送消息。",
   "thread.error.required": "请先填写内容。",
   "thread.error.too_long": "内容过长。",
+  "nav.me": "我的咨询",
+  "me.title": "我的咨询",
+  "me.pending": "等待你确认邮箱。请在收件箱中查找链接。",
+  "admin.nav.inquiries": "咨询",
+  "admin.inquiries.filter": "状态",
+  "admin.inquiries.client": "客户",
+  "admin.inquiries.builder": "开发者",
+  "admin.inquiries.message": "内容",
+  "admin.inquiries.remove": "标记为垃圾（移除）",
 };
