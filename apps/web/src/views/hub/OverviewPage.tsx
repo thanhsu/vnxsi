@@ -7,7 +7,7 @@ import { PRODUCT_STATUS_KEY, STATUS_BODY_KEY, STATUS_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { HubLayout } from "./HubLayout.tsx";
 
-export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder; productCounts: Partial<Record<ProductStatus, number>>; openInquiries: number }> = ({ locale, origin, builder, productCounts, openInquiries }) => {
+export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder; productCounts: Partial<Record<ProductStatus, number>>; openInquiries: number; pendingInvitations: number }> = ({ locale, origin, builder, productCounts, openInquiries, pendingInvitations }) => {
   const tr = translator(locale);
   return (
     <HubLayout locale={locale} origin={origin} title={tr("hub.nav.overview")} rest="/hub" active="overview">
@@ -63,6 +63,13 @@ export const OverviewPage: FC<{ locale: Locale; origin: string; builder: Builder
         <p>{tr("hub.inquiries.open", { n: openInquiries })}</p>
         <p>
           <a href={localizedPath(locale, "/hub/inquiries")}>{tr("inbox.title")}</a>
+        </p>
+      </section>
+      <section class="card wide">
+        <h2>{tr("hub.nav.invitations")}</h2>
+        <p>{tr("hub.invitations.waiting", { n: pendingInvitations })}</p>
+        <p>
+          <a href={localizedPath(locale, "/hub/invitations")}>{tr("hub.invitations.title")}</a>
         </p>
       </section>
     </HubLayout>

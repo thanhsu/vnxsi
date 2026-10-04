@@ -4,6 +4,7 @@ import { countOpenInquiries } from "../db/inquiries.ts";
 import { writeAudit } from "../db/audit.ts";
 import { setBuilderStatus, updateBuilderProfile } from "../db/builders.ts";
 import { countBuilderProductsByStatus } from "../db/products.ts";
+import { countPendingInvitations } from "../db/requests.ts";
 import { canChangeHandle, canEditProfile, transition } from "../domain/builder.ts";
 import { formValuesFromBody, formValuesFromProfile, parseBuilderProfile, type BuilderFormValues, type FieldErrors } from "../domain/builder-input.ts";
 import type { AppEnv } from "../env.ts";
@@ -22,8 +23,12 @@ function profilePage(c: Context<AppEnv>, values: BuilderFormValues, errors: Fiel
 export function registerHubRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/hub", requireBuilder, async (c) => {
     const builder = c.get("builder");
-    const [productCounts, openInquiries] = await Promise.all([countBuilderProductsByStatus(c.env.DB, builder.userId), countOpenInquiries(c.env.DB, builder.userId)]);
-    return page(c, <OverviewPage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} productCounts={productCounts} openInquiries={openInquiries} />);
+    const [productCounts, openInquiries, pendingInvitations] = await Promise.all([
+      countBuilderProductsByStatus(c.env.DB, builder.userId),
+      countOpenInquiries(c.env.DB, builder.userId),
+      countPendingInvitations(c.env.DB, builder.userId),
+    ]);
+    return page(c, <OverviewPage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} productCounts={productCounts} openInquiries={openInquiries} pendingInvitations={pendingInvitations} />);
   });
 
   onLocalized(app, "get", "/hub/profile", requireBuilder, (c) =>

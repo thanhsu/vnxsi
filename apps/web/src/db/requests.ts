@@ -5,9 +5,12 @@ import {
   MAX_ACTIVE_INVITES,
   type AdminRequest,
   type Candidate,
+  type InvitationListItem,
+  type Invitation,
   type InviteStatus,
   type InviteWithBuilder,
   type ClientRequest,
+  type ProposalInput,
   type RequestInvite,
   type RequestStatus,
   type TerminalRequestStatus,
@@ -376,4 +379,71 @@ export async function listCandidates(db: D1Database, request: Pick<ClientRequest
     hasCategoryProduct: r.has_category_product === 1,
     expiredInvites: r.expired_invites,
   }));
+}
+
+/** The builder's Invitations tab, newest first. Requests removed as spam disappear (spec §5.3). */
+export async function listBuilderInvitations(db: D1Database, builderId: string, limit = 200): Promise<InvitationListItem[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT x.*, r.title AS request_title, r.category AS request_category, r.status AS request_status
+       FROM request_invites x JOIN requests r ON r.id = x.request_id
+       WHERE x.builder_id = ?1 AND r.status != 'removed'
+       ORDER BY x.invited_at DESC, x.rowid DESC LIMIT ?2`,
+    )
+    .bind(builderId, limit)
+    .all<InviteRow & { request_title: string; request_category: Category; request_status: RequestStatus }>();
+  return results.map((r) => ({ invite: toInvite(r), requestTitle: r.request_title, requestCategory: r.request_category, requestStatus: r.request_status }));
+}
+
+/** Spec §9: a builder who was not invited cannot see the request; a removed request reads as missing too. */
+export async function findBuilderInvitation(db: D1Database, builderId: string, inviteId: string): Promise<Invitation | null> {
+  const row = await db.prepare("SELECT * FROM request_invites WHERE id = ?1 AND builder_id = ?2").bind(inviteId, builderId).first<InviteRow>();
+  if (!row) return null;
+  const request = await findRequestById(db, row.request_id);
+  if (!request || request.status === "removed") return null;
+  return { invite: toInvite(row), request };
+}
+
+/** Spec §5.3 overview: invitations still waiting for this builder's answer. */
+export async function countPendingInvitations(db: D1Database, builderId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM request_invites x JOIN requests r ON r.id = x.request_id WHERE x.builder_id = ?1 AND x.status = 'invited' AND r.status = 'matching'")
+    .bind(builderId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Spec §7.6: the invitation is still `invited`, the request is `matching` and the builder is still approved on an active
+// account. Checked inside the statement itself (the architecture test reads upper-case SQL words in comments), so a request closed (or a builder suspended) after the route read it loses.
+const ANSWERABLE = `request_invites.status = 'invited'
+  AND EXISTS (SELECT 1 FROM requests r WHERE r.id = request_invites.request_id AND r.status = 'matching')
+  AND EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = request_invites.builder_id AND b.status = 'approved' AND u.status = 'active')`;
+
+/** Spec §7.6 propose: invited -> proposed. RETURNING the row, or nothing when it lost. Batch it with a guarded audit row. */
+export function proposeStatement(db: D1Database, input: { inviteId: string; builderId: string; proposal: ProposalInput; now: string }): D1PreparedStatement {
+  const p = input.proposal;
+  return db
+    .prepare(
+      `UPDATE request_invites SET status = 'proposed', approach = ?3, price_cents = ?4, price_max_cents = ?5, price_note = NULLIF(?6, ''),
+         timeline_days = ?7, responded_at = ?8, updated_at = ?8
+       WHERE id = ?1 AND builder_id = ?2 AND ${ANSWERABLE}
+       RETURNING *`,
+    )
+    .bind(input.inviteId, input.builderId, p.approach, p.priceCents, p.priceMaxCents, p.priceNote, p.timelineDays, input.now);
+}
+
+/** Spec §7.6 decline: invited -> declined with an optional reason (the client never sees it). Same rules as propose. */
+export function declineInviteStatement(db: D1Database, input: { inviteId: string; builderId: string; reason: string; now: string }): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE request_invites SET status = 'declined', decline_reason = NULLIF(?3, ''), responded_at = ?4, updated_at = ?4
+       WHERE id = ?1 AND builder_id = ?2 AND ${ANSWERABLE}
+       RETURNING *`,
+    )
+    .bind(input.inviteId, input.builderId, input.reason, input.now);
+}
+
+export function returnedInvite(result: D1Result | undefined): RequestInvite | null {
+  const row = result?.results[0] as InviteRow | undefined;
+  return row ? toInvite(row) : null;
 }

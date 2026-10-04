@@ -10,6 +10,7 @@ import { registerAuthRoutes } from "./routes/auth.tsx";
 import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
 import { registerHubInquiryRoutes } from "./routes/hub-inquiries.tsx";
+import { registerHubInvitationRoutes } from "./routes/hub-invitations.tsx";
 import { registerMeRoutes } from "./routes/me.tsx";
 import { registerMeRequestRoutes } from "./routes/me-requests.tsx";
 import { registerRequestFormRoutes } from "./routes/request-form.tsx";
@@ -49,6 +50,7 @@ export function createApp() {
   registerApplyRoutes(app);
   registerHubRoutes(app);
   registerHubInquiryRoutes(app);
+  registerHubInvitationRoutes(app);
   registerMeRoutes(app);
   registerMeRequestRoutes(app);
   registerPortfolioRoutes(app);
