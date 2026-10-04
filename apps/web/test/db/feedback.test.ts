@@ -49,7 +49,7 @@ describe("0009_feedback migration (plan VNX-0710)", () => {
   it("refuses unknown roles, kinds, statuses and upper-case e-mails", async () => {
     const insert = (role: string, kind: string, email: string, status = "new") =>
       db()
-        .prepare("INSERT INTO feedback (id, role, kind, email, message, locale, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'm', 'en', ?5, 't', 't')")
+        .prepare("INSERT INTO feedback (id, role, kind, email, message, locale, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'm', 'en', ?5, '2000-01-01T00:00:00.000Z', '2000-01-01T00:00:00.000Z')")
         .bind(crypto.randomUUID(), role, kind, email, status)
         .run();
     await expect(insert("admin", "question", "a@b.co")).rejects.toThrow();
@@ -74,19 +74,22 @@ describe("db/feedback", () => {
 
   it("lists by status, newest first, with limit and offset, and counts", async () => {
     const tag = `fb-list-${crypto.randomUUID().slice(0, 8)}@vnx.si`;
-    const older = await createFeedback(db(), input({ email: tag, now: "2030-01-01T00:00:00.000Z" }));
-    const newer = await createFeedback(db(), input({ email: tag, now: "2030-01-02T00:00:00.000Z" }));
-    const before = await countFeedback(db(), "new");
+    // Other tests add rows too: timestamps a century ahead of now keep these two at the top of "new".
+    const base = Date.now() + 100 * 365 * 24 * 3600 * 1000;
+    const older = await createFeedback(db(), input({ email: tag, now: new Date(base).toISOString() }));
+    const newer = await createFeedback(db(), input({ email: tag, now: new Date(base + 60_000).toISOString() }));
+    const direct = async () => (await db().prepare("SELECT COUNT(*) AS n FROM feedback WHERE status = 'new'").first<{ n: number }>())!.n;
+    expect(await countFeedback(db(), "new")).toBe(await direct());
     const page = await listFeedback(db(), "new", { limit: 2, offset: 0 });
     expect(page.map((f) => f.id)).toEqual([newer.id, older.id]);
     expect((await listFeedback(db(), "new", { limit: 1, offset: 1 })).map((f) => f.id)).toEqual([older.id]);
 
-    const now = "2030-01-03T00:00:00.000Z";
+    const now = new Date(base + 120_000).toISOString();
     const admin = await ensureUser("fb-db-admin@vnx.si");
     const moved = await setFeedbackStatusStatement(db(), { id: newer.id, from: "new", to: "handled", by: admin.id, now }).first();
     expect(moved).not.toBeNull();
     expect(await findFeedbackById(db(), newer.id)).toMatchObject({ status: "handled", handledAt: now, handledBy: admin.id, updatedAt: now });
-    expect(await countFeedback(db(), "new")).toBe(before - 1);
+    expect(await countFeedback(db(), "handled")).toBeGreaterThanOrEqual(1);
     expect((await listFeedback(db(), "handled", { limit: 50, offset: 0 })).map((f) => f.id)).toContain(newer.id);
   });
 

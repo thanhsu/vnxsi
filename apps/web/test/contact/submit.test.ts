@@ -220,3 +220,23 @@ describe("POST /contact when the mail fails (plan VNX-0710 AC9)", () => {
     expect(logged).not.toContain("mailfail@example.vn");
   });
 });
+
+describe("POST /contact from the landing form, signed out (VNX-0710, landing has no Turnstile widget)", () => {
+  beforeEach(() => clearOutbox());
+
+  it("without a Turnstile token: 400 on /contact with the values kept, the widget shown and nothing stored", async () => {
+    const fields = form("landing-nocaptcha@example.vn", { from: "landing" });
+    delete fields["cf-turnstile-response"];
+    const res = await post("/vi/contact", fields);
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    const main = mainOf(html);
+    expect(textOf(main)).toContain(t("vi", "contact.error.captcha"));
+    expect(main).toContain('class="cf-turnstile" data-sitekey="fake-site-key"');
+    expect(main).toContain('<input type="hidden" name="from" value="contact"');
+    expect(main).toContain(`>${MESSAGE}</textarea>`);
+    expect(main).toContain('value="landing-nocaptcha@example.vn"');
+    expect(await rowsFor("landing-nocaptcha@example.vn")).toHaveLength(0);
+    expect(outbox).toHaveLength(0);
+  });
+});

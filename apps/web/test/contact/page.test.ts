@@ -12,7 +12,8 @@ const get = (path: string, cookie?: string, env: Bindings = testEnv) => createAp
 const decode = (s: string) =>
   s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
-const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ");
+/** Links vanish without a gap (the e-mail address sits inside a sentence); other tags become a space. */
+const textOf = (html: string) => decode(html.replace(/<\/?a\b[^>]*>/g, "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ");
 
 /** The approved copy (plan VNX-0710 "Nội dung"): EN and VI, word for word. */
 export const CONTACT_COPY: [MessageKey, string, string][] = [
@@ -106,7 +107,10 @@ describe("GET /contact (plan VNX-0710 AC3)", () => {
       expect(main).toContain('<input type="hidden" name="from" value="contact"');
       expect(main).toMatch(/<div class="hp" aria-hidden="true">[\s\S]*?<input[^>]*name="website"[^>]*tabindex="-1"/);
       expect(main).toContain('class="cf-turnstile" data-sitekey="fake-site-key"');
-      expect(main).toContain('<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async="" defer=""></script>');
+      // hono/jsx hoists an async script into <head> (as on the M5 inquiry form); it loads once.
+      const head = /<head>([\s\S]*)<\/head>/.exec(html)?.[1] ?? "";
+      expect(head).toContain('<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async="" defer=""></script>');
+      expect(html.match(/turnstile\/v0\/api\.js/g)).toHaveLength(1);
       // Every visible control has a label.
       for (const id of ["ct-name", "ct-email", "ct-message", "ct-kind", "ct-consent", "ct-role-builder", "ct-role-client", "ct-role-other"]) {
         expect(main, id).toContain(`for="${id}"`);

@@ -347,7 +347,8 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
       const action = locale === "en" ? "/contact" : `/${locale.toLowerCase()}/contact`;
       expect(ask, path).toContain(`<form method="post" action="${action}"`);
       expect(ask, path).toContain('<input type="hidden" name="from" value="landing"');
-      expect(ask, path).toContain('class="cf-turnstile" data-sitekey="fake-site-key"');
+      // No Turnstile on the landing page (VNX-0709 AC2: no third-party request); /contact shows it when needed.
+      expect(ask, path).not.toContain("cf-turnstile");
       expect(ask, path).not.toContain('role="status"');
     }
   });
