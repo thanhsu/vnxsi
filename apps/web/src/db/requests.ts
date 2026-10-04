@@ -472,12 +472,20 @@ export const CRON_LIST_CAP = 200;
  * for the "invitation ended" e-mail. `now >= invited_at + 7 days` holds for every row, so each one counts as a lapse in the
  * §8.10 penalty (julianday(updated_at) - julianday(invited_at) >= 7); the cron must not call this with a shorter window.
  */
-export async function expireStaleInvites(db: D1Database, invitedBefore: string, now: string): Promise<string[]> {
+export async function expireStaleInvites(db: D1Database, invitedBefore: string, now: string): Promise<ExpiredInvite[]> {
   const { results } = await db
-    .prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE status = 'invited' AND invited_at < ?1 RETURNING id")
+    .prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE status = 'invited' AND invited_at < ?1 RETURNING id, request_id")
     .bind(invitedBefore, now)
-    .all<{ id: string }>();
-  return results.map((r) => r.id);
+    .all<{ id: string; request_id: string }>();
+  return results.map((r) => ({ id: r.id, requestId: r.request_id }));
+}
+
+/** An invitation a system-driven sweep just moved to expired; the caller audits each one (`inviteExpiryAuditStatements`). */
+export type ExpiredInvite = { id: string; requestId: string };
+
+/** The rows a batched sweep statement returned (`RETURNING id, request_id`). */
+export function expiredInvites(result: D1Result | undefined): ExpiredInvite[] {
+  return ((result?.results ?? []) as { id: string; request_id: string }[]).map((r) => ({ id: r.id, requestId: r.request_id }));
 }
 
 /**
@@ -492,13 +500,13 @@ export function expireInvitesOfInactiveBuildersStatement(db: D1Database, now: st
       `UPDATE request_invites SET status = 'expired', updated_at = ?1
        WHERE status = 'invited' AND (?2 IS NULL OR builder_id = ?2)
          AND builder_id IN (SELECT b.user_id FROM builders b JOIN users u ON u.id = b.user_id WHERE b.status != 'approved' OR u.status != 'active')
-       RETURNING id`,
+       RETURNING id, request_id`,
     )
     .bind(now, builderId);
 }
 
-export async function expireInvitesOfInactiveBuilders(db: D1Database, now: string): Promise<number> {
-  return (await expireInvitesOfInactiveBuildersStatement(db, now).all()).results.length;
+export async function expireInvitesOfInactiveBuilders(db: D1Database, now: string, builderId: string | null = null): Promise<ExpiredInvite[]> {
+  return expiredInvites(await expireInvitesOfInactiveBuildersStatement(db, now, builderId).all());
 }
 
 /** Spec §8.4: unanswered invitations sent before `invitedBefore`, not yet reminded, on a matching request, to a public builder. */

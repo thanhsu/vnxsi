@@ -92,3 +92,22 @@ export function auditStatement(db: D1Database, input: AuditInput, onlyIf?: Audit
 export async function writeAudit(db: D1Database, input: AuditInput): Promise<void> {
   await auditStatement(db, input).run();
 }
+
+/**
+ * Spec §7: one `request_invite.expire` row per invitation a system-driven sweep expired (cron lapse, builder or user
+ * suspension, the cron re-sweep). Each is guarded on that invitation being expired at `now`, so a sweep that changed nothing
+ * writes nothing and a second run never repeats a row. `actorUserId` is the admin for a suspension, null for the cron.
+ */
+export function inviteExpiryAuditStatements(
+  db: D1Database,
+  expired: readonly { id: string; requestId: string }[],
+  input: { actorUserId: string | null; reason: "lapsed" | "builder_inactive"; now: string },
+): D1PreparedStatement[] {
+  return expired.map((x) =>
+    auditStatement(
+      db,
+      { actorUserId: input.actorUserId, action: "request_invite.expire", entity: "request_invite", entityId: x.id, data: { requestId: x.requestId, reason: input.reason }, now: input.now },
+      { inviteId: x.id, status: "expired", updatedAt: input.now },
+    ),
+  );
+}

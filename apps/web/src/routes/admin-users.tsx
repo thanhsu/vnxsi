@@ -2,8 +2,8 @@ import type { Context, Hono } from "hono";
 import { adminEmails } from "../auth/admin.ts";
 import { requireAdmin } from "../auth/middleware.ts";
 import { deleteUserSessionsStatement } from "../auth/sessions.ts";
-import { auditStatement } from "../db/audit.ts";
-import { expireInvitesOfInactiveBuildersStatement } from "../db/requests.ts";
+import { auditStatement, inviteExpiryAuditStatements } from "../db/audit.ts";
+import { expireInvitesOfInactiveBuildersStatement, expiredInvites } from "../db/requests.ts";
 import { findUserById, searchUsers, setUserStatusStatement } from "../db/users.ts";
 import { userTransition, type UserAction } from "../domain/user.ts";
 import type { AppEnv } from "../env.ts";
@@ -45,5 +45,10 @@ async function changeUser(c: Context<AppEnv>, action: UserAction) {
   ];
   const results = await c.env.DB.batch(statements);
   if (results[0]?.meta.changes !== 1) return errorResponse(c, "conflict", 409);
+  if (action === "suspend") {
+    // Spec §7: the swept invitations were expired by this batch (`updated_at = now`); each gets its guarded audit row.
+    const expired = expiredInvites(results[2]);
+    if (expired.length > 0) await c.env.DB.batch(inviteExpiryAuditStatements(c.env.DB, expired, { actorUserId: admin.id, reason: "builder_inactive", now }));
+  }
   return c.redirect(localizedPath(c.get("locale"), `/admin/users?q=${encodeURIComponent(target.email)}`), 303);
 }

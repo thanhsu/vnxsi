@@ -1,5 +1,5 @@
 import { adminEmails } from "../auth/admin.ts";
-import { auditStatement } from "../db/audit.ts";
+import { auditStatement, inviteExpiryAuditStatements } from "../db/audit.ts";
 import {
   CRON_LIST_CAP,
   deleteExpiredPendingRequests,
@@ -102,8 +102,14 @@ async function expireInvites(env: Bindings, now: Date): Promise<number> {
   const iso = now.toISOString();
   const swept = await expireInvitesOfInactiveBuilders(env.DB, iso);
   const lapsed = await expireStaleInvites(env.DB, before(now, INVITE_TTL_MS), iso);
-  await notifyInviteExpired(env, lapsed);
-  return swept + lapsed.length;
+  // Spec §7: every transition leaves an audit row, guarded on the invitation being expired at `iso`, so a rerun adds none.
+  const audits = [
+    ...inviteExpiryAuditStatements(env.DB, swept, { actorUserId: null, reason: "builder_inactive", now: iso }),
+    ...inviteExpiryAuditStatements(env.DB, lapsed, { actorUserId: null, reason: "lapsed", now: iso }),
+  ];
+  if (audits.length > 0) await env.DB.batch(audits);
+  await notifyInviteExpired(env, lapsed.map((x) => x.id));
+  return swept.length + lapsed.length;
 }
 
 /** Spec §8.4: one reminder per invitation, 3 days after it was sent. Marked only after the e-mail went out. */

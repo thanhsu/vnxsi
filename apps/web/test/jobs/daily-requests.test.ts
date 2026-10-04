@@ -233,3 +233,57 @@ describe("suspension expires invitations at once and silently (spec §7.6, Owner
     expect(candidates.find((c) => c.userId === q!.userId)?.expiredInvites).toBe(1);
   });
 });
+
+describe("every system-driven invitation expiry is audited (M6 review F3)", () => {
+  beforeEach(async () => {
+    clearOutbox();
+    await adminCookie();
+  });
+  const expireAudits = async (inviteId: string) =>
+    (await testEnv.DB.prepare("SELECT actor_user_id, entity, data FROM audit_log WHERE action = 'request_invite.expire' AND entity_id = ?1").bind(inviteId).all<{ actor_user_id: string | null; entity: string; data: string }>()).results;
+
+  it("the cron lapse and the cron re-sweep each write one row (no actor), and a second run writes none", async () => {
+    const { request } = await makeRequest({ tag: "au-cron", now: daysAgo(8) });
+    const [a, b] = await builders("au-cron", ["a", "b"]);
+    const [ia, ib] = await inviteBuilders(request, [a!, b!], daysAgo(8));
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(b!.userId).run();
+    const first = await runDaily(testEnv, NOW);
+    expect(first.filter((r) => "error" in r)).toEqual([]);
+    const lapsed = await expireAudits(ia!.id);
+    expect(lapsed).toHaveLength(1);
+    expect(lapsed[0]).toMatchObject({ actor_user_id: null, entity: "request_invite" });
+    expect(JSON.parse(lapsed[0]!.data)).toMatchObject({ requestId: request.id, reason: "lapsed" });
+    expect(JSON.parse((await expireAudits(ib!.id))[0]!.data)).toMatchObject({ reason: "builder_inactive" });
+    const total = async () => (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request_invite.expire'").first<{ n: number }>())!.n;
+    const n = await total();
+    await runDaily(testEnv, NOW);
+    await runDaily(testEnv, new Date(NOW.getTime() + 3600_000));
+    expect(await total()).toBe(n);
+  });
+
+  it("the admin suspending a builder writes a row naming the admin", async () => {
+    const app = createApp();
+    const cookie = await adminCookie();
+    const { request } = await makeRequest({ tag: "au-bld" });
+    const [x, y] = await builders("au-bld", ["x", "y"]);
+    const [ix, iy] = await inviteBuilders(request, [x!, y!]);
+    await app.request(formPost(`/admin/builders/${x!.userId}/suspend`, { reason: "" }, { cookie }), undefined, testEnv);
+    const rows = await expireAudits(ix!.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.actor_user_id).not.toBeNull();
+    expect(await expireAudits(iy!.id)).toEqual([]);
+  });
+
+  it("the admin suspending a user writes a row for the user's builder invitations; a lost suspend (409) writes none", async () => {
+    const app = createApp();
+    const cookie = await adminCookie();
+    const { request } = await makeRequest({ tag: "au-usr" });
+    const [x, y] = await builders("au-usr", ["x", "y"]);
+    const [ix, iy] = await inviteBuilders(request, [x!, y!]);
+    expect((await app.request(formPost(`/admin/users/${y!.userId}/suspend`, {}, { cookie }), undefined, testEnv)).status).toBe(303);
+    expect(await expireAudits(iy!.id)).toHaveLength(1);
+    expect(await expireAudits(ix!.id)).toEqual([]);
+    expect((await app.request(formPost(`/admin/users/${y!.userId}/suspend`, {}, { cookie }), undefined, testEnv)).status).toBe(409);
+    expect(await expireAudits(iy!.id)).toHaveLength(1);
+  });
+});
