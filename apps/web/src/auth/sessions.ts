@@ -37,3 +37,8 @@ export async function deleteSession(db: D1Database, raw: string): Promise<void> 
 export function deleteUserSessionsStatement(db: D1Database, userId: string): D1PreparedStatement {
   return db.prepare("DELETE FROM sessions WHERE user_id = ?1 AND EXISTS (SELECT 1 FROM users WHERE id = ?1 AND status = 'suspended')").bind(userId);
 }
+
+export async function deleteExpiredSessions(db: D1Database, now: Date): Promise<number> {
+  const res = await db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(now.toISOString()).run();
+  return res.meta.changes;
+}

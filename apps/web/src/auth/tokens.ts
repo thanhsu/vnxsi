@@ -105,3 +105,9 @@ export async function peekLoginToken(
   if (row) return { ok: true, purpose: row.purpose, locale: isLocale(row.locale) ? row.locale : "en" };
   return { ok: false, reason: await failureReason(db, hash, list) };
 }
+
+/** Spec §8.4: tokens past their expiry are useless. Returns rows deleted. */
+export async function deleteExpiredTokens(db: D1Database, now: Date): Promise<number> {
+  const res = await db.prepare("DELETE FROM login_tokens WHERE expires_at < ?1").bind(now.toISOString()).run();
+  return res.meta.changes;
+}

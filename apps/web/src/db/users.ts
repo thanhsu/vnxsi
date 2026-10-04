@@ -71,3 +71,25 @@ export async function setDisplayNameIfEmpty(db: D1Database, id: string, name: st
     .bind(id, name, now)
     .run();
 }
+
+/**
+ * Owner decision 2026-10-04: implicit accounts created before `cutoff` that never signed in and have nothing attached are
+ * removed. M6 must add `requests` to this list when that table arrives.
+ */
+export async function deleteGhostUsers(db: D1Database, cutoff: string): Promise<number> {
+  const res = await db
+    .prepare(
+      `DELETE FROM users
+       WHERE created_at < ?1 AND last_login_at IS NULL AND is_admin = 0
+         AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = users.id)
+         AND NOT EXISTS (SELECT 1 FROM builders b WHERE b.user_id = users.id)
+         AND NOT EXISTS (SELECT 1 FROM inquiries i WHERE i.client_user_id = users.id)
+         AND NOT EXISTS (SELECT 1 FROM inquiry_messages m WHERE m.sender_user_id = users.id)
+         AND NOT EXISTS (SELECT 1 FROM invites v WHERE v.created_by = users.id)
+         AND NOT EXISTS (SELECT 1 FROM product_verifications pv WHERE pv.verified_by = users.id)
+         AND NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.actor_user_id = users.id)`,
+    )
+    .bind(cutoff)
+    .run();
+  return res.meta.changes;
+}
