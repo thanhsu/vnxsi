@@ -66,6 +66,7 @@ export type NewInquiry = {
   clientName: string;
   builderId: string;
   productId: string | null;
+  requestId?: string | null;
   type: InquiryType;
   message: string;
   budgetBand: BudgetBand;
@@ -75,24 +76,40 @@ export type NewInquiry = {
   now: string;
 };
 
-/** The inquiry and its first message (the client's text; its notification tells the builder) in one transaction. */
-export async function createInquiry(db: D1Database, input: NewInquiry): Promise<{ inquiry: Inquiry; firstMessageId: string }> {
+
+/** Task 6 (M6): the inquiry is written only when the same batch just moved the request to builder_selected for this invite. */
+export type SelectedRequestGuard = { requestId: string; inviteId: string; updatedAt: string };
+
+/** The inquiry and its first message as statements; with a guard, nothing is written unless the guard holds. */
+export function createInquiryStatements(db: D1Database, input: NewInquiry, onlyIf?: SelectedRequestGuard): { statements: D1PreparedStatement[]; id: string; firstMessageId: string } {
   const at = Date.parse(input.now);
   const id = ulid(at);
   const firstMessageId = ulid(at);
-  const [rows] = await db.batch([
-    db
-      .prepare(
-        `INSERT INTO inquiries (id, client_user_id, client_name, builder_id, product_id, type, message, budget_band, deadline, status, locale,
-           opened_at, last_activity_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CASE WHEN ?10 = 'open' THEN ?12 END, ?12, ?12, ?12)
-         RETURNING *`,
-      )
-      .bind(id, input.clientUserId, input.clientName, input.builderId, input.productId, input.type, input.message, input.budgetBand, input.deadline, input.status, input.locale, input.now),
-    db
-      .prepare("INSERT INTO inquiry_messages (id, inquiry_id, sender_user_id, kind, body, created_at) VALUES (?1, ?2, ?3, 'message', ?4, ?5)")
-      .bind(firstMessageId, id, input.clientUserId, input.message, input.now),
-  ]);
+  const guard = onlyIf ? "WHERE EXISTS (SELECT 1 FROM requests WHERE id = ?14 AND status = 'builder_selected' AND selected_invite_id = ?15 AND updated_at = ?16)" : "";
+  const insert = db
+    .prepare(
+      `INSERT INTO inquiries (id, client_user_id, client_name, builder_id, product_id, request_id, type, message, budget_band, deadline, status, locale,
+         opened_at, last_activity_at, created_at, updated_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, CASE WHEN ?11 = 'open' THEN ?13 END, ?13, ?13, ?13 ${guard}
+       RETURNING *`,
+    )
+    .bind(
+      id, input.clientUserId, input.clientName, input.builderId, input.productId, input.requestId ?? null, input.type, input.message, input.budgetBand, input.deadline, input.status, input.locale, input.now,
+      ...(onlyIf ? [onlyIf.requestId, onlyIf.inviteId, onlyIf.updatedAt] : []),
+    );
+  const message = db
+    .prepare(
+      `INSERT INTO inquiry_messages (id, inquiry_id, sender_user_id, kind, body, created_at)
+       SELECT ?1, ?2, ?3, 'message', ?4, ?5 WHERE EXISTS (SELECT 1 FROM inquiries WHERE id = ?2)`,
+    )
+    .bind(firstMessageId, id, input.clientUserId, input.message, input.now);
+  return { statements: [insert, message], id, firstMessageId };
+}
+
+/** The inquiry and its first message (the client's text; its notification tells the builder) in one transaction. */
+export async function createInquiry(db: D1Database, input: NewInquiry): Promise<{ inquiry: Inquiry; firstMessageId: string }> {
+  const { statements, firstMessageId } = createInquiryStatements(db, input);
+  const [rows] = await db.batch(statements);
   const row = rows?.results[0] as Row | undefined;
   if (!row) throw new Error("inquiry insert failed");
   return { inquiry: toInquiry(row), firstMessageId };

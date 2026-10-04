@@ -138,6 +138,29 @@ function isCalendarDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+/** Spec §5.6/§5.7 deadline: empty, or a calendar date from `today` (UTC, YYYY-MM-DD) to 5 years ahead. */
+export function parseDeadline(raw: string, today: string): { ok: true; deadline: string | null } | { ok: false } {
+  if (!raw) return { ok: true, deadline: null };
+  const latest = `${Number(today.slice(0, 4)) + DEADLINE_MAX_YEARS}${today.slice(4)}`;
+  if (!isCalendarDate(raw) || raw < today || raw > latest) return { ok: false };
+  return { ok: true, deadline: raw };
+}
+
+/** The name the other side sees: 1–80 characters, no control or format characters. */
+export function parseClientName(raw: string): { ok: true; name: string } | { ok: false; error: "required" | "too_long" | "invalid" } {
+  const name = raw.trim();
+  if (!name) return { ok: false, error: "required" };
+  if (name.length > NAME_MAX) return { ok: false, error: "too_long" };
+  if (CONTROL.test(name)) return { ok: false, error: "invalid" };
+  return { ok: true, name };
+}
+
+/** Lower-cased e-mail as on the sign-in form, or null when it is not one. */
+export function parseClientEmail(raw: string): string | null {
+  const parsed = Email.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 /** Spec §5.6 form. `today` is the UTC date (YYYY-MM-DD); deadlines run from today to 5 years ahead. */
 export function parseInquiryForm(
   values: InquiryFormValues,
@@ -156,22 +179,18 @@ export function parseInquiryForm(
   if (!budgetBand) errors.budgetBand = "choice";
 
   let deadline: string | null = null;
-  if (values.deadline) {
-    const latest = `${Number(opts.today.slice(0, 4)) + DEADLINE_MAX_YEARS}${opts.today.slice(4)}`;
-    if (!isCalendarDate(values.deadline) || values.deadline < opts.today || values.deadline > latest) errors.deadline = "date";
-    else deadline = values.deadline;
-  }
+  const due = parseDeadline(values.deadline, opts.today);
+  if (due.ok) deadline = due.deadline;
+  else errors.deadline = "date";
 
-  const name = values.name.trim();
-  if (!name) errors.name = "required";
-  else if (name.length > NAME_MAX) errors.name = "too_long";
-  else if (CONTROL.test(name)) errors.name = "invalid";
+  const named = parseClientName(values.name);
+  const name = named.ok ? named.name : "";
+  if (!named.ok) errors.name = named.error;
 
   let email: string | null = null;
   if (opts.needEmail) {
-    const parsed = Email.safeParse(values.email);
-    if (parsed.success) email = parsed.data;
-    else errors.email = "email";
+    email = parseClientEmail(values.email);
+    if (!email) errors.email = "email";
   }
 
   if (Object.keys(errors).length > 0 || !type || !budgetBand) return { ok: false, errors };
