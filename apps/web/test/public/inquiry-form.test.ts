@@ -174,11 +174,13 @@ describe("inquiry form, signed out (spec §5.6 step 3)", () => {
     expect(outbox).toHaveLength(0);
   });
 
-  it("refuses the builder's own e-mail", async () => {
+  it("answers the builder's own e-mail like any other and creates and sends nothing (no login e-mail leak)", async () => {
     const { product } = await makeLiveProduct("if-own@vnx.si", "if-own", "Own Kit");
     const res = await post(`/p/${product.slug}/inquiry/buy`, signedOut("if-own@vnx.si"));
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain("You can&#39;t send an inquiry to yourself.");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("if-own@vnx.si");
+    expect(await listClientInquiries(testEnv.DB, product.builderId)).toEqual([]);
+    expect(outbox).toHaveLength(0);
   });
 
   it("removes the pending inquiry when the confirmation cannot be sent", async () => {
@@ -197,6 +199,8 @@ describe("inquiry form, signed out (spec §5.6 step 3)", () => {
     for (let i = 0; i < 10; i++) expect((await post(`/p/${product.slug}/inquiry/buy`, signedOut(`rl${i}@client.example`), { ip })).status, String(i)).toBe(200);
     const blocked = await post(`/p/${product.slug}/inquiry/buy`, signedOut("rl10@client.example"), { ip });
     expect(blocked.status).toBe(429);
+    expect(outbox).toHaveLength(10);
+    expect(await findUserByEmail(testEnv.DB, "rl10@client.example")).toBeNull();
     expect(await blocked.text()).toContain("Too many inquiries from your network.");
   }, 30_000);
 });

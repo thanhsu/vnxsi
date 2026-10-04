@@ -120,9 +120,9 @@ async function submitForm(c: Context<AppEnv>) {
 
   const email = input.email!;
   const existing = await findUserByEmail(c.env.DB, email);
-  if (existing?.id === target.builderId) return formPage(c, target, type, values, {}, 400, tr("inquiry.error.self"));
-  // A suspended account gets the same answer as anyone else and nothing happens (no account status leak).
-  if (existing && existing.status !== "active") return sentPage(email);
+  // A suspended account, or the builder's own login e-mail, gets the same answer as anyone else and nothing happens:
+  // a different answer would reveal the account status or the private e-mail behind a public builder profile.
+  if (existing && (existing.id === target.builderId || existing.status !== "active")) return sentPage(email);
   // Spec §5.6: an implicit account; the daily job removes it if never confirmed (Owner 2026-10-04).
   const client = existing ?? (await createUser(c.env.DB, { email, locale, now: iso }));
   const { inquiry } = await createInquiry(c.env.DB, { clientUserId: client.id, clientName: input.name, builderId: target.builderId, productId: target.productId, type, message: input.message, budgetBand: input.budgetBand, deadline: input.deadline, status: "pending_verification", locale, now: iso });
