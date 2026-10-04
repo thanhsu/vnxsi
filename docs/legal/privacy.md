@@ -1,11 +1,11 @@
 # Privacy Policy — bản nháp
 
-- **Trạng thái:** Draft, chờ Owner duyệt câu chữ. Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04 (câu chữ và số liệu). Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
 - **Task:** VNX-0705a. Implementer chuyển nguyên văn mục EN và VI vào `src/content/legal/privacy.ts`; `zh-Hans`, `zh-Hant` hiện bản EN kèm câu "bản tiếng Anh có hiệu lực" đã dịch.
 - **Nguyên tắc:** chỉ ghi điều code thật sự làm **tại thời điểm go-live**. Mỗi khi M5 (Inquiry), M6 (request), M7 (lượt xem, `/go/`), EPIC 21 (partner) thêm dữ liệu, phải cập nhật trang này trong cùng task đó.
 - **Đối chiếu code (`main` tại `5363766`):** session `__Host-vnx_session` 30 ngày (`auth/sessions.ts`); link đăng nhập 15 phút (`auth/tokens.ts`); `__Host-vnx_invite` 1 giờ (`auth/invite-cookie.ts`); rate limit lưu IP thô trong khóa `login:ip:*`, `waitlist:ip:*` và hash email `login:email:*` (`routes/auth.tsx`, `routes/landing.tsx`); waitlist lưu email, `personas`, `consent_at`, `lang`, `country`, `referrer` (host), `utm_*` (`db/waitlist.ts`).
 - **Điều kiện để câu về thời hạn giữ IP đúng:** cron dọn `rate_limits` (VNX-0505, M5) chạy trước go-live.
-- **Còn chờ Owner chốt:** thời hạn trả lời yêu cầu (đề xuất 30 ngày); thời hạn giữ waitlist (đề xuất: tới khi chợ mở cho client cộng 12 tháng, hoặc tới khi người dùng yêu cầu xóa).
+- **Owner chốt (2026-10-04):** trả lời yêu cầu trong 30 ngày; giữ waitlist tới khi chợ mở cho client cộng 12 tháng, hoặc tới khi người dùng yêu cầu xóa.
 
 ---
 

@@ -1,6 +1,6 @@
 # Media Kit — bản nháp
 
-- **Trạng thái:** Draft, chờ Owner duyệt câu chữ.
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04.
 - **Task:** VNX-0705a. Implementer chuyển mục EN và VI vào `src/content/legal/media-kit.ts`; `zh-Hans`, `zh-Hant` hiện bản EN (trang này không phải văn bản pháp lý, nhưng giữ cùng cách làm cho đơn giản; dịch khi VNX-0801).
 - **Đối tượng (Owner 2026-10-04):** partner/affiliate xét duyệt và báo chí.
 - **Luật:** không có con số, logo partner hay testimonial nào chưa có thật (ADR-004). Không liệt kê partner chưa `active`. Mục số liệu chỉ thêm khi có số thật vượt ngưỡng (spec 8.11).

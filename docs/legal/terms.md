@@ -1,6 +1,6 @@
 # Terms of Service — bản nháp
 
-- **Trạng thái:** Draft, chờ Owner duyệt câu chữ. Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04 (câu chữ và số liệu). Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
 - **Task:** VNX-0705a. Implementer chuyển nguyên văn mục EN và VI vào `src/content/legal/terms.ts`; `zh-Hans`, `zh-Hant` hiện bản EN kèm câu "bản tiếng Anh có hiệu lực" đã dịch.
 - **Căn cứ quyết định Owner (2026-10-04):** bên vận hành ghi "VNX.SI" + `contact@vnx.si`; luật Việt Nam; 16+ để để lại email, 18+ để làm builder hoặc giao dịch.
 - **Ngày cập nhật hiển thị:** ngày go-live (Implementer để hằng `LEGAL_UPDATED_AT`, Owner chốt khi deploy).
