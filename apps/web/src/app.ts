@@ -23,6 +23,7 @@ import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
 import { registerLandingRoutes } from "./routes/landing.tsx";
+import { registerLegalRoutes } from "./routes/legal.tsx";
 import { errorResponse } from "./views/error-response.tsx";
 
 export function createApp() {
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("*", sessionMiddleware);
 
   registerLandingRoutes(app);
+  registerLegalRoutes(app);
   registerAuthRoutes(app);
   registerJoinRoutes(app);
   registerApplyRoutes(app);

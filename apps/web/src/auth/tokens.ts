@@ -41,6 +41,12 @@ export async function createLoginToken(
   return raw;
 }
 
+/** Deletes tokens whose link expired before `now`, used or not. Returns the rows deleted. */
+export async function deleteExpiredLoginTokens(db: D1Database, now: Date): Promise<number> {
+  const result = await db.prepare("DELETE FROM login_tokens WHERE expires_at < ?1").bind(now.toISOString()).run();
+  return result.meta.changes;
+}
+
 type Row = { email: string; purpose: TokenPurpose; locale: string; inquiry_id: string | null; request_id: string | null; invite_code_hash: string | null };
 
 export async function consumeLoginToken(db: D1Database, raw: string, now: Date, expectedPurpose: TokenPurpose): Promise<ConsumeResult> {
