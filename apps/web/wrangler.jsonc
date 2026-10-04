@@ -17,6 +17,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  "r2_buckets": [
+    // Product images (spec §8.5). Owner must enable R2 on the account; then: wrangler r2 bucket create vnxsi-media
+    { "binding": "MEDIA", "bucket_name": "vnxsi-media" }
+  ],
   "vars": {
     // Used to build absolute links in emails.
     "APP_ORIGIN": "https://vnx.si"
@@ -31,7 +35,8 @@
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity and 0004_builders)
+  //   0. wrangler r2 bucket create vnxsi-media      (once)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy

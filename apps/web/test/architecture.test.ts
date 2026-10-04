@@ -32,6 +32,10 @@ const WRITERS: Record<string, string> = {
   builders: "../src/db/builders.ts",
   invites: "../src/db/invites.ts",
   portfolio_items: "../src/db/portfolio.ts",
+  products: "../src/db/products.ts",
+  pricing_tiers: "../src/db/pricing.ts",
+  product_media: "../src/db/media.ts",
+  product_verifications: "../src/db/verifications.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {

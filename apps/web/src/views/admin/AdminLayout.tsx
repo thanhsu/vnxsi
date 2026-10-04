@@ -4,10 +4,11 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { Layout } from "../Layout.tsx";
 
-export type AdminSection = "builders" | "invites" | "users";
+export type AdminSection = "builders" | "products" | "invites" | "users";
 
 const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [
   { key: "builders", path: "/admin/builders", label: "admin.nav.builders" },
+  { key: "products", path: "/admin/products", label: "admin.nav.products" },
   { key: "invites", path: "/admin/invites", label: "admin.nav.invites" },
   { key: "users", path: "/admin/users", label: "admin.nav.users" },
 ];
