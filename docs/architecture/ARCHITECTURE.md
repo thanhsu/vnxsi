@@ -45,7 +45,7 @@ Một Worker duy nhất, không có server khác, không có bước build ngoà
 | `monetization/` | Route `/go/`, cờ tính năng, provider port partner (`generic_template`, `manual`), disclosure (ADR-007). Bảng qua `db/clicks.ts`, `db/flags.ts`, `db/merchants.ts`, `db/programs.ts`, `db/offers.ts`, `db/conversions.ts`, `db/revenue.ts` | db, domain, views, i18n |
 | `content/` | Renderer markdown giới hạn, ngưỡng index (phụ lục monetization mục 4). Bảng qua `db/articles.ts` | db, domain |
 
-**Luật ranking không đọc tiền (ADR-007):** file xếp hạng/gợi ý (`db/products.ts` phần tìm kiếm, `stats/`, matching, `ai/`) không import `db/` của monetization và không có SQL tới bảng tiền; kiểm bằng test kiến trúc.
+**Luật ranking không đọc tiền (ADR-007):** file xếp hạng/gợi ý (`db/catalog.ts`, `db/directory.ts`, `stats/`, matching, `ai/`) không import `db/` của monetization và không có SQL tới bảng tiền; kiểm bằng test kiến trúc.
 
 **Luật phụ thuộc:** `domain` không phụ thuộc gì. `db` chỉ phụ thuộc kiểu của `domain`. `views` không gọi `db`. Luật này được kiểm bằng test kiến trúc (`test/architecture.test.ts`, task VNX-0003).
 

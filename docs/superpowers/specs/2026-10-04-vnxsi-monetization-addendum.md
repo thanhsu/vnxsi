@@ -1,7 +1,7 @@
 # VNX.SI — Phụ lục spec: Monetization, Partner, Nội dung
 
 - **Ngày:** 2026-10-04
-- **Trạng thái:** Draft, chờ Owner duyệt cùng ADR-007/008/009
+- **Trạng thái:** Approved bởi Owner 2026-10-04 (cùng ADR-007/008/009)
 - **Bổ sung cho:** [spec Wave 1](2026-10-03-vnxsi-marketplace-wave1-design.md). Phụ lục có cùng cấp với spec. Chỗ nào phụ lục ghi "thay mục X" thì phụ lục thắng.
 - **Căn cứ:** [audit](../../strategy/2026-10-04-monetization-audit.md) (quyết định Owner Q1–Q9), [ADR-007](../../adr/ADR-007-monetization.md), [ADR-008](../../adr/ADR-008-sponsored-placement.md), [ADR-009](../../adr/ADR-009-advertising.md). Khi phụ lục khác đề xuất trong audit, phụ lục thắng.
 

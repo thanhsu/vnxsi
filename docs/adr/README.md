@@ -10,6 +10,6 @@ Template: `ADR-000-template.md`. Đổi trạng thái hoặc nội dung một AD
 | [ADR-004](ADR-004-neutral-ranking.md) | Xếp hạng không bán; số liệu công khai chỉ từ dữ liệu thật, có ngưỡng | Accepted | `test/catalog/*.test.ts`, `test/stats/*.test.ts` (M4, M7) |
 | [ADR-005](ADR-005-ai-provider-port.md) | AI qua provider port, chọn model theo lớp năng lực, ngân sách chi phí | Proposed (Wave 2) | — |
 | [ADR-006](ADR-006-knowledge-packages.md) | Prompt quản lý bằng Knowledge Package có phiên bản và eval gate | Proposed (Wave 2) | — |
-| [ADR-007](ADR-007-monetization.md) | Monetization là module riêng; ranking không đọc tiền; mọi link ra ngoài qua `/go/`; conversion chỉ khi partner xác nhận | Proposed (chờ Owner duyệt văn bản) | `test/architecture.test.ts`, `test/monetization/*.test.ts` (M7, EPIC 21) |
-| [ADR-008](ADR-008-sponsored-placement.md) | Sponsored là ô tách riêng có nhãn, không đổi thứ tự xếp hạng (bổ sung ADR-004) | Proposed (chờ Owner duyệt văn bản) | test thứ tự organic bất biến (EPIC 23) |
-| [ADR-009](ADR-009-advertising.md) | Quảng cáo chỉ ở trang nội dung, qua `AdProvider`, tải lười; chưa code | Proposed (thiết kế) | — |
+| [ADR-007](ADR-007-monetization.md) | Monetization là module riêng; ranking không đọc tiền; mọi link ra ngoài qua `/go/`; conversion chỉ khi partner xác nhận | Accepted (2026-10-04) | `test/architecture.test.ts`, `test/monetization/*.test.ts` (M7, EPIC 21) |
+| [ADR-008](ADR-008-sponsored-placement.md) | Sponsored là ô tách riêng có nhãn, không đổi thứ tự xếp hạng (bổ sung ADR-004) | Accepted (2026-10-04) | test thứ tự organic bất biến (EPIC 23) |
+| [ADR-009](ADR-009-advertising.md) | Quảng cáo chỉ ở trang nội dung, qua `AdProvider`, tải lười; chưa code | Accepted (2026-10-04, chỉ thiết kế) | — |

@@ -13,9 +13,9 @@ Mỗi dòng một quyết định; chi tiết trong ADR hoặc spec.
 | 2026-10-03 | AI qua provider port, Knowledge Package, envelope JSON, eval gate (áp dụng từ Wave 2) | ADR-005, ADR-006 (Proposed) |
 | 2026-10-03 | Kết nối client–builder: Inquiry + danh bạ builder + Post a request do admin ghép | Spec mục 4, 5.7 |
 | 2026-10-03 | Rate limit bằng D1 thay cho Workers Rate Limiting binding | Spec mục 8.2 |
-| 2026-10-04 | Monetization là module riêng; ranking không đọc tiền; mọi link ra ngoài qua `/go/`; conversion chỉ khi partner xác nhận; chỉ analytics nội bộ | ADR-007 (Proposed), phụ lục monetization |
+| 2026-10-04 | Monetization là module riêng; ranking không đọc tiền; mọi link ra ngoài qua `/go/`; conversion chỉ khi partner xác nhận; chỉ analytics nội bộ | ADR-007 (Accepted), phụ lục monetization |
 | 2026-10-04 | Listing bên thứ ba ở `/tools/:merchant`, không vào `/products` | Audit monetization Q1 |
-| 2026-10-04 | Sponsored là ô tách riêng có nhãn, không đổi thứ tự, sau Wave 1 | ADR-008 (Proposed) |
-| 2026-10-04 | Quảng cáo chỉ thiết kế, chưa code | ADR-009 (Proposed) |
+| 2026-10-04 | Sponsored là ô tách riêng có nhãn, không đổi thứ tự, sau Wave 1 | ADR-008 (Accepted) |
+| 2026-10-04 | Quảng cáo chỉ thiết kế, chưa code | ADR-009 (Accepted) |
 | 2026-10-04 | `/go/p/:slug/{demo,site}` + `outbound_clicks` làm ở M7, thay `/p/:slug/demo` | Phụ lục monetization mục 2 |
 | 2026-10-04 | Owner cá nhân nhận hoa hồng partner; lead dùng lại M6 không phí; nội dung markdown giới hạn chỉ admin viết; ngưỡng index 5/5/3/2 | Audit monetization Q4, Q7–Q9 |

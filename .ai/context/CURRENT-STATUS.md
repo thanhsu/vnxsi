@@ -8,7 +8,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
 - **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. Đã merge vào `main` (`d297c72`, đã push). Tiếp theo: plan M5.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
-- **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 và phụ lục spec đã viết, **chờ Owner duyệt văn bản** trước khi plan M4.
+- **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 **Accepted** và phụ lục spec **Approved** (Owner duyệt văn bản 2026-10-04). Code theo lịch: `/go/` ở M7 (VNX-0707), phần còn lại ở EPIC 21–24.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
 
 ## Task
@@ -97,7 +97,6 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 
 ## Nghĩa vụ để lại
 
-- **Owner, trước M4 (monetization Q3):** duyệt văn bản ADR-007, ADR-008, ADR-009 (đang Proposed) và phụ lục `docs/superpowers/specs/2026-10-04-vnxsi-monetization-addendum.md`; duyệt thì Reviewer chuyển ADR sang Accepted. Đã viết (2026-10-04): 3 ADR, phụ lục, cập nhật module map, domain catalog, charter, kiến trúc, master backlog (EPIC 21–24), roadmap (VNX-0404 thêm `Disallow: /go/`; task mới VNX-0707 `/go/` tách khỏi VNX-0701).
 - **M7 (VNX-0707):** secret mới `ANALYTICS_SALT`; thêm vào thứ tự deploy khi tới M7.
 - **Owner (monetization Q4):** tự kiểm điều khoản từng chương trình partner (có cho cá nhân tham gia không, mẫu thuế, cách payout) trước khi bật trên production; khi lập pháp nhân (VNX-1401) thì chuyển hợp đồng.
 

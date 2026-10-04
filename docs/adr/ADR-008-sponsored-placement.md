@@ -1,6 +1,6 @@
 # ADR-008: Sponsored là ô tách riêng, không đổi thứ tự xếp hạng
 
-- **Trạng thái:** Proposed (chờ Owner duyệt văn bản; quyết định nghiệp vụ Q2 ngày 2026-10-04)
+- **Trạng thái:** Accepted (Owner duyệt văn bản 2026-10-04; quyết định nghiệp vụ Q2 cùng ngày)
 - **Ngày:** 2026-10-04
 - **Người quyết định:** Owner, Claude (Reviewer)
 - **Bổ sung cho:** ADR-004. ADR-004 giữ nguyên hiệu lực với mọi danh sách xếp hạng; ADR này chỉ cho phép thêm một loại khối mới nằm ngoài các danh sách đó.

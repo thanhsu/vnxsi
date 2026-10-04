@@ -1,6 +1,6 @@
 # ADR-009: Quảng cáo chỉ ở trang nội dung, qua provider port; chưa code
 
-- **Trạng thái:** Proposed (thiết kế; quyết định nghiệp vụ Q6 ngày 2026-10-04: chỉ viết ADR, chưa code)
+- **Trạng thái:** Accepted (Owner duyệt văn bản 2026-10-04; chỉ là thiết kế, chưa code theo quyết định Q6)
 - **Ngày:** 2026-10-04
 - **Người quyết định:** Owner, Claude (Reviewer)
 - **Điều kiện bắt đầu code:** có traffic thật trên trang nội dung (Owner đặt ngưỡng khi lên lịch EPIC 24) và ADR này chuyển `Accepted`.

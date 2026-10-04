@@ -1,6 +1,6 @@
 # ADR-007: Monetization là một module riêng, không chạm vào xếp hạng
 
-- **Trạng thái:** Proposed (chờ Owner duyệt văn bản; quyết định nghiệp vụ đã có ngày 2026-10-04, Q1–Q9)
+- **Trạng thái:** Accepted (Owner duyệt văn bản 2026-10-04; quyết định nghiệp vụ Q1–Q9 cùng ngày)
 - **Ngày:** 2026-10-04
 - **Người quyết định:** Owner, Claude (Reviewer)
 - **Liên quan:** ADR-004 (xếp hạng không bán), ADR-008 (ô sponsored), ADR-009 (quảng cáo), audit `docs/strategy/2026-10-04-monetization-audit.md`, phụ lục spec `docs/superpowers/specs/2026-10-04-vnxsi-monetization-addendum.md`
