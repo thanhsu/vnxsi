@@ -69,6 +69,22 @@ describe("db/requests (VNX-0601)", () => {
     expect(outcome.request?.matchedAt).not.toBe(now);
   });
 
+  it("does not count a suspended builder's stale proposal toward the 5 (M6 review F5)", async () => {
+    const { request } = await makeRequest({ tag: "rq-stale" });
+    const bs = await builders("rq-stale-b", 7);
+    const five = await inviteBuilders(request, bs.slice(0, 5));
+    await proposeOn(five[0]!);
+    await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(bs[0]!.userId).run();
+    await db().prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(bs[1]!.userId).run(); // an `invited` one of a suspended builder (sweep not yet run) frees its slot too
+    const admin = await ensureUser("owner@vnx.si");
+    const batch = inviteBuildersBatch(db(), { requestId: request.id, builderIds: [bs[5]!.userId, bs[6]!.userId], invitedBy: admin.id, now: later(new Date().toISOString()) });
+    const outcome = batch.read(await db().batch(batch.statements));
+    expect(outcome.invited.map((i) => i.builderId)).toEqual([bs[5]!.userId, bs[6]!.userId]);
+    const more = await builders("rq-stale-m", 1);
+    const over = inviteBuildersBatch(db(), { requestId: request.id, builderIds: [more[0]!.userId], invitedBy: admin.id, now: later(new Date().toISOString(), 2000) });
+    expect(over.read(await db().batch(over.statements)).invited).toEqual([]);
+  });
+
   it("never invites the client, a suspended builder, or into a closed request; then nothing changes", async () => {
     const { client, request } = await makeRequest({ tag: "rq-bad" });
     const self = await makeBuilder(client.email, "rq-bad-self", "approved");

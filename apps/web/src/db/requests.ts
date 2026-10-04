@@ -229,7 +229,7 @@ export function endRequestBatch(
 
 /**
  * Spec §5.7 step 2 / §7.6: invites each builder unless already invited, the builder is the client, the builder is not
- * approved on an active account, the request is not submitted/matching, or 5 invitations are already active. The cap
+ * approved on an active account, the request is not submitted/matching, or 5 invitations are already active (an invitation of a builder no longer approved on an active account does not count, M6 review F5). The cap
  * is checked inside each INSERT, so concurrent admins cannot pass it. Then the request moves to matching, only if this
  * batch invited someone (matched_at keeps the first invitation's time).
  */
@@ -247,7 +247,8 @@ export function inviteBuildersBatch(
          WHERE EXISTS (SELECT 1 FROM requests r WHERE r.id = ?2 AND r.status IN ('submitted', 'matching') AND r.client_user_id != ?3)
            AND EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?3 AND b.status = 'approved' AND u.status = 'active')
            AND NOT EXISTS (SELECT 1 FROM request_invites x WHERE x.request_id = ?2 AND x.builder_id = ?3)
-           AND (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = ?2 AND x.status IN ('invited', 'proposed')) < ?6
+           AND (SELECT COUNT(*) FROM request_invites x JOIN builders xb ON xb.user_id = x.builder_id JOIN users xu ON xu.id = x.builder_id
+                WHERE x.request_id = ?2 AND x.status IN ('invited', 'proposed') AND xb.status = 'approved' AND xu.status = 'active') < ?6
          RETURNING id, builder_id`,
       )
       .bind(inviteIds[i], input.requestId, builderId, input.invitedBy, input.now, MAX_ACTIVE_INVITES),
