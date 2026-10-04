@@ -3,7 +3,7 @@ import { deleteExpiredSessions } from "../auth/sessions.ts";
 import { deleteExpiredLoginTokens } from "../auth/tokens.ts";
 import { deleteExpiredPendingInquiries, listInquiriesToAlert, listInquiriesToRemind, listUnnotifiedMessages, markAlerted, markReminded } from "../db/inquiries.ts";
 import { deleteGhostUsers, findUserById } from "../db/users.ts";
-import { ALERT_AFTER_MS, PENDING_TTL_MS, REMIND_AFTER_MS } from "../domain/inquiry.ts";
+import { ALERT_AFTER_MS, builderFacingName, PENDING_TTL_MS, REMIND_AFTER_MS } from "../domain/inquiry.ts";
 import { getMailer } from "../email/index.ts";
 import { inquiryAdminAlertEmail, inquiryReminderEmail } from "../email/templates/inquiry.ts";
 import type { Bindings } from "../env.ts";
@@ -36,7 +36,7 @@ async function remind(env: Bindings, now: Date): Promise<number> {
     if (!builder) continue;
     const locale = isLocale(builder.locale) ? builder.locale : "en";
     try {
-      await mailer.send({ to: builder.email, ...inquiryReminderEmail(locale, { clientName: item.inquiry.clientName, productName: item.productName ?? item.requestTitle, url: inquiryUrl(env, locale, item.inquiry.id, "builder") }) });
+      await mailer.send({ to: builder.email, ...inquiryReminderEmail(locale, { clientName: builderFacingName(item.inquiry.clientName), productName: item.productName ?? item.requestTitle, url: inquiryUrl(env, locale, item.inquiry.id, "builder") }) });
       await markReminded(env.DB, item.inquiry.id, iso);
       sent++;
     } catch (err) {

@@ -2,7 +2,7 @@ import { writeAudit } from "../db/audit.ts";
 import { findMessageContext, markMessageNotified, recordNotifyFailure, type MessageContext } from "../db/inquiries.ts";
 import { builderFacingName, MAX_NOTIFY_ATTEMPTS } from "../domain/inquiry.ts";
 import { getMailer } from "../email/index.ts";
-import { inquiryDeclinedEmail, inquiryMessageEmail, newInquiryEmail } from "../email/templates/inquiry.ts";
+import { inquiryDeclinedEmail, inquiryMessageEmail, inquiryMessageForBuilderEmail, newInquiryEmail } from "../email/templates/inquiry.ts";
 import { requestSelectedEmail } from "../email/templates/request.ts";
 import type { Bindings } from "../env.ts";
 import { isLocale, localizedPath, type Locale } from "../i18n/locales.ts";
@@ -27,10 +27,10 @@ function compose(env: Bindings, ctx: MessageContext): { to: string; subject: str
     // The builder sees the client's typed name only, never the e-mail (spec §5.6).
     // Spec §5.7 step 4: the first message of a request inquiry is the "you were chosen" e-mail.
     const mail = !ctx.isFirst
-      ? inquiryMessageEmail(locale, { fromName: inquiry.clientName, productName: about, body: message.body, url })
+      ? inquiryMessageForBuilderEmail(locale, { fromName: builderFacingName(inquiry.clientName), productName: about, body: message.body, url })
       : inquiry.type === "request"
         ? requestSelectedEmail(locale, { clientName: builderFacingName(inquiry.clientName), title: summary.requestTitle ?? "", body: message.body, url })
-        : newInquiryEmail(locale, { clientName: inquiry.clientName, type: inquiry.type, productName: about, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url });
+        : newInquiryEmail(locale, { clientName: builderFacingName(inquiry.clientName), type: inquiry.type, productName: about, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url });
     return { to: ctx.builder.email, ...mail };
   }
   const locale = asLocale(ctx.client.locale);

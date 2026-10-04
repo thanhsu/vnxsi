@@ -1,5 +1,5 @@
 import type { FC } from "hono/jsx";
-import { canPostMessage, DECLINE_REASON_MAX, REPLY_MAX, type InquiryMessage, type InquirySummary } from "../domain/inquiry.ts";
+import { builderFacingName, canPostMessage, DECLINE_REASON_MAX, REPLY_MAX, type InquiryMessage, type InquirySummary } from "../domain/inquiry.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { BUDGET_KEY, INQUIRY_STATUS_KEY, INQUIRY_TYPE_KEY } from "./labels.ts";
@@ -25,7 +25,7 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
   const nameOf = (m: InquiryMessage) => {
     const fromClient = m.senderUserId === inquiry.clientUserId;
     if ((viewer === "client") === fromClient) return tr("thread.you");
-    return fromClient ? inquiry.clientName : summary.builderName;
+    return fromClient ? builderFacingName(inquiry.clientName) : summary.builderName;
   };
   const active = canPostMessage(inquiry.status);
   return (
