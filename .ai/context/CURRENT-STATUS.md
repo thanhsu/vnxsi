@@ -9,7 +9,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 - **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. Đã merge vào `main` (`d297c72`, đã push). Tiếp theo: plan M5.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
 - **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 **Accepted** và phụ lục spec **Approved** (Owner duyệt văn bản 2026-10-04). Code theo lịch: `/go/` ở M7 (VNX-0707), phần còn lại ở EPIC 21–24. **Partner đầu tiên:** ElevenLabs (PartnerStack), sổ ở `docs/partners/registry.md`; lát mỏng EPIC 21 (phụ lục mục 3.8) làm ngay sau VNX-0708.
-- **Landing định vị (VNX-0708):** **xong** trên nhánh `feat/vnx-0708-landing` (worktree `.claude/worktrees/agent-a26fce7bca484621a`): 405/405 test, typecheck sạch, review APPROVE sau lượt sửa F1–F3 (`.ai/reviews/VNX-0708-review.md`). **Đã merge** vào `main` (`e4a932d`), chưa push. Go-live: điều kiện deploy `main` đầy đủ + OQ-1 (`/privacy`) còn mở.
+- **Landing định vị (VNX-0708):** **xong** trên nhánh `feat/vnx-0708-landing` (worktree `.claude/worktrees/agent-a26fce7bca484621a`): 405/405 test, typecheck sạch, review APPROVE sau lượt sửa F1–F3 (`.ai/reviews/VNX-0708-review.md`). **Đã merge** vào `main` (`e4a932d`) và lên GitHub qua PR #2 (`ade9f4f`). Go-live: điều kiện deploy `main` đầy đủ + OQ-1 (`/privacy`) còn mở.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
 
 ## Task
@@ -60,7 +60,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | Sửa sau review toàn nhánh M4 | ✅ | bcb76d6 | thứ tự deploy có `0006_catalog`; timeout test nặng; kiểm cột trả tiền cả `ALTER TABLE` |
 | Merge M4 vào `main` | ✅ | d297c72 | merge commit, Owner duyệt 2026-10-04; đã push |
 | VNX-0708 Landing định vị | ✅ | 2b78709, fb2ac44, 615ca6f, f5e7b56 | `/` SSR 4 locale, waitlist client (persona `client`), gỡ `/api/waitlist` JSON và `public/index.html`; sửa F1–F3 (referrer qua `ref`, `www.` nội bộ, giữ tick đồng ý) |
-| Merge VNX-0708 vào `main` | ✅ | e4a932d | merge commit, Owner duyệt 2026-10-04; chưa push |
+| Merge VNX-0708 vào `main` | ✅ | e4a932d, ade9f4f | merge commit; lên GitHub qua PR #2 (merge `ade9f4f`, CI `test` + `gitleaks` xanh, `dependency-review` đỏ do chưa bật Dependency graph) |
 
 ## Điều kiện trước khi deploy `main`
 
