@@ -3,7 +3,7 @@
 _Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 
 ## Tóm tắt
-- **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Merge vào `main`: chờ cổng cuối (`<merge SHA>`).
+- **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Đã merge vào `main` (`e9f53a2`, đã push).
 - **Cách làm từ M6 (Owner, 2026-10-04):** phiên Opus điều phối các subagent Sonnet (viết plan và code); Opus review và duyệt thay Owner (plan, khắc phục); sau mỗi milestone được APPROVE thì merge và push.
 - **Tiếp theo:** lát mỏng EPIC 21 (partner), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md` (đã duyệt, kể cả câu chữ khối A/B/C), nhánh `feat/epic21-partner-slice`. Migration EPIC 21 bắt đầu từ `0010` (`main` đã có `0009_feedback`).
 - **Production (2026-10-05):** `main` `3169e6d` (PR #4: VNX-0709 thiết kế lại đợt A, VNX-0710 contact/feedback, VNX-0711 chạy khi chưa có R2, kèm M5 + VNX-0508) **đã deploy** lên https://vnx.si (version `b5d0f063`, cron `0 1 * * *`). D1 production đã áp `0003`–`0007`, `0009`. Smoke: 20 route trả mã đúng, magic link thật gửi qua Resend tới `thanhsu604@gmail.com`. Chưa có R2: `/media/*` 404, upload ảnh báo "sắp mở" (builder chưa submit product được). Việc còn lại: Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → bỏ comment `r2_buckets` trong `wrangler.jsonc` → deploy.
@@ -90,7 +90,7 @@ _Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 | VNX-0606 Cron request | ✅ | 1d1ea62 | nhắc lời mời 3 ngày, hết hạn 7 / 30 ngày, xóa request chưa xác nhận 48 giờ; khóa builder / user → lời mời `expired` |
 | Sửa sau review toàn nhánh M6 | ✅ | f9f895d, e08de3b, b66ce34, da2745f, 018f276, 9e83fd7, 6ecd24f, 53f8729 | F2 khớp kỹ năng Latin theo từ; F3 audit `request_invite.expire`; F4 cron xóa cả request / Inquiry đã gỡ mà chưa từng xác nhận; F5 giới hạn 5 chỉ đếm builder công khai (SQL + form admin); F7 khóa user → gỡ request đang mở; `deleteGhostUsers` xét `request_invites.invited_by`; email hết hạn gửi trước audit. 802/802 |
 | Gộp `main` vào M6 | ✅ | 2865d7e | `origin/main` `d3d1f4f` (PR #4, #5); giữ cả hai phía ở `app.ts`, `db/audit.ts`, `AdminLayout`, landing, `privacy.md` / `content.ts` |
-| Merge M6 vào `main` | ⏳ | `<merge SHA>` | chờ cổng cuối; sau đó push |
+| Merge M6 vào `main` | ✅ | e9f53a2 | merge commit, Opus duyệt theo ủy quyền Owner; đã push. Deploy cần `db:migrate:remote` (`0008_requests`) trước |
 
 ## Điều kiện trước khi deploy `main`
 
