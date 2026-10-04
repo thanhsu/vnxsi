@@ -426,4 +426,10 @@ export const vi: Messages = {
   "email.inquiryReminder.body": "{client} đã gửi bạn yêu cầu về {product} từ ba ngày trước và chưa nhận được trả lời.",
   "email.inquiryReminder.cta": "Trả lời trên VNX.SI:",
   "inquiry.profileTarget": "dịch vụ của bạn",
+  "auth.confirm.login.title": "Hoàn tất đăng nhập",
+  "auth.confirm.login.body": "Bấm nút bên dưới để đăng nhập VNX.SI trên thiết bị này.",
+  "auth.confirm.login.submit": "Đăng nhập",
+  "auth.confirm.inquiry.title": "Xác nhận yêu cầu",
+  "auth.confirm.inquiry.body": "Bấm nút bên dưới để xác nhận email và gửi yêu cầu tới builder.",
+  "auth.confirm.inquiry.submit": "Xác nhận và gửi",
 };

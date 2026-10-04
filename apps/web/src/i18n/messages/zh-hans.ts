@@ -426,4 +426,10 @@ export const zhHans: Messages = {
   "email.inquiryReminder.body": "{client} 三天前就 {product} 向你发送了咨询，目前还没有收到回复。",
   "email.inquiryReminder.cta": "在 VNX.SI 上回复：",
   "inquiry.profileTarget": "你的服务",
+  "auth.confirm.login.title": "完成登录",
+  "auth.confirm.login.body": "点击下方按钮，在此设备上登录 VNX.SI。",
+  "auth.confirm.login.submit": "登录",
+  "auth.confirm.inquiry.title": "确认你的咨询",
+  "auth.confirm.inquiry.body": "点击下方按钮确认邮箱，并把咨询发送给开发者。",
+  "auth.confirm.inquiry.submit": "确认并发送",
 };

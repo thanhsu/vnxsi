@@ -5,7 +5,7 @@ import { findBuilderByHandle } from "../../src/db/builders.ts";
 import { createInvite, findInvite } from "../../src/db/invites.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { ensureUser, profileValues, signIn } from "../fixtures.ts";
-import { formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
+import { followMagicLink, formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const admin = () => signIn("owner@vnx.si", { admin: true });
@@ -79,7 +79,7 @@ describe("admin invites (spec §5.5)", () => {
     const token = /\/auth\/verify\?t=([A-Za-z0-9_-]{43})/.exec(outbox[0]!.text)![1];
 
     // Opened on a second device that never saw /join.
-    const verify = await app().request(getReq(`/auth/verify?t=${token}&next=%2Fhub%2Fapply`), undefined, testEnv);
+    const verify = await followMagicLink(app(), `/auth/verify?t=${token}&next=%2Fhub%2Fapply`, testEnv);
     const cookies = `__Host-vnx_session=${setCookieValue(verify, "__Host-vnx_session")}; __Host-vnx_invite=${setCookieValue(verify, "__Host-vnx_invite")}`;
     const apply = await app().request(formPost("/hub/apply", profileValues({ handle: "gate-builder" }), { cookie: cookies }), undefined, testEnv);
     expect(apply.headers.get("location")).toBe("/hub");

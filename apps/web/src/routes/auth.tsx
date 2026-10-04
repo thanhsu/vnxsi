@@ -5,9 +5,9 @@ import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "../au
 import { sha256Hex } from "../auth/crypto.ts";
 import { readInviteCookie, writeInviteCookie } from "../auth/invite-cookie.ts";
 import { createSession, deleteSession } from "../auth/sessions.ts";
-import { consumeLoginToken, createLoginToken } from "../auth/tokens.ts";
+import { type ConsumedToken, consumeLoginToken, createLoginToken, peekLoginToken, type TokenPurpose } from "../auth/tokens.ts";
 import { writeAudit } from "../db/audit.ts";
-import { createUser, findUserByEmail, markLogin } from "../db/users.ts";
+import { createUser, findUserByEmail, markLogin, type UserRow } from "../db/users.ts";
 import { getMailer } from "../email/index.ts";
 import { loginEmail } from "../email/templates/login.ts";
 import type { AppEnv } from "../env.ts";
@@ -15,7 +15,7 @@ import { translator } from "../i18n/t.ts";
 import { onLocalized } from "../http/localized.ts";
 import { safeNext } from "../http/next.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
-import { InvalidLinkPage, LoginPage, LoginSentPage } from "../views/auth.tsx";
+import { ConfirmLinkPage, InvalidLinkPage, LoginPage, LoginSentPage } from "../views/auth.tsx";
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
 
@@ -25,6 +25,22 @@ const HOUR = 3600;
 
 function origin(c: Context<AppEnv>) {
   return new URL(c.req.url).origin;
+}
+
+/** Purposes the confirmation link accepts. Task 4 (VNX-0502) adds "inquiry_verify". */
+export const VERIFY_PURPOSES: TokenPurpose[] = ["login"];
+
+/** Signs the token's e-mail in (creating the account the first time) and sets the session cookie. Null when suspended. */
+async function completeLogin(c: Context<AppEnv>, token: ConsumedToken, now: Date): Promise<UserRow | null> {
+  const iso = now.toISOString();
+  const user = (await findUserByEmail(c.env.DB, token.email)) ?? (await createUser(c.env.DB, { email: token.email, locale: token.locale, now: iso }));
+  if (user.status !== "active") return null;
+  await markLogin(c.env.DB, user.id, { now: iso, isAdmin: adminEmails(c.env).has(token.email) });
+  await writeAudit(c.env.DB, { actorUserId: user.id, action: "auth.login", entity: "user", entityId: user.id, data: { purpose: token.purpose }, now: iso });
+  writeSessionCookie(c, await createSession(c.env.DB, user.id, now));
+  // The link may be opened on another device: restore the invite there (spec §5.3).
+  if (token.inviteCodeHash) writeInviteCookie(c, token.inviteCodeHash);
+  return user;
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
@@ -64,22 +80,25 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     return page(c, <LoginSentPage locale={locale} origin={origin(c)} email={email} />);
   });
 
+  // VNX-0506: link scanners in corporate mail open links with GET; only the button (POST) spends the token.
   app.get("/auth/verify", async (c) => {
+    c.header("Cache-Control", "no-store");
+    const raw = c.req.query("t") ?? "";
+    const peek = await peekLoginToken(c.env.DB, raw, new Date(), VERIFY_PURPOSES);
+    if (!peek.ok) return page(c, <InvalidLinkPage locale="en" origin={origin(c)} />, 400);
+    const purpose = peek.purpose === "login" ? "login" : "inquiry";
+    return page(c, <ConfirmLinkPage locale={peek.locale} origin={origin(c)} token={raw} next={safeNext(c.req.query("next"))} purpose={purpose} />);
+  });
+
+  app.post("/auth/verify", async (c) => {
+    c.header("Cache-Control", "no-store");
+    const form = await c.req.parseBody();
     const now = new Date();
-    const result = await consumeLoginToken(c.env.DB, c.req.query("t") ?? "", now, "login");
+    const result = await consumeLoginToken(c.env.DB, typeof form.t === "string" ? form.t : "", now, VERIFY_PURPOSES);
     if (!result.ok) return page(c, <InvalidLinkPage locale="en" origin={origin(c)} />, 400);
-
-    const { email, locale } = result.token;
-    const iso = now.toISOString();
-    const user = (await findUserByEmail(c.env.DB, email)) ?? (await createUser(c.env.DB, { email, locale, now: iso }));
-    if (user.status !== "active") return errorResponse(c, "forbidden", 403);
-
-    await markLogin(c.env.DB, user.id, { now: iso, isAdmin: adminEmails(c.env).has(email) });
-    await writeAudit(c.env.DB, { actorUserId: user.id, action: "auth.login", entity: "user", entityId: user.id, data: { purpose: result.token.purpose }, now: iso });
-    writeSessionCookie(c, await createSession(c.env.DB, user.id, now));
-    // The link may be opened on another device: restore the invite there (spec §5.3).
-    if (result.token.inviteCodeHash) writeInviteCookie(c, result.token.inviteCodeHash);
-    return c.redirect(safeNext(c.req.query("next")) ?? "/", 303);
+    const user = await completeLogin(c, result.token, now);
+    if (!user) return errorResponse(c, "forbidden", 403);
+    return c.redirect(safeNext(form.next) ?? "/", 303);
   });
 
   app.post("/logout", async (c) => {

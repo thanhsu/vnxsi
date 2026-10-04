@@ -424,6 +424,12 @@ export const en = {
   "email.inquiryReminder.body": "{client} sent you an inquiry about {product} three days ago and hasn't had a reply yet.",
   "email.inquiryReminder.cta": "Reply on VNX.SI:",
   "inquiry.profileTarget": "your services",
+  "auth.confirm.login.title": "Finish signing in",
+  "auth.confirm.login.body": "Press the button to sign in to VNX.SI on this device.",
+  "auth.confirm.login.submit": "Sign in",
+  "auth.confirm.inquiry.title": "Confirm your inquiry",
+  "auth.confirm.inquiry.body": "Press the button to confirm your e-mail and send your inquiry to the builder.",
+  "auth.confirm.inquiry.submit": "Confirm and send",
 } as const;
 
 export type MessageKey = keyof typeof en;

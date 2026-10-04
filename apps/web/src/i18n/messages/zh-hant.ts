@@ -426,4 +426,10 @@ export const zhHant: Messages = {
   "email.inquiryReminder.body": "{client} 三天前就 {product} 向你送出了詢問，目前還沒有收到回覆。",
   "email.inquiryReminder.cta": "在 VNX.SI 上回覆：",
   "inquiry.profileTarget": "你的服務",
+  "auth.confirm.login.title": "完成登入",
+  "auth.confirm.login.body": "點擊下方按鈕，在此裝置上登入 VNX.SI。",
+  "auth.confirm.login.submit": "登入",
+  "auth.confirm.inquiry.title": "確認你的詢問",
+  "auth.confirm.inquiry.body": "點擊下方按鈕確認電子郵件，並把詢問送給開發者。",
+  "auth.confirm.inquiry.submit": "確認並送出",
 };

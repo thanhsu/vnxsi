@@ -3,7 +3,7 @@ import { createApp } from "../../src/app.ts";
 import { sha256Hex } from "../../src/auth/crypto.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { signIn } from "../fixtures.ts";
-import { formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
+import { followMagicLink, formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
 
 const CODE = "abcdefghijklmnopqrstuv"; // 22 chars, the shape randomToken(16) produces
 
@@ -52,7 +52,7 @@ describe("invite links (spec §5.3)", () => {
     await app.request(formPost("/login", { email: "carry@vnx.si", next: "/hub/apply" }, { cookie: `__Host-vnx_invite=${hash}` }), undefined, testEnv);
     expect(await tokenInviteHash("carry@vnx.si")).toBe(hash);
     // The e-mail is opened on a device without the invite cookie.
-    const verify = await app.request(getReq(`/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2Fhub%2Fapply`), undefined, testEnv);
+    const verify = await followMagicLink(app, `/auth/verify?t=${tokenFrom(outbox[0]!.text)}&next=%2Fhub%2Fapply`, testEnv);
     expect(verify.status).toBe(303);
     expect(verify.headers.get("location")).toBe("/hub/apply");
     expect(setCookieValue(verify, "__Host-vnx_session")).not.toBeNull();
