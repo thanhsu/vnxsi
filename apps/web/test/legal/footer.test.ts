@@ -8,7 +8,7 @@ import { testEnv } from "../helpers.ts";
 const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
 const footerOf = (html: string) => /<footer[^>]*>([\s\S]*)<\/footer>/.exec(html)?.[1] ?? "";
 
-describe("site footer (VNX-0705a AC6)", () => {
+describe("site footer (VNX-0705a AC6; Company group since VNX-0709)", () => {
   it("links Terms, Privacy and Media kit in the page's locale on /, /products and /p/:slug", async () => {
     const { product } = await makeLiveProduct("footer-live@vnx.si", "footer-live", "Footer Live");
     for (const rest of ["/", "/products", `/p/${product.slug}`]) {
@@ -17,7 +17,7 @@ describe("site footer (VNX-0705a AC6)", () => {
         const res = await get(path);
         expect(res.status, path).toBe(200);
         const footer = footerOf(await res.text());
-        expect(footer, path).toContain(`<nav class="footer-nav" aria-label="${t(locale, "footer.nav")}">`);
+        expect(footer, path).toContain(`<nav class="footer-nav" aria-label="${t(locale, "footer.company")}">`);
         for (const [href, key] of [
           ["/terms", "footer.terms"],
           ["/privacy", "footer.privacy"],
