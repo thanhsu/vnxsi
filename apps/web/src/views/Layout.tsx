@@ -1,6 +1,7 @@
 import type { FC, PropsWithChildren } from "hono/jsx";
 import { alternates, LOCALE_LABEL, LOCALES, localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator, type Translate } from "../i18n/t.ts";
+import { CONTACT_EMAIL } from "../domain/feedback.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { jsonLdScript } from "./json-ld.ts";
 
@@ -79,6 +80,7 @@ function mainNav(locale: Locale, rest: string): NavItem[] {
     { href: localizedPath(locale, "/builders"), key: "nav.findBuilders", current: rest === "/builders" },
     { href: anchorOn(locale, "/", "how"), key: "nav.howItWorks", current: false },
     { href: anchorOn(locale, "/", "builders"), key: "nav.forBuilders", current: false },
+    { href: localizedPath(locale, "/contact"), key: "nav.contact", current: rest === "/contact" },
   ];
 }
 
@@ -227,7 +229,8 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
             <nav class="footer-nav" aria-label={tr("footer.company")}>
               <p class="footer-h" aria-hidden="true">{tr("footer.company")}</p>
               <a href={localizedPath(locale, "/media-kit")}>{tr("footer.mediaKit")}</a>
-              <a href="mailto:contact@vnx.si">contact@vnx.si</a>
+              <a href={localizedPath(locale, "/contact")}>{tr("nav.contact")}</a>
+              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
               <a href={localizedPath(locale, "/terms")}>{tr("footer.terms")}</a>
               <a href={localizedPath(locale, "/privacy")}>{tr("footer.privacy")}</a>
             </nav>

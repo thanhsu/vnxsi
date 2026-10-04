@@ -1,5 +1,6 @@
 import type { FC } from "hono/jsx";
 import type { Utm, WaitlistErrors } from "../domain/waitlist-input.ts";
+import { ContactForm, emptyFeedbackValues } from "./contact/ContactForm.tsx";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
@@ -22,6 +23,8 @@ type Props = {
   form?: LandingForm;
   /** First public products in the neutral catalogue order; fewer than three shows the category cards. */
   deck: readonly DeckProduct[];
+  /** The "Ask us" block (VNX-0710): ?asked=1 shows the thank-you notice; the form posts to /contact. */
+  ask: { asked: boolean; siteKey: string | null; email: string };
 };
 
 /** schema.org Organization (plan VNX-0708): no logo, sameAs or ratings. */
@@ -95,7 +98,7 @@ const STEPS = [
 /** Tool names stay as written in every locale (plan VNX-0709 §8). */
 const TOOLS = ["Claude", "Codex", "Gemini", "Cursor", "Lovable", "Replit"];
 
-export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form, deck }) => {
+export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form, deck, ask }) => {
   const tr = translator(locale);
   const builderHref = builderCtaHref(locale, signedIn);
   const emailError = form?.errors?.email ? tr("landing.form.error.email") : null;
@@ -337,6 +340,25 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
               {tr("landing.cta.builder")}
             </a>
           </p>
+        </div>
+      </section>
+
+      <section id="ask" class="lp-section lp-ask" aria-labelledby="ask-title">
+        <div class="container lp-split">
+          <div class="section-head reveal-scroll">
+            <p class="eyebrow">{tr("landing.ask.eyebrow")}</p>
+            <h2 id="ask-title">{tr("landing.ask.title")}</h2>
+            <p class="section-sub">{tr("landing.ask.lead")}</p>
+          </div>
+          <div class="contact-card">
+            {ask.asked ? (
+              <p class="notice good" role="status">
+                {tr("contact.sent")}
+              </p>
+            ) : (
+              <ContactForm locale={locale} from="landing" values={emptyFeedbackValues("landing", ask.email)} errors={{}} signedIn={signedIn} siteKey={ask.siteKey} widget={false} />
+            )}
+          </div>
         </div>
       </section>
     </Layout>

@@ -7,6 +7,7 @@ import type { AppEnv } from "../env.ts";
 import { onLocalized } from "../http/localized.ts";
 import { siteOrigin } from "../http/origin.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
+import { turnstileSiteKey } from "../http/turnstile.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { LandingPage, type LandingForm } from "../views/LandingPage.tsx";
 import { DECK_SIZE } from "../views/landing/Deck.tsx";
@@ -16,7 +17,7 @@ const HOUR = 3600;
 /** Same level as an inquiry (spec §8.2): 10 per IP per hour. */
 const WAITLIST_PER_IP = 10;
 
-type RenderOpts = { joined: boolean; utm: Utm; referrer: string | null; form?: LandingForm };
+type RenderOpts = { joined: boolean; utm: Utm; referrer: string | null; form?: LandingForm; asked?: boolean };
 
 async function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: ContentfulStatusCode = 200) {
   // Real products replace the category cards only once DECK_SIZE are public (plan VNX-0709 §6).
@@ -32,6 +33,7 @@ async function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: Conte
       referrer={opts.referrer}
       form={opts.form}
       deck={deck}
+      ask={{ asked: opts.asked === true, siteKey: turnstileSiteKey(c.env), email: c.get("user")?.email ?? "" }}
     />,
     status,
   );
@@ -46,6 +48,7 @@ export function registerLandingRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/", (c) =>
     renderLanding(c, {
       joined: c.req.query("joined") === "1",
+      asked: c.req.query("asked") === "1",
       utm: utmFrom(c.req.query()),
       referrer: externalReferrerHost(c.req.header("referer"), hostsOf(c)),
     }),

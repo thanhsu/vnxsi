@@ -24,9 +24,9 @@
   "vars": {
     // Used to build absolute links in emails.
     "APP_ORIGIN": "https://vnx.si",
-    // Turnstile site key (public). Owner creates the widget for vnx.si (VNX-0507); empty = signed-out inquiries are
-    // refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
-    "TURNSTILE_SITE_KEY": ""
+    // Turnstile site key (public) of the vnx.si widget (Owner, 2026-10-04; VNX-0710). Empty = signed-out inquiries and
+    // contact messages are refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X"
   },
   "workers_dev": true,
   "routes": [
