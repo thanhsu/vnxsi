@@ -539,8 +539,12 @@ export async function listRequestsToExpire(db: D1Database, matchedBefore: string
   return results.map((r) => r.id);
 }
 
-/** Spec §8.4: unconfirmed requests created before `cutoff` go away (they never have invitations). Returns how many. */
+/**
+ * Spec §8.4: requests never confirmed (submitted_at IS NULL, stamped on the first move to submitted) and created before
+ * `cutoff` go away (they never have invitations), including one an admin moved to `removed` meanwhile (Owner, M6 review F4):
+ * the Privacy page promises 48 hours. A request that was ever confirmed is never deleted. Returns how many.
+ */
 export async function deleteExpiredPendingRequests(db: D1Database, cutoff: string): Promise<number> {
-  const { results } = await db.prepare("DELETE FROM requests WHERE status = 'pending_verification' AND created_at < ?1 RETURNING id").bind(cutoff).all();
+  const { results } = await db.prepare("DELETE FROM requests WHERE submitted_at IS NULL AND status IN ('pending_verification', 'removed') AND created_at < ?1 RETURNING id").bind(cutoff).all();
   return results.length;
 }

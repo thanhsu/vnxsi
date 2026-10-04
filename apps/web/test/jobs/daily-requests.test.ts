@@ -121,6 +121,19 @@ describe("daily job, request steps (spec §8.4, VNX-0606)", () => {
     expect(await testEnv.DB.prepare("SELECT id FROM users WHERE id = ?1").bind(young.client.id).first()).not.toBeNull();
   });
 
+  it("also deletes a never-confirmed request an admin moved to removed, and its ghost account; keeps a removed one that was confirmed (M6 review F4)", async () => {
+    const never = await makeRequest({ tag: "dr-rm1", status: "pending_verification", now: hoursAgo(49) });
+    const confirmed = await makeRequest({ tag: "dr-rm2", now: hoursAgo(49) });
+    for (const x of [never, confirmed]) await testEnv.DB.prepare("UPDATE users SET created_at = ?2 WHERE id = ?1").bind(x.client.id, hoursAgo(49)).run();
+    await testEnv.DB.prepare("UPDATE requests SET status = 'removed' WHERE id IN (?1, ?2)").bind(never.request.id, confirmed.request.id).run();
+    const results = await runDaily(testEnv, NOW);
+    expect(results.filter((r) => "error" in r)).toEqual([]);
+    expect(await findRequestById(testEnv.DB, never.request.id)).toBeNull();
+    expect(await testEnv.DB.prepare("SELECT id FROM users WHERE id = ?1").bind(never.client.id).first()).toBeNull();
+    expect((await findRequestById(testEnv.DB, confirmed.request.id))?.status).toBe("removed");
+    expect(await testEnv.DB.prepare("SELECT id FROM users WHERE id = ?1").bind(confirmed.client.id).first()).not.toBeNull();
+  });
+
   it("is idempotent: a second run sends nothing and changes no row", async () => {
     const lapse = await makeRequest({ tag: "dr-idem1", now: daysAgo(8) });
     await inviteBuilders(lapse.request, await builders("dr-idem1", ["b"]), daysAgo(8));

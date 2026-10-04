@@ -231,11 +231,16 @@ export function deletePendingInquiryStatements(db: D1Database, id: string): D1Pr
   ];
 }
 
-/** Spec §8.4: unconfirmed inquiries created before `cutoff` go away. Returns how many inquiries were deleted. */
+/**
+ * Spec §8.4: inquiries never confirmed (opened_at IS NULL, stamped when one first becomes `open`) and created before `cutoff`
+ * go away, including one an admin moved to `removed` meanwhile (Owner, M6 review F4). One that was ever opened is kept.
+ * Returns how many inquiries were deleted.
+ */
 export async function deleteExpiredPendingInquiries(db: D1Database, cutoff: string): Promise<number> {
+  const never = "opened_at IS NULL AND status IN ('pending_verification', 'removed') AND created_at < ?1";
   const [, inquiries] = await db.batch([
-    db.prepare("DELETE FROM inquiry_messages WHERE inquiry_id IN (SELECT id FROM inquiries WHERE status = 'pending_verification' AND created_at < ?1)").bind(cutoff),
-    db.prepare("DELETE FROM inquiries WHERE status = 'pending_verification' AND created_at < ?1").bind(cutoff),
+    db.prepare(`DELETE FROM inquiry_messages WHERE inquiry_id IN (SELECT id FROM inquiries WHERE ${never})`).bind(cutoff),
+    db.prepare(`DELETE FROM inquiries WHERE ${never}`).bind(cutoff),
   ]);
   return inquiries?.meta.changes ?? 0;
 }
