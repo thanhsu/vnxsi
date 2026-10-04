@@ -27,12 +27,14 @@ import { registerInquiryFormRoutes } from "./routes/inquiry-form.tsx";
 import { registerAdminProductRoutes } from "./routes/admin-products.tsx";
 import { registerAdminInquiryRoutes } from "./routes/admin-inquiries.tsx";
 import { registerAdminRequestRoutes } from "./routes/admin-requests.tsx";
+import { registerAdminFeedbackRoutes } from "./routes/admin-feedback.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
 import { registerLandingRoutes } from "./routes/landing.tsx";
 import { registerLegalRoutes } from "./routes/legal.tsx";
+import { registerContactRoutes } from "./routes/contact.tsx";
 import { errorResponse } from "./views/error-response.tsx";
 
 export function createApp() {
@@ -45,6 +47,7 @@ export function createApp() {
 
   registerLandingRoutes(app);
   registerLegalRoutes(app);
+  registerContactRoutes(app);
   registerAuthRoutes(app);
   registerJoinRoutes(app);
   registerApplyRoutes(app);
@@ -68,6 +71,7 @@ export function createApp() {
   registerAdminProductRoutes(app);
   registerAdminInquiryRoutes(app);
   registerAdminRequestRoutes(app);
+  registerAdminFeedbackRoutes(app);
   registerInviteAdminRoutes(app);
   registerUserAdminRoutes(app);
 

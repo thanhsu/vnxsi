@@ -5,7 +5,8 @@ import type { SessionUser } from "./auth/sessions.ts";
 export interface Bindings {
   DB: D1Database;
   ASSETS: Fetcher;
-  MEDIA: R2Bucket;
+  /** Product images (spec §8.5). Absent until R2 is enabled (VNX-0711): /media/* is 404 and uploads answer 503. */
+  MEDIA?: R2Bucket;
   APP_ORIGIN: string;
   ADMIN_EMAILS?: string;
   MAIL_DRIVER?: string;

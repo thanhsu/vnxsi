@@ -1,6 +1,6 @@
 import type { EmailMessage, Mailer } from "./mailer.ts";
 
-/** In-memory outbox shared by the test isolate. Never used in production. */
+/** In-memory outbox shared by the test isolate (whole messages, replyTo included). Never used in production. */
 export const outbox: EmailMessage[] = [];
 
 export function clearOutbox() {

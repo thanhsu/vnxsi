@@ -14,7 +14,7 @@ import { editorPath, ownedProduct, stepPage, type MediaError } from "./hub-produ
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
-function demoWithError(c: Context<AppEnv>, product: Product, error: MediaError, status: 400 | 409) {
+function demoWithError(c: Context<AppEnv>, product: Product, error: MediaError, status: 400 | 409 | 503) {
   return stepPage(c, product, "demo", stepValuesFromProduct("demo", product), {}, status, error);
 }
 
@@ -30,6 +30,9 @@ export function registerProductMediaRoutes(app: Hono<AppEnv>) {
     const product = await ownedProduct(c);
     if (!product) return errorResponse(c, "notFound", 404);
     if (editLock(product.status, c.get("builder").status)) return errorResponse(c, "conflict", 409);
+    // No R2 binding yet (VNX-0711): nothing goes to R2 or D1.
+    const bucket = c.env.MEDIA;
+    if (!bucket) return demoWithError(c, product, "unavailable", 503);
     // Refuse an oversized upload before buffering it; 64 KB covers the multipart framing and the alt field.
     const declared = Number(c.req.header("content-length"));
     if (declared > MAX_MEDIA_BYTES + 64 * 1024) return demoWithError(c, product, "size", 400);
@@ -48,11 +51,11 @@ export function registerProductMediaRoutes(app: Hono<AppEnv>) {
 
     const now = new Date().toISOString();
     const key = productMediaKey(product.id, ext, now);
-    await putImage(c.env.MEDIA, key, bytes, ext);
+    await putImage(bucket, key, bytes, ext);
     const added = await addMedia(c.env.DB, { productId: product.id, r2Key: key, alt, now });
     if (!added) {
       // Lost the race for the last slot: don't leave an orphan object in R2.
-      await deleteImage(c.env.MEDIA, key);
+      await deleteImage(bucket, key);
       return demoWithError(c, product, "full", 409);
     }
     await touchEdited(c, product, now);
@@ -66,10 +69,13 @@ export function registerProductMediaRoutes(app: Hono<AppEnv>) {
     const media = await findMedia(c.env.DB, product.id, mediaId);
     if (!media) return errorResponse(c, "notFound", 404);
     if (editLock(product.status, c.get("builder").status)) return errorResponse(c, "conflict", 409);
+    // No R2 binding yet (VNX-0711): keep the row rather than lose track of the object.
+    const bucket = c.env.MEDIA;
+    if (!bucket) return demoWithError(c, product, "unavailable", 503);
 
     await deleteMedia(c.env.DB, product.id, media.id);
     try {
-      await deleteImage(c.env.MEDIA, media.r2Key);
+      await deleteImage(bucket, media.r2Key);
     } catch (err) {
       // The row is gone, so the image is no longer shown; an orphan object only costs storage.
       console.error(JSON.stringify({ requestId: c.get("requestId"), event: "media.delete_failed", key: media.r2Key, error: String(err) }));

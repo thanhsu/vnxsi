@@ -1,5 +1,6 @@
 import type { BadgeKind } from "../domain/product.ts";
 import { ulid } from "../lib/ulid.ts";
+import type { FeedbackGuard } from "./feedback.ts";
 import type { InquiryGuard } from "./inquiries.ts";
 import type { ProductGuard } from "./products.ts";
 import type { InviteGuard, RequestGuard } from "./requests.ts";
@@ -21,13 +22,20 @@ export type AuditRequestGuard = RequestGuard;
 export type AuditInvitesGuard = { requestId: string; inviteIds: string[] };
 /** Written only when the batch's invitation compare-and-set went through (see InviteGuard). */
 export type AuditInviteGuard = InviteGuard;
+/** Written only when the batch's feedback compare-and-set went through (see FeedbackGuard, VNX-0710). */
+export type AuditFeedbackGuard = FeedbackGuard;
 
 /**
  * The audit INSERT as a statement, so a route can commit it in one db.batch with the change it records.
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
- * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's, `inviteId` on the invitation's.
+ * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
+ * `inviteId` on the invitation's, `feedbackId` on the feedback row's.
  */
-export function auditStatement(db: D1Database, input: AuditInput, onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard): D1PreparedStatement {
+export function auditStatement(
+  db: D1Database,
+  input: AuditInput,
+  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard,
+): D1PreparedStatement {
   const id = ulid(Date.parse(input.now));
   const data = JSON.stringify(input.data ?? {});
   const values = [id, input.actorUserId, input.action, input.entity, input.entityId, data, input.now];
@@ -78,6 +86,15 @@ export function auditStatement(db: D1Database, input: AuditInput, onlyIf?: Audit
          WHERE EXISTS (SELECT 1 FROM request_invites WHERE id = ?8 AND status = ?9 AND updated_at = ?10)`,
       )
       .bind(...values, onlyIf.inviteId, onlyIf.status, onlyIf.updatedAt);
+  }
+  if ("feedbackId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM feedback WHERE id = ?8 AND status = ?9 AND updated_at = ?10)`,
+      )
+      .bind(...values, onlyIf.feedbackId, onlyIf.status, onlyIf.updatedAt);
   }
   return db
     .prepare(

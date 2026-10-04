@@ -40,6 +40,7 @@ const WRITERS: Record<string, string> = {
   inquiry_messages: "../src/db/inquiries.ts",
   requests: "../src/db/requests.ts",
   request_invites: "../src/db/requests.ts",
+  feedback: "../src/db/feedback.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {

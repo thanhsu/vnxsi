@@ -1,5 +1,5 @@
-import { BADGE_SCORE, likePattern, PAGE_SIZE, searchPlan, type CatalogItem, type CatalogQuery, type Paged } from "../domain/catalog.ts";
-import type { Category } from "../domain/product.ts";
+import { BADGE_SCORE, likePattern, PAGE_SIZE, parseCatalogQuery, searchPlan, type CatalogItem, type CatalogQuery, type Paged } from "../domain/catalog.ts";
+import { BADGE_KINDS, type BadgeKind, type Category, type ProductLang } from "../domain/product.ts";
 import { PUBLIC_PRODUCT } from "./products.ts";
 
 type ItemRow = {
@@ -84,4 +84,44 @@ export async function searchProducts(db: D1Database, query: CatalogQuery): Promi
   const count = db.prepare(`${hits}SELECT COUNT(*) AS n FROM ${from} WHERE ${filter}`).bind(...params);
   const [rows, total] = await db.batch([list, count]);
   return { items: ((rows?.results ?? []) as ItemRow[]).map(toItem), total: (total?.results[0] as { n: number } | undefined)?.n ?? 0 };
+}
+
+type DeckDetailRow = { id: string; primary_lang: ProductLang; kind: BadgeKind | null };
+
+/**
+ * Landing deck (VNX-0709): the first `limit` public products in the catalogue's own neutral order (the same
+ * searchProducts browse query as /products page 1, so ADR-004 holds: no other ranking input), with their primary
+ * language and active badges. Fewer than `limit` items means fewer public products exist.
+ */
+export async function firstPublicProducts(db: D1Database, limit: number) {
+  const top = (await searchProducts(db, parseCatalogQuery({}))).items.slice(0, limit);
+  if (top.length === 0) return [];
+  const ids = top.map((item) => item.id);
+  const marks = ids.map((_, i) => `?${i + 1}`).join(", ");
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.primary_lang, v.kind FROM products p
+       LEFT JOIN product_verifications v ON v.product_id = p.id AND v.revoked_at IS NULL
+       WHERE p.id IN (${marks})`,
+    )
+    .bind(...ids)
+    .all<DeckDetailRow>();
+  return top.flatMap((item) => {
+    const rows = results.filter((r) => r.id === item.id);
+    // Gone between the two reads: leave it out rather than guess its language.
+    if (rows.length === 0) return [];
+    const kinds = new Set(rows.map((r) => r.kind).filter((k): k is BadgeKind => k !== null));
+    return [
+      {
+        slug: item.slug,
+        name: item.name,
+        tagline: item.tagline,
+        category: item.category,
+        primaryLang: rows[0]!.primary_lang,
+        minPriceCents: item.minPriceCents,
+        coverKey: item.coverKey,
+        badges: BADGE_KINDS.filter((kind) => kinds.has(kind)),
+      },
+    ];
+  });
 }

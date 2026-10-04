@@ -26,3 +26,12 @@ describe("ResendMailer", () => {
     await expect(new ResendMailer("k", "f", fetchFn).send(message)).rejects.toBeInstanceOf(MailError);
   });
 });
+
+describe("ResendMailer reply-to (VNX-0710)", () => {
+  it("sends reply_to only when the message has a replyTo", async () => {
+    const fetchFn = vi.fn(async () => new Response("{}", { status: 200 }));
+    await new ResendMailer("k", "VNX.SI <noreply@vnx.si>", fetchFn).send({ ...message, replyTo: "sender@example.vn" });
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ to: ["lan@example.vn"], reply_to: "sender@example.vn" });
+  });
+});

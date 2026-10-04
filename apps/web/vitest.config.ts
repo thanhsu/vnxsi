@@ -11,6 +11,8 @@ export default defineConfig(async () => {
         miniflare: {
           // The pool bundles an older workerd than wrangler.jsonc's compatibility_date allows.
           compatibilityDate: "2026-08-01",
+          // wrangler.jsonc has no R2 binding until R2 is enabled (VNX-0711); tests keep an in-memory MEDIA bucket.
+          r2Buckets: ["MEDIA"],
           bindings: {
             TEST_MIGRATIONS: migrations,
             APP_ORIGIN: "https://vnx.si",

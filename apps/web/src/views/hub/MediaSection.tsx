@@ -5,7 +5,8 @@ import { localizedPath } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 
-export type MediaErrorCode = "missing" | "type" | "size" | "full" | "alt";
+/** "unavailable": no R2 binding yet (VNX-0711). */
+export type MediaErrorCode = "missing" | "type" | "size" | "full" | "alt" | "unavailable";
 
 const ERROR_KEY: Record<MediaErrorCode, MessageKey> = {
   missing: "media.error.missing",
@@ -13,9 +14,19 @@ const ERROR_KEY: Record<MediaErrorCode, MessageKey> = {
   size: "media.error.size",
   full: "media.error.full",
   alt: "media.error.alt",
+  unavailable: "media.unavailable",
 };
 
-type Props = { locale: Locale; productId: string; productName: string; media: ProductMedia[]; error: MediaErrorCode | null; editable: boolean };
+type Props = {
+  locale: Locale;
+  productId: string;
+  productName: string;
+  media: ProductMedia[];
+  error: MediaErrorCode | null;
+  editable: boolean;
+  /** False while there is no R2 binding (VNX-0711): a notice replaces the upload form and the delete buttons. */
+  enabled: boolean;
+};
 
 export const MediaSection: FC<Props> = (p) => {
   const tr = translator(p.locale);
@@ -30,7 +41,7 @@ export const MediaSection: FC<Props> = (p) => {
           {p.media.map((m) => (
             <li>
               <img src={`/media/${m.r2Key}`} alt={m.alt || p.productName} width={160} loading="lazy" />
-              {p.editable ? (
+              {p.editable && p.enabled ? (
                 <form method="post" action={`${base}/${m.id}/delete`}>
                   <button class="link" type="submit" aria-label={tr("media.deleteItem", { alt: m.alt || p.productName })}>
                     {tr("media.delete")}
@@ -41,12 +52,17 @@ export const MediaSection: FC<Props> = (p) => {
           ))}
         </ul>
       )}
-      {p.error ? (
+      {p.editable && !p.enabled ? (
+        <p class="notice" role={p.error === "unavailable" ? "alert" : undefined}>
+          {tr("media.unavailable")}
+        </p>
+      ) : null}
+      {p.error && p.error !== "unavailable" ? (
         <p id="media-error" class="error-msg" role="alert">
           {tr(ERROR_KEY[p.error])}
         </p>
       ) : null}
-      {p.editable && p.media.length < MAX_MEDIA ? (
+      {p.editable && p.enabled && p.media.length < MAX_MEDIA ? (
         <form method="post" action={base} enctype="multipart/form-data">
           <div class="field">
             <label for="media-file">{tr("media.file")}</label>
