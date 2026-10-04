@@ -287,26 +287,28 @@ export function deletePendingRequestStatement(db: D1Database, id: string): D1Pre
 export type InviteContext = {
   invite: RequestInvite;
   request: ClientRequest;
-  builder: { email: string; locale: string; name: string; handle: string };
+  /** `public`: the builder is approved on an active account (spec §7.6). */
+  builder: { email: string; locale: string; name: string; handle: string; public: boolean };
   client: { email: string; locale: string };
 };
 
 export async function findInviteContext(db: D1Database, inviteId: string): Promise<InviteContext | null> {
   const row = await db
     .prepare(
-      `SELECT x.*, b.name AS builder_name, b.handle AS builder_handle, bu.email AS builder_email, bu.locale AS builder_locale
+      `SELECT x.*, b.name AS builder_name, b.handle AS builder_handle, bu.email AS builder_email, bu.locale AS builder_locale,
+         (b.status = 'approved' AND bu.status = 'active') AS builder_public
        FROM request_invites x JOIN builders b ON b.user_id = x.builder_id JOIN users bu ON bu.id = x.builder_id
        WHERE x.id = ?1`,
     )
     .bind(inviteId)
-    .first<InviteRow & { builder_name: string; builder_handle: string; builder_email: string; builder_locale: string }>();
+    .first<InviteRow & { builder_name: string; builder_handle: string; builder_email: string; builder_locale: string; builder_public: number }>();
   if (!row) return null;
   const found = await findRequestWithClient(db, row.request_id);
   if (!found) return null;
   return {
     invite: toInvite(row),
     request: found.request,
-    builder: { email: row.builder_email, locale: row.builder_locale, name: row.builder_name, handle: row.builder_handle },
+    builder: { email: row.builder_email, locale: row.builder_locale, name: row.builder_name, handle: row.builder_handle, public: row.builder_public === 1 },
     client: found.client,
   };
 }

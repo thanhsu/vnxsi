@@ -107,6 +107,20 @@ describe("request notifications (spec §8.3)", () => {
     expect(outbox[1]).toMatchObject({ to: "rn-end-b1@vnx.si", subject: `Lời mời đã kết thúc: ${request.title}` });
   });
 
+  it("skips the two end notices for a builder who is suspended or whose account is not active; others still get theirs", async () => {
+    const { invites } = await invited("rn-susp", ["en", "en", "en"]);
+    await setInvite(invites[0]!.id, "not_selected");
+    await setInvite(invites[1]!.id, "expired");
+    await setInvite(invites[2]!.id, "expired");
+    await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(invites[0]!.builderId).run();
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(invites[1]!.builderId).run();
+    expect(await notifyNotSelected(testEnv, [invites[0]!.id])).toEqual({ sent: 0, failed: 0 });
+    expect(await notifyInviteExpired(testEnv, [invites[1]!.id])).toEqual({ sent: 0, failed: 0 });
+    expect(outbox).toEqual([]);
+    expect(await notifyInviteExpired(testEnv, [invites[2]!.id])).toEqual({ sent: 1, failed: 0 });
+    expect(outbox).toHaveLength(1);
+  });
+
   it("still tells builders their proposal was not selected after the request was removed as spam, without the client's e-mail", async () => {
     const { client, invites, request } = await invited("rn-spam");
     await setInvite(invites[0]!.id, "not_selected");

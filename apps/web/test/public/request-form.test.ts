@@ -113,6 +113,7 @@ describe("/request form (spec §5.7 step 1)", () => {
     const unconfigured = { ...testEnv, TURNSTILE_DRIVER: undefined, TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as Bindings;
     const res = await post("/request", signedOut("t2@request.example"), {}, unconfigured);
     expect(res.status).toBe(503);
+    expect(((await res.text()).match(/Posting without an account is temporarily unavailable/g) ?? []).length).toBe(1);
     expect(await findUserByEmail(testEnv.DB, "t1@request.example")).toBeNull();
     expect(await findUserByEmail(testEnv.DB, "t2@request.example")).toBeNull();
     expect(await findUserByEmail(testEnv.DB, "t3@request.example")).toBeNull();
@@ -141,8 +142,8 @@ describe("/request form (spec §5.7 step 1)", () => {
     const ip = { "cf-connecting-ip": "203.0.113.77" };
     for (let i = 0; i < 10; i++) await post("/request", valid({ title: "" }), { cookie, ...ip }); // invalid forms do not count
     const accounts = await Promise.all([0, 1, 2, 3].map((i) => signIn(`rf-ip-${i}@vnx.si`)));
-    let last!: Response;
-    for (let i = 0; i < 11; i++) last = await post("/request", valid(), { cookie: accounts[i % 4]!.cookie, ...ip });
+    for (let i = 0; i < 10; i++) expect((await post("/request", valid(), { cookie: accounts[i % 4]!.cookie, ...ip })).status, `post ${i + 1}`).toBe(303);
+    const last = await post("/request", valid(), { cookie: accounts[2]!.cookie, ...ip });
     expect(last.status).toBe(429);
     expect(await last.text()).toContain("Too many requests from your network");
   });

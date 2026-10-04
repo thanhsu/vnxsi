@@ -99,7 +99,8 @@ async function submitForm(c: Context<AppEnv>) {
   }
 
   const captcha = await verifyTurnstile(c.env, body[TURNSTILE_FIELD], ip === "unknown" ? null : ip);
-  if (captcha === "unavailable") return formPage(c, values, {}, 503, tr("request.form.unavailable"));
+  // Not configured: the page already says so in place of the form, so no second message.
+  if (captcha === "unavailable") return formPage(c, values, {}, 503, turnstileSiteKey(c.env) === null ? undefined : tr("request.form.unavailable"));
   if (captcha === "fail") return formPage(c, values, {}, 400, tr("inquiry.error.captcha"));
 
   const email = input.email!;

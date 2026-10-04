@@ -64,9 +64,22 @@ describe("/me requests (spec §5.4)", () => {
     expect(statuses).toEqual(["not_selected", "expired"]);
     // A's proposal was not selected, B's invitation lapsed: each builder gets one e-mail, and none shows the client's e-mail.
     expect(outbox.map((m) => m.to).sort()).toEqual(["mr-close-a@vnx.si", "mr-close-b@vnx.si"]);
-    expect(outbox.every((m) => !m.text.includes(client.email))).toBe(true);
+    expect(outbox.every((m) => ![m.subject, m.text, m.html].some((part) => part.includes(client.email)))).toBe(true);
     expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(409);
     expect(outbox).toHaveLength(2);
+  });
+
+  it("closing does not e-mail a suspended invitee; the other invitee still gets theirs", async () => {
+    const { client, request } = await makeRequest({ tag: "mr-susp" });
+    const a = await makeBuilder("mr-susp-a@vnx.si", "mr-susp-a", "approved");
+    const b = await makeBuilder("mr-susp-b@vnx.si", "mr-susp-b", "approved");
+    const [ia] = await inviteBuilders(request, [a, b]);
+    await proposeOn(ia!);
+    await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(a.userId).run();
+    const { cookie } = await signIn(client.email);
+    expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(303);
+    expect((await listRequestInvites(testEnv.DB, request.id)).map((x) => x.invite.status)).toEqual(["not_selected", "expired"]);
+    expect(outbox.map((m) => m.to)).toEqual(["mr-susp-b@vnx.si"]);
   });
 
   it("lets the owner close a submitted request: 303, nobody to e-mail; a pending one cannot be closed (409)", async () => {

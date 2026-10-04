@@ -59,6 +59,8 @@ function aboutInvite(
   kind: string,
   inviteId: string,
   to: "builder" | "client",
+  // `publicBuilderOnly`: skip when the builder is no longer approved on an active account (the two end notices; plan M6 fix round 1).
+  opts: { publicBuilderOnly?: boolean },
   compose: (ctx: InviteContext, locale: Locale) => Omit<EmailMessage, "to"> | null, // the invitation's own status gates each notice; builder end-notices still go out after spam (plan header)
 ): Promise<NotifyOutcome> {
   return attempt(
@@ -67,6 +69,7 @@ function aboutInvite(
     async () => {
       const ctx = await findInviteContext(env.DB, inviteId);
       if (!ctx) return null;
+      if (opts.publicBuilderOnly && !ctx.builder.public) return null;
       const party = to === "builder" ? ctx.builder : ctx.client;
       const mail = compose(ctx, asLocale(party.locale));
       return mail ? { to: party.email, ...mail } : null;
@@ -106,7 +109,7 @@ export async function notifyInvited(env: Bindings, inviteIds: string[]): Promise
   const outcomes: NotifyOutcome[] = [];
   for (const id of inviteIds) {
     outcomes.push(
-      await aboutInvite(env, "invited", id, "builder", ({ invite, request }, locale) =>
+      await aboutInvite(env, "invited", id, "builder", {}, ({ invite, request }, locale) =>
         invite.status !== "invited"
           ? null
           : requestInviteEmail(locale, { clientName: builderFacingName(request.clientName), title: request.title, category: request.category, budgetBand: request.budgetBand, deadline: request.deadline, days: INVITE_TTL_MS / DAY_MS, url: invitationUrl(env, locale, invite.id) }),
@@ -118,7 +121,7 @@ export async function notifyInvited(env: Bindings, inviteIds: string[]): Promise
 
 /** Task 7: a builder invited three days ago who has not answered. The cron marks `reminded_at` itself. */
 export function notifyInviteReminder(env: Bindings, inviteId: string): Promise<NotifyOutcome> {
-  return aboutInvite(env, "reminder", inviteId, "builder", ({ invite, request }, locale) =>
+  return aboutInvite(env, "reminder", inviteId, "builder", {}, ({ invite, request }, locale) =>
     invite.status !== "invited" || request.status !== "matching"
       ? null
       : requestReminderEmail(locale, { clientName: builderFacingName(request.clientName), title: request.title, days: INVITE_TTL_MS / DAY_MS, url: invitationUrl(env, locale, invite.id) }),
@@ -130,7 +133,7 @@ export async function notifyInviteExpired(env: Bindings, inviteIds: string[]): P
   const outcomes: NotifyOutcome[] = [];
   for (const id of inviteIds) {
     outcomes.push(
-      await aboutInvite(env, "invite_expired", id, "builder", ({ invite, request }, locale) =>
+      await aboutInvite(env, "invite_expired", id, "builder", { publicBuilderOnly: true }, ({ invite, request }, locale) =>
         invite.status !== "expired" ? null : requestInviteExpiredEmail(locale, { title: request.title, url: invitationsUrl(env, locale) }),
       ),
     );
@@ -140,7 +143,7 @@ export async function notifyInviteExpired(env: Bindings, inviteIds: string[]): P
 
 /** Task 5: a proposal the builder just sent. */
 export function notifyProposal(env: Bindings, inviteId: string): Promise<NotifyOutcome> {
-  return aboutInvite(env, "proposal", inviteId, "client", ({ invite, request, builder }, locale) =>
+  return aboutInvite(env, "proposal", inviteId, "client", {}, ({ invite, request, builder }, locale) =>
     invite.status !== "proposed" || request.status !== "matching"
       ? null
       : requestProposalEmail(locale, { builderName: builder.name, title: request.title, priceCents: invite.priceCents, priceMaxCents: invite.priceMaxCents, timelineDays: invite.timelineDays ?? 0, url: clientRequestUrl(env, locale, request.id) }),
@@ -152,7 +155,7 @@ export async function notifyNotSelected(env: Bindings, inviteIds: string[]): Pro
   const outcomes: NotifyOutcome[] = [];
   for (const id of inviteIds) {
     outcomes.push(
-      await aboutInvite(env, "not_selected", id, "builder", ({ invite, request }, locale) =>
+      await aboutInvite(env, "not_selected", id, "builder", { publicBuilderOnly: true }, ({ invite, request }, locale) =>
         invite.status !== "not_selected" ? null : requestNotSelectedEmail(locale, { title: request.title, url: invitationsUrl(env, locale) }),
       ),
     );
