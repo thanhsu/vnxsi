@@ -155,7 +155,7 @@ describe("motion (VNX-0709 AC10)", () => {
     expect(supports).toHaveLength(1);
     expect(supports[0]!.body).toContain(".reveal-scroll");
     expect(supports[0]!.body).toMatch(/animation-timeline:\s*view\(\)/);
-    const outside = css.replace(supports[0]!.body, "");
+    const outside = css.replace(supports[0]!.body, "").replace(/@supports\s*\(animation-timeline:\s*view\(\)\)/, "");
     expect(outside).not.toMatch(/animation-timeline/);
     // Outside @supports, .reveal-scroll has no rule that could leave it invisible.
     for (const m of outside.matchAll(/([^{}]*\.reveal-scroll[^{}]*)\{([^}]*)\}/g)) {

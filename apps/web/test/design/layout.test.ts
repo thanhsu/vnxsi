@@ -15,9 +15,10 @@ const decode = (s: string) =>
 const textOf = (s: string) => decode(s.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
 const headerOf = (s: string) => /<header class="site-header">([\s\S]*?)<\/header>/.exec(s)?.[1] ?? "";
 const footerOf = (s: string) => /<footer class="site-footer">([\s\S]*?)<\/footer>/.exec(s)?.[1] ?? "";
-/** Inner HTML of the first element opened by `open` (a regex source for its start tag), tags of the same name matched. */
+/** Inner HTML of the first `tag` element whose start tag contains `attrs` (literal), nested tags of the same name matched. */
 function inner(s: string, tag: string, attrs: string): string {
-  const start = new RegExp(`<${tag}${attrs}[^>]*>`).exec(s);
+  const escaped = attrs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const start = new RegExp(`<${tag}\\b[^>]*?${escaped}[^>]*>`).exec(s);
   if (!start) return "";
   let depth = 1;
   const re = new RegExp(`<(/?)${tag}\\b[^>]*>`, "g");
