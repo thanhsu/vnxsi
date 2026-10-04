@@ -63,3 +63,11 @@ export async function searchUsers(db: D1Database, query: string, limit = 50): Pr
     .all<{ id: string; email: string; status: UserStatus; is_admin: number; builder_handle: string | null; builder_status: BuilderStatus | null }>();
   return results.map((r) => ({ id: r.id, email: r.email, status: r.status, isAdmin: r.is_admin === 1, builderHandle: r.builder_handle, builderStatus: r.builder_status }));
 }
+
+/** Sets the display name only when the account has none (first confirmed inquiry; Owner decision 2026-10-04). */
+export async function setDisplayNameIfEmpty(db: D1Database, id: string, name: string, now: string): Promise<void> {
+  await db
+    .prepare("UPDATE users SET display_name = ?2, updated_at = ?3 WHERE id = ?1 AND (display_name IS NULL OR display_name = '')")
+    .bind(id, name, now)
+    .run();
+}
