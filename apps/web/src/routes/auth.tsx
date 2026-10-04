@@ -5,10 +5,10 @@ import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "../au
 import { sha256Hex } from "../auth/crypto.ts";
 import { readInviteCookie, writeInviteCookie } from "../auth/invite-cookie.ts";
 import { createSession, deleteSession } from "../auth/sessions.ts";
-import { type ConsumedToken, consumeLoginToken, createLoginToken, peekLoginToken, type TokenPurpose } from "../auth/tokens.ts";
-import { auditStatement, writeAudit } from "../db/audit.ts";
-import { findInquiryById, listMessages, returnedInquiry, setInquiryStatusStatement } from "../db/inquiries.ts";
-import { createUser, findUserByEmail, markLogin, setDisplayNameIfEmpty, type UserRow } from "../db/users.ts";
+import { type ConsumedToken, consumeLoginToken, createLoginToken, describeToken, peekLoginToken, type TokenPurpose } from "../auth/tokens.ts";
+import { writeAudit } from "../db/audit.ts";
+import { findInquiryById } from "../db/inquiries.ts";
+import { createUser, findUserByEmail, markLogin, type UserRow } from "../db/users.ts";
 import { getMailer } from "../email/index.ts";
 import { loginEmail } from "../email/templates/login.ts";
 import type { AppEnv } from "../env.ts";
@@ -17,10 +17,10 @@ import { translator } from "../i18n/t.ts";
 import { onLocalized } from "../http/localized.ts";
 import { safeNext } from "../http/next.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
-import { notifyInquiryMessage } from "../notify/inquiry.ts";
 import { ConfirmLinkPage, InvalidLinkPage, LoginPage, LoginSentPage } from "../views/auth.tsx";
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
+import { openPendingInquiry } from "./inquiry-confirm.ts";
 
 const LoginForm = z.object({ email: z.string().trim().toLowerCase().pipe(z.email().max(254)) });
 
@@ -52,19 +52,16 @@ async function completeLogin(c: Context<AppEnv>, token: ConsumedToken, now: Date
  * The compare-and-set pending_verification -> open below is the state machine's "verify" rule (domain/inquiry.ts).
  */
 async function confirmInquiry(c: Context<AppEnv>, token: ConsumedToken, user: UserRow, now: Date): Promise<string> {
-  const iso = now.toISOString();
   const inquiry = token.inquiryId ? await findInquiryById(c.env.DB, token.inquiryId) : null;
   if (!inquiry || inquiry.clientUserId !== user.id || inquiry.status !== "pending_verification") return localizedPath(token.locale, "/me");
-  const guard = { inquiryId: inquiry.id, status: "open" as const, updatedAt: iso };
-  const [moved] = await c.env.DB.batch([
-    setInquiryStatusStatement(c.env.DB, { id: inquiry.id, from: "pending_verification", to: "open", now: iso }),
-    auditStatement(c.env.DB, { actorUserId: user.id, action: "inquiry.verify", entity: "inquiry", entityId: inquiry.id, now: iso }, guard),
-  ]);
-  if (!returnedInquiry(moved)) return localizedPath(token.locale, "/me");
-  await setDisplayNameIfEmpty(c.env.DB, user.id, inquiry.clientName, iso);
-  const [first] = await listMessages(c.env.DB, inquiry.id);
-  if (first) await notifyInquiryMessage(c.env, first.id, now);
+  if (!(await openPendingInquiry(c, inquiry, user, now, "link"))) return localizedPath(token.locale, "/me");
   return localizedPath(token.locale, `/me/inquiries/${inquiry.id}`);
+}
+
+/** The dead-link page in the language the link was requested in (English when the token is unknown). */
+async function invalidLink(c: Context<AppEnv>, raw: string) {
+  const known = await describeToken(c.env.DB, raw);
+  return page(c, <InvalidLinkPage locale={known?.locale ?? "en"} origin={origin(c)} inquiryHint={known?.purpose === "inquiry_verify"} />, 400);
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
@@ -109,7 +106,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     c.header("Cache-Control", "no-store");
     const raw = c.req.query("t") ?? "";
     const peek = await peekLoginToken(c.env.DB, raw, new Date(), VERIFY_PURPOSES);
-    if (!peek.ok) return page(c, <InvalidLinkPage locale="en" origin={origin(c)} />, 400);
+    if (!peek.ok) return invalidLink(c, raw);
     const purpose = peek.purpose === "login" ? "login" : "inquiry";
     return page(c, <ConfirmLinkPage locale={peek.locale} origin={origin(c)} token={raw} next={safeNext(c.req.query("next"))} purpose={purpose} />);
   });
@@ -119,7 +116,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const form = await c.req.parseBody();
     const now = new Date();
     const result = await consumeLoginToken(c.env.DB, typeof form.t === "string" ? form.t : "", now, VERIFY_PURPOSES);
-    if (!result.ok) return page(c, <InvalidLinkPage locale="en" origin={origin(c)} />, 400);
+    if (!result.ok) return invalidLink(c, typeof form.t === "string" ? form.t : "");
     const user = await completeLogin(c, result.token, now);
     if (!user) return errorResponse(c, "forbidden", 403);
     if (result.token.purpose === "inquiry_verify") return c.redirect(await confirmInquiry(c, result.token, user, now), 303);

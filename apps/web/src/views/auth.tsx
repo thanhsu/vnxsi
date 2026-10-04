@@ -53,13 +53,14 @@ export const LoginSentPage: FC<Base & { email: string }> = (props) => {
   );
 };
 
-export const InvalidLinkPage: FC<Base> = (props) => {
+export const InvalidLinkPage: FC<Base & { inquiryHint?: boolean }> = (props) => {
   const tr = translator(props.locale);
   return (
     <Layout locale={props.locale} title={tr("auth.invalidLink.title")} origin={props.origin} rest="/login" noindex>
       <section class="card">
         <h1>{tr("auth.invalidLink.title")}</h1>
         <p>{tr("auth.invalidLink.body")}</p>
+        {props.inquiryHint ? <p>{tr("auth.invalidLink.inquiryHint")}</p> : null}
         <a class="btn" href={localizedPath(props.locale, "/login")}>
           {tr("auth.invalidLink.cta")}
         </a>

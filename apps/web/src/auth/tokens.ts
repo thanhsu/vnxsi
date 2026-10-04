@@ -111,3 +111,13 @@ export async function deleteExpiredTokens(db: D1Database, now: Date): Promise<nu
   const res = await db.prepare("DELETE FROM login_tokens WHERE expires_at < ?1").bind(now.toISOString()).run();
   return res.meta.changes;
 }
+
+/**
+ * Locale and purpose of a token that exists, whatever its state (null when unknown). Only for rendering the dead-link
+ * page in the right language; it reveals nothing about the e-mail and never spends the token.
+ */
+export async function describeToken(db: D1Database, raw: string): Promise<{ locale: Locale; purpose: TokenPurpose } | null> {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return null;
+  const row = await db.prepare("SELECT purpose, locale FROM login_tokens WHERE token_hash = ?1").bind(await sha256Hex(raw)).first<{ purpose: TokenPurpose; locale: string }>();
+  return row ? { purpose: row.purpose, locale: isLocale(row.locale) ? row.locale : "en" } : null;
+}

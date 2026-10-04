@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { findInquiryById } from "../../src/db/inquiries.ts";
+import { findInquiryById, listMessages } from "../../src/db/inquiries.ts";
+import { findUserById } from "../../src/db/users.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { makeInquiry, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
@@ -26,7 +27,41 @@ describe("/me (spec §5.4)", () => {
     expect(html).toContain(`href="/me/inquiries/${open.inquiry.id}"`);
     const pending = await makeInquiry({ tag: "me-pend", status: "pending_verification" });
     const pc = (await signIn(pending.client.email)).cookie;
-    expect(await (await get(`/me/inquiries/${pending.inquiry.id}`, pc)).text()).toContain("Waiting for you to confirm your e-mail.");
+    expect(await (await get(`/me/inquiries/${pending.inquiry.id}`, pc)).text()).toContain("Not sent yet.");
+  });
+
+  it('offers "Send now" for a pending inquiry; posting it opens the inquiry, notifies the builder once and names the account', async () => {
+    const { inquiry, client } = await makeInquiry({ tag: "me-now", status: "pending_verification" });
+    const { cookie } = await signIn(client.email);
+    const html = await (await get(`/me/inquiries/${inquiry.id}`, cookie)).text();
+    expect(html).toContain("Send now");
+    expect(html).toContain(`action="/me/inquiries/${inquiry.id}/confirm"`);
+    expect((await findUserById(testEnv.DB, client.id))?.display_name).toBeNull();
+    const res = await post(`/vi/me/inquiries/${inquiry.id}/confirm`, {}, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/vi/me/inquiries/${inquiry.id}`);
+    const opened = await findInquiryById(testEnv.DB, inquiry.id);
+    expect(opened?.status).toBe("open");
+    expect(opened?.openedAt).not.toBeNull();
+    expect((await findUserById(testEnv.DB, client.id))?.display_name).toBe("Minh Tran");
+    expect(outbox.filter((m) => m.to === "me-now-b@vnx.si")).toHaveLength(1);
+    const [first] = await listMessages(testEnv.DB, inquiry.id);
+    expect(first?.notifiedAt).not.toBeNull();
+    const audit = await testEnv.DB.prepare("SELECT data FROM audit_log WHERE action = 'inquiry.verify' AND entity_id = ?1").bind(inquiry.id).first<{ data: string }>();
+    expect(JSON.parse(audit!.data)).toEqual({ via: "me" });
+    // A second press: already open -> 409, nothing more is sent.
+    expect((await post(`/me/inquiries/${inquiry.id}/confirm`, {}, cookie)).status).toBe(409);
+    expect(outbox.filter((m) => m.to === "me-now-b@vnx.si")).toHaveLength(1);
+  });
+
+  it("404s Send now for another client's inquiry and for a removed one", async () => {
+    const mine = await makeInquiry({ tag: "me-now2", status: "pending_verification" });
+    const other = await makeInquiry({ tag: "me-now3", status: "pending_verification" });
+    const { cookie } = await signIn(mine.client.email);
+    expect((await post(`/me/inquiries/${other.inquiry.id}/confirm`, {}, cookie)).status).toBe(404);
+    expect((await findInquiryById(testEnv.DB, other.inquiry.id))?.status).toBe("pending_verification");
+    await testEnv.DB.prepare("UPDATE inquiries SET status = 'removed' WHERE id = ?1").bind(mine.inquiry.id).run();
+    expect((await post(`/me/inquiries/${mine.inquiry.id}/confirm`, {}, cookie)).status).toBe(404);
   });
 
   it("lets the client reply (status kept) and close; the builder is notified of the reply", async () => {

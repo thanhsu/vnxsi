@@ -13,6 +13,7 @@ import { InquiryThread } from "../views/InquiryThread.tsx";
 import { Layout } from "../views/Layout.tsx";
 import { page } from "../views/render.ts";
 import { loadForSide, postInquiryAction, type ThreadExtra } from "./hub-inquiries.tsx";
+import { openPendingInquiry } from "./inquiry-confirm.ts";
 
 async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: ThreadExtra = {}, status: 200 | 400 = 200) {
   const locale = c.get("locale");
@@ -27,7 +28,16 @@ async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: Th
         <a href={localizedPath(locale, "/me")}>{tr("me.title")}</a>
       </p>
       <h1>{title}</h1>
-      {summary.inquiry.status === "pending_verification" ? <p class="notice">{tr("me.pending")}</p> : null}
+      {summary.inquiry.status === "pending_verification" ? (
+        <div class="notice">
+          <p>{tr("me.pending")}</p>
+          <form method="post" action={`${localizedPath(locale, rest)}/confirm`}>
+            <button class="btn" type="submit">
+              {tr("me.sendNow")}
+            </button>
+          </form>
+        </div>
+      ) : null}
       <InquiryThread locale={locale} summary={summary} messages={messages} viewer="client" base={localizedPath(locale, rest)} {...extra} />
     </Layout>,
     status,
@@ -51,6 +61,16 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/me/inquiries/:id", requireUser, async (c) => {
     const summary = await loadForSide(c, "client", c.req.param("id") ?? "");
     return summary ? threadPage(c, summary) : errorResponse(c, "notFound", 404);
+  });
+
+  // "Send now": the signed-in session proves the owner's e-mail, so this is the state machine's "verify" transition done
+  // on the owner's behalf, same rule as the e-mail link (the link lives 15 minutes, the pending inquiry 48 hours).
+  onLocalized(app, "post", "/me/inquiries/:id/confirm", requireUser, async (c) => {
+    const summary = await loadForSide(c, "client", c.req.param("id") ?? "");
+    if (!summary) return errorResponse(c, "notFound", 404);
+    if (summary.inquiry.status !== "pending_verification") return errorResponse(c, "conflict", 409);
+    if (!(await openPendingInquiry(c, summary.inquiry, c.get("user")!, new Date(), "me"))) return errorResponse(c, "conflict", 409);
+    return c.redirect(localizedPath(c.get("locale"), `/me/inquiries/${summary.inquiry.id}`), 303);
   });
 
   // Clients reply and close; declining is the builder's (spec §7.3), so /decline does not exist here (404).

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
+import { createLoginToken } from "../../src/auth/tokens.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
 
@@ -47,6 +48,29 @@ describe("/auth/verify confirmation page (VNX-0506)", () => {
     expect(res.status).toBe(403);
     // The token is still good.
     expect((await app.request(formPost("/auth/verify", { t }), undefined, testEnv)).status).toBe(303);
+  });
+
+  it("explains an expired inquiry link in the link's own language, with the Send now hint", async () => {
+    const app = createApp();
+    const old = new Date(Date.now() - 16 * 60 * 1000);
+    const t = await createLoginToken(testEnv.DB, { email: "expired@vnx.si", purpose: "inquiry_verify", locale: "vi" }, old);
+    const got = await app.request(getReq(`/auth/verify?t=${t}`), undefined, testEnv);
+    expect(got.status).toBe(400);
+    const html = await got.text();
+    expect(html).toContain("Link đăng nhập này không còn dùng được");
+    expect(html).toContain("Nếu bạn đang xác nhận một yêu cầu: hãy đăng nhập, mở Yêu cầu của tôi và bấm Gửi ngay.");
+    expect(html).toContain('lang="vi"');
+    const posted = await app.request(formPost("/auth/verify", { t }), undefined, testEnv);
+    expect(posted.status).toBe(400);
+    expect(await posted.text()).toContain("Gửi ngay");
+    // A login link has no inquiry hint; an unknown token falls back to English.
+    const login = await createLoginToken(testEnv.DB, { email: "expired2@vnx.si", purpose: "login", locale: "vi" }, old);
+    const loginHtml = await (await app.request(getReq(`/auth/verify?t=${login}`), undefined, testEnv)).text();
+    expect(loginHtml).toContain("Link đăng nhập này không còn dùng được");
+    expect(loginHtml).not.toContain("Gửi ngay");
+    const unknown = await (await app.request(getReq("/auth/verify?t=nope"), undefined, testEnv)).text();
+    expect(unknown).toContain("This sign-in link no longer works");
+    expect(unknown).not.toContain("Send now");
   });
 
   it("shows the invalid-link page for unknown tokens on GET and POST", async () => {
