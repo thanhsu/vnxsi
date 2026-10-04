@@ -333,7 +333,8 @@ export async function findInviteContext(db: D1Database, inviteId: string): Promi
 }
 
 const ADMIN_SELECT = `SELECT r.*, u.email AS client_email,
-    (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('invited', 'proposed')) AS active_invites,
+    (SELECT COUNT(*) FROM request_invites x JOIN builders xb ON xb.user_id = x.builder_id JOIN users xu ON xu.id = x.builder_id
+      WHERE x.request_id = r.id AND x.status IN ('invited', 'proposed') AND xb.status = 'approved' AND xu.status = 'active') AS active_invites, -- same rule as the cap in inviteBuildersBatch
     (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id) AS total_invites,
     (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('proposed', 'selected', 'not_selected', 'declined')) AS proposals
   FROM requests r JOIN users u ON u.id = r.client_user_id`;

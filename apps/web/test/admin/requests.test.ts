@@ -24,6 +24,23 @@ function suggestedHandles(html: string): string[] {
 describe("admin requests (spec §5.5, §5.7 step 2, §8.10)", () => {
   beforeEach(() => clearOutbox());
 
+  it("a suspended builder's stale proposal frees its slot in the admin form and route (M6 review F5)", async () => {
+    const { cookie } = await admin();
+    const { request } = await makeRequest({ tag: "ar-stale" });
+    const bs = await builders("ar-stale-b", 7);
+    const five = await inviteBuilders(request, bs.slice(0, 5));
+    await proposeOn(five[0]!);
+    expect(await (await get(`/admin/requests/${request.id}`, cookie)).text()).not.toContain(`/invite">`); // full: no form
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(bs[0]!.userId).run();
+    const html = await (await get(`/admin/requests/${request.id}`, cookie)).text();
+    expect(html).toContain(`/invite">`);
+    expect((await post(`/admin/requests/${request.id}/invite`, cookie, { handle: bs[5]!.handle })).status).toBe(303);
+    expect(activeOf(await invitesOf(request.id)).length).toBe(6); // the stale proposal is still stored; 5 count
+    const second = await post(`/admin/requests/${request.id}/invite`, cookie, { handle: bs[6]!.handle });
+    expect([400, 409]).toContain(second.status);
+    expect((await invitesOf(request.id)).some((i) => i.builderId === bs[6]!.userId)).toBe(false);
+  });
+
   it("is admin only, and an unknown request is 404", async () => {
     const { request } = await makeRequest({ tag: "ar-auth" });
     const { cookie } = await signIn("ar-nobody@vnx.si");
