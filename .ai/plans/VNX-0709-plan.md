@@ -1,6 +1,6 @@
 # VNX-0709 — Thiết kế lại đợt A: nền chung, header, footer, logo, Landing v2 · Plan
 
-- **Trạng thái:** Draft
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04
 - **Roadmap:** M7, task mới VNX-0709 (làm trước go-live; Owner duyệt hướng thiết kế 2026-10-04). Thay giao diện của VNX-0708; thay một phần VNX-0703/0704 (khung homepage, không có khối số liệu).
 - **Nguồn thiết kế (đã duyệt):** canvas prototype `https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm`, artboard **"Landing v2, from prototype homepage (desktop)"** (`project/LandingV2.dc.html`) và **"Landing v2 (390 px)"**; logo **Option B · Connected nodes** (`project/Logo.dc.html`). Implementer đọc file artboard bằng Artifact tool (`action: read`, `path: project/LandingV2.dc.html`) hoặc bản sao Reviewer để ở `docs/design/mockups/` (mục "Tài liệu kèm").
 - **Audit và design system:** `docs/design/2026-10-04-ui-audit-and-redesign.md` (mục 2: token, typography, spacing, radius, shadow, motion, component). Quyết định Owner Q1–Q5 ở mục 0 của file đó.
