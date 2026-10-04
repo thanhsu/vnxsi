@@ -58,12 +58,12 @@
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|
-| VNX-0301 | Migration product, tier, media, verification; state machine product | AGENT, FOUNDATION | ⏳ |
-| VNX-0302 | Upload R2, `/media/*` | AGENT, HIGH-RISK | ⏳ |
-| VNX-0303 | Editor bước 1–5 | AGENT | ⏳ |
-| VNX-0304 | Editor bước 6–9, điều kiện submit | AGENT | ⏳ |
-| VNX-0305 | Admin duyệt product, huy hiệu, mục mới sửa, tự thu hồi Demo verified | AGENT | ⏳ |
-| VNX-0306 | Trang `/p/:slug`, JSON-LD, Open Graph | AGENT | ⏳ |
+| VNX-0301 | Migration product, tier, media, verification; state machine product | AGENT, FOUNDATION | ✅ |
+| VNX-0302 | Upload R2, `/media/*` | AGENT, HIGH-RISK | ✅ |
+| VNX-0303 | Editor bước 1–5 | AGENT | ✅ |
+| VNX-0304 | Editor bước 6–9, điều kiện submit | AGENT | ✅ |
+| VNX-0305 | Admin duyệt product, huy hiệu, mục mới sửa, tự thu hồi Demo verified | AGENT | ✅ |
+| VNX-0306 | Trang `/p/:slug`, JSON-LD, Open Graph | AGENT | ✅ |
 | VNX-0307 | Tạo bucket R2 `vnxsi-media` | HUMAN | ⏳ |
 
 ## EPIC 4 — Catalogue và danh bạ

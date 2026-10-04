@@ -6,7 +6,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
-- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product): plan `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md` **đã duyệt 2026-10-04, đang thực thi**, nhánh `feat/m3-product`.
+- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong** trên nhánh `feat/m3-product` (chưa push, chưa merge): 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Tiếp theo: Owner quyết định merge/push và 3 câu hỏi nghiệp vụ dưới đây, rồi viết plan M4.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
 
@@ -38,11 +38,23 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | VNX-0205b Admin invite | ✅ | 2dc5b78 | link hiện một lần; test cổng ra M2 |
 | VNX-0205c Khóa builder/user; đồng bộ admin | ✅ | 98df068 | `ADMIN_EMAILS` cấp và thu quyền |
 | Sửa sau review toàn nhánh M2 | ✅ | 6cc9974 | link Hub ở header, CRLF, khóa user nguyên tử, a11y portfolio |
+| Merge M2 vào `main` | ✅ | 3bde074 | merge commit, đã push |
+| VNX-0301 Dữ liệu product | ✅ | 4268fd5 | migration `0005_products`; 1 huy hiệu hiệu lực mỗi loại (partial unique index) |
+| VNX-0303 Editor 8 bước văn bản | ✅ | ec35b48 | form sinh từ `STEP_FIELDS`; slug khóa sau publish |
+| VNX-0302 Ảnh R2, `/media/*` | ✅ | c287860 | magic bytes, ≤2 MB, ≤8 ảnh |
+| VNX-0304a Pricing | ✅ | bef2f87 | ≤5 tier, cent USD |
+| VNX-0304b Điều kiện submit, vòng đời | ✅ | 4f342e3 | submit / rút lại / ẩn / hiện / lưu trữ |
+| VNX-0305a Admin duyệt product | ✅ | cd192e6 | huy hiệu `listed`, email |
+| VNX-0305b Huy hiệu, mới chỉnh sửa | ✅ | 45089a1 | evidence / lý do bắt buộc |
+| VNX-0306 `/p/:slug` | ✅ | 96511bc | Open Graph, JSON-LD đã escape |
+| Sửa sau review toàn nhánh M3 | ✅ | 45b07a1 | thu hồi Demo verified và duyệt + `listed` chạy trong một `db.batch`; admin thấy mọi trường công khai |
+| VNX-0307 Bucket R2 | ⏳ | — | chờ Owner bật R2 |
 
 ## Điều kiện trước khi deploy `main`
 
 Theo thứ tự (cũng ghi trong `apps/web/wrangler.jsonc`):
-1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, và `0004_builders` khi M2 đã merge).
+0. (khi có M3) `npx wrangler r2 bucket create vnxsi-media` — cần Owner bật R2 trước; wrangler từ chối deploy nếu binding trỏ tới bucket chưa có.
+1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, `0004_builders`, và `0005_products` khi M3 đã merge).
 2. Xác minh domain gửi mail trên Resend; `wrangler secret put RESEND_API_KEY`, `wrangler secret put ADMIN_EMAILS`.
 3. `npm run deploy`.
 
@@ -69,6 +81,11 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 
 ## Nghĩa vụ để lại
 
+- **Owner quyết định (từ review M3):**
+  1. Product đang công khai có được rơi xuống dưới điều kiện submit không (xóa hết ảnh / tier, để trống trường bắt buộc, hiện lại mà không kiểm)? Spec chưa nói. Hiện tại: được.
+  2. `published_at` có được làm mới khi hiện lại / mở khóa không? Hiện tại: có, nên builder có thể ẩn rồi hiện để lên đầu "mới nhất". Spec 7.2 chỉ nói đặt khi duyệt. Cần chốt trước M4.
+  3. M4: `robots.txt` chặn `/media` (spec 8.8) sẽ làm crawler bỏ ảnh og:image; có mở riêng `/media/products/` không?
+
 - **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
 
 - **Deploy sau khi merge M2:** `db:migrate:remote` phải áp cả `0004_builders` (đã ghi trong `wrangler.jsonc`).
@@ -85,6 +102,10 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
 ## Ghi nhận (minor, chưa làm)
+
+- M3: các bước văn bản không phải Demo vẫn ghi sửa và audit bằng 2 lệnh riêng; Pricing đổi trạng thái và thay tier bằng 2 lệnh riêng (cửa sổ vài ms).
+- M3: upload ảnh lỗi D1 sau khi đã ghi R2 để lại object mồ côi; thiếu `If-None-Match` ở `/media`.
+- M3: các minor còn lại và test nhánh phụ: xem `.ai/reviews/M3-review.md`.
 
 - M2: mã invite thô nằm trong path `/join/<code>`, nên log request của nền tảng (observability) có thể chứa mã chưa dùng. Chấp nhận ở Wave 1.
 - M2: bảng chuyển trạng thái builder và ghi audit là 2 lệnh D1 riêng (trừ khóa user); cùng mẫu với M1.
