@@ -24,6 +24,8 @@ export type AuditInvitesGuard = { requestId: string; inviteIds: string[] };
 export type AuditInviteGuard = InviteGuard;
 /** Written only when the batch's feedback compare-and-set went through (see FeedbackGuard, VNX-0710). */
 export type AuditFeedbackGuard = FeedbackGuard;
+/** Written only when that feature flag row currently has this value and was last written by this actor at that instant (see setFlag). */
+export type AuditFlagGuard = { flagKey: string; enabled: 0 | 1; updatedAt: string; updatedBy: string };
 
 /**
  * The audit INSERT as a statement, so a route can commit it in one db.batch with the change it records.
@@ -34,7 +36,7 @@ export type AuditFeedbackGuard = FeedbackGuard;
 export function auditStatement(
   db: D1Database,
   input: AuditInput,
-  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard,
+  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard,
 ): D1PreparedStatement {
   const id = ulid(Date.parse(input.now));
   const data = JSON.stringify(input.data ?? {});
@@ -95,6 +97,15 @@ export function auditStatement(
          WHERE EXISTS (SELECT 1 FROM feedback WHERE id = ?8 AND status = ?9 AND updated_at = ?10)`,
       )
       .bind(...values, onlyIf.feedbackId, onlyIf.status, onlyIf.updatedAt);
+  }
+  if ("flagKey" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM feature_flags WHERE key = ?8 AND enabled = ?9 AND updated_at = ?10 AND updated_by = ?11)`,
+      )
+      .bind(...values, onlyIf.flagKey, onlyIf.enabled, onlyIf.updatedAt, onlyIf.updatedBy);
   }
   return db
     .prepare(

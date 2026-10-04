@@ -42,7 +42,7 @@
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
   //   0. wrangler r2 bucket create vnxsi-media      (once)
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy
@@ -51,6 +51,7 @@
   // 0007_inquiries (M5) and the M5 code ship together too: the M5 code needs 0007 before it can serve /hub and /me, so
   // migrate first, then deploy. The daily cron trigger ("0 1 * * *") takes effect on deploy; it also reads the 0007 tables.
   // 0008_requests (M6) ships with the M6 code the same way: migrate first, then deploy (the daily cron reads 0008 too).
+  // 0010_feature_flags (EPIC 21) ships with its code the same way: migrate first, then deploy.
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //
