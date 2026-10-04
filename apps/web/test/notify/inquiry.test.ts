@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { addMessageStatement, listMessages, setInquiryStatusStatement } from "../../src/db/inquiries.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
@@ -74,5 +74,47 @@ describe("notifyInquiryMessage (spec §8.3)", () => {
     const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'inquiry.notify_failed' AND entity_id = ?1").bind(inquiry.id).first<{ n: number }>();
     expect(audit?.n).toBe(1);
     expect(await notifyInquiryMessage(failingEnv, firstMessageId, NOW)).toBe("skipped");
+  });
+
+  describe("never throws, even when D1 fails", () => {
+    const quiet = () => vi.spyOn(console, "error").mockImplementation(() => {});
+    // A DB that works until a statement matching `failOn` is prepared.
+    const dbFailingOn = (failOn: RegExp): D1Database =>
+      new Proxy(testEnv.DB, {
+        get(target, prop) {
+          if (prop === "prepare") {
+            return (sql: string) => {
+              if (failOn.test(sql)) throw new Error("d1 down");
+              return target.prepare(sql);
+            };
+          }
+          const value = Reflect.get(target, prop) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+
+    it("skips when the message cannot be loaded", async () => {
+      const spy = quiet();
+      const env = { ...testEnv, DB: dbFailingOn(/./) } as Bindings;
+      await expect(notifyInquiryMessage(env, "01ANYMESSAGEID00000000000", NOW)).resolves.toBe("skipped");
+      spy.mockRestore();
+    });
+
+    it("still reports failed when the failure bookkeeping itself fails", async () => {
+      const { firstMessageId } = await makeInquiry({ tag: "nt-nothrow1", status: "open" });
+      const spy = quiet();
+      const env = { ...failingEnv, DB: dbFailingOn(/^UPDATE/) } as Bindings;
+      await expect(notifyInquiryMessage(env, firstMessageId, NOW)).resolves.toBe("failed");
+      spy.mockRestore();
+    });
+
+    it("reports sent when the mail went out but marking it sent fails", async () => {
+      const { firstMessageId } = await makeInquiry({ tag: "nt-nothrow2", status: "open" });
+      const spy = quiet();
+      const env = { ...testEnv, DB: dbFailingOn(/^UPDATE/) } as Bindings;
+      await expect(notifyInquiryMessage(env, firstMessageId, NOW)).resolves.toBe("sent");
+      expect(outbox).toHaveLength(1);
+      spy.mockRestore();
+    });
   });
 });

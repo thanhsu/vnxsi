@@ -36,25 +36,45 @@ function compose(env: Bindings, ctx: MessageContext): { to: string; subject: str
   return { to: ctx.client.email, ...inquiryMessageEmail(locale, { fromName: summary.builderName, productName: summary.productName, body: message.body, url }) };
 }
 
+// Never logs addresses: only the message id, the stage and the error text.
+function logFailure(messageId: string, stage: "load" | "bookkeeping" | "mark_sent", err: unknown): void {
+  console.error(JSON.stringify({ event: "inquiry.notify_failed", messageId, stage, error: String(err) }));
+}
+
 /**
  * Sends the e-mail for one inquiry message to the other party (spec §8.3). A failure is counted and left for the daily
  * job to retry; the third failure is written to audit_log. Never throws.
  */
 export async function notifyInquiryMessage(env: Bindings, messageId: string, now: Date): Promise<"sent" | "failed" | "skipped"> {
-  const ctx = await findMessageContext(env.DB, messageId);
+  let ctx: MessageContext | null;
+  try {
+    ctx = await findMessageContext(env.DB, messageId);
+  } catch (err) {
+    logFailure(messageId, "load", err);
+    return "skipped";
+  }
   if (!ctx) return "skipped";
   const status = ctx.summary.inquiry.status;
   if (ctx.message.notifiedAt !== null || ctx.message.notifyAttempts >= MAX_NOTIFY_ATTEMPTS || status === "pending_verification" || status === "removed") return "skipped";
   try {
     await getMailer(env).send(compose(env, ctx));
   } catch (err) {
-    const attempts = await recordNotifyFailure(env.DB, messageId);
-    console.error(JSON.stringify({ event: "inquiry.notify_failed", messageId, attempts, error: String(err) }));
-    if (attempts >= MAX_NOTIFY_ATTEMPTS) {
-      await writeAudit(env.DB, { actorUserId: null, action: "inquiry.notify_failed", entity: "inquiry", entityId: ctx.summary.inquiry.id, data: { messageId }, now: now.toISOString() });
+    try {
+      const attempts = await recordNotifyFailure(env.DB, messageId);
+      console.error(JSON.stringify({ event: "inquiry.notify_failed", messageId, attempts, error: String(err) }));
+      if (attempts >= MAX_NOTIFY_ATTEMPTS) {
+        await writeAudit(env.DB, { actorUserId: null, action: "inquiry.notify_failed", entity: "inquiry", entityId: ctx.summary.inquiry.id, data: { messageId }, now: now.toISOString() });
+      }
+    } catch (bookkeepingErr) {
+      logFailure(messageId, "bookkeeping", bookkeepingErr);
     }
     return "failed";
   }
-  await markMessageNotified(env.DB, messageId, now.toISOString());
+  try {
+    await markMessageNotified(env.DB, messageId, now.toISOString());
+  } catch (err) {
+    // The mail went out; a later retry may send it twice, which we accept over reporting a failure.
+    logFailure(messageId, "mark_sent", err);
+  }
   return "sent";
 }
