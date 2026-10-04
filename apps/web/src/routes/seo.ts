@@ -16,6 +16,9 @@ export function registerSeoRoutes(app: Hono<AppEnv>) {
       { rest: "/", localized: true },
       { rest: "/products", localized: true },
       { rest: "/builders", localized: true },
+      { rest: "/terms", localized: true },
+      { rest: "/privacy", localized: true },
+      { rest: "/media-kit", localized: true },
       ...products.map((p) => ({ rest: `/p/${p.slug}`, lastmod: p.updatedAt, localized: true })),
       ...builders.map((b) => ({ rest: `/b/${b.handle}`, lastmod: b.updatedAt, localized: true })),
     ];
