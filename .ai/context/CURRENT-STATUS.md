@@ -6,7 +6,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
-- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). Tiếp theo: plan M4.
+- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. **Chưa merge** (chờ Owner).
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
 - **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 và phụ lục spec đã viết, **chờ Owner duyệt văn bản** trước khi plan M4.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
@@ -51,18 +51,28 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | Sửa sau review toàn nhánh M3 | ✅ | 45b07a1 | thu hồi Demo verified và duyệt + `listed` chạy trong một `db.batch`; admin thấy mọi trường công khai |
 | VNX-0307 Bucket R2 | ⏳ | — | chờ Owner bật R2 |
 | Merge M3 vào `main` | ✅ | fe87caa | merge commit, đã push |
+| VNX-0401 FTS5, xếp hạng | ✅ | fc63649 | migration `0006_catalog` (FTS5 trigram, trigger đồng bộ); `published_at` chỉ đặt khi duyệt; `RETURNING id` thay `meta.changes` |
+| VNX-0404a Canonical, hreflang | ✅ | d4d17ef | `siteOrigin` (`APP_ORIGIN`); trang `noindex` không canonical / hreflang |
+| VNX-0402 `/products` | ✅ | eb849d0 | bộ lọc, phân trang 24, test cổng ra M4 qua HTTP |
+| VNX-0403 `/builders` | ✅ | b7d6963 | `open` trước, rồi số product, rồi mới duyệt |
+| VNX-0404b `sitemap.xml`, `robots.txt` | ✅ | 93f6f08 | 4 locale + `x-default`; `Allow: /media/products/`, `Disallow: /go/` |
+| Sửa sau review toàn nhánh M4 | ✅ | bcb76d6 | thứ tự deploy có `0006_catalog`; timeout test nặng; kiểm cột trả tiền cả `ALTER TABLE` |
+| Merge M4 vào `main` | ⏳ | — | chờ Owner |
 
 ## Điều kiện trước khi deploy `main`
 
 Theo thứ tự (cũng ghi trong `apps/web/wrangler.jsonc`):
 0. (khi có M3) `npx wrangler r2 bucket create vnxsi-media` — cần Owner bật R2 trước; wrangler từ chối deploy nếu binding trỏ tới bucket chưa có.
-1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, `0004_builders`, và `0005_products` khi M3 đã merge).
+1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, `0004_builders`, `0005_products`, và `0006_catalog` khi M4 đã merge). Từ `0006_catalog` trở đi, migration và `npm run deploy` phải chạy liền nhau: code trước M4 trả 409 khi sửa product đang publish nếu bảng đã có trigger FTS.
 2. Xác minh domain gửi mail trên Resend; `wrangler secret put RESEND_API_KEY`, `wrangler secret put ADMIN_EMAILS`.
 3. `npm run deploy`.
 
 Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để sửa nhanh landing: `/login` sẽ lỗi.
 
 ## Quyết định phát sinh
+
+- **Owner 2026-10-04 (M4):** lọc giá bằng 2 ô "giá khởi điểm từ – đến (USD)" trên tier rẻ nhất có giá, không phân biệt `billing`; product chỉ có tier `contact` bị loại khi lọc giá; thẻ giữ "From $19" không ghi chu kỳ. Nút "Post a request" chưa có đến M6. Tìm tiếng Việt không dấu không hỗ trợ ở Wave 1. Sửa F1–F4 sau review toàn nhánh; F5 (`instr` cho danh bạ) để sau.
+- **Reviewer (M4):** D1 cộng cả dòng trigger vào `meta.changes` → câu UPDATE `products` dùng `RETURNING` và đếm dòng trả về. Lọc huy hiệu khớp đúng loại (`in_production` không kéo theo `demo_verified`). Test "không có cột trả tiền" chỉ xét các bảng mà truy vấn xếp hạng đọc (ADR-008 sẽ có bảng chiến dịch riêng). `robots.txt` có `Disallow: /go/` theo spec 8.8 đã sửa. D1 từ chối mẫu `LIKE` > 50 byte: danh bạ cắt từ khóa còn ≤ 48 byte. Test nặng có timeout 30 s.
 
 - **Owner 2026-10-04 (monetization):** audit ở `docs/strategy/2026-10-04-monetization-audit.md`. (Q1) listing bên thứ ba ở khu `/tools/:merchant` riêng, `/products` chỉ có product của builder; (Q2) sponsored là ô tách riêng có nhãn, không cộng điểm xếp hạng, cần ADR-008 thay một phần ADR-004, làm sau cổng ra Wave 1; (Q3) chốt kiến trúc ngay (ADR-007 + phụ lục spec trước M4), gộp `/go/` + outbound click vào M7 thay `/p/:slug/demo`, affiliate làm khi có hợp đồng partner thật; (Q4) cá nhân Owner nhận hoa hồng partner; (Q5) chỉ analytics nội bộ; (Q6) quảng cáo chỉ viết ADR; (Q7) lead dùng lại M6, chưa thu phí; (Q8) nội dung biên tập là markdown giới hạn, chỉ admin viết; (Q9) ngưỡng index: category ≥5, best list ≥5, alternatives ≥3, so sánh ≥2.
 
@@ -91,12 +101,14 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - **M7 (VNX-0707):** secret mới `ANALYTICS_SALT`; thêm vào thứ tự deploy khi tới M7.
 - **Owner (monetization Q4):** tự kiểm điều khoản từng chương trình partner (có cho cá nhân tham gia không, mẫu thuế, cách payout) trước khi bật trên production; khi lập pháp nhân (VNX-1401) thì chuyển hợp đồng.
 
-- **M4 (từ quyết định Owner 2026-10-04):** sửa `setProductStatus` để `published_at` chỉ đặt khi admin duyệt (`approve`), không đổi khi `relist` / `unsuspend`; `robots.txt` chặn `/media` nhưng `Allow: /media/products/`.
+- **Deploy sau khi merge M4:** áp `0006_catalog` cùng lúc với code M4 (ghi trong `wrangler.jsonc`). Trước lần `db:migrate:remote` đầu tiên: thử `0006_catalog` trên một D1 remote nháp (trigram, trigger, `json_each` trong trigger, `wrangler d1 export`).
+- **M6:** nút "Post a request" ở `/builders` và ở trạng thái rỗng của `/products`; thêm `/request` vào sitemap.
+- **M7:** `/`, `/for-builders`, `/terms`, `/privacy` vào sitemap kèm alternate; link header vào `<nav>`; nếu `/go/` có tiền tố locale thì `robots.txt` chặn cả các tiền tố.
+- **M8 (runbook):** backup D1 khi có bảng ảo FTS5 (bỏ `products_fts` và trigger → export → tạo lại và backfill, hoặc dùng Time Travel).
 
 - **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
 
 - **Deploy sau khi merge M2:** `db:migrate:remote` phải áp cả `0004_builders` (đã ghi trong `wrangler.jsonc`).
-- **M4 (VNX-0404):** canonical/hreflang của `/b/:handle` lấy origin từ request; chuyển sang `APP_ORIGIN` cùng SEO toàn site.
 - **Trước M5:** thêm `Cache-Control: no-store` cho `/hub*`, `/admin*`, `/me*` (trang có dữ liệu cá nhân).
 - **Quyết định sau (ADR nhỏ):** hash invite đang vừa là khóa DB vừa là giá trị cookie, nên người đọc được D1/audit có thể tự duyệt builder; thiết kế lại (cookie ≠ khóa DB, hoặc HMAC) nếu cần.
 - **M5 (VNX-0505):** cron dọn `sessions`, `login_tokens`, `rate_limits` hết hạn.
@@ -109,6 +121,11 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
 ## Ghi nhận (minor, chưa làm)
+
+- M4: danh bạ tìm từ khóa > ~46 byte theo tiền tố (giới hạn `LIKE` 50 byte của D1); nên đổi sang `instr(lower(cột), lower(?))`.
+- M4: `LIKE` cho từ 1–2 ký tự chỉ không phân biệt hoa thường với ASCII; nội dung product không chuẩn hóa NFC khi lưu.
+- M4: FTS xóa theo `product_id` UNINDEXED (quét bảng); sau Wave 1 khóa theo `rowid`. Sitemap index khi vượt 10 000 product.
+- M4: các minor còn lại và test nhánh phụ: xem `.ai/reviews/M4-review.md`.
 
 - M3: các bước văn bản không phải Demo vẫn ghi sửa và audit bằng 2 lệnh riêng; Pricing đổi trạng thái và thay tier bằng 2 lệnh riêng (cửa sổ vài ms).
 - M3: upload ảnh lỗi D1 sau khi đã ghi R2 để lại object mồ côi; thiếu `If-None-Match` ở `/media`.

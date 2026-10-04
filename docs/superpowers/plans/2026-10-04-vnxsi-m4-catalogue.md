@@ -2393,7 +2393,8 @@ Spec mục 9 phủ thêm: "Danh bạ builder chỉ hiện builder `approved`, l�
 - **Deploy:** `db:migrate:remote` phải áp thêm `0006_catalog` (cập nhật comment thứ tự deploy trong `wrangler.jsonc` ở task cuối hoặc ở lượt sửa sau review).
 - **M6:** nút "Post a request" ở `/builders` và ở trạng thái rỗng của `/products`; thêm `/request` vào sitemap.
 - **M7:** `/`, `/for-builders`, `/terms`, `/privacy` vào sitemap với đủ alternate khi có bản locale.
-- **M8 (runbook):** `wrangler d1 export` không xuất được bảng ảo FTS5; backup / khôi phục phải tạo lại `products_fts` (chạy lại khối backfill của `0006_catalog`).
+- **M8 (runbook):** `wrangler d1 export` có thể từ chối cả database có bảng ảo FTS5 (cần kiểm trên D1 remote). Backup bằng export: bỏ `products_fts` và 3 trigger → export → tạo lại và chạy lại khối backfill của `0006_catalog`; hoặc chỉ dựa vào Time Travel. (Sửa theo review toàn nhánh M4, F6.)
+- **Trước lần `db:migrate:remote` đầu tiên:** thử `0006_catalog` trên một D1 remote nháp (trigram, trigger, `json_each` trong trigger, hành vi export).
 - **Sau Wave 1:** sitemap index khi vượt 10 000 product.
 
 ## Ghi nhận (dự kiến)
