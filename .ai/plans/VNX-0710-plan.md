@@ -1,6 +1,6 @@
 # VNX-0710 — Feedback & liên hệ (`/contact`, form trên landing, `/admin/feedback`) · Plan
 
-- **Trạng thái:** Draft (thiết kế Owner duyệt trong chat 2026-10-04)
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04
 - **Roadmap:** M7, task mới VNX-0710 (Owner yêu cầu 2026-10-04, dùng lâu dài trên production).
 - **Spec:** chưa có trong spec Wave 1; plan này là nguồn. Áp quy tắc chung: spec 8.2 (rate limit, origin), 8.3 (email qua `Mailer`), 8.6 (văn bản thuần), 8.9 (lỗi theo ô); ADR-001, ADR-002, ADR-003.
 - **Phụ thuộc:** nhánh `feat/vnx-0709-ui` (landing, header, footer mới) + `origin/main` mới (M5: Turnstile, cron; VNX-0508: Privacy).
