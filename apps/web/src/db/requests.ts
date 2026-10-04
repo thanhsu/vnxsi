@@ -1,8 +1,10 @@
-import { WORK_LANGUAGES, type WorkLanguage } from "../domain/builder.ts";
+import { WORK_LANGUAGES, type Availability, type WorkLanguage } from "../domain/builder.ts";
 import type { BudgetBand } from "../domain/inquiry.ts";
 import type { Category } from "../domain/product.ts";
 import {
   MAX_ACTIVE_INVITES,
+  type AdminRequest,
+  type Candidate,
   type InviteStatus,
   type InviteWithBuilder,
   type ClientRequest,
@@ -231,9 +233,10 @@ export function endRequestBatch(
 export function inviteBuildersBatch(
   db: D1Database,
   input: { requestId: string; builderIds: string[]; invitedBy: string; now: string },
-): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: ClientRequest | null; invited: { id: string; builderId: string }[] } } {
+): { statements: D1PreparedStatement[]; inviteIds: string[]; read: (results: D1Result[]) => { request: ClientRequest | null; invited: { id: string; builderId: string }[] } } {
   const at = Date.parse(input.now);
-  const inserts = input.builderIds.map((builderId) =>
+  const inviteIds = input.builderIds.map(() => ulid(at));
+  const inserts = input.builderIds.map((builderId, i) =>
     db
       .prepare(
         `INSERT INTO request_invites (id, request_id, builder_id, invited_by, status, invited_at, created_at, updated_at)
@@ -244,17 +247,20 @@ export function inviteBuildersBatch(
            AND (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = ?2 AND x.status IN ('invited', 'proposed')) < ?6
          RETURNING id, builder_id`,
       )
-      .bind(ulid(at), input.requestId, builderId, input.invitedBy, input.now, MAX_ACTIVE_INVITES),
+      .bind(inviteIds[i], input.requestId, builderId, input.invitedBy, input.now, MAX_ACTIVE_INVITES),
   );
+  // Only this batch's own ids count, so a batch that inserted nothing cannot move the request because another batch invited at the same instant.
   const move = db
     .prepare(
       `UPDATE requests SET status = 'matching', matched_at = COALESCE(matched_at, ?2), updated_at = ?2
-       WHERE id = ?1 AND status IN ('submitted', 'matching') AND EXISTS (SELECT 1 FROM request_invites WHERE request_id = ?1 AND invited_at = ?2)
+       WHERE id = ?1 AND status IN ('submitted', 'matching')
+         AND EXISTS (SELECT 1 FROM request_invites WHERE request_id = ?1 AND id IN (SELECT value FROM json_each(?3)))
        RETURNING *`,
     )
-    .bind(input.requestId, input.now);
+    .bind(input.requestId, input.now, JSON.stringify(inviteIds));
   return {
     statements: [...inserts, move],
+    inviteIds,
     read: (results) => ({
       request: returnedRequest(results[inserts.length]),
       invited: results.slice(0, inserts.length).flatMap((r) => ((r?.results ?? []) as { id: string; builder_id: string }[]).map((x) => ({ id: x.id, builderId: x.builder_id }))),
@@ -311,4 +317,63 @@ export async function findInviteContext(db: D1Database, inviteId: string): Promi
     builder: { email: row.builder_email, locale: row.builder_locale, name: row.builder_name, handle: row.builder_handle, public: row.builder_public === 1 },
     client: found.client,
   };
+}
+
+const ADMIN_SELECT = `SELECT r.*, u.email AS client_email,
+    (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('invited', 'proposed')) AS active_invites,
+    (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id) AS total_invites,
+    (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('proposed', 'selected', 'not_selected', 'declined')) AS proposals
+  FROM requests r JOIN users u ON u.id = r.client_user_id`;
+type AdminRow = Row & { client_email: string; active_invites: number; total_invites: number; proposals: number };
+const toAdmin = (r: AdminRow): AdminRequest => ({ request: toRequest(r), clientEmail: r.client_email, activeInvites: r.active_invites, totalInvites: r.total_invites, proposals: r.proposals });
+
+/**
+ * Spec §5.5 queue: `submitted` and `matching` oldest first (first come, first served); any other filter, and `null`
+ * (every status), most recently changed first. Admin only: carries the client's e-mail.
+ */
+export async function listRequestsForAdmin(db: D1Database, status: RequestStatus | null, limit = 200): Promise<AdminRequest[]> {
+  const order = status === "submitted" || status === "matching" ? "ORDER BY COALESCE(r.submitted_at, r.created_at), r.id" : "ORDER BY r.updated_at DESC, r.id DESC";
+  const { results } = await db
+    .prepare(`${ADMIN_SELECT} WHERE (?1 IS NULL OR r.status = ?1) ${order} LIMIT ?2`)
+    .bind(status, limit)
+    .all<AdminRow>();
+  return results.map(toAdmin);
+}
+
+export async function findAdminRequest(db: D1Database, id: string): Promise<AdminRequest | null> {
+  const row = await db.prepare(`${ADMIN_SELECT} WHERE r.id = ?1`).bind(id).first<AdminRow>();
+  return row ? toAdmin(row) : null;
+}
+
+type CandidateRow = { user_id: string; handle: string; name: string; availability: Availability; skills: string; work_languages: string; has_category_product: number; expired_invites: number };
+
+/**
+ * Spec §8.10 candidates: approved builders on active accounts, availability not closed, not the client, not yet
+ * invited to this request. Scoring is domain/request.ts suggestBuilders (ties by handle, ADR-004: nothing paid).
+ * `penaltySince`: expired invitations sent at or after this instant count against the builder. Capped at `limit`
+ * builders, taken by user id (Wave 1 scale; revisit before approved builders pass `limit`).
+ */
+export async function listCandidates(db: D1Database, request: Pick<ClientRequest, "id" | "clientUserId" | "category">, penaltySince: string, limit = 1000): Promise<Candidate[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT b.user_id, b.handle, b.name, b.availability, b.skills, b.work_languages,
+         EXISTS (SELECT 1 FROM products p WHERE p.builder_id = b.user_id AND p.status = 'published' AND p.category = ?2) AS has_category_product,
+         (SELECT COUNT(*) FROM request_invites e WHERE e.builder_id = b.user_id AND e.status = 'expired' AND e.invited_at >= ?3 AND julianday(e.updated_at) - julianday(e.invited_at) >= 7) AS expired_invites
+       FROM builders b JOIN users u ON u.id = b.user_id
+       WHERE b.status = 'approved' AND u.status = 'active' AND b.availability != 'closed' AND b.user_id != ?4
+         AND NOT EXISTS (SELECT 1 FROM request_invites y WHERE y.request_id = ?1 AND y.builder_id = b.user_id)
+       ORDER BY b.user_id LIMIT ?5`,
+    )
+    .bind(request.id, request.category, penaltySince, request.clientUserId, limit)
+    .all<CandidateRow>();
+  return results.map((r) => ({
+    userId: r.user_id,
+    handle: r.handle,
+    name: r.name,
+    availability: r.availability,
+    skills: jsonList(r.skills),
+    workLanguages: jsonList(r.work_languages).filter((l): l is WorkLanguage => (WORK_LANGUAGES as readonly string[]).includes(l)),
+    hasCategoryProduct: r.has_category_product === 1,
+    expiredInvites: r.expired_invites,
+  }));
 }

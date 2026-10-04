@@ -1,6 +1,6 @@
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
 import type { BudgetBand, InquiryStatus, InquiryType } from "../domain/inquiry.ts";
-import type { RequestStatus } from "../domain/request.ts";
+import type { InviteStatus, RequestStatus } from "../domain/request.ts";
 import type { UserStatus } from "../domain/user.ts";
 import type { Badge, Billing, Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
 import type { ProductStep } from "../domain/product-input.ts";
@@ -143,4 +143,13 @@ export const REQUEST_STATUS_KEY: Record<RequestStatus, MessageKey> = {
   expired: "request.status.expired",
   closed: "request.status.closed",
   removed: "request.status.removed",
+};
+
+export const INVITE_STATUS_KEY: Record<InviteStatus, MessageKey> = {
+  invited: "invite.status.invited",
+  proposed: "invite.status.proposed",
+  selected: "invite.status.selected",
+  not_selected: "invite.status.not_selected",
+  declined: "invite.status.declined",
+  expired: "invite.status.expired",
 };

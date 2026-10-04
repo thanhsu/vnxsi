@@ -6,6 +6,7 @@ import {
   findClientRequest,
   findRequestById,
   inviteBuildersBatch,
+  listCandidates,
   listClientRequests,
   listRequestInvites,
   returnedRequest,
@@ -193,5 +194,50 @@ describe("db/requests (VNX-0601)", () => {
     await deleteGhostUsers(db(), new Date(Date.now() - 48 * 3600 * 1000).toISOString());
     expect(await db().prepare("SELECT id FROM users WHERE id = ?1").bind(client.id).first()).not.toBeNull();
     expect(await db().prepare("SELECT id FROM users WHERE id = ?1").bind(bare.id).first()).toBeNull();
+  });
+
+  it("does not move the request, nor audit, when this batch invited nobody, even if another batch invited at the same instant", async () => {
+    const { request } = await makeRequest({ tag: "rq-same" });
+    const [a, b] = await builders("rq-same-b", 2);
+    const admin = await ensureUser("owner@vnx.si");
+    const now = new Date().toISOString();
+    await inviteBuilders(request, [a!], now);
+    const audits = async () => ((await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.invite' AND entity_id = ?1").bind(request.id).first<{ n: number }>())?.n ?? 0);
+    const run = async (builderId: string) => {
+      const batch = inviteBuildersBatch(db(), { requestId: request.id, builderIds: [builderId], invitedBy: admin.id, now });
+      const results = await db().batch([...batch.statements, auditStatement(db(), { actorUserId: admin.id, action: "request.invite", entity: "request", entityId: request.id, now }, { requestId: request.id, inviteIds: batch.inviteIds })]);
+      return batch.read(results);
+    };
+    expect(await run(a!.userId)).toEqual({ request: null, invited: [] }); // duplicate: inserts nothing
+    expect(await audits()).toBe(0);
+    expect((await run(b!.userId)).invited).toHaveLength(1);
+    expect(await audits()).toBe(1);
+  });
+
+  it("lists only eligible candidates; only lapsed expired invitations count against them (spec §8.10)", async () => {
+    const { client, request } = await makeRequest({ tag: "rq-pen" });
+    const [b, taken] = await builders("rq-pen-b", 2);
+    const day = 24 * 3600 * 1000;
+    const t0 = Date.now() - 20 * day;
+    const lapsed = await makeRequest({ tag: "rq-pen-l" });
+    const early = await makeRequest({ tag: "rq-pen-e" });
+    const [lapsedInvite] = await inviteBuilders(lapsed.request, [b!], new Date(t0).toISOString());
+    const [earlyInvite] = await inviteBuilders(early.request, [b!], new Date(t0).toISOString());
+    const expire = (id: string, after: number) => db().prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE id = ?1").bind(id, new Date(t0 + after * day).toISOString()).run();
+    await expire(lapsedInvite!.id, 8); // no answer in 7 days
+    await expire(earlyInvite!.id, 1); // the request ended early
+    await inviteBuilders(request, [taken!]);
+    const self = await makeBuilder(client.email, "rq-pen-self", "approved");
+    const closed = await makeBuilder("rq-pen-cl@vnx.si", "rq-pen-cl", "approved", { availability: "closed" });
+    const pending = await makeBuilder("rq-pen-pe@vnx.si", "rq-pen-pe", "pending");
+    const suspended = await makeBuilder("rq-pen-su@vnx.si", "rq-pen-su", "suspended");
+    const locked = await makeBuilder("rq-pen-lo@vnx.si", "rq-pen-lo", "approved");
+    await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(locked.userId).run();
+    const since = new Date(Date.now() - 60 * day).toISOString();
+    const found = await listCandidates(db(), request, since);
+    expect(found.find((x) => x.userId === b!.userId)?.expiredInvites).toBe(1);
+    for (const gone of [taken!, self, closed, pending, suspended, locked]) expect(found.map((x) => x.userId)).not.toContain(gone.userId);
+    const later = new Date(Date.now() + 1000).toISOString();
+    expect((await listCandidates(db(), request, later)).find((x) => x.userId === b!.userId)?.expiredInvites).toBe(0);
   });
 });
