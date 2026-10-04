@@ -25,3 +25,11 @@ export const originCheck: MiddlewareHandler<AppEnv> = async (c, next) => {
 export function requestOrigin(c: Context<AppEnv>): string {
   return new URL(c.req.url).origin;
 }
+
+/**
+ * Origin for absolute public URLs (canonical, hreflang, og:image, JSON-LD, sitemap): APP_ORIGIN, so a preview or
+ * www host never becomes canonical. Falls back to the request's origin when APP_ORIGIN is missing or invalid.
+ */
+export function siteOrigin(c: Context<AppEnv>): string {
+  return originOf(c.env.APP_ORIGIN) ?? requestOrigin(c);
+}

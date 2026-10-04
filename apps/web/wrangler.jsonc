@@ -36,10 +36,12 @@
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
   //   0. wrangler r2 bucket create vnxsi-media      (once)
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy
+  // 0006_catalog (M4) and the M4 code ship together: run the migration and `npm run deploy` back to back. Once 0006
+  // is applied, pre-M4 code (D1 meta.changes === 1) returns 409 on every edit of a published product (FTS triggers add changes).
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //

@@ -101,8 +101,8 @@ async function pricingPage(c: Context<AppEnv>, product: Product, values: TierVal
 /**
  * The Demo step save as one transaction (run with db.batch): the field compare-and-set first, then — when the demo URL
  * changed — the system revoke of Demo verified (spec §7.2) and its audit row, then the `product.edit` audit row once
- * published. Every statement after the first is guarded on that compare-and-set, so a lost race (results[0] changed
- * 0 rows) changes nothing.
+ * published. Every statement after the first is guarded on that compare-and-set, so a lost race (results[0] returned no
+ * row) changes nothing.
  */
 export function demoStepStatements(
   db: D1Database,
@@ -204,7 +204,7 @@ export function registerProductEditorRoutes(app: Hono<AppEnv>) {
     if (step === "demo") {
       // One transaction, so a new demo URL never keeps Demo verified (spec §7.2).
       const results = await c.env.DB.batch(demoStepStatements(c.env.DB, { product, actorUserId: builder.userId, fields, now }));
-      if (results[0]?.meta.changes !== 1) return errorResponse(c, "conflict", 409);
+      if ((results[0]?.results.length ?? 0) !== 1) return errorResponse(c, "conflict", 409);
       return c.redirect(editorPath(c, product.id, step, "?saved=1"), 303);
     }
     const markEdited = product.firstPublishedAt !== null;

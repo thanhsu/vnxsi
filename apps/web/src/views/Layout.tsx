@@ -18,6 +18,7 @@ export type LayoutProps = {
 export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
   const { locale, title, origin, rest, description, noindex, signedIn, ogImage, jsonLd, children } = props;
   const tr = translator(locale);
+  const canonical = origin + localizedPath(locale, rest);
   return (
     <html lang={locale}>
       <head>
@@ -26,16 +27,17 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <title>{title}</title>
         {description ? <meta name="description" content={description} /> : null}
         {noindex ? <meta name="robots" content="noindex" /> : null}
-        <link rel="canonical" href={origin + localizedPath(locale, rest)} />
+        {noindex ? null : <link rel="canonical" href={canonical} />}
         <meta property="og:type" content="website" />
         <meta property="og:title" content={title} />
-        <meta property="og:url" content={origin + localizedPath(locale, rest)} />
+        {noindex ? null : <meta property="og:url" content={canonical} />}
         {description ? <meta property="og:description" content={description} /> : null}
         {ogImage ? <meta property="og:image" content={ogImage} /> : null}
         {jsonLd ? jsonLdScript(jsonLd) : null}
-        {alternates(origin, rest).map((alt) => (
-          <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
-        ))}
+        {/* A noindex page has no canonical form to point at (spec §5.1 hreflang is for public pages). */}
+        {noindex
+          ? null
+          : alternates(origin, rest).map((alt) => <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />)}
         <link rel="stylesheet" href="/assets/app.css" />
       </head>
       <body>
@@ -44,6 +46,8 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
             <a class="brand" href={localizedPath(locale, "/")}>
               VNX.SI
             </a>
+            <a href={localizedPath(locale, "/products")}>{tr("nav.products")}</a>
+            <a href={localizedPath(locale, "/builders")}>{tr("nav.findBuilders")}</a>
             <nav class="lang" aria-label={tr("nav.language")}>
               {LOCALES.map((l) => (
                 <a href={localizedPath(l, rest)} hreflang={l} lang={l} aria-current={l === locale ? "true" : undefined}>

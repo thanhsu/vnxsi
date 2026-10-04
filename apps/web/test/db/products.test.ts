@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProductDraft, findOwnedProduct, listBuilderProducts, setProductStatus } from "../../src/db/products.ts";
+import { createProductDraft, findOwnedProduct, listBuilderProducts, setProductStatus, updateProductFields } from "../../src/db/products.ts";
 import { grantBadge, listActiveBadges, revokeBadge } from "../../src/db/verifications.ts";
 import { ensureUser, makeBuilder, makeDraft } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
@@ -34,7 +34,26 @@ describe("db/products", () => {
     expect(published).toMatchObject({ status: "published", publishedAt: NOW, firstPublishedAt: NOW });
     await setProductStatus(db(), { id: product.id, from: "published", to: "suspended", reviewNote: "spam", now: LATER });
     const again = await setProductStatus(db(), { id: product.id, from: "suspended", to: "published", reviewNote: null, now: LATER });
-    expect(again).toMatchObject({ publishedAt: LATER, firstPublishedAt: NOW, reviewNote: null });
+    expect(again).toMatchObject({ publishedAt: NOW, firstPublishedAt: NOW, reviewNote: null });
+  });
+
+  it("keeps published_at when a product is shown again (Owner decision 2026-10-04)", async () => {
+    const { product } = await makeDraft("pdb-relist@vnx.si", "pdb-relist", "Relist thing");
+    await setProductStatus(db(), { id: product.id, from: "draft", to: "in_review", reviewNote: null, now: NOW });
+    await setProductStatus(db(), { id: product.id, from: "in_review", to: "published", reviewNote: null, now: NOW });
+    await setProductStatus(db(), { id: product.id, from: "published", to: "unlisted", reviewNote: null, now: LATER });
+    expect(await setProductStatus(db(), { id: product.id, from: "unlisted", to: "published", reviewNote: null, now: LATER })).toMatchObject({ publishedAt: NOW, firstPublishedAt: NOW });
+  });
+});
+
+describe("db/products: updateProductFields on an indexed product", () => {
+  it("reports ok or stale from the returned row, not from meta.changes (products_fts triggers inflate it)", async () => {
+    const { builder, product } = await makeDraft("pdb-fts@vnx.si", "pdb-fts", "Indexed thing");
+    await setProductStatus(db(), { id: product.id, from: "draft", to: "in_review", reviewNote: null, now: NOW });
+    await setProductStatus(db(), { id: product.id, from: "in_review", to: "published", reviewNote: null, now: NOW });
+    const input = { productId: product.id, builderId: builder.userId, markEdited: true, now: LATER, fields: { name: "Indexed thing 2", tagline: "New line" } };
+    expect(await updateProductFields(db(), { ...input, expectedStatus: "published" })).toBe("ok");
+    expect(await updateProductFields(db(), { ...input, expectedStatus: "draft" })).toBe("stale");
   });
 });
 

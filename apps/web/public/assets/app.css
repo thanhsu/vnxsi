@@ -81,3 +81,12 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
 .tiers > li { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); }
 .tiers h3 { margin: 0 0 4px; }
 .price { font-weight: 600; }
+.filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 16px; align-items: end; margin-bottom: 8px; }
+.filters .row-actions { margin: 0 0 16px; }
+.cards { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.cards > li { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); }
+.cards > li > * { margin: 0; }
+.cards img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid var(--line); border-radius: 8px; }
+.cards h2 { font-size: 18px; }
+.pager { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 24px; }
+.pager a { display: inline-flex; align-items: center; min-height: 44px; }

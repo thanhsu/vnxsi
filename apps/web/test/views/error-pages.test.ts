@@ -10,8 +10,9 @@ describe("localized error pages", () => {
     expect(html).toMatch(/^<!DOCTYPE html>/);
     expect(html).toContain('<html lang="vi"');
     expect(html).toContain("Không tìm thấy trang");
-    expect(html).toContain('hreflang="zh-Hant"');
-    expect(html).toContain('href="https://vnx.si/zh-hant/khong-co"');
+    // noindex pages carry no hreflang (VNX-0404); the language switcher still links every locale.
+    expect(html).not.toContain('rel="alternate"');
+    expect(html).toContain('href="/zh-hant/khong-co"');
   });
 
   it("does not emit protocol-relative links for //-prefixed paths", async () => {

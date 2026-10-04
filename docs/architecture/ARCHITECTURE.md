@@ -42,6 +42,10 @@ Một Worker duy nhất, không có server khác, không có bước build ngoà
 | `media/` | Upload/đọc R2, kiểm tra loại file | — |
 | `stats/` | Tính `public_stats`, ghi `product_daily_stats` (M7) | db |
 | `jobs/` | Các job cron, gọi từ `scheduled` | db, email, stats |
+| `monetization/` | Route `/go/`, cờ tính năng, provider port partner (`generic_template`, `manual`), disclosure (ADR-007). Bảng qua `db/clicks.ts`, `db/flags.ts`, `db/merchants.ts`, `db/programs.ts`, `db/offers.ts`, `db/conversions.ts`, `db/revenue.ts` | db, domain, views, i18n |
+| `content/` | Renderer markdown giới hạn, ngưỡng index (phụ lục monetization mục 4). Bảng qua `db/articles.ts` | db, domain |
+
+**Luật ranking không đọc tiền (ADR-007):** file xếp hạng/gợi ý (`db/products.ts` phần tìm kiếm, `stats/`, matching, `ai/`) không import `db/` của monetization và không có SQL tới bảng tiền; kiểm bằng test kiến trúc.
 
 **Luật phụ thuộc:** `domain` không phụ thuộc gì. `db` chỉ phụ thuộc kiểu của `domain`. `views` không gọi `db`. Luật này được kiểm bằng test kiến trúc (`test/architecture.test.ts`, task VNX-0003).
 
@@ -66,7 +70,7 @@ request
 ## 4. Dữ liệu
 
 - D1 là nguồn sự thật duy nhất. Migration đánh số `NNNN_<tên>.sql` trong `apps/web/migrations/`, chỉ thêm, không sửa migration đã chạy production.
-- Nhóm bảng: danh tính (`users`, `login_tokens`, `sessions`, `invites`, `rate_limits`), supply (`builders`, `portfolio_items`, `products`, `pricing_tiers`, `product_media`, `product_verifications`, `products_fts`), kết nối (`inquiries`, `inquiry_messages`, `requests`, `request_invites`), số liệu (`product_daily_stats`, `public_stats`), vận hành (`audit_log`), cũ (`waitlist`).
+- Nhóm bảng: danh tính (`users`, `login_tokens`, `sessions`, `invites`, `rate_limits`), supply (`builders`, `portfolio_items`, `products`, `pricing_tiers`, `product_media`, `product_verifications`, `products_fts`), kết nối (`inquiries`, `inquiry_messages`, `requests`, `request_invites`), số liệu (`product_daily_stats`, `public_stats`), monetization (`outbound_clicks` ở M7; `feature_flags`, `merchants`, `partner_programs`, `offers`, `conversions`, `revenue_entries` ở EPIC 21), nội dung (`articles`, `article_links` ở EPIC 22), vận hành (`audit_log`), cũ (`waitlist`).
 - ID là ULID; tiền là cent USD; thời gian ISO-8601 UTC.
 - Ảnh trong R2, key không đoán được; DB chỉ lưu key.
 
@@ -86,6 +90,8 @@ Mỗi job idempotent: chạy hai lần liên tiếp không gây gửi trùng hay
 - Rate limit bằng bảng D1 `rate_limits` (cửa sổ cố định).
 - Nội dung người dùng: văn bản thuần, JSX tự escape, cấm `dangerouslySetInnerHTML` với dữ liệu người dùng.
 - Turnstile + honeypot cho form công khai.
+- Link ra ngoài qua `/go/`: đích tra theo id trong DB, không bao giờ lấy từ query; chỉ `https:`; host phải khớp danh sách đã đăng ký; `302` + `no-store` + `noindex` (ADR-007).
+- Click không lưu IP; `visitor_hash` = HMAC với khóa xoay theo ngày từ secret `ANALYTICS_SALT`.
 - Bí mật: `wrangler secret` (production), `.dev.vars` (local, đã gitignore).
 - CI quét bí mật bằng gitleaks; dependency-review chặn lỗ hổng từ mức moderate.
 

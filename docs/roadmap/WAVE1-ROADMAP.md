@@ -102,7 +102,7 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md`. Editor sinh form 
 | VNX-0401 | FTS5 trigram + truy vấn xếp hạng (ADR-004), fallback `LIKE` cho từ khóa 1–2 ký tự | AGENT, FOUNDATION |
 | VNX-0402 | Trang `/products` với bộ lọc, phân trang | AGENT |
 | VNX-0403 | Trang `/builders` (danh bạ) | AGENT |
-| VNX-0404 | `sitemap.xml`, `robots.txt`, canonical, hreflang toàn site | AGENT, QUICK-WIN |
+| VNX-0404 | `sitemap.xml`, `robots.txt` (gồm `Allow: /media/products/`, `Disallow: /go/`), canonical, hreflang toàn site | AGENT, QUICK-WIN |
 
 **Cổng ra M4:**
 - Tìm được bằng tiếng Việt có dấu và bằng tiếng Trung 2 ký tự.
@@ -140,7 +140,8 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md`. Editor sinh form 
 
 | Task | Nội dung | Tag |
 |---|---|---|
-| VNX-0701 | `product_daily_stats`: đếm view (lọc bot, chủ product, admin), `/p/:slug/demo` | AGENT |
+| VNX-0701 | `product_daily_stats`: đếm view (lọc bot, chủ product, admin) | AGENT |
+| VNX-0707 | `/go/p/:slug/{demo,site}`, bảng `outbound_clicks`, cột `outbound_clicks`/`demo_clicks`, secret `ANALYTICS_SALT` (phụ lục monetization mục 2; thay `/p/:slug/demo`, Owner duyệt 2026-10-04 Q3) | AGENT, HIGH-RISK |
 | VNX-0702 | Cron hằng giờ tính `public_stats` theo spec mục 8.11 | AGENT |
 | VNX-0703 | Homepage SSR: các khối kèm ngưỡng | AGENT |
 | VNX-0704 | Homepage: animation, chart, tooltip, bảng dữ liệu, reduced-motion | AGENT |

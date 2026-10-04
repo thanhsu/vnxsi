@@ -61,3 +61,24 @@ Mỗi thực thể thuộc đúng một module (cột `Module` là bản ghi s�
 | Payment / Payout | `payments`, `payouts` | commerce | ledger |
 | Review | `reviews` | commerce | chỉ sau order/project hoàn tất |
 | MaintenancePlan | `maintenance_plans` | commerce | định kỳ hằng tháng |
+
+## Monetization (ADR-007, phụ lục monetization)
+
+| Thực thể | Bảng | Module | Wave | Ghi chú |
+|---|---|---|---|---|
+| OutboundClick | `outbound_clicks` | monetization | 1 (M7) | mỗi lượt qua `/go/`; `id` là `click_id`; không lưu IP |
+| FeatureFlag | `feature_flags` | monetization | sau Wave 1 (E21) | không có dòng = tắt |
+| Merchant | `merchants` | monetization | E21 | trang `/tools/:slug`; `allowed_hosts` |
+| PartnerProgram | `partner_programs` | monetization | E21 | affiliate / referral / revenue_share / direct; điều khoản nullable, không mặc định |
+| Offer | `offers` | monetization | E21 | nhiều offer / subject (product, merchant, article) |
+| Conversion | `conversions` | monetization | E21 | chỉ từ admin/CSV/postback đã kiểm; `UNIQUE(program_id, external_ref)` |
+| RevenueEntry | `revenue_entries` | monetization | E21 | ledger append-only, theo từng loại tiền |
+| SponsoredCampaign | (thiết kế ở plan E23) | monetization | E23 | ô tách riêng (ADR-008) |
+
+## Nội dung (phụ lục monetization mục 4)
+
+| Thực thể | Bảng | Module | Wave | Ghi chú |
+|---|---|---|---|---|
+| Article | `articles` | content | 2 (E22) | guide / review / comparison / alternatives / best_list / category_guide; một locale mỗi bài |
+| ArticleLink | `article_links` | content | 2 (E22) | đồ thị liên kết nội bộ |
+| Lead | dùng `requests`, `request_invites` | matching | 1 (M6) | không bảng mới (Q7) |
