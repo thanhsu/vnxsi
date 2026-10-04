@@ -3,6 +3,7 @@ import { createApp } from "../../src/app.ts";
 import type { Locale } from "../../src/i18n/locales.ts";
 import { en, type MessageKey } from "../../src/i18n/messages/en.ts";
 import { t } from "../../src/i18n/t.ts";
+import type { Bindings } from "../../src/env.ts";
 import { signIn } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
@@ -347,8 +348,8 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
       const action = locale === "en" ? "/contact" : `/${locale.toLowerCase()}/contact`;
       expect(ask, path).toContain(`<form method="post" action="${action}"`);
       expect(ask, path).toContain('<input type="hidden" name="from" value="landing"');
-      // No Turnstile on the landing page (VNX-0709 AC2: no third-party request); /contact shows it when needed.
-      expect(ask, path).not.toContain("cf-turnstile");
+      // VNX-0710 F1: signed out, the #ask form carries the Turnstile widget, like /contact.
+      expect(ask, path).toContain('<div class="cf-turnstile" data-sitekey="fake-site-key"></div>');
       expect(ask, path).not.toContain('role="status"');
     }
   });
@@ -364,11 +365,37 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
     }
   });
 
-  it("VNX-0710 AC8: signed in, the #ask form has the account e-mail and no Turnstile", async () => {
+  it("VNX-0710 AC8: signed in, the #ask form has the account e-mail, no widget and no Turnstile script", async () => {
     const { cookie } = await signIn("landing-ask@vnx.si");
-    const main = mainOf(await (await get("/vi", cookie)).text());
+    const html = await (await get("/vi", cookie)).text();
+    const main = mainOf(html);
     const ask = main.slice(main.indexOf('<section id="ask"'));
     expect(ask).toMatch(/<input[^>]*name="email"[^>]*value="landing-ask@vnx.si"/);
     expect(ask).not.toContain("cf-turnstile");
+    expect(html).not.toContain("challenges.cloudflare.com");
+  });
+
+  it("VNX-0710 F1: signed out, the landing loads the Turnstile script once, in <head>", async () => {
+    for (const { path } of PAGES) {
+      const html = await (await get(path)).text();
+      const head = /<head>([\s\S]*)<\/head>/.exec(html)?.[1] ?? "";
+      expect(head, path).toContain('<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async="" defer=""></script>');
+      expect(html.match(/turnstile\/v0\/api\.js/g), path).toHaveLength(1);
+    }
+  });
+
+  it("VNX-0710 F1: without Turnstile configured, #ask shows the unavailable notice like /contact: no form, no script", async () => {
+    const env = { ...testEnv, TURNSTILE_DRIVER: undefined, TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET: undefined } as Bindings;
+    for (const { path, locale } of PAGES) {
+      const html = await (await createApp().request(new Request(`https://vnx.si${path}`), undefined, env)).text();
+      const main = mainOf(html);
+      const ask = main.slice(main.indexOf('<section id="ask"'));
+      expect(ask, path).not.toContain("<form");
+      expect(textOf(ask), path).toContain(t(locale, "contact.form.unavailable"));
+      expect(ask, path).toContain('href="mailto:contact@vnx.si"');
+      expect(html, path).not.toContain("challenges.cloudflare.com");
+      // The waitlist form does not depend on Turnstile.
+      expect(notifyOf(main), path).toContain("<form");
+    }
   });
 });

@@ -14,6 +14,33 @@ const text = async (path: string) => {
 };
 const headOf = (html: string) => /<head>([\s\S]*)<\/head>/.exec(html)?.[1] ?? "";
 
+/** The one third-party request a page may make (VNX-0710 F1, Owner 2026-10-05): the Turnstile widget script. */
+const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+
+/**
+ * Every URL in the page that would load something from another host (VNX-0709 AC2). An absolute URL in <head> must be
+ * on vnx.si; scripts, images, iframes, stylesheets, icons, preloads and preconnects must be same-origin paths. The one
+ * exception is a <script> whose src is exactly the Turnstile script.
+ */
+function thirdPartyRequests(html: string): string[] {
+  const bad: string[] = [];
+  const allowed = (tag: string, url: string) => tag === "script" && url === TURNSTILE_SCRIPT;
+  const sameOrigin = (url: string) => /^\/(?!\/)/.test(url);
+  // JSON-LD is data, not a request: its schema.org @context is skipped.
+  const head = headOf(html).replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "");
+  for (const m of head.matchAll(/<(\w+)\b[^>]*?\s(?:href|src|content)="(https?:\/\/[^"]*)"/g)) {
+    if (!allowed(m[1]!, m[2]!) && new URL(m[2]!).host !== "vnx.si") bad.push(m[2]!);
+  }
+  if (html.includes("fonts.googleapis.com")) bad.push("fonts.googleapis.com");
+  for (const m of html.matchAll(/<(script|img|iframe)[^>]*\ssrc="([^"]*)"/g)) {
+    if (!allowed(m[1]!, m[2]!) && !sameOrigin(m[2]!)) bad.push(m[2]!);
+  }
+  for (const m of html.matchAll(/<link rel="(?:stylesheet|preload|icon|preconnect|dns-prefetch)"[^>]*\shref="([^"]*)"/g)) {
+    if (!sameOrigin(m[1]!)) bad.push(m[1]!);
+  }
+  return [...new Set(bad)];
+}
+
 /** The body of every `@<rule> <prelude> { … }` block, braces matched. */
 function atBlocks(css: string, rule: string): { prelude: string; body: string }[] {
   const out: { prelude: string; body: string }[] = [];
@@ -114,20 +141,28 @@ describe("no third-party requests (VNX-0709 AC2)", () => {
     expect(css).not.toContain("fonts.gstatic.com");
   });
 
-  it("every absolute URL in <head> is on APP_ORIGIN, and every script, stylesheet, icon and preload is same-origin", async () => {
-    for (const path of ["/", "/vi/", "/products", "/zh-hant/terms", "/login", "/vi/no-such-page"]) {
+  it("every absolute URL in <head> is on APP_ORIGIN, and every script, stylesheet, icon and preload is same-origin, except the Turnstile script (VNX-0710 F1)", async () => {
+    for (const path of ["/", "/vi/", "/products", "/zh-hant/terms", "/login", "/vi/no-such-page", "/contact"]) {
       const html = await (await get(path)).text();
-      // JSON-LD is data, not a request: its schema.org @context is skipped.
-      const head = headOf(html).replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "");
-      for (const m of head.matchAll(/(?:href|src|content)="(https?:\/\/[^"]*)"/g)) {
-        expect(new URL(m[1]!).host, `${path} ${m[1]}`).toBe("vnx.si");
-      }
-      expect(html, path).not.toContain("fonts.googleapis.com");
-      for (const m of html.matchAll(/<(?:script|img|iframe)[^>]*\ssrc="([^"]*)"/g)) expect(m[1], path).toMatch(/^\/(?!\/)/);
-      for (const m of html.matchAll(/<link rel="(?:stylesheet|preload|icon|preconnect|dns-prefetch)"[^>]*\shref="([^"]*)"/g)) {
-        expect(m[1], path).toMatch(/^\/(?!\/)/);
-      }
+      expect(thirdPartyRequests(html), path).toEqual([]);
     }
+  });
+
+  it("allows exactly one external origin: the Turnstile script on challenges.cloudflare.com, and nothing else", () => {
+    const page = (head: string, body = "") => `<html><head>${head}</head><body>${body}</body></html>`;
+    expect(thirdPartyRequests(page(`<script src="${TURNSTILE_SCRIPT}" async="" defer=""></script>`))).toEqual([]);
+    for (const bad of [
+      '<script src="https://www.google.com/recaptcha/api.js"></script>',
+      '<script src="https://challenges.cloudflare.com.evil.example/turnstile/v0/api.js"></script>',
+      '<script src="https://challenges.cloudflare.com/other.js"></script>',
+      '<link rel="stylesheet" href="https://challenges.cloudflare.com/turnstile/v0/api.js">',
+      '<link rel="preconnect" href="https://fonts.gstatic.com">',
+      '<meta property="og:image" content="https://cdn.example.com/x.png">',
+    ]) {
+      expect(thirdPartyRequests(page(bad)), bad).not.toEqual([]);
+    }
+    expect(thirdPartyRequests(page("", '<img src="https://tracker.example/p.gif">'))).not.toEqual([]);
+    expect(thirdPartyRequests(page("", '<iframe src="https://challenges.cloudflare.com/x"></iframe>'))).not.toEqual([]);
   });
 });
 

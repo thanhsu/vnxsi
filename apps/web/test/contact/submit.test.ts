@@ -221,8 +221,29 @@ describe("POST /contact when the mail fails (plan VNX-0710 AC9)", () => {
   });
 });
 
-describe("POST /contact from the landing form, signed out (VNX-0710, landing has no Turnstile widget)", () => {
+describe("POST /contact from the landing form, signed out (VNX-0710 F1)", () => {
   beforeEach(() => clearOutbox());
+
+  it("the landing form carries the widget, and a valid token gets 303 to the landing #ask on the first send, in each locale", async () => {
+    for (const [prefix, home] of [
+      ["", "/"],
+      ["/vi", "/vi/"],
+      ["/zh-hans", "/zh-hans/"],
+      ["/zh-hant", "/zh-hant/"],
+    ] as const) {
+      // The form the visitor actually sees on the landing page has the widget.
+      const landing = await (await app().request(new Request(`https://vnx.si${home}`), undefined, testEnv)).text();
+      const ask = landing.slice(landing.indexOf('<section id="ask"'));
+      expect(ask, home).toContain('<div class="cf-turnstile" data-sitekey="fake-site-key"></div>');
+
+      const email = `landing-first${prefix.replace("/", "-")}@example.vn`;
+      const res = await post(`${prefix}/contact`, form(email, { from: "landing" }));
+      expect(res.status, prefix).toBe(303);
+      expect(res.headers.get("location"), prefix).toBe(`${home}?asked=1#ask`);
+      expect(await rowsFor(email), prefix).toHaveLength(1);
+    }
+    expect(outbox).toHaveLength(4);
+  });
 
   it("without a Turnstile token: 400 on /contact with the values kept, the widget shown and nothing stored", async () => {
     const fields = form("landing-nocaptcha@example.vn", { from: "landing" });
