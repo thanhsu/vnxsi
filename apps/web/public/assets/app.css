@@ -67,3 +67,5 @@ fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 12
 .table-wrap { overflow-x: auto; }
 table.data { border-collapse: collapse; width: 100%; background: var(--surface); }
 table.data th, table.data td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.badge-published { border-color: var(--good); color: var(--good); }
+.subnav a[aria-current="step"] { background: var(--ink); color: var(--surface); }

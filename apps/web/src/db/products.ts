@@ -1,4 +1,5 @@
 import type { Product, ProductStatus } from "../domain/product.ts";
+import type { ProductField, ProductFields } from "../domain/product-input.ts";
 import { slugify, slugWithSuffix } from "../domain/slug.ts";
 import { ulid } from "../lib/ulid.ts";
 
@@ -135,4 +136,59 @@ export async function setProductStatus(
     .bind(input.id, input.from, input.to, input.reviewNote, input.now)
     .first<ProductRow>();
   return row ? toProduct(row) : null;
+}
+
+/** Fixed column names; SQL is built only from these constants, never from input. */
+const COLUMN: Record<ProductField, string> = {
+  name: "name",
+  slug: "slug",
+  tagline: "tagline",
+  category: "category",
+  deliveryModel: "delivery_model",
+  primaryLang: "primary_lang",
+  tags: "tags",
+  description: "description",
+  problem: "problem",
+  targetUsers: "target_users",
+  features: "features",
+  techStack: "tech_stack",
+  demoUrl: "demo_url",
+  websiteUrl: "website_url",
+  customizable: "customizable",
+  customizationNotes: "customization_notes",
+  license: "license",
+  supportPolicy: "support_policy",
+};
+
+function encode(value: unknown): string | number | null {
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? 1 : 0;
+  return value as string | number | null;
+}
+
+export type UpdateFieldsResult = "ok" | "stale" | "slug_taken";
+
+/**
+ * Writes the given fields while the product is still owned by `builderId` and in `expectedStatus`.
+ * `markEdited` stamps edited_after_publish_at (spec §7.2: edits after the first publish go live and are flagged).
+ */
+export async function updateProductFields(
+  db: D1Database,
+  input: { productId: string; builderId: string; expectedStatus: Product["status"]; fields: Partial<ProductFields>; now: string; markEdited: boolean },
+): Promise<UpdateFieldsResult> {
+  const entries = Object.entries(input.fields).filter(([key]) => key in COLUMN) as [ProductField, unknown][];
+  const params: (string | number | null)[] = [input.productId, input.builderId, input.expectedStatus, input.now, input.markEdited ? 1 : 0];
+  const sets = entries.map(([key, value]) => {
+    params.push(encode(value));
+    return `${COLUMN[key]} = ?${params.length}`;
+  });
+  const sql = `UPDATE products SET ${[...sets, "updated_at = ?4", "edited_after_publish_at = CASE WHEN ?5 = 1 THEN ?4 ELSE edited_after_publish_at END"].join(", ")}
+    WHERE id = ?1 AND builder_id = ?2 AND status = ?3`;
+  try {
+    const res = await db.prepare(sql).bind(...params).run();
+    return res.meta.changes === 1 ? "ok" : "stale";
+  } catch (err) {
+    if (String(err).includes("products.slug")) return "slug_taken";
+    throw err;
+  }
 }

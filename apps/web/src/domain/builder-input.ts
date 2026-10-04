@@ -80,7 +80,7 @@ export function isHttpsUrl(value: string): boolean {
 }
 
 /** Splits on commas, trims, drops empties and case-insensitive duplicates. */
-function csv(value: string): string[] {
+export function splitCsv(value: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const part of value.split(",")) {
@@ -103,8 +103,8 @@ const Schema = z.object({
   bio: z.string().trim().min(1).max(2000),
   country: z.string().trim().toUpperCase().refine(isCountryCode),
   websiteUrl: z.string().trim().max(500).refine((v) => v === "" || isHttpsUrl(v)),
-  skills: z.string().max(1000).transform(csv).pipe(textList(1)),
-  aiTools: z.string().max(1000).transform(csv).pipe(textList(0)),
+  skills: z.string().max(1000).transform(splitCsv).pipe(textList(1)),
+  aiTools: z.string().max(1000).transform(splitCsv).pipe(textList(0)),
   workLanguages: z.array(z.enum(WORK_LANGUAGES)).max(3),
   availability: z.enum(AVAILABILITIES),
   hourlyRate: z.string().trim().regex(/^(|[1-9]\d{0,4})$/).refine((v) => v === "" || Number(v) <= 10000),

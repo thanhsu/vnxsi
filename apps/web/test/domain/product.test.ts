@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canChangeSlug, canEditProduct, PRODUCT_STATUSES, submitGaps, transition, type Product, type ProductAction } from "../../src/domain/product.ts";
+import { canChangeSlug, canEditProduct, editLock, PRODUCT_STATUSES, submitGaps, transition, type Product, type ProductAction } from "../../src/domain/product.ts";
 import { slugify, slugWithSuffix, SLUG_RE } from "../../src/domain/slug.ts";
 
 const VALID: [string, ProductAction, "owner" | "admin", string][] = [
@@ -123,5 +123,15 @@ describe("slugs", () => {
 
   it.each(["ab", "-abc", "abc-", "Abc", "a_bc", "a".repeat(61)])("rejects slug %j", (slug) => {
     expect(SLUG_RE.test(slug)).toBe(false);
+  });
+});
+
+describe("editLock", () => {
+  it("explains why the editor is read-only", () => {
+    expect(editLock("draft", "approved")).toBeNull();
+    expect(editLock("published", "pending")).toBeNull();
+    expect(editLock("in_review", "approved")).toBe("in_review");
+    expect(editLock("suspended", "approved")).toBe("suspended");
+    expect(editLock("draft", "suspended")).toBe("builder_suspended");
   });
 });

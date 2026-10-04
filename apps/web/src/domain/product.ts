@@ -152,3 +152,13 @@ export function submitGaps(input: { product: Product; builderStatus: BuilderStat
   if (p.deliveryModel === "source" && !p.license) gaps.push("license");
   return gaps;
 }
+
+export type EditLock = "in_review" | "suspended" | "builder_suspended";
+
+/** Why the editor is read-only, or null when the builder may edit (Owner decision 2026-10-04: in_review is locked). */
+export function editLock(status: ProductStatus, builderStatus: BuilderStatus): EditLock | null {
+  if (builderStatus === "suspended") return "builder_suspended";
+  if (status === "in_review") return "in_review";
+  if (status === "suspended") return "suspended";
+  return null;
+}
