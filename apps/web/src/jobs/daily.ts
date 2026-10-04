@@ -58,7 +58,11 @@ export async function runDaily(env: Bindings, now: Date): Promise<DailySummary> 
   await step("alert", async () => {
     const late = await listInquiriesToAlert(env.DB, before(now, ALERT_AFTER_MS));
     const admins = [...adminEmails(env)];
-    if (late.length === 0 || admins.length === 0) return;
+    if (late.length === 0) return;
+    if (admins.length === 0) {
+      console.warn(JSON.stringify({ event: "jobs.daily.no_admins", overdue: late.length }));
+      return;
+    }
     const mail = inquiryAdminAlertEmail(
       late.map((i) => ({ id: i.inquiry.id, builderHandle: i.builderHandle, productName: i.productName, openedAt: i.inquiry.openedAt ?? i.inquiry.createdAt })),
       new URL("/admin/inquiries?status=open", env.APP_ORIGIN).toString(),

@@ -1,13 +1,17 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession } from "../../src/auth/sessions.ts";
+import { sha256Hex } from "../../src/auth/crypto.ts";
 import { createLoginToken } from "../../src/auth/tokens.ts";
+import { writeAudit } from "../../src/db/audit.ts";
+import { createInvite } from "../../src/db/invites.ts";
+import { grantBadge } from "../../src/db/verifications.ts";
 import { findInquiryById, listMessages } from "../../src/db/inquiries.ts";
 import { createUser, findUserByEmail } from "../../src/db/users.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
 import { hitRateLimit } from "../../src/http/rate-limit.ts";
 import { runDaily } from "../../src/jobs/daily.ts";
-import { makeInquiry } from "../fixtures.ts";
+import { makeBuilder, makeInquiry, makeLiveProduct } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
 const NOW = new Date("2026-10-10T01:00:00.000Z");
@@ -88,6 +92,54 @@ describe("daily job (spec §8.4)", () => {
     for (const email of ["dj-keep1@vnx.si", "dj-keep2@vnx.si", withInquiry.client.email, "dj-keep4@vnx.si"]) expect(await findUserByEmail(testEnv.DB, email), email).not.toBeNull();
     expect(await findUserByEmail(testEnv.DB, "dj-ghost3@vnx.si")).toBeNull();
     expect(recent.id && ghost.id).toBeTruthy();
+  });
+
+  it("does not remind a suspended builder", async () => {
+    const due = await makeInquiry({ tag: "dj-susp", status: "open", now: daysAgo(4) });
+    await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(due.builder.userId).run();
+    clearOutbox();
+    await runDaily(testEnv, NOW);
+    expect(sentTo("dj-susp-b@vnx.si").filter((m) => m.subject.includes("waiting"))).toEqual([]);
+    expect((await findInquiryById(testEnv.DB, due.inquiry.id))?.builderRemindedAt).toBeNull();
+  });
+
+  it("warns (without addresses) when inquiries are overdue and no admin e-mail is configured", async () => {
+    await makeInquiry({ tag: "dj-noadm", status: "open", now: daysAgo(9) });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await runDaily({ ...testEnv, ADMIN_EMAILS: "" } as Bindings, NOW);
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.includes("jobs.daily.no_admins"));
+      expect(line).toBeDefined();
+      const parsed = JSON.parse(line!) as { event: string; overdue: number };
+      expect(parsed.event).toBe("jobs.daily.no_admins");
+      expect(parsed.overdue).toBeGreaterThanOrEqual(1);
+      expect(line).not.toContain("@");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("keeps a suspended never-signed-in account", async () => {
+    const spam = await createUser(testEnv.DB, { email: "dj-suspended-ghost@vnx.si", locale: "en", now: daysAgo(5) });
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(spam.id).run();
+    await runDaily(testEnv, NOW);
+    expect(await findUserByEmail(testEnv.DB, "dj-suspended-ghost@vnx.si")).not.toBeNull();
+  });
+
+  it("keeps old never-signed-in accounts that are a builder, an invite creator, a badge verifier or an audit actor", async () => {
+    const iso = daysAgo(5);
+    const age = (id: string) => testEnv.DB.prepare("UPDATE users SET created_at = ?2, last_login_at = NULL WHERE id = ?1").bind(id, iso).run();
+    const builder = await makeBuilder("dj-k-builder@vnx.si", "dj-k-builder", "approved");
+    const inviter = await createUser(testEnv.DB, { email: "dj-k-inviter@vnx.si", locale: "en", now: iso });
+    await createInvite(testEnv.DB, { codeHash: await sha256Hex("dj-k-invite"), createdBy: inviter.id, maxUses: 1, expiresAt: daysAgo(-30), note: null, now: iso });
+    const verifier = await createUser(testEnv.DB, { email: "dj-k-verifier@vnx.si", locale: "en", now: iso });
+    const { product } = await makeLiveProduct("dj-k-owner@vnx.si", "dj-k-owner", "Dj Keep Kit");
+    await grantBadge(testEnv.DB, { productId: product.id, kind: "demo_verified", verifiedBy: verifier.id, evidence: "checked", now: iso });
+    const actor = await createUser(testEnv.DB, { email: "dj-k-actor@vnx.si", locale: "en", now: iso });
+    await writeAudit(testEnv.DB, { actorUserId: actor.id, action: "test.keep", entity: "user", entityId: actor.id, now: iso });
+    for (const id of [builder.userId, inviter.id, verifier.id, actor.id]) await age(id);
+    await runDaily(testEnv, NOW);
+    for (const email of ["dj-k-builder@vnx.si", "dj-k-inviter@vnx.si", "dj-k-verifier@vnx.si", "dj-k-actor@vnx.si"]) expect(await findUserByEmail(testEnv.DB, email), email).not.toBeNull();
   });
 
   it("cleans expired tokens, sessions and old rate-limit windows", async () => {

@@ -80,7 +80,7 @@ export async function deleteGhostUsers(db: D1Database, cutoff: string): Promise<
   const res = await db
     .prepare(
       `DELETE FROM users
-       WHERE created_at < ?1 AND last_login_at IS NULL AND is_admin = 0
+       WHERE created_at < ?1 AND last_login_at IS NULL AND is_admin = 0 AND status = 'active'
          AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = users.id)
          AND NOT EXISTS (SELECT 1 FROM builders b WHERE b.user_id = users.id)
          AND NOT EXISTS (SELECT 1 FROM inquiries i WHERE i.client_user_id = users.id)

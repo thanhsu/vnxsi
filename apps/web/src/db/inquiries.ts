@@ -308,7 +308,7 @@ export async function listUnnotifiedMessages(db: D1Database, limit = 100): Promi
 /** Spec §8.4: open (unanswered) inquiries opened before `openedBefore` whose builder has not been reminded. */
 export async function listInquiriesToRemind(db: D1Database, openedBefore: string, limit = 200): Promise<InquirySummary[]> {
   const { results } = await db
-    .prepare(`${SUMMARY} WHERE i.status = 'open' AND i.opened_at < ?1 AND i.builder_reminded_at IS NULL ORDER BY i.opened_at, i.id LIMIT ?2`)
+    .prepare(`${SUMMARY} WHERE i.status = 'open' AND b.status = 'approved' AND i.opened_at < ?1 AND i.builder_reminded_at IS NULL ORDER BY i.opened_at, i.id LIMIT ?2`)
     .bind(openedBefore, limit)
     .all<SummaryRow>();
   return results.map(toSummary);
