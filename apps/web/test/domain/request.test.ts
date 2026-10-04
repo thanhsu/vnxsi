@@ -227,4 +227,26 @@ describe("suggestBuilders (spec §8.10)", () => {
     expect(top?.score).toBe(0);
     expect(top?.reasons).toEqual([]);
   });
+
+  describe("skill matching by whole word (M6 review F2)", () => {
+    const match = (skill: string, text: string) => {
+      const [top] = suggestBuilders({ title: text, description: "", languages: [] }, [candidate({ handle: "x", skills: [skill] })]);
+      return top?.reasons.some((r) => r.kind === "skill") ?? false;
+    };
+    it("does not match inside a longer Latin word", () => {
+      expect(match("Go", "Google Analytics dashboard")).toBe(false);
+      expect(match("Go", "arsugone")).toBe(false);
+      expect(match("AI", "we maintain the site")).toBe(false);
+    });
+    it("matches a whole word, case-insensitively, next to punctuation", () => {
+      expect(match("AI", "AI agents")).toBe(true);
+      expect(match("React", "react, node")).toBe(true);
+      expect(match("Go", "Backend in (Go)")).toBe(true);
+      expect(match("C++", "a C++ engine")).toBe(true);
+    });
+    it("keeps substring matching for CJK skills", () => {
+      expect(match("预约", "我们需要一个预约系统")).toBe(true);
+      expect(match("予約", "予約アプリを作りたい")).toBe(true);
+    });
+  });
 });

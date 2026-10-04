@@ -328,6 +328,18 @@ export interface Suggestion {
   reasons: SuggestionReason[];
 }
 
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/**
+ * §8.10 "appears in": a Latin-script skill must stand as a whole word (not letter or digit on either side), so "Go" does not
+ * match "Google" nor "AI" "maintain"; a skill with CJK characters has no word spaces and keeps substring matching. Both inputs lower-case.
+ */
+function mentions(haystack: string, needle: string): boolean {
+  if (CJK.test(needle)) return haystack.includes(needle);
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(haystack);
+}
+
 const POINTS = (r: SuggestionReason): number => (r.kind === "category" ? 3 : r.kind === "expired" ? -r.count : 1);
 
 /**
@@ -343,7 +355,7 @@ export function suggestBuilders(request: Pick<ClientRequest, "title" | "descript
       const matched = new Set<string>();
       for (const skill of candidate.skills) {
         const needle = skill.trim().toLowerCase();
-        if (!needle || matched.has(needle) || matched.size >= SKILL_POINTS_MAX || !haystack.includes(needle)) continue;
+        if (!needle || matched.has(needle) || matched.size >= SKILL_POINTS_MAX || !mentions(haystack, needle)) continue;
         matched.add(needle);
         reasons.push({ kind: "skill", skill: skill.trim() });
       }
