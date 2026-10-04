@@ -37,12 +37,12 @@ Một Worker duy nhất, không có server khác, không có bước build ngoà
 | `db/` | Truy vấn D1 theo bảng; trả kiểu domain; **không quyết định chuyển trạng thái** | domain (kiểu) |
 | `auth/` | Token magic link, session, middleware `requireUser`/`requireBuilder`/`requireAdmin` | db, http |
 | `http/` | Middleware chung: request id, locale, origin check, rate limit, cookie helpers | db |
-| `email/` | Interface `Mailer`, bản Resend, bản giả cho test, template theo locale | i18n |
+| `email/` | Interface `Mailer`, bản Resend, bản giả cho test, template theo locale | i18n; `domain` chỉ để lấy kiểu (`import type`) |
 | `i18n/` | 4 file locale, `t()`, tiện ích URL theo locale, hreflang | — |
 | `media/` | Upload/đọc R2, kiểm tra loại file | — |
 | `stats/` | Tính `public_stats`, ghi `product_daily_stats` (M7) | db |
 | `notify/` | Thông báo theo sự kiện (M5): đọc db, dựng template, gửi qua `Mailer`, ghi `notified_at` / số lần thử; dùng chung cho routes và jobs | db, domain, email, i18n |
-| `jobs/` | Các job cron, gọi từ `scheduled` | db, email, stats |
+| `jobs/` | Các job cron, gọi từ `scheduled` | db, domain, email, i18n, notify, stats; `auth/` và `http/rate-limit` cho hàm dọn bảng do chúng sở hữu |
 | `monetization/` | Route `/go/`, cờ tính năng, provider port partner (`generic_template`, `manual`), disclosure (ADR-007). Bảng qua `db/clicks.ts`, `db/flags.ts`, `db/merchants.ts`, `db/programs.ts`, `db/offers.ts`, `db/conversions.ts`, `db/revenue.ts` | db, domain, views, i18n |
 | `content/` | Renderer markdown giới hạn, ngưỡng index (phụ lục monetization mục 4). Bảng qua `db/articles.ts` | db, domain |
 
