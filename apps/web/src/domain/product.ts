@@ -162,3 +162,13 @@ export function editLock(status: ProductStatus, builderStatus: BuilderStatus): E
   if (status === "suspended") return "suspended";
   return null;
 }
+
+/** A product with the builder fields admin screens and e-mails need. */
+export interface ProductWithBuilder {
+  product: Product;
+  builderHandle: string;
+  builderName: string;
+  builderEmail: string;
+  builderLocale: string;
+  builderStatus: BuilderStatus;
+}

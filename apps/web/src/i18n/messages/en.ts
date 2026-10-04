@@ -315,6 +315,23 @@ export const en = {
   "editor.action.archive": "Archive",
   "hub.products.title": "Products",
   "hub.products.manage": "Manage products",
+  "admin.nav.products": "Products",
+  "admin.products.empty": "No products with this status.",
+  "admin.products.updated": "Last change",
+  "admin.products.badges": "Badges",
+  "admin.products.note": "Note for the builder (required)",
+  "admin.products.requestChanges": "Request changes",
+  "admin.products.error.note": "Enter a note (up to 1000 characters).",
+  "admin.products.mailFailed": "Saved, but the email to the builder couldn't be sent.",
+  "badge.listed": "Listed",
+  "badge.demo_verified": "Demo verified",
+  "badge.in_production": "In production",
+  "email.productApproved.subject": "Your product on VNX.SI is approved",
+  "email.productApproved.body": "Good news: {name} has been approved and is now public:",
+  "email.productApproved.cta": "Manage your products in Builder Hub:",
+  "email.productChanges.subject": "Changes needed on your VNX.SI product",
+  "email.productChanges.body": "An admin reviewed {name} and asked for these changes:",
+  "email.productChanges.cta": "Edit the product and submit it again:",
 } as const;
 
 export type MessageKey = keyof typeof en;

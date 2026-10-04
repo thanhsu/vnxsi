@@ -1,4 +1,5 @@
-import type { Product, ProductStatus } from "../domain/product.ts";
+import type { BuilderStatus } from "../domain/builder.ts";
+import type { Product, ProductStatus, ProductWithBuilder } from "../domain/product.ts";
 import type { ProductField, ProductFields } from "../domain/product-input.ts";
 import { slugify, slugWithSuffix } from "../domain/slug.ts";
 import { ulid } from "../lib/ulid.ts";
@@ -200,4 +201,24 @@ export async function countBuilderProductsByStatus(db: D1Database, builderId: st
     .bind(builderId)
     .all<{ status: ProductStatus; n: number }>();
   return Object.fromEntries(results.map((r) => [r.status, r.n]));
+}
+
+type WithBuilderRow = ProductRow & { builder_handle: string; builder_name: string; builder_email: string; builder_locale: string; builder_status: BuilderStatus };
+
+const WITH_BUILDER = `SELECT p.*, b.handle AS builder_handle, b.name AS builder_name, b.status AS builder_status, u.email AS builder_email, u.locale AS builder_locale
+  FROM products p JOIN builders b ON b.user_id = p.builder_id JOIN users u ON u.id = p.builder_id`;
+
+function toWithBuilder(r: WithBuilderRow): ProductWithBuilder {
+  return { product: toProduct(r), builderHandle: r.builder_handle, builderName: r.builder_name, builderEmail: r.builder_email, builderLocale: r.builder_locale, builderStatus: r.builder_status };
+}
+
+export async function findProductWithBuilder(db: D1Database, id: string): Promise<ProductWithBuilder | null> {
+  const row = await db.prepare(`${WITH_BUILDER} WHERE p.id = ?1`).bind(id).first<WithBuilderRow>();
+  return row ? toWithBuilder(row) : null;
+}
+
+/** Oldest change first, so the review queue is first come, first served. */
+export async function listProductsByStatus(db: D1Database, status: ProductStatus, limit = 200): Promise<ProductWithBuilder[]> {
+  const { results } = await db.prepare(`${WITH_BUILDER} WHERE p.status = ?1 ORDER BY p.updated_at, p.id LIMIT ?2`).bind(status, limit).all<WithBuilderRow>();
+  return results.map(toWithBuilder);
 }
