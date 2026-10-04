@@ -6,7 +6,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
-- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong** trên nhánh `feat/m3-product` (chưa push, chưa merge): 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Tiếp theo: Owner quyết định merge/push và 3 câu hỏi nghiệp vụ dưới đây, rồi viết plan M4.
+- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). Tiếp theo: plan M4.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
 
@@ -49,6 +49,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | VNX-0306 `/p/:slug` | ✅ | 96511bc | Open Graph, JSON-LD đã escape |
 | Sửa sau review toàn nhánh M3 | ✅ | 45b07a1 | thu hồi Demo verified và duyệt + `listed` chạy trong một `db.batch`; admin thấy mọi trường công khai |
 | VNX-0307 Bucket R2 | ⏳ | — | chờ Owner bật R2 |
+| Merge M3 vào `main` | ✅ | fe87caa | merge commit, đã push |
 
 ## Điều kiện trước khi deploy `main`
 
@@ -61,6 +62,8 @@ Theo thứ tự (cũng ghi trong `apps/web/wrangler.jsonc`):
 Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để sửa nhanh landing: `/login` sẽ lỗi.
 
 ## Quyết định phát sinh
+
+- **Owner 2026-10-04 (sau review M3):** (1) product đang công khai được phép rơi xuống dưới điều kiện submit (giữ như hiện tại; admin theo dõi qua "Mới chỉnh sửa"); (2) `published_at` chỉ đặt khi duyệt, ẩn/hiện lại hay mở khóa không đẩy product lên "mới nhất"; (3) `robots.txt` cho phép `/media/products/` để og:image hiện khi chia sẻ link.
 
 - **Owner 2026-10-04 (M3):** product `in_review` bị khóa, có nút Rút lại (`withdraw` → draft); `primary_lang` gồm `en`, `vi`, `zh-Hans`, `zh-Hant`; Claude tạo bucket R2 sau khi Owner bật R2 (lần thử 2026-10-04 lỗi 10042: tài khoản chưa bật R2).
 
@@ -81,10 +84,7 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 
 ## Nghĩa vụ để lại
 
-- **Owner quyết định (từ review M3):**
-  1. Product đang công khai có được rơi xuống dưới điều kiện submit không (xóa hết ảnh / tier, để trống trường bắt buộc, hiện lại mà không kiểm)? Spec chưa nói. Hiện tại: được.
-  2. `published_at` có được làm mới khi hiện lại / mở khóa không? Hiện tại: có, nên builder có thể ẩn rồi hiện để lên đầu "mới nhất". Spec 7.2 chỉ nói đặt khi duyệt. Cần chốt trước M4.
-  3. M4: `robots.txt` chặn `/media` (spec 8.8) sẽ làm crawler bỏ ảnh og:image; có mở riêng `/media/products/` không?
+- **M4 (từ quyết định Owner 2026-10-04):** sửa `setProductStatus` để `published_at` chỉ đặt khi admin duyệt (`approve`), không đổi khi `relist` / `unsuspend`; `robots.txt` chặn `/media` nhưng `Allow: /media/products/`.
 
 - **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
 
