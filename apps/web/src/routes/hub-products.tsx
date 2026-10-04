@@ -2,18 +2,22 @@ import type { Context, Hono } from "hono";
 import { requireBuilder } from "../auth/middleware.ts";
 import { writeAudit } from "../db/audit.ts";
 import { listMedia } from "../db/media.ts";
+import { listTiers, replaceTiers } from "../db/pricing.ts";
 import { createProductDraft, findOwnedProduct, listBuilderProducts, updateProductFields } from "../db/products.ts";
 import { revokeBadge } from "../db/verifications.ts";
 import { canEditProfile } from "../domain/builder.ts";
 import { isTextStep, parseProductName, parseStep, stepValuesFromBody, stepValuesFromProduct, type FieldErrorCode, type StepErrors, type StepValues, type TextStep } from "../domain/product-input.ts";
+import { parseTiers, tierValuesFromBody, tierValuesFromTiers, type TierErrors, type TierValues } from "../domain/pricing-input.ts";
 import { canChangeSlug, editLock, type Product } from "../domain/product.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
 import { errorResponse } from "../views/error-response.tsx";
+import { EditorLayout } from "../views/hub/EditorLayout.tsx";
 import { EditorPage } from "../views/hub/EditorPage.tsx";
 import type { MediaErrorCode } from "../views/hub/MediaSection.tsx";
+import { PricingForm } from "../views/hub/PricingForm.tsx";
 import { ProductsPage } from "../views/hub/ProductsPage.tsx";
 import { page } from "../views/render.ts";
 
@@ -72,6 +76,17 @@ export async function stepPage(
   );
 }
 
+function pricingPage(c: Context<AppEnv>, product: Product, values: TierValues, errors: TierErrors, status: 200 | 400 = 200) {
+  const lock = editLock(product.status, c.get("builder").status);
+  return page(
+    c,
+    <EditorLayout locale={c.get("locale")} origin={requestOrigin(c)} product={product} step="pricing" lock={lock} saved={c.req.query("saved") === "1"}>
+      {lock ? null : <PricingForm locale={c.get("locale")} action={editorPath(c, product.id, "pricing")} values={values} errors={errors} />}
+    </EditorLayout>,
+    status,
+  );
+}
+
 export function registerProductEditorRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/hub/products", requireBuilder, (c) => listPage(c, "", null));
 
@@ -91,6 +106,32 @@ export function registerProductEditorRoutes(app: Hono<AppEnv>) {
     const product = await ownedProduct(c);
     if (!product) return errorResponse(c, "notFound", 404);
     return c.redirect(editorPath(c, product.id, "product"), 303);
+  });
+
+  onLocalized(app, "get", "/hub/products/:id/edit/pricing", requireBuilder, async (c) => {
+    const product = await ownedProduct(c);
+    if (!product) return errorResponse(c, "notFound", 404);
+    return pricingPage(c, product, tierValuesFromTiers(await listTiers(c.env.DB, product.id)), {});
+  });
+
+  onLocalized(app, "post", "/hub/products/:id/edit/pricing", requireBuilder, async (c) => {
+    const product = await ownedProduct(c);
+    if (!product) return errorResponse(c, "notFound", 404);
+    if (editLock(product.status, c.get("builder").status)) return errorResponse(c, "conflict", 409);
+    const values = tierValuesFromBody(await c.req.parseBody());
+    const parsed = parseTiers(values);
+    if (!parsed.ok) return pricingPage(c, product, values, parsed.errors, 400);
+
+    const now = new Date().toISOString();
+    const markEdited = product.firstPublishedAt !== null;
+    // Compare-and-set on status first, so a product that just went to review keeps the tiers it was submitted with.
+    const touched = await updateProductFields(c.env.DB, { productId: product.id, builderId: product.builderId, expectedStatus: product.status, fields: {}, now, markEdited });
+    if (touched !== "ok") return errorResponse(c, "conflict", 409);
+    await replaceTiers(c.env.DB, { productId: product.id, tiers: parsed.tiers, now });
+    if (markEdited) {
+      await writeAudit(c.env.DB, { actorUserId: product.builderId, action: "product.edit", entity: "product", entityId: product.id, data: { step: "pricing" }, now });
+    }
+    return c.redirect(editorPath(c, product.id, "pricing", "?saved=1"), 303);
   });
 
   onLocalized(app, "get", "/hub/products/:id/edit/:step", requireBuilder, async (c) => {

@@ -280,6 +280,19 @@ export const en = {
   "media.error.size": "This image is larger than 2 MB.",
   "media.error.full": "You already have 8 images. Delete one to add another.",
   "media.error.alt": "Keep the description under 150 characters.",
+  "pricing.intro": "Add up to 5 pricing tiers. Leave a tier empty to remove it. Prices are in USD.",
+  "pricing.tier": "Tier {n}",
+  "pricing.name": "Tier name",
+  "pricing.billing": "Billing",
+  "pricing.price": "Price (USD)",
+  "pricing.description": "What's included",
+  "pricing.billing.one_time": "One-time",
+  "pricing.billing.monthly": "Monthly",
+  "pricing.billing.yearly": "Yearly",
+  "pricing.billing.contact": "Contact for price",
+  "pricing.error.too_long": "This text is too long.",
+  "pricing.error.price": "Enter a price from 0 to 100000 USD, with at most 2 decimals.",
+  "pricing.error.contact": "Leave the price empty for \"Contact for price\".",
 } as const;
 
 export type MessageKey = keyof typeof en;

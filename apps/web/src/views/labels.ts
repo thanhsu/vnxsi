@@ -1,6 +1,6 @@
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
 import type { UserStatus } from "../domain/user.ts";
-import type { Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
+import type { Billing, Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
 import type { ProductStep } from "../domain/product-input.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 
@@ -92,4 +92,11 @@ export const STEP_KEY: Record<ProductStep, MessageKey> = {
   customization: "product.step.customization",
   license: "product.step.license",
   support: "product.step.support",
+};
+
+export const BILLING_KEY: Record<Billing, MessageKey> = {
+  one_time: "pricing.billing.one_time",
+  monthly: "pricing.billing.monthly",
+  yearly: "pricing.billing.yearly",
+  contact: "pricing.billing.contact",
 };
