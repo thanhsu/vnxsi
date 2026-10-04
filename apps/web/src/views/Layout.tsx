@@ -73,7 +73,14 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
           {children}
         </main>
         <footer class="site-footer">
-          <div class="container">{tr("site.tagline")}</div>
+          <div class="container">
+            <p class="tagline">{tr("site.tagline")}</p>
+            <nav class="footer-nav" aria-label={tr("footer.nav")}>
+              <a href={localizedPath(locale, "/terms")}>{tr("footer.terms")}</a>
+              <a href={localizedPath(locale, "/privacy")}>{tr("footer.privacy")}</a>
+              <a href={localizedPath(locale, "/media-kit")}>{tr("footer.mediaKit")}</a>
+            </nav>
+          </div>
         </footer>
       </body>
     </html>

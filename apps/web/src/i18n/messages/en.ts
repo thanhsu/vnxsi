@@ -7,6 +7,8 @@ export const en = {
   "nav.language": "Language",
   "footer.terms": "Terms",
   "footer.privacy": "Privacy",
+  "footer.mediaKit": "Media kit",
+  "footer.nav": "About this site",
   "error.notFound.title": "Page not found",
   "error.notFound.body": "The page you are looking for does not exist or has moved.",
   "error.forbidden.title": "You can't open this page",
@@ -424,6 +426,14 @@ export const en = {
   "landing.form.error.rateLimited": "Too many attempts. Please try again in an hour.",
   "landing.principle.title": "Rankings are never for sale.",
   "landing.principle.body": "Products are ordered by what we can verify, not by who pays.",
+  "legal.updated": "Last updated: {date}",
+  "legal.englishOnly": "This page is available in English only.",
+  "legal.terms.title": "Terms of Service",
+  "legal.terms.description": "The rules for using VNX.SI, the marketplace for AI-built products.",
+  "legal.privacy.title": "Privacy Policy",
+  "legal.privacy.description": "What personal data VNX.SI collects, why, who sees it, and your rights.",
+  "legal.mediaKit.title": "Media kit",
+  "legal.mediaKit.description": "About VNX.SI, who it is for, how we work with partners, and brand guidelines.",
 } as const;
 
 export type MessageKey = keyof typeof en;

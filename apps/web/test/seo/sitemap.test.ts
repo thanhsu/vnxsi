@@ -44,6 +44,24 @@ describe("/sitemap.xml (spec §8.8)", () => {
     expect(xml).not.toContain("<loc>https://vnx.si/vi</loc>");
   });
 
+  it("lists /terms, /privacy and /media-kit once per locale with hreflang alternates (VNX-0705a AC7)", async () => {
+    const { xml } = await fetchSitemap();
+    for (const rest of ["/terms", "/privacy", "/media-kit"]) {
+      const alternates = [
+        `<xhtml:link rel="alternate" hreflang="en" href="https://vnx.si${rest}"/>`,
+        `<xhtml:link rel="alternate" hreflang="vi" href="https://vnx.si/vi${rest}"/>`,
+        `<xhtml:link rel="alternate" hreflang="zh-Hans" href="https://vnx.si/zh-hans${rest}"/>`,
+        `<xhtml:link rel="alternate" hreflang="zh-Hant" href="https://vnx.si/zh-hant${rest}"/>`,
+        `<xhtml:link rel="alternate" hreflang="x-default" href="https://vnx.si${rest}"/>`,
+      ].join("");
+      for (const prefix of ["", "/vi", "/zh-hans", "/zh-hant"]) {
+        const loc = `https://vnx.si${prefix}${rest}`;
+        expect(xml, loc).toContain(`<url><loc>${loc}</loc>${alternates}</url>`);
+        expect(xml.split(`<loc>${loc}</loc>`), loc).toHaveLength(2);
+      }
+    }
+  });
+
   it("leaves out everything that is not public", async () => {
     const { product: draft } = await makeDraft("sm-draft@vnx.si", "sm-draft", "Sitemap Draft");
     const unlisted = await makeLiveProduct("sm-unl@vnx.si", "sm-unl", "Sitemap Unlisted");

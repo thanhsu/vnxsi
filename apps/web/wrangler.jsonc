@@ -30,7 +30,9 @@
     { "pattern": "vnx.si", "custom_domain": true },
     { "pattern": "www.vnx.si", "custom_domain": true }
   ],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Daily job at 01:00 UTC (spec §8.4): src/jobs/daily.ts. Registered on the next `npm run deploy`.
+  "triggers": { "crons": ["0 1 * * *"] }
   // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
   //
