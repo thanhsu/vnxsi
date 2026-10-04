@@ -272,6 +272,15 @@ export function inviteBuildersBatch(
   };
 }
 
+/** A client's requests that are still open (submitted or matching): what suspending the client ends. Oldest first. */
+export async function listOpenClientRequests(db: D1Database, clientUserId: string): Promise<{ id: string; status: Extract<RequestStatus, "submitted" | "matching"> }[]> {
+  const { results } = await db
+    .prepare("SELECT id, status FROM requests WHERE client_user_id = ?1 AND status IN ('submitted', 'matching') ORDER BY created_at, id")
+    .bind(clientUserId)
+    .all<{ id: string; status: Extract<RequestStatus, "submitted" | "matching"> }>();
+  return results;
+}
+
 type InviteBuilderRow = InviteRow & { builder_name: string; builder_handle: string; builder_public: number };
 
 /** Every invitation of a request with the builder's public name, oldest first. */
