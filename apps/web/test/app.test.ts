@@ -15,19 +15,18 @@ describe("app skeleton", () => {
     expect(await res.json()).toEqual({ ok: false, error: "Not found" });
   });
 
-  it("keeps /api/waitlist validation behaviour", async () => {
-    const res = await createApp().request(
-      "https://vnx.si/api/waitlist",
-      { method: "POST", headers: { "content-type": "application/json", origin: "https://vnx.si" }, body: "{oops" },
-      testEnv,
-    );
-    expect(res.status).toBe(400);
+  it("no longer serves the JSON /api/waitlist endpoint (VNX-0708)", async () => {
+    for (const init of [{}, { method: "POST", headers: { "content-type": "application/json", origin: "https://vnx.si" }, body: "{}" }]) {
+      const res = await createApp().request("https://vnx.si/api/waitlist", init, testEnv);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ ok: false, error: "Not found" });
+    }
   });
 
   it("falls back to static assets for unmatched paths", async () => {
-    const res = await createApp().request("https://vnx.si/", {}, testEnv);
+    const res = await createApp().request("https://vnx.si/assets/app.css", {}, testEnv);
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("<html");
+    expect(await res.text()).toContain(":root");
   });
 
   it("renders a 500 with a reference id when a handler throws", async () => {
@@ -41,23 +40,17 @@ describe("app skeleton", () => {
   });
 
   it("returns a JSON 500 without an English error string for /api failures", async () => {
-    const brokenEnv = {
-      ...testEnv,
-      TURNSTILE_SECRET: undefined,
-      DB: {
-        prepare() {
-          throw new Error("db down");
-        },
+    // No /api route reads a binding any more, so fail inside the origin check that guards every POST.
+    const brokenEnv = { ...testEnv } as Record<string, unknown>;
+    Object.defineProperty(brokenEnv, "APP_ORIGIN", {
+      get() {
+        throw new Error("env down");
       },
-    } as unknown as typeof testEnv;
+    });
     const res = await createApp().request(
-      "https://vnx.si/api/waitlist",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: "https://vnx.si", "cf-ray": "ray-api" },
-        body: JSON.stringify({ email: "a@example.com", personas: ["developer"], consent: true, lang: "vi" }),
-      },
-      brokenEnv,
+      "https://vnx.si/api/nope",
+      { method: "POST", headers: { origin: "https://vnx.si", "cf-ray": "ray-api" } },
+      brokenEnv as unknown as typeof testEnv,
     );
     expect(res.status).toBe(500);
     const body = (await res.json()) as Record<string, unknown>;
