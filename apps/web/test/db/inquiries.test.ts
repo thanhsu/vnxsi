@@ -84,6 +84,7 @@ describe("db/inquiries", () => {
     const lose = await db().batch([
       setInquiryStatusStatement(db(), { id: inquiry.id, from: "open", to: "answered", now: "2026-10-06T10:00:00.000Z" }),
       addMessageStatement(db(), { inquiryId: inquiry.id, senderUserId: builder.userId, kind: "message", body: "Again", now: "2026-10-06T10:00:00.000Z" }, { ...guard, updatedAt: "2026-10-06T10:00:00.000Z" }),
+      auditStatement(db(), { actorUserId: builder.userId, action: "inquiry.reply", entity: "inquiry", entityId: inquiry.id, now: "2026-10-06T10:00:00.000Z" }, { ...guard, updatedAt: "2026-10-06T10:00:00.000Z" }),
     ]);
     expect(returnedInquiry(lose[0])).toBeNull();
     expect(lose[1]?.results).toHaveLength(0);
