@@ -7,7 +7,9 @@ import { grantBadge } from "../src/db/verifications.ts";
 import { createUser, findUserByEmail, type UserRow } from "../src/db/users.ts";
 import type { Builder, BuilderProfile, BuilderStatus } from "../src/domain/builder.ts";
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
-import type { DeliveryModel, Product } from "../src/domain/product.ts";
+import type { TierInput } from "../src/domain/pricing-input.ts";
+import type { ProductFields } from "../src/domain/product-input.ts";
+import type { BadgeKind, DeliveryModel, Product } from "../src/domain/product.ts";
 import { testEnv } from "./helpers.ts";
 
 export function profileValues(overrides: Partial<BuilderFormValues> = {}): BuilderFormValues {
@@ -111,4 +113,54 @@ export async function publishProduct(productId: string): Promise<Product> {
   const published = await setProductStatus(testEnv.DB, { id: productId, from: "in_review", to: "published", reviewNote: null, now });
   await grantBadge(testEnv.DB, { productId, kind: "listed", verifiedBy: null, evidence: "", now });
   return published!;
+}
+
+export type LiveOpts = { at?: string; fields?: Partial<ProductFields>; tiers?: TierInput[]; badges?: BadgeKind[] };
+
+const LIVE_TIERS: TierInput[] = [
+  { name: "Starter", billing: "monthly", priceCents: 1900, description: "" },
+  { name: "Custom", billing: "contact", priceCents: null, description: "" },
+];
+
+/** A product of `builder` that meets every submit condition, approved at `opts.at` with "listed" plus `opts.badges`. */
+export async function addLiveProduct(builder: Builder, name: string, opts: LiveOpts = {}): Promise<Product> {
+  const at = opts.at ?? new Date().toISOString();
+  const draft = await createProductDraft(testEnv.DB, { builderId: builder.userId, name, now: at });
+  await updateProductFields(testEnv.DB, {
+    productId: draft.id,
+    builderId: builder.userId,
+    expectedStatus: "draft",
+    markEdited: false,
+    now: at,
+    fields: {
+      tagline: `${name} in one line`,
+      problem: "Bookings get lost",
+      targetUsers: "Spa owners",
+      description: "Online booking.",
+      category: "booking",
+      deliveryModel: "saas",
+      supportPolicy: "Email within 48h",
+      features: ["Calendar"],
+      ...opts.fields,
+    },
+  });
+  await replaceTiers(testEnv.DB, { productId: draft.id, tiers: opts.tiers ?? LIVE_TIERS, now: at });
+  await addMedia(testEnv.DB, { productId: draft.id, r2Key: `products/${draft.id}/01J0000000000000000000000C.png`, alt: "Cover", now: at });
+  await setProductStatus(testEnv.DB, { id: draft.id, from: "draft", to: "in_review", reviewNote: null, now: at });
+  await setProductStatus(testEnv.DB, { id: draft.id, from: "in_review", to: "published", reviewNote: null, now: at });
+  for (const kind of ["listed" as const, ...(opts.badges ?? [])]) {
+    await grantBadge(testEnv.DB, { productId: draft.id, kind, verifiedBy: null, evidence: kind === "listed" ? "" : "test evidence", now: at });
+  }
+  return (await findProductById(testEnv.DB, draft.id))!;
+}
+
+/** A new approved builder with one live product (see addLiveProduct). */
+export async function makeLiveProduct(
+  email: string,
+  handle: string,
+  name: string,
+  opts: LiveOpts & { builder?: Partial<BuilderFormValues> } = {},
+): Promise<{ builder: Builder; product: Product }> {
+  const builder = await makeBuilder(email, handle, "approved", opts.builder);
+  return { builder, product: await addLiveProduct(builder, name, opts) };
 }

@@ -127,13 +127,17 @@ export async function listBuilderProducts(db: D1Database, builderId: string): Pr
  */
 export type ProductGuard = { productId: string; status: ProductStatus; updatedAt: string };
 
-/** Compare-and-set on status, as a statement for db.batch. Publishing stamps published_at and, the first time, first_published_at. */
+/**
+ * Compare-and-set on status, as a statement for db.batch. Only an approval (in_review → published) stamps published_at
+ * (Owner decision 2026-10-04: relisting or unsuspending does not bump a product to "newest"); the first one also stamps
+ * first_published_at.
+ */
 export function setProductStatusStatement(db: D1Database, input: { id: string; from: ProductStatus; to: ProductStatus; reviewNote: string | null; now: string }): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE products SET status = ?3, review_note = ?4, updated_at = ?5,
-         published_at = CASE WHEN ?3 = 'published' THEN ?5 ELSE published_at END,
-         first_published_at = CASE WHEN ?3 = 'published' THEN COALESCE(first_published_at, ?5) ELSE first_published_at END
+         published_at = CASE WHEN ?2 = 'in_review' AND ?3 = 'published' THEN ?5 ELSE published_at END,
+         first_published_at = CASE WHEN ?2 = 'in_review' AND ?3 = 'published' THEN COALESCE(first_published_at, ?5) ELSE first_published_at END
        WHERE id = ?1 AND status = ?2
        RETURNING *`,
     )
@@ -146,7 +150,7 @@ export function returnedProduct(result: D1Result | undefined): Product | null {
   return row ? toProduct(row) : null;
 }
 
-/** Compare-and-set on status. Publishing stamps published_at and, the first time, first_published_at. */
+/** Compare-and-set on status. Only an approval stamps published_at (see setProductStatusStatement). */
 export async function setProductStatus(
   db: D1Database,
   input: { id: string; from: ProductStatus; to: ProductStatus; reviewNote: string | null; now: string },
@@ -189,7 +193,7 @@ type UpdateFieldsInput = { productId: string; builderId: string; expectedStatus:
 
 /**
  * Writes the given fields while the product is still owned by `builderId` and in `expectedStatus`, as a statement for
- * db.batch (0 rows changed = lost compare-and-set). `markEdited` stamps edited_after_publish_at (spec §7.2: edits after
+ * db.batch (no row returned = lost compare-and-set; meta.changes is not used because the products_fts triggers add to it). `markEdited` stamps edited_after_publish_at (spec §7.2: edits after
  * the first publish go live and are flagged).
  */
 export function updateProductFieldsStatement(db: D1Database, input: UpdateFieldsInput): D1PreparedStatement {
@@ -200,15 +204,16 @@ export function updateProductFieldsStatement(db: D1Database, input: UpdateFields
     return `${COLUMN[key]} = ?${params.length}`;
   });
   const sql = `UPDATE products SET ${[...sets, "updated_at = ?4", "edited_after_publish_at = CASE WHEN ?5 = 1 THEN ?4 ELSE edited_after_publish_at END"].join(", ")}
-    WHERE id = ?1 AND builder_id = ?2 AND status = ?3`;
+    WHERE id = ?1 AND builder_id = ?2 AND status = ?3
+    RETURNING id`;
   return db.prepare(sql).bind(...params);
 }
 
 /** updateProductFieldsStatement run on its own; reports a taken slug instead of throwing. */
 export async function updateProductFields(db: D1Database, input: UpdateFieldsInput): Promise<UpdateFieldsResult> {
   try {
-    const res = await updateProductFieldsStatement(db, input).run();
-    return res.meta.changes === 1 ? "ok" : "stale";
+    const res = await updateProductFieldsStatement(db, input).all();
+    return res.results.length === 1 ? "ok" : "stale";
   } catch (err) {
     if (String(err).includes("products.slug")) return "slug_taken";
     throw err;
@@ -253,15 +258,15 @@ export async function listRecentlyEdited(db: D1Database, since: string, limit = 
   return results.map(toWithBuilder);
 }
 
-const PUBLIC = "p.status = 'published' AND b.status = 'approved' AND u.status = 'active'";
+/** Spec §7.2: only published products of approved builders on active accounts are public. Aliases: p, b, u. */
+export const PUBLIC_PRODUCT = "p.status = 'published' AND b.status = 'approved' AND u.status = 'active'";
 
-/** Spec §7.2: only published products of approved builders on active accounts are public. */
 export async function findPublicProductBySlug(db: D1Database, slug: string): Promise<ProductWithBuilder | null> {
-  const row = await db.prepare(`${WITH_BUILDER} WHERE p.slug = ?1 AND ${PUBLIC}`).bind(slug).first<WithBuilderRow>();
+  const row = await db.prepare(`${WITH_BUILDER} WHERE p.slug = ?1 AND ${PUBLIC_PRODUCT}`).bind(slug).first<WithBuilderRow>();
   return row ? toWithBuilder(row) : null;
 }
 
 export async function listPublicProductsByBuilder(db: D1Database, builderId: string): Promise<Product[]> {
-  const { results } = await db.prepare(`${WITH_BUILDER} WHERE p.builder_id = ?1 AND ${PUBLIC} ORDER BY p.published_at DESC, p.id`).bind(builderId).all<WithBuilderRow>();
+  const { results } = await db.prepare(`${WITH_BUILDER} WHERE p.builder_id = ?1 AND ${PUBLIC_PRODUCT} ORDER BY p.published_at DESC, p.id`).bind(builderId).all<WithBuilderRow>();
   return results.map(toProduct);
 }
