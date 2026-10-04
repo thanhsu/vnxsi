@@ -121,3 +121,65 @@ Dev server riêng ở cổng 8796 (`wrangler dev --var MAIL_DRIVER:fake --var TU
 1. D1: giữ landing không có widget Turnstile (gửi từ landing khi chưa đăng nhập cần thêm một bước trên `/contact`), hay cho phép tải Turnstile trên landing (sửa VNX-0709 AC2)?
 2. D2: có cần số tin `new` ở mục Feedback trên mọi trang admin không?
 3. D5: Owner duyệt câu `contact.form.unavailable` và các nhãn admin mới.
+
+---
+
+## Lượt sửa F1 (2026-10-05)
+
+- **Phát hiện:** F1 (MEDIUM) trong `.ai/reviews/VNX-0710-0711-review.md`. Owner chọn cách sửa: tải Turnstile trên landing cho form `#ask`. Chỉ sửa F1; F2–F4 giữ nguyên.
+- **Commit:**
+  - `204eb13` test(web): Turnstile on the landing Ask us form, one allowed external origin (VNX-0710 F1). Test viết trước.
+  - `c6fcf8b` fix(web): Turnstile on the landing Ask us form so a signed-out send succeeds first time (VNX-0710 F1)
+  - (commit này) docs: VNX-0710 report, fix round F1
+
+### Thay đổi
+
+- `src/views/contact/ContactForm.tsx`: bỏ prop `widget`. Form render widget và script Turnstile y như trên `/contact` khi chưa đăng nhập và có site key. Khi Turnstile chưa cấu hình (không có site key hoặc secret), form hiện thông báo fail-closed (`contact.form.unavailable`, link Đăng nhập, `mailto:contact@vnx.si`) thay cho form. Hành vi này có sẵn trong component nên áp cho cả landing.
+- `src/views/LandingPage.tsx`: bỏ `widget={false}`.
+- `test/design/assets.test.ts` (VNX-0709 AC2): gom phần kiểm vào hàm `thirdPartyRequests(html)`. Ngoại lệ duy nhất là một `<script>` có `src` đúng bằng `https://challenges.cloudflare.com/turnstile/v0/api.js`. Thêm `/contact` vào danh sách trang được kiểm. Thêm test trên HTML mẫu cho thấy các trường hợp khác vẫn bị bắt: script reCAPTCHA; host giả `challenges.cloudflare.com.evil.example`; script khác trên `challenges.cloudflare.com`; stylesheet hoặc preconnect ra ngoài; `og:image` ở CDN ngoài; `<img>` tracker; `<iframe>` tới `challenges.cloudflare.com`.
+- `test/landing/page.test.ts`:
+  - chưa đăng nhập: `#ask` có widget, và script nằm trong `<head>` đúng một lần (×4 locale);
+  - đã đăng nhập: không có widget, không có `challenges.cloudflare.com`;
+  - không cấu hình Turnstile: `#ask` không có `<form>`, có thông báo và `mailto:`, không có script, còn form waitlist vẫn hiện (×4 locale).
+- `test/contact/submit.test.ts`: với mỗi locale, landing có widget, và POST từ landing (`from=landing`) kèm token giả hợp lệ trả 303 về `/?asked=1#ask`, `/vi/?asked=1#ask`, `/zh-hans/?asked=1#ask` hoặc `/zh-hant/?asked=1#ask` ngay lần đầu; mỗi lần đúng 1 dòng `feedback`, tổng 4 email. Test "không có token → 400 trên `/contact`" vẫn giữ.
+
+### Test đỏ trước khi sửa (sau `204eb13`)
+
+```
+$ npx vitest run test/design/assets.test.ts test/landing test/contact
+     × the landing form carries the widget, and a valid token gets 303 to the landing #ask on the first send, in each locale
+     × VNX-0710 AC5: the #ask block has the eyebrow, title, lead and the contact form posting to /contact with from=landing
+     × VNX-0710 F1: signed out, the landing loads the Turnstile script once, in <head>
+ Test Files  2 failed | 4 passed (6)
+      Tests  3 failed | 79 passed (82)
+```
+
+Hai nhóm test xanh ngay từ đầu:
+- Test "không cấu hình Turnstile → thông báo trong `#ask`": `ContactForm` đã fail-closed trước khi xét prop `widget`, nên landing vốn đã đúng; test giữ lại hành vi này.
+- Các test của `assets.test.ts`: landing lúc đó chưa tải script ngoài nào, và bộ kiểm mới phải từ chối mọi host khác ngay từ đầu.
+
+### Kết quả sau khi sửa
+
+```
+$ git merge-base --is-ancestor origin/main HEAD && echo ancestor-ok
+ancestor-ok
+
+$ npm run typecheck -w apps/web
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+exit=0   (tsc không in lỗi)
+
+$ npm test
+ Test Files  88 passed (88)
+      Tests  644 passed (644)
+
+$ vitest run test/design/assets.test.ts test/landing/page.test.ts test/contact
+ Test Files  4 passed (4)
+      Tests  65 passed (65)
+```
+
+Số test: 640 → 644.
+
+### Ghi chú
+
+- Mục 7 D1 của báo cáo đã đóng theo lựa chọn của Owner. Landing nay có đúng một request bên thứ ba (script Turnstile, chỉ khi chưa đăng nhập và có site key). Mọi trang khác không đổi.
+- Lượt này không chụp lại ảnh giao diện. Khối `#ask` nay hiện ô widget Turnstile giữa ô đồng ý và nút gửi, giống thẻ form trên `/contact` (đã có trong ảnh của Reviewer). AC14 cho `#ask` vẫn chờ Reviewer xem lại.
