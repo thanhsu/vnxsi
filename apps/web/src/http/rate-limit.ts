@@ -19,10 +19,12 @@ export async function hitRateLimit(
   return { allowed: count <= limit, count };
 }
 
-/** The longest window in use is one day (request: 3/day/e-mail); older windows can go. */
-const LONGEST_WINDOW_SECONDS = 24 * 3600;
+/** Windows older than this are deleted by the daily job. The longest window in use is 1 hour; 2 days leaves room for daily limits. */
+export const RATE_LIMIT_KEEP_SECONDS = 2 * 24 * 60 * 60;
 
+/** Deletes counters (they hold raw IPs) whose window started more than 2 days before `nowMs`. Returns the rows deleted. */
 export async function deleteOldRateLimitWindows(db: D1Database, nowMs: number): Promise<number> {
-  const res = await db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(Math.floor(nowMs / 1000) - LONGEST_WINDOW_SECONDS).run();
-  return res.meta.changes;
+  const cutoff = Math.floor(nowMs / 1000) - RATE_LIMIT_KEEP_SECONDS;
+  const result = await db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(cutoff).run();
+  return result.meta.changes;
 }

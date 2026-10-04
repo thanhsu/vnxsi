@@ -34,7 +34,8 @@
     { "pattern": "www.vnx.si", "custom_domain": true }
   ],
   "observability": { "enabled": true },
-  // Spec §8.4: daily job at 01:00 UTC (reminders, admin alert, notification retries, clean-up). M7 adds "5 * * * *".
+  // Daily job at 01:00 UTC (spec §8.4): src/jobs/daily.ts (reminders, admin alert, notification retries, clean-up).
+  // Registered on the next `npm run deploy`. M7 adds "5 * * * *".
   "triggers": { "crons": ["0 1 * * *"] }
   // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").

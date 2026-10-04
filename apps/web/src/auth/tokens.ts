@@ -41,6 +41,12 @@ export async function createLoginToken(
   return raw;
 }
 
+/** Deletes tokens whose link expired before `now`, used or not. Returns the rows deleted. */
+export async function deleteExpiredLoginTokens(db: D1Database, now: Date): Promise<number> {
+  const result = await db.prepare("DELETE FROM login_tokens WHERE expires_at < ?1").bind(now.toISOString()).run();
+  return result.meta.changes;
+}
+
 type Row = { email: string; purpose: TokenPurpose; locale: string; inquiry_id: string | null; request_id: string | null; invite_code_hash: string | null };
 
 const purposeList = (expected: TokenPurpose | readonly TokenPurpose[]) => JSON.stringify(typeof expected === "string" ? [expected] : expected);
@@ -104,12 +110,6 @@ export async function peekLoginToken(
     .first<{ purpose: TokenPurpose; locale: string }>();
   if (row) return { ok: true, purpose: row.purpose, locale: isLocale(row.locale) ? row.locale : "en" };
   return { ok: false, reason: await failureReason(db, hash, list) };
-}
-
-/** Spec §8.4: tokens past their expiry are useless. Returns rows deleted. */
-export async function deleteExpiredTokens(db: D1Database, now: Date): Promise<number> {
-  const res = await db.prepare("DELETE FROM login_tokens WHERE expires_at < ?1").bind(now.toISOString()).run();
-  return res.meta.changes;
 }
 
 /**

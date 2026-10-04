@@ -33,12 +33,13 @@ export async function deleteSession(db: D1Database, raw: string): Promise<void> 
   await db.prepare("DELETE FROM sessions WHERE id_hash = ?1").bind(await sha256Hex(raw)).run();
 }
 
+/** Deletes sessions that expired before `now`. Returns the rows deleted. */
+export async function deleteExpiredSessions(db: D1Database, now: Date): Promise<number> {
+  const result = await db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(now.toISOString()).run();
+  return result.meta.changes;
+}
+
 /** Only deletes while the user is suspended, so a batch whose status change lost the race leaves sessions alone. */
 export function deleteUserSessionsStatement(db: D1Database, userId: string): D1PreparedStatement {
   return db.prepare("DELETE FROM sessions WHERE user_id = ?1 AND EXISTS (SELECT 1 FROM users WHERE id = ?1 AND status = 'suspended')").bind(userId);
-}
-
-export async function deleteExpiredSessions(db: D1Database, now: Date): Promise<number> {
-  const res = await db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(now.toISOString()).run();
-  return res.meta.changes;
 }

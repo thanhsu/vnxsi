@@ -9,6 +9,8 @@ export const vi: Messages = {
   "nav.language": "Ngôn ngữ",
   "footer.terms": "Điều khoản",
   "footer.privacy": "Quyền riêng tư",
+  "footer.mediaKit": "Media kit",
+  "footer.nav": "Thông tin về trang",
   "error.notFound.title": "Không tìm thấy trang",
   "error.notFound.body": "Trang bạn tìm không tồn tại hoặc đã chuyển chỗ.",
   "error.forbidden.title": "Bạn không mở được trang này",
@@ -527,4 +529,13 @@ export const vi: Messages = {
   "landing.form.error.rateLimited": "Thử quá nhiều lần. Vui lòng thử lại sau một giờ.",
   "landing.principle.title": "Thứ hạng không bao giờ được bán.",
   "landing.principle.body": "Sản phẩm được xếp theo những gì chúng tôi kiểm được, không theo ai trả tiền.",
+  "legal.updated": "Cập nhật lần cuối: {date}",
+  // Not shown: VI pages have their own text (plan VNX-0705a). Kept for locale parity.
+  "legal.englishOnly": "Trang này hiện chỉ có bản tiếng Anh.",
+  "legal.terms.title": "Điều khoản sử dụng",
+  "legal.terms.description": "Quy tắc sử dụng VNX.SI, chợ cho sản phẩm xây bằng AI.",
+  "legal.privacy.title": "Chính sách quyền riêng tư",
+  "legal.privacy.description": "VNX.SI thu thập dữ liệu cá nhân nào, vì sao, ai thấy được, và quyền của bạn.",
+  "legal.mediaKit.title": "Media kit",
+  "legal.mediaKit.description": "Về VNX.SI, dành cho ai, cách chúng tôi hợp tác với partner, và hướng dẫn thương hiệu.",
 };

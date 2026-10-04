@@ -1,158 +1,152 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSession } from "../../src/auth/sessions.ts";
-import { sha256Hex } from "../../src/auth/crypto.ts";
-import { createLoginToken } from "../../src/auth/tokens.ts";
-import { writeAudit } from "../../src/db/audit.ts";
-import { createInvite } from "../../src/db/invites.ts";
-import { grantBadge } from "../../src/db/verifications.ts";
-import { findInquiryById, listMessages } from "../../src/db/inquiries.ts";
-import { createUser, findUserByEmail } from "../../src/db/users.ts";
-import { clearOutbox, outbox } from "../../src/email/fake.ts";
-import type { Bindings } from "../../src/env.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSession, getSessionUser } from "../../src/auth/sessions.ts";
+import { consumeLoginToken, createLoginToken, LOGIN_TOKEN_TTL_MS } from "../../src/auth/tokens.ts";
+import { createUser } from "../../src/db/users.ts";
 import { hitRateLimit } from "../../src/http/rate-limit.ts";
+import worker from "../../src/index.ts";
 import { runDaily } from "../../src/jobs/daily.ts";
-import { makeBuilder, makeInquiry, makeLiveProduct } from "../fixtures.ts";
+import type { Bindings } from "../../src/env.ts";
 import { testEnv } from "../helpers.ts";
 
-const NOW = new Date("2026-10-10T01:00:00.000Z");
-const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 3600 * 1000).toISOString();
-const sentTo = (to: string) => outbox.filter((m) => m.to === to);
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR = 3600;
+// The job always gets its clock from the caller; nothing here depends on the machine's time.
+const NOW = new Date("2026-10-04T01:00:00Z");
 
-describe("daily job (spec §8.4)", () => {
-  beforeEach(() => clearOutbox());
+const count = async (sql: string, ...params: unknown[]) =>
+  (await testEnv.DB.prepare(sql).bind(...params).first<{ n: number }>())?.n ?? 0;
+const rateWindow = (key: string) => count("SELECT COUNT(*) AS n FROM rate_limits WHERE key = ?1", key);
+// The VNX-0505 (M5) inquiry steps run before the clean-up steps (test/jobs/daily-inquiries.test.ts covers them).
+// This file creates no inquiries and no ghost accounts, so they find nothing to do.
+const IDLE_INQUIRY_STEPS = [
+  { job: "daily", step: "remind", sent: 0 },
+  { job: "daily", step: "alert", sent: 0 },
+  { job: "daily", step: "resend", sent: 0 },
+  { job: "daily", step: "pending_inquiries", deleted: 0 },
+  { job: "daily", step: "ghost_users", deleted: 0 },
+];
 
-  it("reminds the builder once after 3 days without a reply", async () => {
-    const due = await makeInquiry({ tag: "dj-rem", status: "open", now: daysAgo(4), builderLocale: "vi" });
-    const fresh = await makeInquiry({ tag: "dj-rem2", status: "open", now: daysAgo(1) });
-    const answered = await makeInquiry({ tag: "dj-rem3", status: "answered", now: daysAgo(5) });
+/** A DB whose statements on one table throw, to show one failing step does not stop the others. */
+function brokenOn(table: string): D1Database {
+  const db = testEnv.DB;
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (sql: string) => {
+          if (sql.includes(table)) throw new Error(`boom on ${table}`);
+          return target.prepare(sql);
+        };
+      }
+      const value = Reflect.get(target, prop) as unknown;
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("daily clean-up job (VNX-0705a AC8)", () => {
+  it("deletes rate-limit windows older than 2 days and expired login tokens and sessions, keeping the rest", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    // Rate-limit windows: 3 days old (gone), 2 days minus an hour (kept), last hour (kept).
+    await hitRateLimit(testEnv.DB, "daily:old", 10, HOUR, NOW.getTime() - 3 * DAY_MS);
+    await hitRateLimit(testEnv.DB, "daily:edge", 10, HOUR, NOW.getTime() - 2 * DAY_MS + HOUR * 1000);
+    await hitRateLimit(testEnv.DB, "daily:new", 10, HOUR, NOW.getTime() - 60_000);
+
+    // Login tokens: one expired an hour ago (gone), one still valid (kept).
+    const oldToken = await createLoginToken(testEnv.DB, { email: "daily-old@vnx.si", purpose: "login", locale: "en" }, new Date(NOW.getTime() - LOGIN_TOKEN_TTL_MS - HOUR * 1000));
+    const liveToken = await createLoginToken(testEnv.DB, { email: "daily-live@vnx.si", purpose: "login", locale: "en" }, new Date(NOW.getTime() - 60_000));
+
+    // Sessions: one expired yesterday (gone), one created today (kept).
+    const user = await createUser(testEnv.DB, { email: "daily-session@vnx.si", locale: "en", now: new Date(NOW.getTime() - 40 * DAY_MS).toISOString() });
+    const oldSession = await createSession(testEnv.DB, user.id, new Date(NOW.getTime() - 31 * DAY_MS));
+    const liveSession = await createSession(testEnv.DB, user.id, new Date(NOW.getTime() - 60_000));
+
+    const expected = {
+      rate_limits: await count("SELECT COUNT(*) AS n FROM rate_limits WHERE window_start < ?1", Math.floor(NOW.getTime() / 1000) - 2 * 86400),
+      login_tokens: await count("SELECT COUNT(*) AS n FROM login_tokens WHERE expires_at < ?1", NOW.toISOString()),
+      sessions: await count("SELECT COUNT(*) AS n FROM sessions WHERE expires_at < ?1", NOW.toISOString()),
+    };
+    expect(Object.values(expected).every((n) => n >= 1)).toBe(true);
+
+    const results = await runDaily(testEnv, NOW);
+    expect(results).toEqual([
+      ...IDLE_INQUIRY_STEPS,
+      { job: "daily", step: "rate_limits", deleted: expected.rate_limits },
+      { job: "daily", step: "login_tokens", deleted: expected.login_tokens },
+      { job: "daily", step: "sessions", deleted: expected.sessions },
+    ]);
+
+    expect(await rateWindow("daily:old")).toBe(0);
+    expect(await rateWindow("daily:edge")).toBe(1);
+    expect(await rateWindow("daily:new")).toBe(1);
+
+    // The expired token row is gone (unknown, not "expired"); the live one still works.
+    expect(await consumeLoginToken(testEnv.DB, oldToken, NOW, "login")).toEqual({ ok: false, reason: "invalid" });
+    expect((await consumeLoginToken(testEnv.DB, liveToken, NOW, "login")).ok).toBe(true);
+
+    expect(await count("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?1", user.id)).toBe(1);
+    expect(await getSessionUser(testEnv.DB, liveSession, NOW)).not.toBeNull();
+    expect(await getSessionUser(testEnv.DB, oldSession, NOW)).toBeNull();
+  });
+
+  it("is idempotent: a second run deletes nothing", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await hitRateLimit(testEnv.DB, "daily:again", 10, HOUR, NOW.getTime() - 5 * DAY_MS);
     await runDaily(testEnv, NOW);
-    expect(sentTo("dj-rem-b@vnx.si").map((m) => m.subject)).toContain("Minh Tran đang chờ bạn trả lời");
-    expect(sentTo("dj-rem2-b@vnx.si").filter((m) => m.subject.includes("waiting"))).toEqual([]);
-    expect(sentTo("dj-rem3-b@vnx.si").filter((m) => m.subject.includes("waiting"))).toEqual([]);
-    expect((await findInquiryById(testEnv.DB, due.inquiry.id))?.builderRemindedAt).toBe(NOW.toISOString());
-    clearOutbox();
+    const second = await runDaily(testEnv, NOW);
+    expect(second).toEqual([
+      ...IDLE_INQUIRY_STEPS,
+      { job: "daily", step: "rate_limits", deleted: 0 },
+      { job: "daily", step: "login_tokens", deleted: 0 },
+      { job: "daily", step: "sessions", deleted: 0 },
+    ]);
+  });
+
+  it("logs one JSON line per step", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     await runDaily(testEnv, NOW);
-    expect(sentTo("dj-rem-b@vnx.si").filter((m) => m.subject.includes("chờ"))).toEqual([]);
-    expect(fresh.inquiry.id && answered.inquiry.id).toBeTruthy();
+    const lines = log.mock.calls.map((call) => call[0] as string);
+    expect(lines).toHaveLength(IDLE_INQUIRY_STEPS.length + 3);
+    expect(lines.map((l) => JSON.parse(l))).toEqual([
+      ...IDLE_INQUIRY_STEPS,
+      { job: "daily", step: "rate_limits", deleted: 0 },
+      { job: "daily", step: "login_tokens", deleted: 0 },
+      { job: "daily", step: "sessions", deleted: 0 },
+    ]);
+    for (const line of lines) expect(line).not.toContain("\n");
   });
 
-  it("tells the admins once about inquiries open for 7 days", async () => {
-    const late = await makeInquiry({ tag: "dj-alert", status: "open", now: daysAgo(8) });
-    await runDaily(testEnv, NOW);
-    const alert = sentTo("owner@vnx.si").find((m) => m.subject.includes("unanswered for 7 days"));
-    expect(alert?.text).toContain(late.inquiry.id);
-    expect((await findInquiryById(testEnv.DB, late.inquiry.id))?.adminAlertedAt).toBe(NOW.toISOString());
-    clearOutbox();
-    await runDaily(testEnv, NOW);
-    expect(sentTo("owner@vnx.si").filter((m) => m.text.includes(late.inquiry.id))).toEqual([]);
+  it("keeps going when one step fails, and logs the error", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await createLoginToken(testEnv.DB, { email: "daily-after-fail@vnx.si", purpose: "login", locale: "en" }, new Date(NOW.getTime() - DAY_MS));
+    const env = { ...testEnv, DB: brokenOn("rate_limits") } as Bindings;
+    const results = await runDaily(env, NOW);
+    const at = IDLE_INQUIRY_STEPS.length;
+    expect(results.slice(0, at)).toEqual(IDLE_INQUIRY_STEPS);
+    expect(results[at]).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
+    expect(results[at + 1]).toEqual({ job: "daily", step: "login_tokens", deleted: 1 });
+    expect(results[at + 2]).toEqual({ job: "daily", step: "sessions", deleted: 0 });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
   });
+});
 
-  it("resends due notifications once, and skips them after a success", async () => {
-    const { firstMessageId, inquiry } = await makeInquiry({ tag: "dj-resend", status: "open", now: daysAgo(0) });
-    const summary = await runDaily(testEnv, NOW);
-    expect(summary.resent).toBeGreaterThanOrEqual(1);
-    expect(sentTo("dj-resend-b@vnx.si")).toHaveLength(1);
-    expect((await listMessages(testEnv.DB, inquiry.id))[0]?.id).toBe(firstMessageId);
-    clearOutbox();
-    await runDaily(testEnv, NOW);
-    expect(sentTo("dj-resend-b@vnx.si")).toHaveLength(0);
-  });
-
-  it("stops after three failed attempts in all", async () => {
-    const { firstMessageId, inquiry } = await makeInquiry({ tag: "dj-fail", status: "open", now: daysAgo(0) });
-    const noMail = { ...testEnv, MAIL_DRIVER: undefined, RESEND_API_KEY: undefined } as Bindings;
-    for (let i = 0; i < 4; i++) await runDaily(noMail, NOW);
-    const [message] = await listMessages(testEnv.DB, inquiry.id);
-    expect(message).toMatchObject({ id: firstMessageId, notifyAttempts: 3, notifiedAt: null });
-  });
-
-  it("deletes unconfirmed inquiries after 48 hours and the ghost accounts behind them", async () => {
-    const old = await makeInquiry({ tag: "dj-ghost", status: "pending_verification", now: daysAgo(3) });
-    // Make the client a never-signed-in implicit account created 3 days ago.
-    await testEnv.DB.prepare("UPDATE users SET created_at = ?2, last_login_at = NULL WHERE id = ?1").bind(old.client.id, daysAgo(3)).run();
-    const recent = await makeInquiry({ tag: "dj-ghost2", status: "pending_verification", now: daysAgo(1) });
-    const summary = await runDaily(testEnv, NOW);
-    expect(summary.pendingDeleted).toBeGreaterThanOrEqual(1);
-    expect(await findInquiryById(testEnv.DB, old.inquiry.id)).toBeNull();
-    expect(await findInquiryById(testEnv.DB, recent.inquiry.id)).not.toBeNull();
-    expect(await findUserByEmail(testEnv.DB, old.client.email)).toBeNull();
-  });
-
-  it("keeps accounts that signed in, have a session, a builder row, an inquiry or are recent", async () => {
-    const iso = daysAgo(5);
-    const signedIn = await createUser(testEnv.DB, { email: "dj-keep1@vnx.si", locale: "en", now: iso });
-    await testEnv.DB.prepare("UPDATE users SET last_login_at = ?2 WHERE id = ?1").bind(signedIn.id, iso).run();
-    const withSession = await createUser(testEnv.DB, { email: "dj-keep2@vnx.si", locale: "en", now: iso });
-    await createSession(testEnv.DB, withSession.id, NOW);
-    const withInquiry = await makeInquiry({ tag: "dj-keep3", status: "open", now: iso });
-    await testEnv.DB.prepare("UPDATE users SET created_at = ?2, last_login_at = NULL WHERE id = ?1").bind(withInquiry.client.id, iso).run();
-    const recent = await createUser(testEnv.DB, { email: "dj-keep4@vnx.si", locale: "en", now: daysAgo(1) });
-    const ghost = await createUser(testEnv.DB, { email: "dj-ghost3@vnx.si", locale: "en", now: iso });
-    await runDaily(testEnv, NOW);
-    for (const email of ["dj-keep1@vnx.si", "dj-keep2@vnx.si", withInquiry.client.email, "dj-keep4@vnx.si"]) expect(await findUserByEmail(testEnv.DB, email), email).not.toBeNull();
-    expect(await findUserByEmail(testEnv.DB, "dj-ghost3@vnx.si")).toBeNull();
-    expect(recent.id && ghost.id).toBeTruthy();
-  });
-
-  it("does not remind a suspended builder", async () => {
-    const due = await makeInquiry({ tag: "dj-susp", status: "open", now: daysAgo(4) });
-    await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(due.builder.userId).run();
-    clearOutbox();
-    await runDaily(testEnv, NOW);
-    expect(sentTo("dj-susp-b@vnx.si").filter((m) => m.subject.includes("waiting"))).toEqual([]);
-    expect((await findInquiryById(testEnv.DB, due.inquiry.id))?.builderRemindedAt).toBeNull();
-  });
-
-  it("warns (without addresses) when inquiries are overdue and no admin e-mail is configured", async () => {
-    await makeInquiry({ tag: "dj-noadm", status: "open", now: daysAgo(9) });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      await runDaily({ ...testEnv, ADMIN_EMAILS: "" } as Bindings, NOW);
-      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.includes("jobs.daily.no_admins"));
-      expect(line).toBeDefined();
-      const parsed = JSON.parse(line!) as { event: string; overdue: number };
-      expect(parsed.event).toBe("jobs.daily.no_admins");
-      expect(parsed.overdue).toBeGreaterThanOrEqual(1);
-      expect(line).not.toContain("@");
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it("keeps a suspended never-signed-in account", async () => {
-    const spam = await createUser(testEnv.DB, { email: "dj-suspended-ghost@vnx.si", locale: "en", now: daysAgo(5) });
-    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(spam.id).run();
-    await runDaily(testEnv, NOW);
-    expect(await findUserByEmail(testEnv.DB, "dj-suspended-ghost@vnx.si")).not.toBeNull();
-  });
-
-  it("keeps old never-signed-in accounts that are a builder, an invite creator, a badge verifier or an audit actor", async () => {
-    const iso = daysAgo(5);
-    const age = (id: string) => testEnv.DB.prepare("UPDATE users SET created_at = ?2, last_login_at = NULL WHERE id = ?1").bind(id, iso).run();
-    const builder = await makeBuilder("dj-k-builder@vnx.si", "dj-k-builder", "approved");
-    const inviter = await createUser(testEnv.DB, { email: "dj-k-inviter@vnx.si", locale: "en", now: iso });
-    await createInvite(testEnv.DB, { codeHash: await sha256Hex("dj-k-invite"), createdBy: inviter.id, maxUses: 1, expiresAt: daysAgo(-30), note: null, now: iso });
-    const verifier = await createUser(testEnv.DB, { email: "dj-k-verifier@vnx.si", locale: "en", now: iso });
-    const { product } = await makeLiveProduct("dj-k-owner@vnx.si", "dj-k-owner", "Dj Keep Kit");
-    await grantBadge(testEnv.DB, { productId: product.id, kind: "demo_verified", verifiedBy: verifier.id, evidence: "checked", now: iso });
-    const actor = await createUser(testEnv.DB, { email: "dj-k-actor@vnx.si", locale: "en", now: iso });
-    await writeAudit(testEnv.DB, { actorUserId: actor.id, action: "test.keep", entity: "user", entityId: actor.id, now: iso });
-    for (const id of [builder.userId, inviter.id, verifier.id, actor.id]) await age(id);
-    await runDaily(testEnv, NOW);
-    for (const email of ["dj-k-builder@vnx.si", "dj-k-inviter@vnx.si", "dj-k-verifier@vnx.si", "dj-k-actor@vnx.si"]) expect(await findUserByEmail(testEnv.DB, email), email).not.toBeNull();
-  });
-
-  it("cleans expired tokens, sessions and old rate-limit windows", async () => {
-    await createLoginToken(testEnv.DB, { email: "dj-tok@vnx.si", purpose: "login", locale: "en" }, new Date(daysAgo(3)));
-    const user = await createUser(testEnv.DB, { email: "dj-sess@vnx.si", locale: "en", now: daysAgo(40) });
-    await testEnv.DB.prepare("UPDATE users SET last_login_at = ?2 WHERE id = ?1").bind(user.id, daysAgo(40)).run();
-    await createSession(testEnv.DB, user.id, new Date(daysAgo(40)));
-    await hitRateLimit(testEnv.DB, "dj:test", 5, 3600, NOW.getTime() - 3 * 24 * 3600 * 1000);
-    const summary = await runDaily(testEnv, NOW);
-    expect(summary.tokensDeleted).toBeGreaterThanOrEqual(1);
-    expect(summary.sessionsDeleted).toBeGreaterThanOrEqual(1);
-    expect(summary.rateLimitRowsDeleted).toBeGreaterThanOrEqual(1);
-    const left = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM rate_limits WHERE key = 'dj:test'").first<{ n: number }>();
-    expect(left?.n).toBe(0);
+describe("scheduled handler (VNX-0705a AC9)", () => {
+  it("the Worker exports scheduled and runs the job at the trigger's time", async () => {
+    expect(typeof worker.scheduled).toBe("function");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await hitRateLimit(testEnv.DB, "daily:scheduled", 10, HOUR, NOW.getTime() - 3 * DAY_MS);
+    const pending: Promise<unknown>[] = [];
+    const ctx = { waitUntil: (p: Promise<unknown>) => pending.push(p), passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
+    const controller = { scheduledTime: NOW.getTime(), cron: "0 1 * * *", noRetry: () => {} } as ScheduledController;
+    await worker.scheduled?.(controller, testEnv, ctx);
+    expect(pending).toHaveLength(1);
+    await Promise.all(pending);
+    expect(await rateWindow("daily:scheduled")).toBe(0);
+    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual([...IDLE_INQUIRY_STEPS.map((r) => r.step), "rate_limits", "login_tokens", "sessions"]);
   });
 });

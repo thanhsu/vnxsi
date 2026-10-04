@@ -124,3 +124,17 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
   .ways { grid-template-columns: 1fr; }
   .cta-row .btn { flex: 1 1 100%; }
 }
+/* Footer links and legal pages (VNX-0705a). */
+.site-footer .tagline { margin: 0 0 4px; }
+.footer-nav { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.footer-nav a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink-2); }
+.legal { max-width: 70ch; padding: 8px 0 48px; overflow-wrap: break-word; }
+.legal .notice { margin: 16px 0 0; }
+.legal h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.2; margin: 24px 0 8px; }
+.legal h2 { font-size: 20px; line-height: 1.35; margin: 32px 0 8px; }
+.legal p { margin: 0 0 12px; }
+.legal ul { margin: 0 0 12px; padding-left: 22px; }
+.legal li + li { margin-top: 6px; }
+.legal code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; padding: 1px 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+.legal-updated { color: var(--muted); }
+.swatch { display: inline-block; width: 1em; height: 1em; margin-right: 6px; vertical-align: -0.15em; border: 1px solid var(--line); border-radius: 4px; }
