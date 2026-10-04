@@ -17,7 +17,7 @@ AI làm việc xây phần mềm rẻ và nhanh hơn. VNX.SI làm cho việc **t
 ## Nguyên tắc cốt lõi
 
 1. **Trung thực trước tăng trưởng.** Không bịa số liệu, review, testimonial. Số công khai chỉ từ dữ liệu thật và có ngưỡng (ADR-004).
-2. **Xếp hạng không bán.** Không ai trả tiền để lên top (ADR-004).
+2. **Xếp hạng không bán.** Không ai trả tiền để lên top (ADR-004). Sponsored chỉ là ô tách riêng có nhãn (ADR-008); hoa hồng partner không bao giờ là tín hiệu xếp hạng (ADR-007).
 3. **Xác minh đọc được.** Huy hiệu nói rõ đã kiểm gì, ai kiểm, khi nào; không dùng sao.
 4. **Model-agnostic.** Builder dùng công cụ AI nào cũng được; platform AI đi qua provider port (ADR-005).
 5. **Tính toán trước sinh nội dung.** Giá, xếp hạng, thống kê do SQL tính; AI chỉ giải thích và xếp lại trong tập ứng viên đã tính (AI-ARCHITECTURE mục 5).
@@ -54,7 +54,8 @@ AI làm việc xây phần mềm rẻ và nhanh hơn. VNX.SI làm cho việc **t
 
 ## Ngoài phạm vi (hiện tại)
 
-- Sponsored listing (nếu có sau này phải tách nhãn và cần ADR mới).
+- Sponsored listing trong Wave 1. Sau Wave 1: ô tách riêng có nhãn theo ADR-008 (EPIC 23).
+- Quảng cáo: chỉ thiết kế (ADR-009), chưa có lịch.
 - App di động native.
 - Thị trường dùng tiếng Hindi (thị trường Ấn Độ dùng EN).
 - AI tự viết code cho client (Wave 4).

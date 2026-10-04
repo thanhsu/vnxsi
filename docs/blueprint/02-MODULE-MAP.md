@@ -34,6 +34,8 @@ Các module là ranh giới nghiệp vụ trong cùng một Worker (ADR-001). Mo
 | `admin` | Giao diện điều phối duyệt, khóa, huy hiệu, ghép | — | mọi module (qua hàm công khai) | 1 | E2–E7 |
 | `ai` | Pipeline AI, provider port, Knowledge Package, `ai_runs` | `ai_runs` | catalog, builder, matching (chỉ đọc qua tool) | 2 | E9–E12 |
 | `commerce` | Order, project, milestone, payment, payout, review | `orders`, `projects`, `proposals`, `milestones`, `payments`, `payouts`, `reviews` | engagement, matching, catalog | 3 | E14–E18 |
+| `monetization` | Outbound `/go/`, cờ tính năng, merchant, chương trình partner, offer, conversion, ledger doanh thu (ADR-007) | `outbound_clicks`, `feature_flags`, `merchants`, `partner_programs`, `offers`, `conversions`, `revenue_entries` | catalog (chỉ đọc), insights (ghi qua hàm) | 1 (`/go/`), sau Wave 1 (phần còn lại) | E7, E21, E23, E24 |
+| `content` | Bài biên tập, trang category SEO, liên kết nội bộ | `articles`, `article_links` | catalog, monetization (chỉ đọc) | 2 | E22 |
 
 ## Luật
 
@@ -41,5 +43,6 @@ Các module là ranh giới nghiệp vụ trong cùng một Worker (ADR-001). Mo
 2. `ai` không truy vấn D1 trực tiếp từ prompt; chỉ qua tool xác định (AI-ARCHITECTURE lớp 3).
 3. `insights` chỉ đọc; sai số liệu không được làm hỏng dữ liệu nghiệp vụ.
 4. `admin` không có logic riêng ngoài gọi chuyển trạng thái của module sở hữu.
+5. Không module nào ngoài `monetization` đọc bảng tiền (`offers`, `partner_programs`, `merchants`, `conversions`, `revenue_entries`); riêng code xếp hạng/gợi ý/AI không được đọc dù gián tiếp (ADR-007 luật 2).
 
 Luật 1 được kiểm bằng test kiến trúc mở rộng ở EPIC 2 (VNX-0201): mỗi `src/db/<module>.ts` chỉ chứa câu SQL nhắm tới bảng của module đó.

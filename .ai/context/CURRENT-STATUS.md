@@ -8,6 +8,7 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
 - **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). Tiếp theo: plan M4.
 - **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
+- **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 và phụ lục spec đã viết, **chờ Owner duyệt văn bản** trước khi plan M4.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
 
 ## Task
@@ -63,6 +64,8 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 
 ## Quyết định phát sinh
 
+- **Owner 2026-10-04 (monetization):** audit ở `docs/strategy/2026-10-04-monetization-audit.md`. (Q1) listing bên thứ ba ở khu `/tools/:merchant` riêng, `/products` chỉ có product của builder; (Q2) sponsored là ô tách riêng có nhãn, không cộng điểm xếp hạng, cần ADR-008 thay một phần ADR-004, làm sau cổng ra Wave 1; (Q3) chốt kiến trúc ngay (ADR-007 + phụ lục spec trước M4), gộp `/go/` + outbound click vào M7 thay `/p/:slug/demo`, affiliate làm khi có hợp đồng partner thật; (Q4) cá nhân Owner nhận hoa hồng partner; (Q5) chỉ analytics nội bộ; (Q6) quảng cáo chỉ viết ADR; (Q7) lead dùng lại M6, chưa thu phí; (Q8) nội dung biên tập là markdown giới hạn, chỉ admin viết; (Q9) ngưỡng index: category ≥5, best list ≥5, alternatives ≥3, so sánh ≥2.
+
 - **Owner 2026-10-04 (sau review M3):** (1) product đang công khai được phép rơi xuống dưới điều kiện submit (giữ như hiện tại; admin theo dõi qua "Mới chỉnh sửa"); (2) `published_at` chỉ đặt khi duyệt, ẩn/hiện lại hay mở khóa không đẩy product lên "mới nhất"; (3) `robots.txt` cho phép `/media/products/` để og:image hiện khi chia sẻ link.
 
 - **Owner 2026-10-04 (M3):** product `in_review` bị khóa, có nút Rút lại (`withdraw` → draft); `primary_lang` gồm `en`, `vi`, `zh-Hans`, `zh-Hant`; Claude tạo bucket R2 sau khi Owner bật R2 (lần thử 2026-10-04 lỗi 10042: tài khoản chưa bật R2).
@@ -83,6 +86,10 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Header hiện link Builder Hub khi đã đăng nhập (người chưa là builder được đưa sang `/hub/apply`).
 
 ## Nghĩa vụ để lại
+
+- **Owner, trước M4 (monetization Q3):** duyệt văn bản ADR-007, ADR-008, ADR-009 (đang Proposed) và phụ lục `docs/superpowers/specs/2026-10-04-vnxsi-monetization-addendum.md`; duyệt thì Reviewer chuyển ADR sang Accepted. Đã viết (2026-10-04): 3 ADR, phụ lục, cập nhật module map, domain catalog, charter, kiến trúc, master backlog (EPIC 21–24), roadmap (VNX-0404 thêm `Disallow: /go/`; task mới VNX-0707 `/go/` tách khỏi VNX-0701).
+- **M7 (VNX-0707):** secret mới `ANALYTICS_SALT`; thêm vào thứ tự deploy khi tới M7.
+- **Owner (monetization Q4):** tự kiểm điều khoản từng chương trình partner (có cho cá nhân tham gia không, mẫu thuế, cách payout) trước khi bật trên production; khi lập pháp nhân (VNX-1401) thì chuyển hợp đồng.
 
 - **M4 (từ quyết định Owner 2026-10-04):** sửa `setProductStatus` để `published_at` chỉ đặt khi admin duyệt (`approve`), không đổi khi `relist` / `unsuspend`; `robots.txt` chặn `/media` nhưng `Allow: /media/products/`.
 

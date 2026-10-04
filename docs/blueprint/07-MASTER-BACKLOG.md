@@ -73,7 +73,7 @@
 | VNX-0401 | FTS5 trigram, truy vấn xếp hạng, fallback `LIKE` | AGENT, FOUNDATION | ⏳ |
 | VNX-0402 | `/products` có bộ lọc và phân trang | AGENT | ⏳ |
 | VNX-0403 | `/builders` danh bạ | AGENT | ⏳ |
-| VNX-0404 | Sitemap, robots, canonical, hreflang | AGENT, QUICK-WIN | ⏳ |
+| VNX-0404 | Sitemap, robots (gồm `Disallow: /go/`), canonical, hreflang | AGENT, QUICK-WIN | ⏳ |
 
 ## EPIC 5 — Inquiry
 
@@ -101,7 +101,8 @@
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|
-| VNX-0701 | `product_daily_stats`, `/p/:slug/demo` | AGENT | ⏳ |
+| VNX-0701 | `product_daily_stats` (view) | AGENT | ⏳ |
+| VNX-0707 | `/go/p/:slug/{demo,site}` + `outbound_clicks` (phụ lục monetization mục 2, ADR-007) | AGENT, HIGH-RISK | ⏳ |
 | VNX-0702 | Cron hằng giờ `public_stats`, trending | AGENT | ⏳ |
 | VNX-0703 | Homepage SSR có ngưỡng | AGENT | ⏳ |
 | VNX-0704 | Animation, chart, tooltip, bảng dữ liệu, reduced-motion | AGENT | ⏳ |
@@ -171,6 +172,8 @@
 | VNX-1204 | Tự kiểm demo URL định kỳ (HTTP, HTTPS) → cảnh báo, không tự gắn huy hiệu | AGENT | 💤 |
 
 ## EPIC 13 — Tăng trưởng client
+
+VNX-1301 và VNX-1302 làm qua mô hình nội dung của EPIC 22 (phụ lục monetization mục 4).
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|
@@ -246,3 +249,55 @@
 | VNX-2001 | AI Architect: PRD → đề xuất kiến trúc cho builder | AGENT, RESEARCH | 💤 |
 | VNX-2002 | AI QA / Security check cho product nộp lên (bổ sung huy hiệu mới, cần ADR) | AGENT, RESEARCH | 💤 |
 | VNX-2003 | Tích hợp agent runtime (hướng spec v0.1 cũ) như công cụ cho builder | RESEARCH | 💤 |
+
+---
+
+# Monetization (xuyên wave)
+
+Nguồn: [phụ lục monetization](../superpowers/specs/2026-10-04-vnxsi-monetization-addendum.md), ADR-007/008/009. Phần outbound `/go/` làm trong M7 (VNX-0701). Các task dưới đây là bản phác; tách nhỏ khi lập plan của epic.
+
+## EPIC 21 — Partner và affiliate
+
+Điều kiện bắt đầu: có hợp đồng partner thật đầu tiên (Owner tự kiểm điều khoản, Q4).
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2101 | `feature_flags` + `/admin/flags` | AGENT, FOUNDATION | 💤 |
+| VNX-2102 | Migration merchants, programs, offers; admin CRUD; kiểm `allowed_hosts` | AGENT, FOUNDATION | 💤 |
+| VNX-2103 | `/go/o/:offerId`, tracking template, provider port (`generic_template`, `manual`) | AGENT, HIGH-RISK | 💤 |
+| VNX-2104 | `/tools/:merchant`, khối offer, disclosure, trang `/disclosure` | AGENT | 💤 |
+| VNX-2105 | Conversion: state machine, nhập tay, import CSV | AGENT, HIGH-RISK | 💤 |
+| VNX-2106 | Ledger `revenue_entries`, `/admin/revenue` | AGENT | 💤 |
+| VNX-2107 | Hub: offer `trial` cho product của builder | AGENT | 💤 |
+| VNX-2108 | Hub: `/hub/products/:id/stats` (view, demo, outbound, Inquiry) | AGENT | 💤 |
+| VNX-2109 | Postback theo giao thức của mạng partner (chỉ khi partner hỗ trợ) | AGENT, HIGH-RISK | 💤 |
+
+## EPIC 22 — Nội dung biên tập (gộp EPIC 13)
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2201 | Migration articles, article_links; state machine bài | AGENT, FOUNDATION | 💤 |
+| VNX-2202 | Renderer markdown giới hạn + bộ test XSS | AGENT, HIGH-RISK | 💤 |
+| VNX-2203 | Admin: editor, hàng chờ duyệt, publish | AGENT | 💤 |
+| VNX-2204 | Route public theo loại bài, JSON-LD Article/Breadcrumb, hreflang theo `translation_group` | AGENT | 💤 |
+| VNX-2205 | Ngưỡng index (5/5/3/2), sitemap, cờ `content_indexing` | AGENT | 💤 |
+| VNX-2206 | `/products/c/:category`; "Được nhắc trong" trên trang product | AGENT | 💤 |
+
+## EPIC 23 — Sponsored (ADR-008)
+
+Điều kiện bắt đầu: cổng ra Wave 1 đạt; ADR-008 `Accepted`.
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2301 | Chiến dịch sponsored: builder xin, admin duyệt, thời hạn | AGENT | 💤 |
+| VNX-2302 | Ô sponsored trên homepage và trang category; nhãn 4 locale | AGENT | 💤 |
+| VNX-2303 | Test thứ tự organic bất biến; route cấm không render ô | AGENT | 💤 |
+
+## EPIC 24 — Quảng cáo (ADR-009)
+
+Điều kiện bắt đầu: có traffic trên trang nội dung (Owner đặt ngưỡng); ADR-009 `Accepted`.
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2401 | Registry vị trí, `AdProvider` bản `direct`, ô kích thước cố định, tải lười | AGENT | 💤 |
+| VNX-2402 | (Tùy quyết định) mạng quảng cáo bên thứ ba + CMP + CSP | AGENT, HIGH-RISK | 💤 |

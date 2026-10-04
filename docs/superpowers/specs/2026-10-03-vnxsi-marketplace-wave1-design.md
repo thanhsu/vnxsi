@@ -5,6 +5,7 @@
 - **Phạm vi:** `apps/web` (Worker `vnxsi-web`, D1 `vnxsi`), thay landing hiện tại
 - **Thay thế:** [spec v0.1](2026-10-02-vnx-v0.1-design.md) và [plan review/cost](../../plan/2026-10-02-vnx-review-cost-rollout.md) (cả hai: Superseded)
 - **Chiến lược gốc:** [Marketplace OS v1](../../strategy/2026-10-03-marketplace-os-v1.md)
+- **Phụ lục:** [Monetization, Partner, Nội dung (2026-10-04)](2026-10-04-vnxsi-monetization-addendum.md): thay mục 8.11 ở phần đếm demo click; thêm `/go/` vào `robots.txt` (mục 8.8)
 
 ---
 
@@ -391,7 +392,7 @@ Mỗi file một trách nhiệm. `domain/` không phụ thuộc Hono hay D1. `db
 ### 8.8 SEO
 
 - `sitemap.xml`: trang tĩnh, product và builder public × 4 locale, kèm `xhtml:link` hreflang.
-- `robots.txt`: chặn `/hub`, `/me`, `/admin`, `/auth`, `/media`. Request không bao giờ có trang public.
+- `robots.txt`: chặn `/hub`, `/me`, `/admin`, `/auth`, `/media` (trừ `Allow: /media/products/`, quyết định Owner 2026-10-04), `/go/` (phụ lục monetization). Request không bao giờ có trang public.
 - Sitemap gồm cả `/builders` và `/request`.
 - Mỗi trang có title, meta description, canonical, Open Graph (ảnh đầu tiên của product).
 - `/p/:slug` có JSON-LD `SoftwareApplication` (name, description, offers từ pricing tier có giá). Không đưa `aggregateRating` (chưa có review).
@@ -420,7 +421,7 @@ Tất cả được tính sẵn mỗi giờ bởi cron và lưu vào bảng `pub
 
 **Ghi nhận lượt xem:** bảng `product_daily_stats` (`product_id`, `day`, `views`, `demo_clicks`, `inquiries`; PK `product_id` + `day`).
 - `views` tăng khi render `/p/:slug`. Không đếm: bot (theo User-Agent và `cf.botManagement` nếu có), chính builder của product, admin. Mỗi trình duyệt chỉ đếm 1 lần mỗi product mỗi ngày, nhận diện bằng cookie ngẫu nhiên không gắn danh tính.
-- `demo_clicks` đếm qua route chuyển hướng `/p/:slug/demo`.
+- `demo_clicks` đếm qua route chuyển hướng `/go/p/:slug/demo` (thay `/p/:slug/demo`; chi tiết và cột `outbound_clicks` ở phụ lục monetization mục 2).
 - `inquiries` tăng khi Inquiry vào `open`.
 
 **Định nghĩa:**
@@ -489,7 +490,7 @@ Chuyển từ `node --test` sang **Vitest + `@cloudflare/vitest-pool-workers`**:
 
 ## 11. Ngoài phạm vi dự án 1
 
-AI Discovery và ước giá; AI matching (Wave 1 chỉ có gợi ý theo luật cho admin); request board công khai để builder tự tìm việc; thanh toán, escrow, order, payout; Project, Proposal có ràng buộc, Milestone; doanh thu trong Builder Hub; review và rating; Maintenance; Product Opportunity; sponsored listing; bản dịch nội dung product sang nhiều ngôn ngữ; quy đổi tiền tệ; resize ảnh; reply bằng email; app di động.
+AI Discovery và ước giá; AI matching (Wave 1 chỉ có gợi ý theo luật cho admin); request board công khai để builder tự tìm việc; thanh toán, escrow, order, payout; Project, Proposal có ràng buộc, Milestone; doanh thu trong Builder Hub; review và rating; Maintenance; Product Opportunity; sponsored listing (sau Wave 1, theo ADR-008); affiliate/partner, nội dung biên tập, quảng cáo (phụ lục monetization, trừ `/go/` làm ở M7); bản dịch nội dung product sang nhiều ngôn ngữ; quy đổi tiền tệ; resize ảnh; reply bằng email; app di động.
 
 ## 12. Rủi ro và câu hỏi để mở
 
