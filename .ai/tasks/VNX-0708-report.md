@@ -112,3 +112,58 @@ Ngoài các mục trên, tôi không thêm câu quảng cáo, con số, thẻ pr
 - `TURNSTILE_SECRET` trong `src/env.ts` và comment trong `wrangler.jsonc` giờ không còn code nào dùng. Sẽ có lại khi làm VNX-0502.
 - `apps/web/drafts/` vẫn còn các bản HTML landing cũ, giữ theo plan.
 - `npm ci` báo một số lỗ hổng `npm audit` có sẵn từ trước; không xử lý.
+
+## Lượt sửa F1–F3
+
+Phạm vi: chỉ F1, F2, F3 trong `.ai/reviews/VNX-0708-review.md` (`0b853ca`), Owner đã duyệt. Không đụng F4, F5.
+
+### Commit
+
+| SHA | Nội dung |
+|---|---|
+| `615ca6f` | `test: referrer via ref, www site host and kept consent (VNX-0708 F1-F3)`: test viết trước; khi commit có 4 test đỏ |
+| `f5e7b56` | `fix(web): landing referrer via ref, www host internal, keep consent (VNX-0708 F1-F3)` |
+| (commit này) | `docs: VNX-0708 report, fix round F1-F3` |
+
+### Thay đổi
+
+- **F1**
+  - `GET /` lấy host của `Referer` qua `externalReferrerHost` và đưa vào input ẩn `ref`, cùng chỗ với `utm_*`.
+  - Schema zod của `POST /waitlist` có thêm field `ref`. Giá trị được trim và chuyển chữ thường, rồi phải là hostname trần: `^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`, tối đa 200 ký tự, không trùng host của site. Sai bất kỳ điều kiện nào thì thành `null`, không báo lỗi form.
+  - `POST` không đọc header `Referer` nữa.
+  - `externalReferrerHost` dùng chung kiểm tra `refHost` với POST, nên GET chỉ in ra những giá trị mà POST sẽ nhận lại.
+  - `referrer` chuyển vào kiểu `ClientSignup`. Câu SQL trong `db/waitlist.ts` giữ nguyên.
+- **F2:** `LandingForm` có thêm `consent`. Khi form được render lại (400 vì lỗi field, hoặc 429) mà lần gửi trước có `consent=on`, ô đồng ý được đặt `checked`.
+- **F3:** thêm `siteHosts(appOriginHost, requestHost)`, trả về host của `APP_ORIGIN`, `www.` + host đó và host của request. Cả GET lẫn POST dùng hàm này.
+
+File đã sửa đều thuộc danh sách handoff: `src/domain/waitlist-input.ts`, `src/db/waitlist.ts` (chỉ đổi kiểu), `src/routes/landing.tsx`, `src/views/LandingPage.tsx`, `test/landing/page.test.ts`, `test/landing/waitlist.test.ts`. Không có file mới, không thêm dependency.
+
+### Test thêm / sửa
+
+- `page.test.ts` › "F1: carries an external Referer host into a hidden ref input…"
+  - `Referer: https://news.ycombinator.com/item?id=1` cho ra `<input type="hidden" name="ref" value="news.ycombinator.com">`; trang không chứa path `item?id`.
+  - `vnx.si`, `www.vnx.si`, một chuỗi không phải URL, hoặc thiếu `Referer`: không có `ref`.
+- `waitlist.test.ts`
+  - "F1: stores the referrer host carried in ref…": `ref=news.ycombinator.com` ghi `referrer = news.ycombinator.com`. Header `Referer` ngoài trên POST không còn được dùng, kết quả `null`.
+  - "F1: a ref that is not a plain external hostname is stored as null": thử ref có path, có scheme, có khoảng trắng, có query, có `<script>`, có `user@`, dài 201 ký tự, `vnx.si`, `www.vnx.si`. Tất cả cho 303 và `referrer = null`.
+  - "F3: treats APP_ORIGIN, www. + APP_ORIGIN and the request host as the site itself": unit test `siteHosts` và `externalReferrerHost`, gồm `https://www.vnx.si/x` → `null`.
+  - "F2: keeps the consent box ticked…": email sai kèm `consent=on` → `#waitlist-consent` có `checked`. Thiếu `consent` → không có `checked`.
+  - Test cũ "stores utm_* … and only an external referrer host" đổi thành "stores utm_* (capped at 200)". Phần referrer của nó dựa trên header `Referer` của POST, hành vi mà F1 bỏ đi.
+
+### Kết quả
+
+```
+> npm run typecheck -w apps/web
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+typecheck exit=0
+
+> npm test
+ Test Files  62 passed (62)
+      Tests  405 passed (405)
+   Duration  52.68s
+test exit=0
+```
+
+Số test: 400 → 405 (page +1; waitlist +4: F1 ×2, F2, F3; test utm được sửa, không cộng thêm).
+
+Không có việc nào chưa làm được trong lượt này. Thêm một lưu ý: `ref` do client gửi nên có thể bị giả mạo, giống `utm_*`. Đây là dữ liệu attribution, không dùng cho quyết định nào.
