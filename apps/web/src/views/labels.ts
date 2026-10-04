@@ -1,4 +1,5 @@
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
+import type { BudgetBand, InquiryStatus, InquiryType } from "../domain/inquiry.ts";
 import type { UserStatus } from "../domain/user.ts";
 import type { Badge, Billing, Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
 import type { ProductStep } from "../domain/product-input.ts";
@@ -105,4 +106,29 @@ export const BADGE_KEY: Record<Badge["kind"], MessageKey> = {
   listed: "badge.listed",
   demo_verified: "badge.demo_verified",
   in_production: "badge.in_production",
+};
+
+export const INQUIRY_TYPE_KEY: Record<InquiryType, MessageKey> = {
+  buy: "inquiry.type.buy",
+  customize: "inquiry.type.customize",
+  hire: "inquiry.type.hire",
+  build_similar: "inquiry.type.build_similar",
+  request: "inquiry.type.request",
+};
+
+export const BUDGET_KEY: Record<BudgetBand, MessageKey> = {
+  "<500": "inquiry.budget.lt500",
+  "500-2k": "inquiry.budget.500-2k",
+  "2k-10k": "inquiry.budget.2k-10k",
+  ">10k": "inquiry.budget.gt10k",
+  unsure: "inquiry.budget.unsure",
+};
+
+export const INQUIRY_STATUS_KEY: Record<InquiryStatus, MessageKey> = {
+  pending_verification: "inquiry.status.pending_verification",
+  open: "inquiry.status.open",
+  answered: "inquiry.status.answered",
+  declined: "inquiry.status.declined",
+  closed: "inquiry.status.closed",
+  removed: "inquiry.status.removed",
 };
