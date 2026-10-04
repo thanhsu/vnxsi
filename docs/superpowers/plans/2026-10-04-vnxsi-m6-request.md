@@ -6649,30 +6649,62 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 7: VNX-0606 — Cron: lời mời và request hết hạn, nhắc, dọn request chờ; khóa builder
+### Task 7: VNX-0606 — Cron: lời mời và request hết hạn, nhắc, dọn request chờ; khóa builder / user
 
 **Files:**
-- Modify: `apps/web/src/db/requests.ts` (`expireStaleInvites`, `expireInvitesOfInactiveBuilders`, `listInvitesToRemind`, `markInviteReminded`, `listRequestsToExpire`, `deleteExpiredPendingRequests`)
-- Modify: `apps/web/src/notify/request.ts` (`remindInvite`)
+- Modify: `apps/web/src/db/requests.ts` (6 hàm mới, dưới)
 - Modify: `apps/web/src/jobs/daily.ts` (4 bước mới, kiểu đếm `expired`)
-- Modify: `apps/web/src/routes/admin.tsx` (khóa builder), `apps/web/src/routes/admin-users.tsx` (khóa user): lời mời `invited` hết hạn ngay
-- Test: `apps/web/test/jobs/daily-requests.test.ts`
+- Modify: `apps/web/src/routes/admin.tsx` (`decide`: khóa builder), `apps/web/src/routes/admin-users.tsx` (`changeUser`: khóa user, cùng `db.batch` với trạng thái, phiên và audit)
+- Modify: `apps/web/test/jobs/daily.test.ts` (danh sách bước "rỗng" có thêm 4 bước mới)
+- Test: `apps/web/test/jobs/daily-requests.test.ts` (tạo mới)
+- Không sửa `notify/request.ts`, `email/templates/request.ts`, locale: Task 2 đã có đủ `notifyInviteReminder`, `notifyInviteExpired`, `notifyRequestExpired`, `notifyNotSelected` và 4 locale. Không thêm key `t()` nào. Không sửa `index.ts` (`scheduled` đã gọi `runDaily` cho `0 1 * * *`) và `deleteGhostUsers` (đã xét `requests` từ Task 1).
 
 **Interfaces:**
-- Consumes: Task 1 (`endRequestBatch`, `INVITE_TTL_MS`, `INVITE_REMIND_AFTER_MS`, `MATCHING_TTL_MS`, `toRequest`), Task 2 (`findInviteContext`, `inviteReminderEmail`, `invitationUrl`, `notifyRequestEnded`, `notifyNotSelected`), M5 (`runDaily`, `PENDING_TTL_MS`, `auditStatement`).
+- Consumes (code thật):
+  - `db/requests.ts`: `endRequestBatch(db, {id, from, to, now}) → {statements, read(results) → {request, notSelected, expired}}`, `proposeStatement`, `returnedInvite`, `listRequestInvites`, `listCandidates`.
+  - `db/audit.ts`: `auditStatement(db, input, {requestId, status, updatedAt})`.
+  - `notify/request.ts`: `notifyInviteReminder(env, id): NotifyOutcome`; `notifyInviteExpired(env, ids)`, `notifyNotSelected(env, ids)` (cả hai bỏ qua builder không còn công khai nhờ `publicBuilderOnly`); `notifyRequestExpired(env, requestId): NotifyOutcome`.
+  - `domain/request.ts`: `INVITE_REMIND_AFTER_MS` (3 ngày), `INVITE_TTL_MS` (7 ngày), `MATCHING_TTL_MS` (30 ngày).
+  - `domain/inquiry.ts`: `PENDING_TTL_MS` (48 giờ).
+  - `db/users.ts`: `deleteGhostUsers`.
+  - `jobs/daily.ts`: `runDaily`, helper `before`.
+  - `auth/sessions.ts`: `deleteUserSessionsStatement`.
+  - Fixture: `makeRequest`, `makeBuilder`, `inviteBuilders(request, builders, now)` (gọi lại được trên request đã `matching`, để mời thêm vào thời điểm khác), `proposeOn`, `signIn`.
 - Produces:
-  - `db/requests.ts`: `expireStaleInvites(db, invitedBefore, now): Promise<number>`, `expireInvitesOfInactiveBuilders(db, now): Promise<number>`, `listInvitesToRemind(db, invitedBefore, limit?): Promise<string[]>`, `markInviteReminded(db, id, now)`, `listRequestsToExpire(db, matchedBefore, limit?): Promise<ClientRequest[]>`, `deleteExpiredPendingRequests(db, cutoff): Promise<number>`.
-  - `notify/request.ts`: `remindInvite(env, inviteId, now): Promise<boolean>`.
-  - `jobs/daily.ts`: bước `invites_expire`, `invite_remind`, `requests_expire`, `pending_requests`; `DailyResult` thêm dạng `{ job, step, expired }`.
+  - `db/requests.ts`:
+    - `expireStaleInvites(db, invitedBefore, now): Promise<string[]>` (id các lời mời vừa hết hạn);
+    - `expireInvitesOfInactiveBuildersStatement(db, now, builderId?: string | null): D1PreparedStatement`;
+    - `expireInvitesOfInactiveBuilders(db, now): Promise<number>`;
+    - `listInvitesToRemind(db, invitedBefore, limit?): Promise<string[]>`;
+    - `markInviteReminded(db, id, now): Promise<void>`;
+    - `listRequestsToExpire(db, matchedBefore, limit?): Promise<string[]>`;
+    - `deleteExpiredPendingRequests(db, cutoff): Promise<number>`.
+  - `jobs/daily.ts`: bước `invites_expire`, `requests_expire`, `invite_remind`, `pending_requests`; hằng `CRON_LIST_CAP` (200); `DailyResult` thêm `{ job, step, expired }`.
 
-- [ ] **Step 1: Test cron (fail)**
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Khóa builder / user: không gửi email "lời mời đã kết thúc"** (Owner 2026-10-04). Chỉ hai đường gửi nó: lời mời quá 7 ngày (cron) và request kết thúc (`expired` của `endRequestBatch`). Hai chỗ đảm bảo: (a) đường khóa chỉ chạy câu `UPDATE`, không gọi `notify*`; (b) `notifyInviteExpired` đã bỏ qua builder không công khai (`publicBuilderOnly`), nên dù lời mời của builder bị khóa còn sót ở `invited` (đua, hoặc khóa trực tiếp trong DB) thì lúc client đóng request cũng không có email. Test hồi quy (từ review Task 3) khóa cả hai lớp.
+2. **Tức thì và nguyên tử (spec 7.6).** Khóa user: câu hết hạn nằm trong cùng `db.batch` với đổi trạng thái, xóa phiên và audit (nguyên tử). Khóa builder: `decide` (M2) chạy `setBuilderStatus` rồi `writeAudit` thành hai lần gọi riêng, không có dạng câu lệnh để gộp; không đổi cấu trúc code M2 trong task này (ngoài phạm vi). Câu hết hạn của builder chạy ngay sau `setBuilderStatus`; khe hở giữa hai lần gọi vô hại vì `ANSWERABLE` (Task 5) đã chặn builder không còn `approved` gửi đề xuất hay từ chối, và cron quét lại hằng ngày. Câu hết hạn tự kiểm điều kiện (chỉ chạm lời mời của builder hiện không công khai), nên gọi lúc nào cũng không sai, và cron dùng chính nó (không truyền `builderId`).
+3. **Điểm trừ §8.10 (chỉ đếm lapse: `julianday(updated_at) - julianday(invited_at) >= 7`).**
+   - Cron: `expireStaleInvites` chỉ chạm lời mời có `invited_at < now - 7 ngày` và đặt `updated_at = now`, nên chênh lệch luôn > 7 ngày: đếm đúng.
+   - Khóa builder / user: đặt `updated_at = now` của lúc khóa. Khóa trước ngày 7 thì chênh lệch < 7: không bị trừ (test). Khóa sau ngày 7 mà cron chưa chạy (trễ tối đa một ngày) thì có bị đếm, và đúng: lời mời đó đã bỏ trống hơn 7 ngày. Builder bị khóa không được gợi ý (`listCandidates` đòi `approved` + `active`), cửa sổ phạt 60 ngày chỉ bắt đầu có tác dụng khi mở khóa. Cùng lý lẽ cho client đóng request ở ngày 7–8 (Task 3). Không thêm cột hay cờ.
+4. **Cron: thứ tự bước là một phần hành vi.** `invites_expire` (quét âm thầm các lời mời của builder không công khai, rồi lapse > 7 ngày và gửi email) chạy trước `requests_expire` (lúc request hết hạn, chỉ còn lời mời mới hơn 7 ngày trong danh sách `expired` của `endRequestBatch`; lời mời cũ hơn đã có email lapse riêng, không email lần hai) và `requests_expire` chạy trước `invite_remind` (lời mời vừa bị request hết hạn kéo theo không còn bị nhắc: `listInvitesToRemind` chỉ lấy request `matching`; nên không bao giờ có "nhắc" rồi "đã kết thúc" cho cùng builder trong một lần chạy). `pending_requests` chạy trước `ghost_users`.
+5. **Hạn mềm (§9).** `proposeStatement` / `declineInviteStatement` (Task 5) không xem tuổi lời mời, nên đến khi cron chạy builder vẫn trả lời được. Cron chỉ chạm `status = 'invited'` bằng compare-and-set, nên đua với một câu trả lời thì thua mà không hỏng gì. Test khóa hành vi này.
+6. **Nhắc một lần.** `listInvitesToRemind` lọc `reminded_at IS NULL`; cron gọi `notifyInviteReminder` và chỉ khi trả `"sent"` mới `markInviteReminded`. Gửi lỗi thì không đánh dấu và thử lại ở lần chạy sau (tối đa tới khi lời mời hết hạn; hợp quy tắc "email về request gửi một lần, lỗi chỉ ghi log" vì chưa có lần gửi thành công). Email nhắc đã che tên client (`builderFacingName` trong `notifyInviteReminder`); `daily.ts` không đọc `clientName` nên test kiến trúc "tên client" vẫn qua.
+7. **Email hết hạn / không được chọn / lapse không có cột gửi lại** (quyết định plan): các id trả về từ `RETURNING` chỉ có đúng ở lần chạy chuyển trạng thái, lần chạy sau không thấy lại, nên không gửi trùng.
+8. **Request hết hạn** đi qua `endRequestBatch` (`from: "matching"`, `to: "expired"`) cùng một câu audit `request.expire` có điều kiện; mất compare-and-set (client vừa đóng) thì `read(...).request` là `null`: không gửi gì. Thứ tự gửi: client (`notifyRequestExpired`), `notifyNotSelected(notSelected)`, `notifyInviteExpired(expired)`.
+9. `listRequestsToExpire` / `listInvitesToRemind` có giới hạn `CRON_LIST_CAP = 200` mỗi lần chạy, coi là ngưỡng an toàn (không phải hạn mức nghiệp vụ); chạm ngưỡng thì cron `console.warn` (`jobs.daily.capped`), phần còn lại xử lý hôm sau.
+10. `deleteExpiredPendingRequests` dùng `RETURNING id` (cùng khuôn với M5 / ARCHITECTURE: không dựa `meta.changes`). Request chờ xác nhận không có lời mời nên không cần xóa bảng con.
+
+**Khác với bản nháp (đã đối chiếu code thật):** `notifyRequestEnded` và `remindInvite` không tồn tại: dùng `notifyRequestExpired` + `notifyNotSelected` + `notifyInviteExpired` và `notifyInviteReminder` (cron tự `markInviteReminded`). `expireStaleInvites` trả danh sách id (bản nháp trả số) để gửi email lapse. `endRequestBatch` nhận một đối tượng (`from`, `to`, `now`) và `read` trả thêm `expired`. Lời mời của builder bị khóa hết hạn không gửi email (bản nháp không nói; nay là quyết định của Owner). Bổ sung: test idempotent, test hạn mềm, test điểm trừ, test hồi quy khóa-rồi-đóng, và `decide` chỉ chạy khi `suspend`. `listRequestsToExpire` trả id.
+
+- [ ] **Step 1: Test (fail)**
 
 `apps/web/test/jobs/daily-requests.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { findRequestById, listRequestInvites } from "../../src/db/requests.ts";
+import { listCandidates, listRequestInvites, findRequestById, proposeStatement, returnedInvite } from "../../src/db/requests.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { runDaily, type DailyResult } from "../../src/jobs/daily.ts";
 import { inviteBuilders, makeBuilder, makeRequest, proposeOn, signIn } from "../fixtures.ts";
@@ -6682,9 +6714,13 @@ const NOW = new Date("2026-10-10T01:00:00.000Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 3600 * 1000).toISOString();
 const hoursAgo = (n: number) => new Date(NOW.getTime() - n * 3600 * 1000).toISOString();
 const sentTo = (to: string) => outbox.filter((m) => m.to === to);
-const statusOf = async (requestId: string, inviteId: string) => (await listRequestInvites(testEnv.DB, requestId)).find((x) => x.invite.id === inviteId)?.invite;
+const subjectsTo = (to: string) => sentTo(to).map((m) => m.subject);
+const inviteOf = async (requestId: string, inviteId: string) => (await listRequestInvites(testEnv.DB, requestId)).find((x) => x.invite.id === inviteId)!.invite;
+const builders = (tag: string, keys: string[]) => Promise.all(keys.map((k) => makeBuilder(`${tag}-${k}@vnx.si`, `${tag}-${k}`, "approved")));
+const adminCookie = async () => (await signIn("owner@vnx.si", { admin: true })).cookie;
 function stepCount(results: DailyResult[], step: string, key: "sent" | "deleted" | "expired"): number {
   const result = results.find((r) => r.step === step);
+  expect(result, step).toBeDefined();
   expect(result, step).toHaveProperty(key);
   return (result as unknown as Record<typeof key, number>)[key];
 }
@@ -6692,132 +6728,279 @@ function stepCount(results: DailyResult[], step: string, key: "sent" | "deleted"
 describe("daily job, request steps (spec §8.4, VNX-0606)", () => {
   beforeEach(() => clearOutbox());
 
-  it("reminds a builder once after 3 days, in their language", async () => {
-    const { request } = await makeRequest({ tag: "dr-rem", now: daysAgo(4) });
-    const builder = await makeBuilder("dr-rem-b@vnx.si", "dr-rem-b", "approved");
-    await testEnv.DB.prepare("UPDATE users SET locale = 'vi' WHERE id = ?1").bind(builder.userId).run();
-    const [invite] = await inviteBuilders(request, [builder], daysAgo(4));
+  it("reminds a builder once after 3 days, in their language, without the client's e-mail", async () => {
+    const { client, request } = await makeRequest({ tag: "dr-rem", now: daysAgo(4) });
+    await testEnv.DB.prepare("UPDATE requests SET client_name = ?2 WHERE id = ?1").bind(request.id, client.email).run(); // the client typed their e-mail as their name
+    const [b] = await builders("dr-rem", ["b"]);
+    await testEnv.DB.prepare("UPDATE users SET locale = 'vi' WHERE id = ?1").bind(b!.userId).run();
+    const [invite] = await inviteBuilders(request, [b!], daysAgo(4));
     const fresh = await makeRequest({ tag: "dr-rem2", now: daysAgo(1) });
-    const freshBuilder = await makeBuilder("dr-rem2-b@vnx.si", "dr-rem2-b", "approved");
-    await inviteBuilders(fresh.request, [freshBuilder], daysAgo(1));
+    await inviteBuilders(fresh.request, await builders("dr-rem2", ["b"]), daysAgo(1));
+
     const results = await runDaily(testEnv, NOW);
     expect(stepCount(results, "invite_remind", "sent")).toBeGreaterThanOrEqual(1);
-    expect(sentTo("dr-rem-b@vnx.si").map((m) => m.subject)).toEqual([`Nhắc: ${request.title} đang chờ đề xuất của bạn`]);
+    expect(subjectsTo("dr-rem-b@vnx.si")).toEqual([`Nhắc: hãy phản hồi “${request.title}”`]);
+    expect(sentTo("dr-rem-b@vnx.si").every((m) => ![m.subject, m.text, m.html].some((part) => part.includes(client.email)))).toBe(true);
     expect(sentTo("dr-rem2-b@vnx.si")).toEqual([]);
-    expect((await statusOf(request.id, invite!.id))?.remindedAt).toBe(NOW.toISOString());
+    expect((await inviteOf(request.id, invite!.id)).remindedAt).toBe(NOW.toISOString());
     clearOutbox();
     await runDaily(testEnv, NOW);
     expect(sentTo("dr-rem-b@vnx.si")).toEqual([]);
   });
 
-  it("expires invitations unanswered for 7 days, and nothing else", async () => {
+  it("lapses an invitation after 7 days with one 'ended' e-mail; a late answer before the cron still counts (soft deadline)", async () => {
     const { request } = await makeRequest({ tag: "dr-exp", now: daysAgo(8) });
-    const [a, b] = await Promise.all(["a", "b"].map((k) => makeBuilder(`dr-exp-${k}@vnx.si`, `dr-exp-${k}`, "approved")));
+    const [a, b, d] = await builders("dr-exp", ["a", "b", "d"]);
     const [ia, ib] = await inviteBuilders(request, [a!, b!], daysAgo(8));
-    await proposeOn(ib!, daysAgo(7));
+    const [id] = await inviteBuilders(request, [d!], daysAgo(6));
+    // Day 8, the cron has not run yet: b still answers, and it is accepted.
+    const answered = await testEnv.DB.batch([
+      proposeStatement(testEnv.DB, { inviteId: ib!.id, builderId: b!.userId, proposal: { approach: "Next.js", priceCents: 450000, priceMaxCents: null, priceNote: "", timelineDays: 30 }, now: NOW.toISOString() }),
+    ]);
+    expect(returnedInvite(answered[0])?.status).toBe("proposed");
+
+    const results = await runDaily(testEnv, NOW);
+    expect(stepCount(results, "invites_expire", "expired")).toBeGreaterThanOrEqual(1);
+    expect((await inviteOf(request.id, ia!.id)).status).toBe("expired");
+    expect((await inviteOf(request.id, ib!.id)).status).toBe("proposed");
+    expect((await inviteOf(request.id, id!.id)).status).toBe("invited");
+    // a lapsed: the "ended" e-mail only (expired before the reminder step); d is 6 days old: reminded, not expired; b answered: nothing.
+    expect(subjectsTo("dr-exp-a@vnx.si")).toEqual([`Invitation ended: ${request.title}`]);
+    expect(subjectsTo("dr-exp-d@vnx.si")).toEqual([`Reminder: respond to “${request.title}”`]);
+    expect(sentTo("dr-exp-b@vnx.si")).toEqual([]);
+    clearOutbox();
     await runDaily(testEnv, NOW);
-    expect((await statusOf(request.id, ia!.id))?.status).toBe("expired");
-    expect((await statusOf(request.id, ib!.id))?.status).toBe("proposed");
-    expect(sentTo("dr-exp-a@vnx.si")).toEqual([]);
+    expect(outbox).toEqual([]);
   });
 
-  it("expires matching requests after 30 days: client told, proposals not selected and told; once", async () => {
+  it("expires a matching request 30 days after matched_at: client told, proposals not selected and told, stale invitations told once", async () => {
     const { request } = await makeRequest({ tag: "dr-req", now: daysAgo(31) });
-    const [a, b] = await Promise.all(["a", "b"].map((k) => makeBuilder(`dr-req-${k}@vnx.si`, `dr-req-${k}`, "approved")));
+    const [a, b, d] = await builders("dr-req", ["a", "b", "d"]);
     const [ia, ib] = await inviteBuilders(request, [a!, b!], daysAgo(31));
+    const [id] = await inviteBuilders(request, [d!], daysAgo(4)); // matched_at stays at the first invitation; 4 days old would be reminded, but the request ends first
     await proposeOn(ia!, daysAgo(30));
-    // ib stays invited and is old enough to expire on its own as well.
+
     const results = await runDaily(testEnv, NOW);
     expect(stepCount(results, "requests_expire", "expired")).toBeGreaterThanOrEqual(1);
     expect(await findRequestById(testEnv.DB, request.id)).toMatchObject({ status: "expired", closedAt: NOW.toISOString() });
-    expect((await statusOf(request.id, ia!.id))?.status).toBe("not_selected");
-    expect((await statusOf(request.id, ib!.id))?.status).toBe("expired");
-    expect(sentTo("dr-req-c@vnx.si").map((m) => m.subject)).toEqual([`Your request "${request.title}" has expired`]);
-    expect(sentTo("dr-req-a@vnx.si")).toHaveLength(1);
+    expect((await inviteOf(request.id, ia!.id)).status).toBe("not_selected");
+    expect((await inviteOf(request.id, ib!.id)).status).toBe("expired"); // lapsed at 7 days
+    expect((await inviteOf(request.id, id!.id)).status).toBe("expired"); // settled by the request ending
+    expect(subjectsTo("dr-req-c@vnx.si")).toEqual([`Your request has expired: ${request.title}`]);
+    expect(subjectsTo("dr-req-a@vnx.si")).toEqual([`Update on your proposal: ${request.title}`]);
+    expect(subjectsTo("dr-req-b@vnx.si")).toEqual([`Invitation ended: ${request.title}`]);
+    expect(subjectsTo("dr-req-d@vnx.si")).toEqual([`Invitation ended: ${request.title}`]); // exactly one: no reminder before it (step order)
     const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.expire' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
     expect(audit?.n).toBe(1);
     clearOutbox();
     await runDaily(testEnv, NOW);
-    expect(sentTo("dr-req-c@vnx.si")).toEqual([]);
-    expect(sentTo("dr-req-a@vnx.si")).toEqual([]);
+    expect(outbox).toEqual([]);
   });
 
-  it("keeps a matching request younger than 30 days", async () => {
-    const { request } = await makeRequest({ tag: "dr-keep", now: daysAgo(29) });
-    await inviteBuilders(request, [await makeBuilder("dr-keep-b@vnx.si", "dr-keep-b", "approved")], daysAgo(29));
+  it("counts the 30 days from matched_at, not from creation; a submitted request never expires", async () => {
+    const { request } = await makeRequest({ tag: "dr-keep", now: daysAgo(45) });
+    await inviteBuilders(request, await builders("dr-keep", ["b"]), daysAgo(29));
+    const idle = await makeRequest({ tag: "dr-keep2", now: daysAgo(40) }); // submitted, never invited
     await runDaily(testEnv, NOW);
     expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("matching");
+    expect((await findRequestById(testEnv.DB, idle.request.id))?.status).toBe("submitted");
   });
 
   it("deletes unconfirmed requests after 48 hours, then their implicit accounts", async () => {
     const old = await makeRequest({ tag: "dr-pend", status: "pending_verification", now: hoursAgo(49) });
     const young = await makeRequest({ tag: "dr-pend2", status: "pending_verification", now: hoursAgo(47) });
-    await testEnv.DB.prepare("UPDATE users SET created_at = ?2 WHERE id IN (?1, ?3)").bind(old.client.id, hoursAgo(49), young.client.id).run();
+    const confirmed = await makeRequest({ tag: "dr-pend3", now: hoursAgo(49) }); // submitted: the clean-up never touches it
+    await testEnv.DB.prepare("UPDATE users SET created_at = ?2 WHERE id = ?1").bind(old.client.id, hoursAgo(49)).run();
+    await testEnv.DB.prepare("UPDATE users SET created_at = ?2 WHERE id = ?1").bind(young.client.id, hoursAgo(47)).run();
     const results = await runDaily(testEnv, NOW);
     expect(stepCount(results, "pending_requests", "deleted")).toBeGreaterThanOrEqual(1);
     expect(await findRequestById(testEnv.DB, old.request.id)).toBeNull();
     expect(await testEnv.DB.prepare("SELECT id FROM users WHERE id = ?1").bind(old.client.id).first()).toBeNull();
     expect((await findRequestById(testEnv.DB, young.request.id))?.status).toBe("pending_verification");
+    expect((await findRequestById(testEnv.DB, confirmed.request.id))?.status).toBe("submitted");
     expect(await testEnv.DB.prepare("SELECT id FROM users WHERE id = ?1").bind(young.client.id).first()).not.toBeNull();
   });
 
-  it("expires the open invitations of a builder who is no longer approved", async () => {
-    const { request } = await makeRequest({ tag: "dr-inact", now: daysAgo(1) });
-    const b = await makeBuilder("dr-inact-b@vnx.si", "dr-inact-b", "approved");
-    const [invite] = await inviteBuilders(request, [b], daysAgo(1));
-    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(b.userId).run();
+  it("is idempotent: a second run sends nothing and changes no row", async () => {
+    const lapse = await makeRequest({ tag: "dr-idem1", now: daysAgo(8) });
+    await inviteBuilders(lapse.request, await builders("dr-idem1", ["b"]), daysAgo(8));
+    const remind = await makeRequest({ tag: "dr-idem2", now: daysAgo(4) });
+    await inviteBuilders(remind.request, await builders("dr-idem2", ["b"]), daysAgo(4));
+    const old = await makeRequest({ tag: "dr-idem3", now: daysAgo(31) });
+    const [x, y] = await builders("dr-idem3", ["x", "y"]);
+    const [ix] = await inviteBuilders(old.request, [x!, y!], daysAgo(31));
+    await proposeOn(ix!, daysAgo(30));
+    await makeRequest({ tag: "dr-idem4", status: "pending_verification", now: hoursAgo(49) });
+
     await runDaily(testEnv, NOW);
-    expect((await statusOf(request.id, invite!.id))?.status).toBe("expired");
+    expect(outbox.length).toBeGreaterThanOrEqual(5);
+    const snapshot = async () =>
+      JSON.stringify([
+        (await testEnv.DB.prepare("SELECT id, status, updated_at, reminded_at FROM request_invites ORDER BY id").all()).results,
+        (await testEnv.DB.prepare("SELECT id, status, updated_at, closed_at FROM requests ORDER BY id").all()).results,
+        (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first()),
+      ]);
+    const before = await snapshot();
+    clearOutbox();
+    const second = await runDaily(testEnv, NOW);
+    expect(outbox).toEqual([]);
+    expect(await snapshot()).toBe(before);
+    expect(second.filter((r) => "error" in r)).toEqual([]);
+    expect(stepCount(second, "invites_expire", "expired")).toBe(0);
+    expect(stepCount(second, "invite_remind", "sent")).toBe(0);
+    expect(stepCount(second, "requests_expire", "expired")).toBe(0);
+    expect(stepCount(second, "pending_requests", "deleted")).toBe(0);
   });
 });
 
-describe("suspension expires invitations at once (spec §7.6)", () => {
-  it("when the admin suspends the builder, and when the admin suspends the user", async () => {
+describe("suspension expires invitations at once and silently (spec §7.6, Owner 2026-10-04)", () => {
+  beforeEach(() => clearOutbox());
+
+  it("admin suspends the builder: expired now, no e-mail; the client closing the request later still tells nobody who was suspended", async () => {
     const app = createApp();
-    const { cookie } = await signIn("owner@vnx.si", { admin: true });
-    const { request } = await makeRequest({ tag: "ds-susp" });
-    const [x, y] = await Promise.all(["x", "y"].map((k) => makeBuilder(`ds-susp-${k}@vnx.si`, `ds-susp-${k}`, "approved")));
+    const cookie = await adminCookie();
+    const { client, request } = await makeRequest({ tag: "ds-bld" });
+    const [x, y] = await builders("ds-bld", ["x", "y"]);
     const [ix, iy] = await inviteBuilders(request, [x!, y!]);
     expect((await app.request(formPost(`/admin/builders/${x!.userId}/suspend`, { reason: "" }, { cookie }), undefined, testEnv)).status).toBe(303);
-    expect((await statusOf(request.id, ix!.id))?.status).toBe("expired");
+    expect((await inviteOf(request.id, ix!.id)).status).toBe("expired");
+    expect((await inviteOf(request.id, iy!.id)).status).toBe("invited");
+    expect(outbox).toEqual([]);
+
+    const own = await signIn(client.email);
+    expect((await app.request(formPost(`/me/requests/${request.id}/close`, {}, { cookie: own.cookie }), undefined, testEnv)).status).toBe(303);
+    expect(sentTo("ds-bld-x@vnx.si")).toEqual([]);
+    expect(subjectsTo("ds-bld-y@vnx.si")).toEqual([`Invitation ended: ${request.title}`]);
+  });
+
+  it("even when the suspended builder's invitation is still invited (suspended behind the route's back), closing sends them nothing", async () => {
+    const app = createApp();
+    const { client, request } = await makeRequest({ tag: "ds-raw" });
+    const [x, y] = await builders("ds-raw", ["x", "y"]);
+    await inviteBuilders(request, [x!, y!]);
+    await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(x!.userId).run();
+    const own = await signIn(client.email);
+    expect((await app.request(formPost(`/me/requests/${request.id}/close`, {}, { cookie: own.cookie }), undefined, testEnv)).status).toBe(303);
+    expect(sentTo("ds-raw-x@vnx.si")).toEqual([]);
+    expect(subjectsTo("ds-raw-y@vnx.si")).toEqual([`Invitation ended: ${request.title}`]);
+  });
+
+  it("admin suspends the user: expired in the same transaction as the status and the audit row; unsuspending does not revive it", async () => {
+    const app = createApp();
+    const cookie = await adminCookie();
+    const { request } = await makeRequest({ tag: "ds-usr" });
+    const [x, y] = await builders("ds-usr", ["x", "y"]);
+    const [ix, iy] = await inviteBuilders(request, [x!, y!]);
     expect((await app.request(formPost(`/admin/users/${y!.userId}/suspend`, {}, { cookie }), undefined, testEnv)).status).toBe(303);
-    expect((await statusOf(request.id, iy!.id))?.status).toBe("expired");
+    expect((await inviteOf(request.id, iy!.id)).status).toBe("expired");
+    expect((await inviteOf(request.id, ix!.id)).status).toBe("invited");
+    expect(outbox).toEqual([]);
+    const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'user.suspend' AND entity_id = ?1").bind(y!.userId).first<{ n: number }>();
+    expect(audit?.n).toBe(1);
+    await app.request(formPost(`/admin/users/${y!.userId}/unsuspend`, {}, { cookie }), undefined, testEnv);
+    expect((await inviteOf(request.id, iy!.id)).status).toBe("expired");
+  });
+
+  it("the daily job sweeps what the route missed, silently", async () => {
+    const { request } = await makeRequest({ tag: "ds-cron", now: daysAgo(1) });
+    const [x] = await builders("ds-cron", ["x"]);
+    const [ix] = await inviteBuilders(request, [x!], daysAgo(1));
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(x!.userId).run();
+    const results = await runDaily(testEnv, NOW);
+    expect(stepCount(results, "invites_expire", "expired")).toBeGreaterThanOrEqual(1);
+    expect((await inviteOf(request.id, ix!.id)).status).toBe("expired");
+    expect(sentTo("ds-cron-x@vnx.si")).toEqual([]);
+  });
+
+  // Spec §8.10 counts only lapses (julianday(updated_at) - julianday(invited_at) >= 7).
+  it("a suspension on day 0 is not a lapse for the §8.10 penalty; the cron's 7-day lapse is", async () => {
+    const app = createApp();
+    const cookie = await adminCookie();
+    const early = await makeRequest({ tag: "ds-pen1" });
+    const [p] = await builders("ds-pen1", ["p"]);
+    await inviteBuilders(early.request, [p!]); // invited now
+    await app.request(formPost(`/admin/builders/${p!.userId}/suspend`, { reason: "" }, { cookie }), undefined, testEnv);
+    await app.request(formPost(`/admin/builders/${p!.userId}/unsuspend`, {}, { cookie }), undefined, testEnv);
+
+    const late = await makeRequest({ tag: "ds-pen2", now: daysAgo(8) });
+    const [q] = await builders("ds-pen2", ["q"]);
+    await inviteBuilders(late.request, [q!], daysAgo(8));
+    await runDaily(testEnv, NOW);
+
+    const other = await makeRequest({ tag: "ds-pen3" });
+    const candidates = await listCandidates(testEnv.DB, other.request, daysAgo(60));
+    expect(candidates.find((c) => c.userId === p!.userId)?.expiredInvites).toBe(0);
+    expect(candidates.find((c) => c.userId === q!.userId)?.expiredInvites).toBe(1);
   });
 });
 ```
 
-Chạy: `npm test -w apps/web -- test/jobs/daily-requests.test.ts` → FAIL.
+(Khóa builder trong test không được là `c`: `makeRequest` đặt client của mỗi `tag` là `<tag>-c@vnx.si`, và không mời được chính client.)
+
+Sửa `apps/web/test/jobs/daily.test.ts`: danh sách bước rỗng gồm cả 4 bước mới theo đúng thứ tự cron:
+
+```ts
+// The M5 inquiry steps and the VNX-0606 (M6) request steps run before the clean-up steps (test/jobs/daily-inquiries.test.ts,
+// daily-requests.test.ts cover them). This file creates no inquiries, requests or ghost accounts, so they find nothing to do.
+const IDLE_ACTIVITY_STEPS = [
+  { job: "daily", step: "remind", sent: 0 },
+  { job: "daily", step: "alert", sent: 0 },
+  { job: "daily", step: "resend", sent: 0 },
+  { job: "daily", step: "invites_expire", expired: 0 },
+  { job: "daily", step: "requests_expire", expired: 0 },
+  { job: "daily", step: "invite_remind", sent: 0 },
+  { job: "daily", step: "pending_inquiries", deleted: 0 },
+  { job: "daily", step: "pending_requests", deleted: 0 },
+  { job: "daily", step: "ghost_users", deleted: 0 },
+];
+```
+
+Chạy: `npm test -w apps/web -- test/jobs` → FAIL (thiếu bước `invites_expire` … và lời mời của builder bị khóa vẫn `invited`).
 
 - [ ] **Step 2: db cho cron**
 
 Thêm vào `apps/web/src/db/requests.ts`:
 
 ```ts
-/** Spec §8.4 / §7.6: invitations unanswered since before `invitedBefore` expire. Returns how many. */
-export async function expireStaleInvites(db: D1Database, invitedBefore: string, now: string): Promise<number> {
+/** Sanity bound on rows one daily run takes from a list; the daily job warns when it is hit. */
+export const CRON_LIST_CAP = 200;
+
+/**
+ * Spec §8.4: invitations sent before `invitedBefore` that are still unanswered lapse (invited -> expired). Returns their ids
+ * for the "invitation ended" e-mail. `now >= invited_at + 7 days` holds for every row, so each one counts as a lapse in the
+ * §8.10 penalty (julianday(updated_at) - julianday(invited_at) >= 7); the cron must not call this with a shorter window.
+ */
+export async function expireStaleInvites(db: D1Database, invitedBefore: string, now: string): Promise<string[]> {
   const { results } = await db
     .prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE status = 'invited' AND invited_at < ?1 RETURNING id")
     .bind(invitedBefore, now)
-    .all();
-  return results.length;
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
 }
 
-/** Spec §7.6: a builder no longer approved, or whose account is suspended, loses their unanswered invitations. */
-export async function expireInvitesOfInactiveBuilders(db: D1Database, now: string): Promise<number> {
-  const { results } = await db
+/**
+ * Spec §7.6: a builder who is not approved on an active account loses their unanswered invitations (invited -> expired),
+ * with no e-mail (Owner 2026-10-04). Checks the builder's CURRENT status itself, so it is safe to batch right after the
+ * change that suspended them, or to run for everyone (no `builderId`) from the daily job. `updated_at = now` of the
+ * suspension: a suspension before day 7 is not a lapse for the §8.10 penalty.
+ */
+export function expireInvitesOfInactiveBuildersStatement(db: D1Database, now: string, builderId: string | null = null): D1PreparedStatement {
+  return db
     .prepare(
       `UPDATE request_invites SET status = 'expired', updated_at = ?1
-       WHERE status = 'invited'
+       WHERE status = 'invited' AND (?2 IS NULL OR builder_id = ?2)
          AND builder_id IN (SELECT b.user_id FROM builders b JOIN users u ON u.id = b.user_id WHERE b.status != 'approved' OR u.status != 'active')
        RETURNING id`,
     )
-    .bind(now)
-    .all();
-  return results.length;
+    .bind(now, builderId);
+}
+
+export async function expireInvitesOfInactiveBuilders(db: D1Database, now: string): Promise<number> {
+  return (await expireInvitesOfInactiveBuildersStatement(db, now).all()).results.length;
 }
 
 /** Spec §8.4: unanswered invitations sent before `invitedBefore`, not yet reminded, on a matching request, to a public builder. */
-export async function listInvitesToRemind(db: D1Database, invitedBefore: string, limit = 200): Promise<string[]> {
+export async function listInvitesToRemind(db: D1Database, invitedBefore: string, limit = CRON_LIST_CAP): Promise<string[]> {
   const { results } = await db
     .prepare(
       `SELECT x.id FROM request_invites x
@@ -6832,52 +7015,45 @@ export async function listInvitesToRemind(db: D1Database, invitedBefore: string,
   return results.map((r) => r.id);
 }
 
+/** Set once, after the reminder went out (does not touch updated_at: only expiry stamps it). */
 export async function markInviteReminded(db: D1Database, id: string, now: string): Promise<void> {
   await db.prepare("UPDATE request_invites SET reminded_at = ?2 WHERE id = ?1 AND reminded_at IS NULL").bind(id, now).run();
 }
 
-/** Spec §8.4: matching requests whose first invitation went out before `matchedBefore` (no proposal chosen in 30 days). */
-export async function listRequestsToExpire(db: D1Database, matchedBefore: string, limit = 200): Promise<ClientRequest[]> {
+/** Spec §8.4: matching requests whose first invitation (matched_at) went out before `matchedBefore`. Oldest first. */
+export async function listRequestsToExpire(db: D1Database, matchedBefore: string, limit = CRON_LIST_CAP): Promise<string[]> {
   const { results } = await db
-    .prepare("SELECT * FROM requests WHERE status = 'matching' AND matched_at < ?1 ORDER BY matched_at, id LIMIT ?2")
+    .prepare("SELECT id FROM requests WHERE status = 'matching' AND matched_at < ?1 ORDER BY matched_at, id LIMIT ?2")
     .bind(matchedBefore, limit)
-    .all<Row>();
-  return results.map(toRequest);
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
 }
 
-/** Spec §8.4: unconfirmed requests created before `cutoff` go away (they never have invitations). */
+/** Spec §8.4: unconfirmed requests created before `cutoff` go away (they never have invitations). Returns how many. */
 export async function deleteExpiredPendingRequests(db: D1Database, cutoff: string): Promise<number> {
-  const result = await db.prepare("DELETE FROM requests WHERE status = 'pending_verification' AND created_at < ?1").bind(cutoff).run();
-  return result.meta.changes;
+  const { results } = await db.prepare("DELETE FROM requests WHERE status = 'pending_verification' AND created_at < ?1 RETURNING id").bind(cutoff).all();
+  return results.length;
 }
 ```
 
-- [ ] **Step 3: Nhắc lời mời**
+- [ ] **Step 3: Các bước cron**
 
-Thêm vào `apps/web/src/notify/request.ts` (import `markInviteReminded` từ `../db/requests.ts`, `inviteReminderEmail` từ `../email/templates/request.ts`):
-
-```ts
-/** Spec §8.4: the 3-day reminder. Marked only after it went out, so a failed one is tried again the next day. */
-export function remindInvite(env: Bindings, inviteId: string, now: Date): Promise<boolean> {
-  return attempt("invite_reminder", inviteId, async () => {
-    const ctx = await findInviteContext(env.DB, inviteId);
-    if (!ctx) throw new Error("invitation not found");
-    const locale = asLocale(ctx.builder.locale);
-    await getMailer(env).send({ to: ctx.builder.email, ...inviteReminderEmail(locale, { title: ctx.request.title, url: invitationUrl(env, locale, inviteId) }) });
-    await markInviteReminded(env.DB, inviteId, now.toISOString());
-  });
-}
-```
-
-- [ ] **Step 4: Các bước cron**
-
-Trong `apps/web/src/jobs/daily.ts`:
+`apps/web/src/jobs/daily.ts` (thêm import; sửa kiểu, `STEPS`, `runDaily`):
 
 ```ts
 import { auditStatement } from "../db/audit.ts";
-import { deleteExpiredPendingRequests, endRequestBatch, expireInvitesOfInactiveBuilders, expireStaleInvites, listInvitesToRemind, listRequestsToExpire } from "../db/requests.ts";
+import {
+  CRON_LIST_CAP,
+  deleteExpiredPendingRequests,
+  endRequestBatch,
+  expireInvitesOfInactiveBuilders,
+  expireStaleInvites,
+  listInvitesToRemind,
+  listRequestsToExpire,
+  markInviteReminded,
+} from "../db/requests.ts";
 import { INVITE_REMIND_AFTER_MS, INVITE_TTL_MS, MATCHING_TTL_MS } from "../domain/request.ts";
-import { notifyNotSelected, notifyRequestEnded, remindInvite } from "../notify/request.ts";
+import { notifyInviteExpired, notifyInviteReminder, notifyNotSelected, notifyRequestExpired } from "../notify/request.ts";
 
 export type DailyResult =
   | { job: "daily"; step: string; sent: number }
@@ -6888,45 +7064,63 @@ export type DailyResult =
 /** `sent` steps count e-mails that went out; `deleted` rows removed; `expired` rows moved to an expired status. */
 type Step = { step: string; counts: "sent" | "deleted" | "expired"; run: (env: Bindings, now: Date) => Promise<number> };
 
-/** Spec §8.4 / §7.6: invitations unanswered for 7 days, and those of builders no longer approved, expire. */
-async function expireInvites(env: Bindings, now: Date): Promise<number> {
-  const iso = now.toISOString();
-  return (await expireStaleInvites(env.DB, before(now, INVITE_TTL_MS), iso)) + (await expireInvitesOfInactiveBuilders(env.DB, iso));
+/** The cap is a sanity bound, not a business limit: the rest waits for tomorrow, and the log says so. */
+function warnIfCapped(step: string, ids: string[]): void {
+  if (ids.length >= CRON_LIST_CAP) console.warn(JSON.stringify({ event: "jobs.daily.capped", step, cap: CRON_LIST_CAP }));
 }
 
-/** Spec §8.4: one reminder to builders who have not answered an invitation for 3 days. */
+/**
+ * Spec §7.6 / §8.4. First the invitations of builders who are no longer approved (silent, Owner 2026-10-04), then those
+ * unanswered for 7 days (one "invitation ended" e-mail each). Deadlines are soft: until this runs, answers are accepted.
+ */
+async function expireInvites(env: Bindings, now: Date): Promise<number> {
+  const iso = now.toISOString();
+  const swept = await expireInvitesOfInactiveBuilders(env.DB, iso);
+  const lapsed = await expireStaleInvites(env.DB, before(now, INVITE_TTL_MS), iso);
+  await notifyInviteExpired(env, lapsed);
+  return swept + lapsed.length;
+}
+
+/** Spec §8.4: one reminder per invitation, 3 days after it was sent. Marked only after the e-mail went out. */
 async function remindInvites(env: Bindings, now: Date): Promise<number> {
   let sent = 0;
-  for (const id of await listInvitesToRemind(env.DB, before(now, INVITE_REMIND_AFTER_MS))) {
-    if (await remindInvite(env, id, now)) sent++;
+  const due = await listInvitesToRemind(env.DB, before(now, INVITE_REMIND_AFTER_MS));
+  warnIfCapped("invite_remind", due);
+  for (const id of due) {
+    if ((await notifyInviteReminder(env, id)) !== "sent") continue;
+    await markInviteReminded(env.DB, id, now.toISOString());
+    sent++;
   }
   return sent;
 }
 
 /**
- * Spec §8.4: matching requests with no proposal chosen 30 days after the first invitation expire; the client is told
- * and builders whose proposal ends are told. The compare-and-set makes a second run a no-op.
+ * Spec §8.4: a request in `matching` for 30 days (from matched_at) expires through endRequestBatch, so its invitations
+ * settle in the same transaction. A lost compare-and-set (the client just closed it) changes and sends nothing.
  */
 async function expireRequests(env: Bindings, now: Date): Promise<number> {
   const iso = now.toISOString();
   let expired = 0;
-  for (const request of await listRequestsToExpire(env.DB, before(now, MATCHING_TTL_MS))) {
-    const end = endRequestBatch(env.DB, { id: request.id, from: "matching", to: "expired", now: iso });
+  const due = await listRequestsToExpire(env.DB, before(now, MATCHING_TTL_MS));
+  warnIfCapped("requests_expire", due);
+  for (const id of due) {
+    const end = endRequestBatch(env.DB, { id, from: "matching", to: "expired", now: iso });
     const results = await env.DB.batch([
       ...end.statements,
-      auditStatement(env.DB, { actorUserId: null, action: "request.expire", entity: "request", entityId: request.id, now: iso }, { requestId: request.id, status: "expired", updatedAt: iso }),
+      auditStatement(env.DB, { actorUserId: null, action: "request.expire", entity: "request", entityId: id, data: { from: "matching" }, now: iso }, { requestId: id, status: "expired", updatedAt: iso }),
     ]);
     const outcome = end.read(results);
     if (!outcome.request) continue;
     expired++;
-    await notifyRequestEnded(env, request.id, "expired");
+    await notifyRequestExpired(env, id);
     await notifyNotSelected(env, outcome.notSelected);
+    await notifyInviteExpired(env, outcome.expired);
   }
   return expired;
 }
 ```
 
-`STEPS` (thứ tự mới; invitations hết hạn trước khi nhắc, request chờ xóa trước tài khoản ngầm):
+`STEPS` (thứ tự là một phần hành vi, xem Quyết định kỹ thuật 4):
 
 ```ts
 const STEPS: Step[] = [
@@ -6934,8 +7128,8 @@ const STEPS: Step[] = [
   { step: "alert", counts: "sent", run: alert },
   { step: "resend", counts: "sent", run: resend },
   { step: "invites_expire", counts: "expired", run: expireInvites },
-  { step: "invite_remind", counts: "sent", run: remindInvites },
   { step: "requests_expire", counts: "expired", run: expireRequests },
+  { step: "invite_remind", counts: "sent", run: remindInvites },
   { step: "pending_inquiries", counts: "deleted", run: (env, now) => deleteExpiredPendingInquiries(env.DB, before(now, PENDING_TTL_MS)) },
   { step: "pending_requests", counts: "deleted", run: (env, now) => deleteExpiredPendingRequests(env.DB, before(now, PENDING_TTL_MS)) },
   // After the pending inquiries and requests are gone, their implicit accounts have nothing attached (Owner 2026-10-04).
@@ -6949,40 +7143,53 @@ const STEPS: Step[] = [
 Trong `runDaily`, dựng kết quả theo `counts`:
 
 ```ts
-      const result: DailyResult = counts === "sent" ? { job: "daily", step, sent: n } : counts === "expired" ? { job: "daily", step, expired: n } : { job: "daily", step, deleted: n };
+const result: DailyResult = counts === "sent" ? { job: "daily", step, sent: n } : counts === "expired" ? { job: "daily", step, expired: n } : { job: "daily", step, deleted: n };
 ```
 
-Cập nhật doc comment đầu file: thêm "VNX-0606 (M6): invitation reminders and expiry, request expiry, pending request clean-up."
+Cập nhật doc comment đầu file: thêm "VNX-0606 (M6): invitation reminders and expiry, request expiry, clean-up of unconfirmed requests."
 
-- [ ] **Step 5: Khóa builder / user thì lời mời hết hạn ngay**
+- [ ] **Step 4: Khóa builder / user thì lời mời hết hạn ngay, không email**
 
-`apps/web/src/routes/admin.tsx`, trong `decide`, ngay sau `if (!updated) return errorResponse(c, "conflict", 409);`:
+`apps/web/src/routes/admin.tsx`, trong `decide`, ngay sau `await writeAudit(...)` (sau audit, để một lỗi ném ra không làm mất dòng audit của M2; cron quét lại):
 
 ```ts
-  // Spec §7.6: a builder who is no longer approved loses their unanswered invitations (the daily job re-checks).
-  if (next.status !== "approved") await expireInvitesOfInactiveBuilders(c.env.DB, now);
+  // Spec §7.6: a suspended builder's unanswered invitations expire at once, with no e-mail (Owner 2026-10-04); the daily job re-sweeps.
+  if (action === "suspend") await expireInvitesOfInactiveBuildersStatement(c.env.DB, now, builder.userId).run();
 ```
 
-`apps/web/src/routes/admin-users.tsx`, trong `changeUser`, ngay sau dòng kiểm `results[0]?.meta.changes !== 1`:
+`apps/web/src/routes/admin-users.tsx`, trong `changeUser`, mảng `statements` (cùng transaction với trạng thái, phiên và audit):
 
 ```ts
-  if (action === "suspend") await expireInvitesOfInactiveBuilders(c.env.DB, now);
+  const statements = [
+    setUserStatusStatement(c.env.DB, { id: target.id, from: target.status, to: next.status, now }),
+    ...(action === "suspend" ? [deleteUserSessionsStatement(c.env.DB, target.id), expireInvitesOfInactiveBuildersStatement(c.env.DB, now, target.id)] : []),
+    auditStatement(c.env.DB, audit, { userId: target.id, status: next.status, updatedAt: now }),
+  ];
 ```
 
-(import `expireInvitesOfInactiveBuilders` từ `../db/requests.ts` ở cả hai file.)
+(`results[0]` vẫn là câu đổi trạng thái; import `expireInvitesOfInactiveBuildersStatement` từ `../db/requests.ts` ở cả hai file. Hai route không import `notify/*` cho việc này.)
 
-Chạy: `npm test -w apps/web -- test/jobs test/admin` → PASS.
+Chạy: `npm test -w apps/web -- test/jobs test/admin test/architecture.test.ts` → PASS.
 
-- [ ] **Step 6: Toàn bộ test, typecheck, commit**
+- [ ] **Step 5: Toàn bộ test, typecheck, commit**
 
 ```bash
 npm run typecheck -w apps/web
 npm test
-git add apps/web/src apps/web/test
-git commit -m "feat(web): daily request jobs and invitation expiry on suspension (VNX-0606)
+git add apps/web/src/db/requests.ts apps/web/src/jobs/daily.ts apps/web/src/routes/admin.tsx apps/web/src/routes/admin-users.tsx apps/web/test/jobs/daily.test.ts apps/web/test/jobs/daily-requests.test.ts
+git commit -m "feat(web): daily request jobs and silent invitation expiry on suspension (VNX-0606)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+**Tiêu chí hoàn thành (mỗi mục kiểm bằng lệnh):**
+- Nhắc một lần sau 3 ngày, đúng ngôn ngữ, không lộ email client: `npm test -w apps/web -- test/jobs/daily-requests.test.ts -t "reminds"`.
+- Lapse sau 7 ngày, hạn mềm, thứ tự bước: `-t "lapses"`.
+- Request hết hạn 30 ngày tính từ `matched_at`, ba loại email: `-t "expires a matching request"`; giữ request 29 ngày: `-t "keeps"`.
+- Xóa request chờ 48 giờ và tài khoản ngầm: `-t "unconfirmed"`.
+- Cron idempotent: `-t "idempotent"`.
+- Khóa builder / user: hết hạn tức thì, không email, hồi quy khóa-rồi-đóng, điểm trừ: `-t "suspension"`.
+- Danh sách bước cũ vẫn khớp: `npm test -w apps/web -- test/jobs/daily.test.ts`.
 
 ---
 
@@ -7012,3 +7219,5 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Audit `request.invite` ghi danh sách admin chọn (`requested`), không phải danh sách thực sự được mời; trang request hiện danh sách thật.
 - Builder không sửa / rút đề xuất đã gửi; client không mở lại request đã đóng.
 - Chọn đề xuất kiểm builder còn công khai ở route, không trong batch (cửa sổ vài ms).
+- Hai lần chạy cron chồng nhau với cùng `now` có thể gửi nhắc hai lần và ghi trùng dòng audit `request.expire` (cùng khuôn với M5); các lần chạy liên tiếp thì idempotent.
+- Request của client bị khóa vẫn tiếp tục trong Wave 1; admin gỡ thủ công như spam (Controller quyết định).
