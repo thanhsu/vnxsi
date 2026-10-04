@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { builderFacingName } from "../../src/domain/inquiry.ts";
 import {
   inquiryAdminAlertEmail,
   inquiryConfirmEmail,
   inquiryDeclinedEmail,
   inquiryMessageEmail,
+  inquiryMessageForBuilderEmail,
   inquiryReminderEmail,
   newInquiryEmail,
 } from "../../src/email/templates/inquiry.ts";
@@ -19,9 +21,20 @@ describe("inquiry e-mail templates (spec §8.3)", () => {
     expect(mail.html).toContain('href="https://vnx.si/auth/verify?t=abc"');
   });
 
+  it("renders the new-inquiry e-mail byte for byte (guards the move of the HTML helpers to email/parts.ts)", () => {
+    const mail = newInquiryEmail("en", { clientName: builderFacingName("Minh"), type: "customize", productName: "Spa Booking", budgetBand: "2k-10k", deadline: "2026-12-01", message: "Line one\nLine <two>", url: "https://vnx.si/hub/inquiries/01J" });
+    expect(mail.html).toBe(
+      '<!doctype html><html lang="en"><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0D1526">' +
+        "<p>Minh sent you an inquiry (Customize) about Spa Booking.</p><p>Budget: $2,000 – $10,000</p><p>Deadline: 2026-12-01</p>" +
+        '<blockquote style="white-space:pre-line;border-left:3px solid #DCE0E6;margin:0;padding-left:12px">Line one\nLine &lt;two&gt;</blockquote>' +
+        "<p>Reply on VNX.SI (replies by e-mail are not delivered):</p>" +
+        '<p><a href="https://vnx.si/hub/inquiries/01J">https://vnx.si/hub/inquiries/01J</a></p></body></html>',
+    );
+  });
+
   it("tells the builder about a new inquiry with type, budget, deadline and the message", () => {
     const mail = newInquiryEmail("en", {
-      clientName: "Minh",
+      clientName: builderFacingName("Minh"),
       type: "customize",
       productName: "Spa Booking",
       budgetBand: "2k-10k",
@@ -38,7 +51,7 @@ describe("inquiry e-mail templates (spec §8.3)", () => {
   });
 
   it("names the builder's services when there is no product, and omits an empty deadline", () => {
-    const mail = newInquiryEmail("en", { clientName: "Minh", type: "hire", productName: null, budgetBand: "unsure", deadline: null, message: "Hello there, need help.", url: "https://vnx.si/x" });
+    const mail = newInquiryEmail("en", { clientName: builderFacingName("Minh"), type: "hire", productName: null, budgetBand: "unsure", deadline: null, message: "Hello there, need help.", url: "https://vnx.si/x" });
     expect(mail.text).toContain("about your services.");
     expect(mail.text).not.toContain("Deadline");
   });
@@ -47,8 +60,9 @@ describe("inquiry e-mail templates (spec §8.3)", () => {
     const evil = '<img src=x onerror="a()">';
     const mails = [
       inquiryMessageEmail("en", { fromName: evil, productName: evil, body: evil, url: "https://vnx.si/x" }),
+      inquiryMessageForBuilderEmail("en", { fromName: builderFacingName(evil), productName: evil, body: evil, url: "https://vnx.si/x" }),
       inquiryDeclinedEmail("en", { builderName: evil, productName: evil, reason: evil, url: "https://vnx.si/x" }),
-      inquiryReminderEmail("en", { clientName: evil, productName: evil, url: "https://vnx.si/x" }),
+      inquiryReminderEmail("en", { clientName: builderFacingName(evil), productName: evil, url: "https://vnx.si/x" }),
       inquiryAdminAlertEmail([{ id: "01J", builderHandle: evil, productName: evil, openedAt: "2026-09-20T00:00:00.000Z" }], "https://vnx.si/admin/inquiries"),
     ];
     for (const mail of mails) {
@@ -77,7 +91,7 @@ describe("inquiry e-mail templates (spec §8.3)", () => {
   });
 
   it("uses the same labels as the pages", () => {
-    const mail = newInquiryEmail("en", { clientName: "A", type: "build_similar", productName: "P", budgetBand: ">10k", deadline: null, message: "x".repeat(20), url: "https://vnx.si/x" });
+    const mail = newInquiryEmail("en", { clientName: builderFacingName("A"), type: "build_similar", productName: "P", budgetBand: ">10k", deadline: null, message: "x".repeat(20), url: "https://vnx.si/x" });
     expect(mail.text).toContain(en[INQUIRY_TYPE_KEY.build_similar]);
     expect(mail.text).toContain(en[BUDGET_KEY[">10k"]]);
   });

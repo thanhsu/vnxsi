@@ -8,6 +8,7 @@ import { createSession, deleteSession } from "../auth/sessions.ts";
 import { type ConsumedToken, consumeLoginToken, createLoginToken, describeToken, peekLoginToken, type TokenPurpose } from "../auth/tokens.ts";
 import { writeAudit } from "../db/audit.ts";
 import { findInquiryById } from "../db/inquiries.ts";
+import { findRequestById } from "../db/requests.ts";
 import { createUser, findUserByEmail, markLogin, type UserRow } from "../db/users.ts";
 import { getMailer } from "../email/index.ts";
 import { loginEmail } from "../email/templates/login.ts";
@@ -21,6 +22,7 @@ import { ConfirmLinkPage, InvalidLinkPage, LoginPage, LoginSentPage } from "../v
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
 import { openPendingInquiry } from "./inquiry-confirm.ts";
+import { openPendingRequest } from "./request-confirm.ts";
 
 const LoginForm = z.object({ email: z.string().trim().toLowerCase().pipe(z.email().max(254)) });
 
@@ -31,7 +33,7 @@ function origin(c: Context<AppEnv>) {
 }
 
 /** Purposes the confirmation link accepts. */
-export const VERIFY_PURPOSES: TokenPurpose[] = ["login", "inquiry_verify"];
+export const VERIFY_PURPOSES: TokenPurpose[] = ["login", "inquiry_verify", "request_verify"];
 
 /** Signs the token's e-mail in (creating the account the first time) and sets the session cookie. Null when suspended. */
 async function completeLogin(c: Context<AppEnv>, token: ConsumedToken, now: Date): Promise<UserRow | null> {
@@ -58,10 +60,21 @@ async function confirmInquiry(c: Context<AppEnv>, token: ConsumedToken, user: Us
   return localizedPath(token.locale, `/me/inquiries/${inquiry.id}`);
 }
 
+/**
+ * Spec §5.7 step 1: confirming the e-mail submits the pending request, names the account the first time and tells the
+ * admins. Returns where to go: the request, or /me when it is not this account's pending request any more.
+ */
+async function confirmRequest(c: Context<AppEnv>, token: ConsumedToken, user: UserRow, now: Date): Promise<string> {
+  const request = token.requestId ? await findRequestById(c.env.DB, token.requestId) : null;
+  if (!request || request.clientUserId !== user.id || request.status !== "pending_verification") return localizedPath(token.locale, "/me");
+  if (!(await openPendingRequest(c, request, user, now, "link"))) return localizedPath(token.locale, "/me");
+  return localizedPath(token.locale, `/me/requests/${request.id}`);
+}
+
 /** The dead-link page in the language the link was requested in (English when the token is unknown). */
 async function invalidLink(c: Context<AppEnv>, raw: string) {
   const known = await describeToken(c.env.DB, raw);
-  return page(c, <InvalidLinkPage locale={known?.locale ?? "en"} origin={origin(c)} inquiryHint={known?.purpose === "inquiry_verify"} />, 400);
+  return page(c, <InvalidLinkPage locale={known?.locale ?? "en"} origin={origin(c)} hint={known?.purpose === "inquiry_verify" ? "inquiry" : known?.purpose === "request_verify" ? "request" : undefined} />, 400);
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
@@ -107,7 +120,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const raw = c.req.query("t") ?? "";
     const peek = await peekLoginToken(c.env.DB, raw, new Date(), VERIFY_PURPOSES);
     if (!peek.ok) return invalidLink(c, raw);
-    const purpose = peek.purpose === "login" ? "login" : "inquiry";
+    const purpose = peek.purpose === "login" ? "login" : peek.purpose === "inquiry_verify" ? "inquiry" : "request";
     return page(c, <ConfirmLinkPage locale={peek.locale} origin={origin(c)} token={raw} next={safeNext(c.req.query("next"))} purpose={purpose} />);
   });
 
@@ -120,6 +133,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const user = await completeLogin(c, result.token, now);
     if (!user) return errorResponse(c, "forbidden", 403);
     if (result.token.purpose === "inquiry_verify") return c.redirect(await confirmInquiry(c, result.token, user, now), 303);
+    if (result.token.purpose === "request_verify") return c.redirect(await confirmRequest(c, result.token, user, now), 303);
     return c.redirect(safeNext(form.next) ?? "/", 303);
   });
 

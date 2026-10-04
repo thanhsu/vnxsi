@@ -94,7 +94,7 @@ describe("legal pages match docs/legal/*.md word for word (VNX-0705a AC2)", () =
 const CONTACT_PRIVACY = {
   EN: [
     "- **Questions and feedback:** when you use our contact form, your email, the name you give (optional), whether you are a builder or a client, what your message is about, the message itself, the language of the page, and your account if you are signed in.",
-    "- **Bot check:** when you send an inquiry or a contact message without signing in, Cloudflare Turnstile checks that you are a person.",
+    "- **Bot check:** when you send an inquiry, a request or a contact message without signing in, Cloudflare Turnstile checks that you are a person.",
     "- To read and answer the questions and feedback you send us.",
     "We rely on your consent (waitlist, contact form),",
     "- Messages sent through the contact form are read only by the VNX.SI team; a copy is delivered to our mailbox through Resend.",
@@ -102,7 +102,7 @@ const CONTACT_PRIVACY = {
   ],
   VI: [
     "- **Câu hỏi và góp ý:** khi bạn dùng form liên hệ, email của bạn, tên bạn cung cấp (không bắt buộc), bạn là builder hay client, tin nhắn nói về điều gì, nội dung tin nhắn, ngôn ngữ của trang, và tài khoản của bạn nếu đã đăng nhập.",
-    "khi bạn gửi yêu cầu hoặc tin nhắn liên hệ mà chưa đăng nhập",
+    "khi bạn gửi yêu cầu, nhu cầu hoặc tin nhắn liên hệ mà chưa đăng nhập",
     "- Đọc và trả lời các câu hỏi, góp ý bạn gửi cho chúng tôi.",
     "(danh sách chờ, form liên hệ)",
     "- Tin nhắn gửi qua form liên hệ chỉ đội ngũ VNX.SI đọc; một bản được chuyển tới hộp thư của chúng tôi qua Resend.",

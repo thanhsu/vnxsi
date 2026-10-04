@@ -4,12 +4,13 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { Layout } from "../Layout.tsx";
 
-export type AdminSection = "builders" | "products" | "inquiries" | "feedback" | "invites" | "users";
+export type AdminSection = "builders" | "products" | "inquiries" | "requests" | "feedback" | "invites" | "users";
 
 const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [
   { key: "builders", path: "/admin/builders", label: "admin.nav.builders" },
   { key: "products", path: "/admin/products", label: "admin.nav.products" },
   { key: "inquiries", path: "/admin/inquiries", label: "admin.nav.inquiries" },
+  { key: "requests", path: "/admin/requests", label: "admin.nav.requests" },
   { key: "feedback", path: "/admin/feedback", label: "admin.nav.feedback" },
   { key: "invites", path: "/admin/invites", label: "admin.nav.invites" },
   { key: "users", path: "/admin/users", label: "admin.nav.users" },

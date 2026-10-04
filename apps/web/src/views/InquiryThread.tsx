@@ -1,5 +1,5 @@
 import type { FC } from "hono/jsx";
-import { canPostMessage, DECLINE_REASON_MAX, REPLY_MAX, type InquiryMessage, type InquirySummary } from "../domain/inquiry.ts";
+import { builderFacingName, canPostMessage, DECLINE_REASON_MAX, REPLY_MAX, type InquiryMessage, type InquirySummary } from "../domain/inquiry.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { BUDGET_KEY, INQUIRY_STATUS_KEY, INQUIRY_TYPE_KEY } from "./labels.ts";
@@ -25,7 +25,7 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
   const nameOf = (m: InquiryMessage) => {
     const fromClient = m.senderUserId === inquiry.clientUserId;
     if ((viewer === "client") === fromClient) return tr("thread.you");
-    return fromClient ? inquiry.clientName : summary.builderName;
+    return fromClient ? builderFacingName(inquiry.clientName) : summary.builderName;
   };
   const active = canPostMessage(inquiry.status);
   return (
@@ -35,7 +35,13 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
         <dd>{tr(INQUIRY_TYPE_KEY[inquiry.type])}</dd>
         <dt>{tr("inbox.about")}</dt>
         <dd>
-          {summary.productSlug && summary.productName ? <a href={localizedPath(locale, `/p/${summary.productSlug}`)}>{summary.productName}</a> : <a href={localizedPath(locale, `/b/${summary.builderHandle}`)}>{summary.builderName}</a>}
+          {summary.productSlug && summary.productName ? (
+            <a href={localizedPath(locale, `/p/${summary.productSlug}`)}>{summary.productName}</a>
+          ) : summary.requestTitle ? (
+            summary.requestTitle
+          ) : (
+            <a href={localizedPath(locale, `/b/${summary.builderHandle}`)}>{summary.builderName}</a>
+          )}
         </dd>
         <dt>{tr("thread.budget")}</dt>
         <dd>{tr(BUDGET_KEY[inquiry.budgetBand])}</dd>

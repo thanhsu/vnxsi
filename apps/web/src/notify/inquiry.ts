@@ -1,8 +1,9 @@
 import { writeAudit } from "../db/audit.ts";
 import { findMessageContext, markMessageNotified, recordNotifyFailure, type MessageContext } from "../db/inquiries.ts";
-import { MAX_NOTIFY_ATTEMPTS } from "../domain/inquiry.ts";
+import { builderFacingName, MAX_NOTIFY_ATTEMPTS } from "../domain/inquiry.ts";
 import { getMailer } from "../email/index.ts";
-import { inquiryDeclinedEmail, inquiryMessageEmail, newInquiryEmail } from "../email/templates/inquiry.ts";
+import { inquiryDeclinedEmail, inquiryMessageEmail, inquiryMessageForBuilderEmail, newInquiryEmail } from "../email/templates/inquiry.ts";
+import { requestSelectedEmail } from "../email/templates/request.ts";
 import type { Bindings } from "../env.ts";
 import { isLocale, localizedPath, type Locale } from "../i18n/locales.ts";
 
@@ -17,23 +18,28 @@ export function inquiryUrl(env: Pick<Bindings, "APP_ORIGIN">, locale: Locale, in
 function compose(env: Bindings, ctx: MessageContext): { to: string; subject: string; text: string; html: string } {
   const { message, summary } = ctx;
   const inquiry = summary.inquiry;
+  // What the inquiry is about: the product, or the request it came from (M6), or (null) the builder's services.
+  const about = summary.productName ?? summary.requestTitle;
   const toBuilder = message.senderUserId === inquiry.clientUserId;
   if (toBuilder) {
     const locale = asLocale(ctx.builder.locale);
     const url = inquiryUrl(env, locale, inquiry.id, "builder");
     // The builder sees the client's typed name only, never the e-mail (spec §5.6).
-    const mail = ctx.isFirst
-      ? newInquiryEmail(locale, { clientName: inquiry.clientName, type: inquiry.type, productName: summary.productName, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url })
-      : inquiryMessageEmail(locale, { fromName: inquiry.clientName, productName: summary.productName, body: message.body, url });
+    // Spec §5.7 step 4: the first message of a request inquiry is the "you were chosen" e-mail.
+    const mail = !ctx.isFirst
+      ? inquiryMessageForBuilderEmail(locale, { fromName: builderFacingName(inquiry.clientName), productName: about, body: message.body, url })
+      : inquiry.type === "request"
+        ? requestSelectedEmail(locale, { clientName: builderFacingName(inquiry.clientName), title: summary.requestTitle ?? "", body: message.body, url })
+        : newInquiryEmail(locale, { clientName: builderFacingName(inquiry.clientName), type: inquiry.type, productName: about, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url });
     return { to: ctx.builder.email, ...mail };
   }
   const locale = asLocale(ctx.client.locale);
   if (message.kind === "decline") {
     const url = new URL(localizedPath(locale, "/products"), env.APP_ORIGIN).toString();
-    return { to: ctx.client.email, ...inquiryDeclinedEmail(locale, { builderName: summary.builderName, productName: summary.productName, reason: message.body, url }) };
+    return { to: ctx.client.email, ...inquiryDeclinedEmail(locale, { builderName: summary.builderName, productName: about, reason: message.body, url }) };
   }
   const url = inquiryUrl(env, locale, inquiry.id, "client");
-  return { to: ctx.client.email, ...inquiryMessageEmail(locale, { fromName: summary.builderName, productName: summary.productName, body: message.body, url }) };
+  return { to: ctx.client.email, ...inquiryMessageEmail(locale, { fromName: summary.builderName, productName: about, body: message.body, url }) };
 }
 
 // Never logs addresses: only the message id, the stage and the error text.

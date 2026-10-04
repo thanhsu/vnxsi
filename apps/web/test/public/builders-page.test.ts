@@ -18,7 +18,7 @@ describe("/builders (spec §5.2)", () => {
     }
     expect(handles(html)).toEqual(["bp-card"]);
     expect(html).toContain("Nobody can pay to rank higher.");
-    expect(html).not.toContain("/request");
+    expect(html).toContain('href="/request"');
   }, 30_000);
 
   it("offers only countries of public builders and keeps the chosen filters", async () => {

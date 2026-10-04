@@ -3,15 +3,17 @@ import { createBuilder,setBuilderStatus } from "../src/db/builders.ts";
 import { createInquiry, setInquiryStatus } from "../src/db/inquiries.ts";
 import { addMedia } from "../src/db/media.ts";
 import { replaceTiers } from "../src/db/pricing.ts";
+import { createRequest, inviteBuildersBatch, listRequestInvites } from "../src/db/requests.ts";
 import { createProductDraft, findProductById, setProductStatus, updateProductFields } from "../src/db/products.ts";
 import { grantBadge } from "../src/db/verifications.ts";
 import { createUser, findUserByEmail, type UserRow } from "../src/db/users.ts";
-import type { Builder, BuilderProfile, BuilderStatus } from "../src/domain/builder.ts";
+import type { Builder, BuilderProfile, BuilderStatus, WorkLanguage } from "../src/domain/builder.ts";
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
 import type { TierInput } from "../src/domain/pricing-input.ts";
 import type { ProductFields } from "../src/domain/product-input.ts";
 import type { Inquiry, InquiryStatus, InquiryType } from "../src/domain/inquiry.ts";
-import type { BadgeKind, DeliveryModel, Product } from "../src/domain/product.ts";
+import type { ClientRequest, RequestInvite, RequestStatus } from "../src/domain/request.ts";
+import type { BadgeKind, Category, DeliveryModel, Product } from "../src/domain/product.ts";
 import { testEnv } from "./helpers.ts";
 
 export function profileValues(overrides: Partial<BuilderFormValues> = {}): BuilderFormValues {
@@ -197,4 +199,54 @@ export async function makeInquiry(opts: { tag: string; status: InquiryStatus; ty
     current = moved;
   }
   return { client, builder, product, inquiry: current, firstMessageId };
+}
+
+/** A client `<tag>-c@vnx.si` and a request, submitted (default) or pending_verification. */
+export async function makeRequest(opts: {
+  tag: string;
+  status?: Extract<RequestStatus, "submitted" | "pending_verification">;
+  category?: Category;
+  languages?: WorkLanguage[];
+  title?: string;
+  description?: string;
+  now?: string;
+  clientLocale?: string;
+}): Promise<{ client: UserRow; request: ClientRequest }> {
+  const client = await ensureUser(`${opts.tag}-c@vnx.si`, opts.clientLocale);
+  const request = await createRequest(testEnv.DB, {
+    clientUserId: client.id,
+    clientName: "Minh Tran",
+    title: opts.title ?? `${opts.tag} booking app`,
+    description: opts.description ?? "We need online booking with SMS reminders for three salons in Hanoi.",
+    category: opts.category ?? "booking",
+    budgetBand: "2k-10k",
+    deadline: null,
+    languages: opts.languages ?? ["en", "vi"],
+    status: opts.status ?? "submitted",
+    locale: opts.clientLocale === "vi" ? "vi" : "en",
+    now: opts.now ?? new Date().toISOString(),
+  });
+  return { client, request };
+}
+
+/** Invites `builders` as the test admin, moving the request to matching. Returns the new invitations in order. */
+export async function inviteBuilders(request: ClientRequest, builders: Builder[], now = new Date().toISOString()): Promise<RequestInvite[]> {
+  const admin = await ensureUser("owner@vnx.si");
+  const batch = inviteBuildersBatch(testEnv.DB, { requestId: request.id, builderIds: builders.map((b) => b.userId), invitedBy: admin.id, now });
+  const outcome = batch.read(await testEnv.DB.batch(batch.statements));
+  if (!outcome.request) throw new Error("invite failed");
+  const all = await listRequestInvites(testEnv.DB, request.id);
+  return builders.map((b) => all.find((x) => x.invite.builderId === b.userId)!.invite);
+}
+
+/** The builder's proposal on `invite` (fixed $4,500, 30 days), written straight to the DB. */
+export async function proposeOn(invite: RequestInvite, now = new Date().toISOString()): Promise<RequestInvite> {
+  await testEnv.DB
+    .prepare(
+      `UPDATE request_invites SET status = 'proposed', approach = 'Next.js with a booking calendar.', price_cents = 450000, timeline_days = 30,
+         responded_at = ?2, updated_at = ?2 WHERE id = ?1 AND status = 'invited'`,
+    )
+    .bind(invite.id, now)
+    .run();
+  return (await listRequestInvites(testEnv.DB, invite.requestId)).find((x) => x.invite.id === invite.id)!.invite;
 }

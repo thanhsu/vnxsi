@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  builderFacingName,
   canPostMessage,
   INQUIRY_STATUSES,
   inquiryValuesFromBody,
@@ -126,5 +127,17 @@ describe("parseMessageBody / parseDeclineReason", () => {
     expect(parseDeclineReason("")).toEqual({ ok: true, reason: "" });
     expect(parseDeclineReason(" Fully booked ")).toEqual({ ok: true, reason: "Fully booked" });
     expect(parseDeclineReason("x".repeat(1001))).toEqual({ ok: false, error: "too_long" });
+  });
+});
+
+describe("builderFacingName (Owner 2026-10-04)", () => {
+  it("keeps ordinary names unchanged", () => {
+    for (const name of ["Minh Tran", "Công ty ABC", "李雷", "Tom @ Acme", "a@b", "v1.2 team"]) expect(builderFacingName(name)).toBe(name);
+  });
+  it("masks every e-mail-like part and nothing else", () => {
+    expect(builderFacingName("minh@client.example")).toBe("•••");
+    expect(builderFacingName("Lan (lan@x.vn)")).toBe("Lan (•••)");
+    expect(builderFacingName("a@b.co / c@d.io")).toBe("••• / •••");
+    expect(builderFacingName("Minh.Tran+x@sub.client.example, CEO")).toBe("•••, CEO");
   });
 });

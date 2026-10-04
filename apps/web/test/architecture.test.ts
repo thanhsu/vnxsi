@@ -38,6 +38,8 @@ const WRITERS: Record<string, string> = {
   product_verifications: "../src/db/verifications.ts",
   inquiries: "../src/db/inquiries.ts",
   inquiry_messages: "../src/db/inquiries.ts",
+  requests: "../src/db/requests.ts",
+  request_invites: "../src/db/requests.ts",
   feedback: "../src/db/feedback.ts",
 };
 
@@ -49,6 +51,30 @@ describe("table ownership (VNX-0201)", () => {
         const table = match[1] ?? "";
         expect(WRITERS[table], `${file} writes unknown table ${table}`).toBeDefined();
         expect(file, `${table} is written outside its module`).toBe(WRITERS[table]);
+      }
+    }
+  });
+});
+
+// Owner 2026-10-04: a client's typed name may be their e-mail; builder-facing code reads it only through builderFacingName.
+const BUILDER_FACING_FILES = [
+  "../src/views/hub/InquiriesPage.tsx",
+  "../src/views/hub/InvitationsPage.tsx",
+  "../src/views/InquiryThread.tsx",
+  "../src/views/RequestFacts.tsx",
+  "../src/routes/hub-inquiries.tsx",
+  "../src/notify/inquiry.ts",
+  "../src/jobs/daily.ts",
+];
+
+describe("builder-facing client name", () => {
+  it("every use of .clientName in builder-facing code is wrapped in builderFacingName", () => {
+    for (const file of BUILDER_FACING_FILES) {
+      const src = sources[file];
+      expect(src, file).toBeDefined();
+      expect(src, file).toContain("builderFacingName(");
+      for (const line of (src ?? "").split("\n")) {
+        expect(line.replace(/builderFacingName\([\w.]*clientName\)/g, ""), file).not.toMatch(/\.clientName\b/);
       }
     }
   });

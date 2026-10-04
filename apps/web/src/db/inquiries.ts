@@ -66,6 +66,7 @@ export type NewInquiry = {
   clientName: string;
   builderId: string;
   productId: string | null;
+  requestId?: string | null;
   type: InquiryType;
   message: string;
   budgetBand: BudgetBand;
@@ -75,24 +76,40 @@ export type NewInquiry = {
   now: string;
 };
 
-/** The inquiry and its first message (the client's text; its notification tells the builder) in one transaction. */
-export async function createInquiry(db: D1Database, input: NewInquiry): Promise<{ inquiry: Inquiry; firstMessageId: string }> {
+
+/** M6: the inquiry is written only when the same batch just moved the request to builder_selected for this invite, which is still `proposed`. */
+export type SelectedRequestGuard = { requestId: string; inviteId: string; updatedAt: string };
+
+/** The inquiry and its first message as statements; with a guard, nothing is written unless the guard holds. */
+export function createInquiryStatements(db: D1Database, input: NewInquiry, onlyIf?: SelectedRequestGuard): { statements: D1PreparedStatement[]; id: string; firstMessageId: string } {
   const at = Date.parse(input.now);
   const id = ulid(at);
   const firstMessageId = ulid(at);
-  const [rows] = await db.batch([
-    db
-      .prepare(
-        `INSERT INTO inquiries (id, client_user_id, client_name, builder_id, product_id, type, message, budget_band, deadline, status, locale,
-           opened_at, last_activity_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CASE WHEN ?10 = 'open' THEN ?12 END, ?12, ?12, ?12)
-         RETURNING *`,
-      )
-      .bind(id, input.clientUserId, input.clientName, input.builderId, input.productId, input.type, input.message, input.budgetBand, input.deadline, input.status, input.locale, input.now),
-    db
-      .prepare("INSERT INTO inquiry_messages (id, inquiry_id, sender_user_id, kind, body, created_at) VALUES (?1, ?2, ?3, 'message', ?4, ?5)")
-      .bind(firstMessageId, id, input.clientUserId, input.message, input.now),
-  ]);
+  const guard = onlyIf ? "WHERE EXISTS (SELECT 1 FROM requests WHERE id = ?14 AND status = 'builder_selected' AND selected_invite_id = ?15 AND updated_at = ?16) AND EXISTS (SELECT 1 FROM request_invites WHERE id = ?15 AND request_id = ?14 AND builder_id = ?4 AND status = 'proposed')" : "";
+  const insert = db
+    .prepare(
+      `INSERT INTO inquiries (id, client_user_id, client_name, builder_id, product_id, request_id, type, message, budget_band, deadline, status, locale,
+         opened_at, last_activity_at, created_at, updated_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, CASE WHEN ?11 = 'open' THEN ?13 END, ?13, ?13, ?13 ${guard}
+       RETURNING *`,
+    )
+    .bind(
+      id, input.clientUserId, input.clientName, input.builderId, input.productId, input.requestId ?? null, input.type, input.message, input.budgetBand, input.deadline, input.status, input.locale, input.now,
+      ...(onlyIf ? [onlyIf.requestId, onlyIf.inviteId, onlyIf.updatedAt] : []),
+    );
+  const message = db
+    .prepare(
+      `INSERT INTO inquiry_messages (id, inquiry_id, sender_user_id, kind, body, created_at)
+       SELECT ?1, ?2, ?3, 'message', ?4, ?5 WHERE EXISTS (SELECT 1 FROM inquiries WHERE id = ?2)`,
+    )
+    .bind(firstMessageId, id, input.clientUserId, input.message, input.now);
+  return { statements: [insert, message], id, firstMessageId };
+}
+
+/** The inquiry and its first message (the client's text; its notification tells the builder) in one transaction. */
+export async function createInquiry(db: D1Database, input: NewInquiry): Promise<{ inquiry: Inquiry; firstMessageId: string }> {
+  const { statements, firstMessageId } = createInquiryStatements(db, input);
+  const [rows] = await db.batch(statements);
   const row = rows?.results[0] as Row | undefined;
   if (!row) throw new Error("inquiry insert failed");
   return { inquiry: toInquiry(row), firstMessageId };
@@ -103,12 +120,12 @@ export async function findInquiryById(db: D1Database, id: string): Promise<Inqui
   return row ? toInquiry(row) : null;
 }
 
-type SummaryRow = Row & { product_name: string | null; product_slug: string | null; builder_name: string; builder_handle: string };
+type SummaryRow = Row & { product_name: string | null; product_slug: string | null; request_title: string | null; builder_name: string; builder_handle: string };
 
-const SUMMARY = `SELECT i.*, p.name AS product_name, p.slug AS product_slug, b.name AS builder_name, b.handle AS builder_handle
-  FROM inquiries i JOIN builders b ON b.user_id = i.builder_id LEFT JOIN products p ON p.id = i.product_id`;
+const SUMMARY = `SELECT i.*, p.name AS product_name, p.slug AS product_slug, rq.title AS request_title, b.name AS builder_name, b.handle AS builder_handle
+  FROM inquiries i JOIN builders b ON b.user_id = i.builder_id LEFT JOIN products p ON p.id = i.product_id LEFT JOIN requests rq ON rq.id = i.request_id`;
 
-const toSummary = (r: SummaryRow): InquirySummary => ({ inquiry: toInquiry(r), productName: r.product_name, productSlug: r.product_slug, builderName: r.builder_name, builderHandle: r.builder_handle });
+const toSummary = (r: SummaryRow): InquirySummary => ({ inquiry: toInquiry(r), productName: r.product_name, productSlug: r.product_slug, requestTitle: r.request_title ?? null, builderName: r.builder_name, builderHandle: r.builder_handle });
 
 // Spec §5.3/§5.4: builders never see unconfirmed or removed inquiries; clients never see removed ones.
 const BUILDER_VISIBLE = "i.status NOT IN ('pending_verification', 'removed')";
@@ -145,8 +162,8 @@ export async function listClientInquiries(db: D1Database, clientUserId: string, 
 export async function listInquiriesForAdmin(db: D1Database, status: InquiryStatus | null, limit = 200): Promise<AdminInquiry[]> {
   const { results } = await db
     .prepare(
-      `SELECT i.*, p.name AS product_name, p.slug AS product_slug, b.name AS builder_name, b.handle AS builder_handle, u.email AS client_email
-       FROM inquiries i JOIN builders b ON b.user_id = i.builder_id JOIN users u ON u.id = i.client_user_id LEFT JOIN products p ON p.id = i.product_id
+      `SELECT i.*, p.name AS product_name, p.slug AS product_slug, rq.title AS request_title, b.name AS builder_name, b.handle AS builder_handle, u.email AS client_email
+       FROM inquiries i JOIN builders b ON b.user_id = i.builder_id JOIN users u ON u.id = i.client_user_id LEFT JOIN products p ON p.id = i.product_id LEFT JOIN requests rq ON rq.id = i.request_id
        WHERE (?1 IS NULL OR i.status = ?1) ORDER BY i.created_at DESC, i.id DESC LIMIT ?2`,
     )
     .bind(status, limit)
@@ -214,11 +231,16 @@ export function deletePendingInquiryStatements(db: D1Database, id: string): D1Pr
   ];
 }
 
-/** Spec §8.4: unconfirmed inquiries created before `cutoff` go away. Returns how many inquiries were deleted. */
+/**
+ * Spec §8.4: inquiries never confirmed (opened_at IS NULL, stamped when one first becomes `open`) and created before `cutoff`
+ * go away, including one an admin moved to `removed` meanwhile (Owner, M6 review F4). One that was ever opened is kept.
+ * Returns how many inquiries were deleted.
+ */
 export async function deleteExpiredPendingInquiries(db: D1Database, cutoff: string): Promise<number> {
+  const never = "opened_at IS NULL AND status IN ('pending_verification', 'removed') AND created_at < ?1";
   const [, inquiries] = await db.batch([
-    db.prepare("DELETE FROM inquiry_messages WHERE inquiry_id IN (SELECT id FROM inquiries WHERE status = 'pending_verification' AND created_at < ?1)").bind(cutoff),
-    db.prepare("DELETE FROM inquiries WHERE status = 'pending_verification' AND created_at < ?1").bind(cutoff),
+    db.prepare(`DELETE FROM inquiry_messages WHERE inquiry_id IN (SELECT id FROM inquiries WHERE ${never})`).bind(cutoff),
+    db.prepare(`DELETE FROM inquiries WHERE ${never}`).bind(cutoff),
   ]);
   return inquiries?.meta.changes ?? 0;
 }
@@ -256,7 +278,7 @@ export async function findMessageContext(db: D1Database, messageId: string): Pro
     .prepare(
       `SELECT m.id AS m_id, m.inquiry_id AS m_inquiry_id, m.sender_user_id AS m_sender_user_id, m.kind AS m_kind, m.body AS m_body,
          m.created_at AS m_created_at, m.notified_at AS m_notified_at, m.notify_attempts AS m_notify_attempts,
-         i.*, p.name AS product_name, p.slug AS product_slug, b.name AS builder_name, b.handle AS builder_handle,
+         i.*, p.name AS product_name, p.slug AS product_slug, rq.title AS request_title, b.name AS builder_name, b.handle AS builder_handle,
          cu.email AS client_email, cu.locale AS client_locale, bu.email AS builder_email, bu.locale AS builder_locale,
          (SELECT f.id FROM inquiry_messages f WHERE f.inquiry_id = i.id ORDER BY f.created_at, f.id LIMIT 1) AS first_id
        FROM inquiry_messages m
@@ -265,6 +287,7 @@ export async function findMessageContext(db: D1Database, messageId: string): Pro
        JOIN users cu ON cu.id = i.client_user_id
        JOIN users bu ON bu.id = i.builder_id
        LEFT JOIN products p ON p.id = i.product_id
+       LEFT JOIN requests rq ON rq.id = i.request_id
        WHERE m.id = ?1`,
     )
     .bind(messageId)

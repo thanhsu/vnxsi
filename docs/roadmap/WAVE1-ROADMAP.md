@@ -125,10 +125,13 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md`. Editor sinh form 
 
 ## M6 — Post a request
 
+Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m6-request.md` (Owner duyệt 2026-10-04; VNX-0602 tách 0602a / 0602b cho vừa ≤ 1 ngày).
+
 | Task | Nội dung | Tag |
 |---|---|---|
 | VNX-0601 | Migration `requests`, `request_invites`; 2 state machine | AGENT, FOUNDATION |
-| VNX-0602 | Form `/request` + xác nhận email | AGENT |
+| VNX-0602a | Email request, thông báo, `request_verify` ở `/auth/verify` | AGENT |
+| VNX-0602b | Form `/request`, `/me` (request), lối vào, sitemap, Privacy | AGENT |
 | VNX-0603 | Admin: hàng chờ request, gợi ý builder theo luật (spec mục 8.10), mời ≤5 | AGENT |
 | VNX-0604 | Hub: tab Invitations, gửi đề xuất / từ chối | AGENT |
 | VNX-0605 | `/me`: xem đề xuất, chọn → tạo Inquiry `type = request` | AGENT |

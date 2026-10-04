@@ -270,6 +270,9 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
         <div class="container lp-final-inner reveal-scroll">
           <h2 id="notify-title">{tr("landing.final.title")}</h2>
           <p class="section-sub">{tr("landing.final.body")}</p>
+          <p>
+            {tr("landing.clients.request")} <a href={localizedPath(locale, "/request")}>{tr("request.cta")}</a>
+          </p>
           {joined ? (
             <p class="notice good" role="status">
               {tr("landing.form.joined")}

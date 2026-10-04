@@ -58,7 +58,7 @@ describe("/auth/verify confirmation page (VNX-0506)", () => {
     expect(got.status).toBe(400);
     const html = await got.text();
     expect(html).toContain("Link đăng nhập này không còn dùng được");
-    expect(html).toContain("Nếu bạn đang xác nhận một yêu cầu: hãy đăng nhập, mở Yêu cầu của tôi và bấm Gửi ngay.");
+    expect(html).toContain("Nếu bạn đang xác nhận một yêu cầu: hãy đăng nhập, mở Yêu cầu và nhu cầu và bấm Gửi ngay.");
     expect(html).toContain('lang="vi"');
     const posted = await app.request(formPost("/auth/verify", { t }), undefined, testEnv);
     expect(posted.status).toBe(400);

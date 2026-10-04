@@ -4,7 +4,7 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { Layout } from "../Layout.tsx";
 
-export type HubSection = "overview" | "profile" | "portfolio" | "products" | "inquiries";
+export type HubSection = "overview" | "profile" | "portfolio" | "products" | "inquiries" | "invitations";
 
 const NAV: { key: HubSection; path: string; label: MessageKey }[] = [
   { key: "overview", path: "/hub", label: "hub.nav.overview" },
@@ -12,6 +12,7 @@ const NAV: { key: HubSection; path: string; label: MessageKey }[] = [
   { key: "portfolio", path: "/hub/portfolio", label: "hub.nav.portfolio" },
   { key: "products", path: "/hub/products", label: "hub.nav.products" },
   { key: "inquiries", path: "/hub/inquiries", label: "hub.nav.inquiries" },
+  { key: "invitations", path: "/hub/invitations", label: "hub.nav.invitations" },
 ];
 
 export const HubLayout: FC<PropsWithChildren<{ locale: Locale; origin: string; title: string; rest: string; active: HubSection }>> = (p) => {

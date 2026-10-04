@@ -37,7 +37,7 @@ export const AdminInquiriesPage: FC<{ locale: Locale; origin: string; status: In
               </tr>
             </thead>
             <tbody>
-              {p.items.map(({ inquiry, clientEmail, builderHandle, productName }) => (
+              {p.items.map(({ inquiry, clientEmail, builderHandle, productName, requestTitle }) => (
                 <tr>
                   <td>
                     <code>{inquiry.id}</code>
@@ -51,7 +51,7 @@ export const AdminInquiriesPage: FC<{ locale: Locale; origin: string; status: In
                   </td>
                   <td>
                     @{builderHandle}
-                    {productName ? ` · ${productName}` : null}
+                    {productName ?? requestTitle ? ` · ${productName ?? requestTitle}` : null}
                     <br />
                     <span class="muted">{tr(INQUIRY_TYPE_KEY[inquiry.type])}</span>
                   </td>

@@ -1,8 +1,9 @@
-import type { BudgetBand, InquiryType } from "../../domain/inquiry.ts";
+import type { BudgetBand, BuilderFacingName, InquiryType } from "../../domain/inquiry.ts";
 import type { Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { escapeHtml } from "../escape.ts";
+import { link, p, quote, wrap } from "../parts.ts";
 
 type Email = { subject: string; text: string; html: string };
 
@@ -14,19 +15,13 @@ const TYPE_KEY: Record<InquiryType, MessageKey> = {
   build_similar: "inquiry.type.build_similar",
   request: "inquiry.type.request",
 };
-const BUDGET_KEY: Record<BudgetBand, MessageKey> = {
+export const BUDGET_KEY: Record<BudgetBand, MessageKey> = {
   "<500": "inquiry.budget.lt500",
   "500-2k": "inquiry.budget.500-2k",
   "2k-10k": "inquiry.budget.2k-10k",
   ">10k": "inquiry.budget.gt10k",
   unsure: "inquiry.budget.unsure",
 };
-
-const p = (text: string) => `<p>${escapeHtml(text)}</p>`;
-const link = (href: string) => `<p><a href="${escapeHtml(href)}">${escapeHtml(href)}</a></p>`;
-const quote = (text: string) => `<blockquote style="white-space:pre-line;border-left:3px solid #DCE0E6;margin:0;padding-left:12px">${escapeHtml(text)}</blockquote>`;
-const wrap = (locale: string, parts: string[]) =>
-  `<!doctype html><html lang="${locale}"><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0D1526">${parts.join("")}</body></html>`;
 
 function target(locale: Locale, productName: string | null): string {
   return productName ?? translator(locale)("inquiry.profileTarget");
@@ -41,7 +36,7 @@ export function inquiryConfirmEmail(locale: Locale, input: { builderName: string
 
 export function newInquiryEmail(
   locale: Locale,
-  input: { clientName: string; type: InquiryType; productName: string | null; budgetBand: BudgetBand; deadline: string | null; message: string; url: string },
+  input: { clientName: BuilderFacingName; type: InquiryType; productName: string | null; budgetBand: BudgetBand; deadline: string | null; message: string; url: string },
 ): Email {
   const tr = translator(locale);
   const type = tr(TYPE_KEY[input.type]);
@@ -55,7 +50,7 @@ export function newInquiryEmail(
   };
 }
 
-export function inquiryMessageEmail(locale: Locale, input: { fromName: string; productName: string | null; body: string; url: string }): Email {
+function messageEmail(locale: Locale, input: { fromName: string; productName: string | null; body: string; url: string }): Email {
   const tr = translator(locale);
   const intro = tr("email.inquiryMessage.intro", { from: input.fromName, product: target(locale, input.productName) });
   const cta = tr("email.inquiryMessage.cta");
@@ -64,6 +59,14 @@ export function inquiryMessageEmail(locale: Locale, input: { fromName: string; p
     text: `${intro}\n\n${input.body}\n\n${cta}\n${input.url}`,
     html: wrap(locale, [p(intro), quote(input.body), p(cta), link(input.url)]),
   };
+}
+
+/** To the client: `fromName` is the builder's public name. */
+export const inquiryMessageEmail = messageEmail;
+
+/** To the builder: the client's typed name only, masked (Owner 2026-10-04). */
+export function inquiryMessageForBuilderEmail(locale: Locale, input: { fromName: BuilderFacingName; productName: string | null; body: string; url: string }): Email {
+  return messageEmail(locale, input);
 }
 
 export function inquiryDeclinedEmail(locale: Locale, input: { builderName: string; productName: string | null; reason: string; url: string }): Email {
@@ -79,7 +82,7 @@ export function inquiryDeclinedEmail(locale: Locale, input: { builderName: strin
   };
 }
 
-export function inquiryReminderEmail(locale: Locale, input: { clientName: string; productName: string | null; url: string }): Email {
+export function inquiryReminderEmail(locale: Locale, input: { clientName: BuilderFacingName; productName: string | null; url: string }): Email {
   const tr = translator(locale);
   const body = tr("email.inquiryReminder.body", { client: input.clientName, product: target(locale, input.productName) });
   const cta = tr("email.inquiryReminder.cta");

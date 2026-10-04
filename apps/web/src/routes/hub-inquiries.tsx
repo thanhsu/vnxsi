@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { requireBuilder } from "../auth/middleware.ts";
 import { auditStatement } from "../db/audit.ts";
 import { addMessageStatement, findBuilderInquiry, findClientInquiry, listBuilderInquiries, listMessages, returnedInquiry, setInquiryStatusStatement } from "../db/inquiries.ts";
-import { parseDeclineReason, parseMessageBody, transition, type InquiryAction, type InquirySummary } from "../domain/inquiry.ts";
+import { builderFacingName, parseDeclineReason, parseMessageBody, transition, type InquiryAction, type InquirySummary } from "../domain/inquiry.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
@@ -80,8 +80,8 @@ async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: Th
   const rest = `/hub/inquiries/${summary.inquiry.id}`;
   return page(
     c,
-    <HubLayout locale={locale} origin={requestOrigin(c)} title={tr("inbox.from", { name: summary.inquiry.clientName })} rest={rest} active="inquiries">
-      <h1>{tr("inbox.from", { name: summary.inquiry.clientName })}</h1>
+    <HubLayout locale={locale} origin={requestOrigin(c)} title={tr("inbox.from", { name: builderFacingName(summary.inquiry.clientName) })} rest={rest} active="inquiries">
+      <h1>{tr("inbox.from", { name: builderFacingName(summary.inquiry.clientName) })}</h1>
       <InquiryThread locale={locale} summary={summary} messages={messages} viewer="builder" base={localizedPath(locale, rest)} {...extra} />
     </HubLayout>,
     status,

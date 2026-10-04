@@ -23,7 +23,7 @@ export type BuilderRow = {
   updated_at: string;
 };
 
-function jsonList(value: string): string[] {
+export function jsonList(value: string): string[] {
   try {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];

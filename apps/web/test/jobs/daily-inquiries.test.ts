@@ -85,6 +85,19 @@ describe("daily job, inquiry steps (spec §8.4, VNX-0505)", () => {
     expect(await findUserByEmail(testEnv.DB, old.client.email)).toBeNull();
   });
 
+  it("deletes a never-confirmed inquiry an admin moved to removed, and its ghost account; keeps a removed one that was confirmed (M6 review F4)", async () => {
+    const never = await makeInquiry({ tag: "dj-rm1", status: "pending_verification", now: daysAgo(3) });
+    const confirmed = await makeInquiry({ tag: "dj-rm2", status: "open", now: daysAgo(3) });
+    for (const x of [never, confirmed]) await testEnv.DB.prepare("UPDATE users SET created_at = ?2, last_login_at = NULL WHERE id = ?1").bind(x.client.id, daysAgo(3)).run();
+    await testEnv.DB.prepare("UPDATE inquiries SET status = 'removed' WHERE id IN (?1, ?2)").bind(never.inquiry.id, confirmed.inquiry.id).run();
+    const results = await runDaily(testEnv, NOW);
+    expect(results.filter((r) => "error" in r)).toEqual([]);
+    expect(await findInquiryById(testEnv.DB, never.inquiry.id)).toBeNull();
+    expect(await findUserByEmail(testEnv.DB, never.client.email)).toBeNull();
+    expect((await findInquiryById(testEnv.DB, confirmed.inquiry.id))?.status).toBe("removed");
+    expect(await findUserByEmail(testEnv.DB, confirmed.client.email)).not.toBeNull();
+  });
+
   it("keeps accounts that signed in, have a session, a builder row, an inquiry or are recent", async () => {
     const iso = daysAgo(5);
     const signedIn = await createUser(testEnv.DB, { email: "dj-keep1@vnx.si", locale: "en", now: iso });

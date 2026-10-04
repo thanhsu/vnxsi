@@ -1,14 +1,17 @@
 # CURRENT STATUS — VNX.SI
 
-_Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
+_Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 
 ## Tóm tắt
+- **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Merge vào `main`: chờ cổng cuối (`<merge SHA>`).
+- **Cách làm từ M6 (Owner, 2026-10-04):** phiên Opus điều phối các subagent Sonnet (viết plan và code); Opus review và duyệt thay Owner (plan, khắc phục); sau mỗi milestone được APPROVE thì merge và push.
+- **Tiếp theo:** lát mỏng EPIC 21 (partner), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md` (đã duyệt, kể cả câu chữ khối A/B/C), nhánh `feat/epic21-partner-slice`. Migration EPIC 21 bắt đầu từ `0010` (`main` đã có `0009_feedback`).
 - **Production (2026-10-05):** `main` `3169e6d` (PR #4: VNX-0709 thiết kế lại đợt A, VNX-0710 contact/feedback, VNX-0711 chạy khi chưa có R2, kèm M5 + VNX-0508) **đã deploy** lên https://vnx.si (version `b5d0f063`, cron `0 1 * * *`). D1 production đã áp `0003`–`0007`, `0009`. Smoke: 20 route trả mã đúng, magic link thật gửi qua Resend tới `thanhsu604@gmail.com`. Chưa có R2: `/media/*` 404, upload ảnh báo "sắp mở" (builder chưa submit product được). Việc còn lại: Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → bỏ comment `r2_buckets` trong `wrangler.jsonc` → deploy.
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
-- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. Đã merge vào `main` (`d297c72`, đã push). M5 (Inquiry) **xong** trên nhánh `feat/m5-inquiry`: 7 task + lượt sửa sau review toàn nhánh (F1–F8), đã gộp `main` hai lần (VNX-0708 ở `1f5ddc7`; VNX-0705a ở `482ef50`, hợp nhất hai cron thành một), 534/534 test, typecheck sạch. Review: `.ai/reviews/M5-review.md`. Đã merge vào `main` (`815e06e`, đã push). VNX-0508 (Privacy cho Inquiry và Turnstile) **xong**, đã merge vào `main` (`bcf95c6`, đã push). Tiếp theo: plan M6.
-- **Production:** https://vnx.si vẫn chạy landing cũ + waitlist (bản deploy trước pivot). `main` đã có code M0–M1 nhưng **chưa deploy**; không có workflow nào tự deploy khi push.
+- **Milestone:** M0 và M1 **xong**, đã merge vào `main` qua PR #1 (merge commit `368cc1a`, 2026-10-03). M2 (Builder) **xong và đã merge** vào `main` (merge commit `3bde074`, đã push). M3 (Product) **xong**: 8 task + lượt sửa sau review toàn nhánh, 323/323 test, typecheck sạch. Review: `.ai/reviews/M3-review.md`. Đã merge vào `main` (`fe87caa`, đã push). M4 (Catalogue và danh bạ) **xong** trên nhánh `feat/m4-catalogue`: 5 task + lượt sửa sau review toàn nhánh (`bcb76d6`), 391/391 test, typecheck sạch. Review: `.ai/reviews/M4-review.md`. Đã merge vào `main` (`d297c72`, đã push). M5 (Inquiry) **xong** trên nhánh `feat/m5-inquiry`: 7 task + lượt sửa sau review toàn nhánh (F1–F8), đã gộp `main` hai lần (VNX-0708 ở `1f5ddc7`; VNX-0705a ở `482ef50`, hợp nhất hai cron thành một), 534/534 test, typecheck sạch. Review: `.ai/reviews/M5-review.md`. Đã merge vào `main` (`815e06e`, đã push). VNX-0508 (Privacy cho Inquiry và Turnstile) **xong**, đã merge vào `main` (`bcf95c6`, đã push). M6 (Request) **xong** trên `feat/m6-request` (xem dòng đầu).
+- **Deploy:** không có workflow nào tự deploy khi push; production chạy code PR #4 (xem dòng Production ở trên).
 - **Monetization (2026-10-04):** audit + Owner trả lời Q1–Q9; ADR-007/008/009 **Accepted** và phụ lục spec **Approved** (Owner duyệt văn bản 2026-10-04). Code theo lịch: `/go/` ở M7 (VNX-0707), phần còn lại ở EPIC 21–24. **Partner đầu tiên:** ElevenLabs (PartnerStack), sổ ở `docs/partners/registry.md`; lát mỏng EPIC 21 (phụ lục mục 3.8) làm ngay sau VNX-0708.
 - **Landing định vị (VNX-0708):** **xong** trên nhánh `feat/vnx-0708-landing` (worktree `.claude/worktrees/agent-a26fce7bca484621a`): 405/405 test, typecheck sạch, review APPROVE sau lượt sửa F1–F3 (`.ai/reviews/VNX-0708-review.md`). **Đã merge** vào `main` (`e4a932d`) và lên GitHub qua PR #2 (`ade9f4f`). Go-live: điều kiện deploy `main` đầy đủ + OQ-1 (`/privacy`) còn mở.
 - **Prototype giao diện:** https://claude.ai/artifact/SkuTz2YbCgoyX2aH5NgZSm (riêng tư).
@@ -75,19 +78,47 @@ _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 | VNX-0508 Privacy cho Inquiry, Turnstile | ✅ | 7602983, 5750640 | Owner duyệt câu chữ; review `.ai/reviews/VNX-0508-review.md` APPROVE; merge `bcf95c6`, đã push |
 | VNX-0507 Widget Turnstile | ⏳ | — | Owner tạo widget cho `vnx.si`, đưa site key; `wrangler secret put TURNSTILE_SECRET` |
 | VNX-0705a Terms, Privacy, Media Kit + cron dọn dữ liệu | ✅ | ab11c0e, 2430868, 79eca5f | review APPROVE (`.ai/reviews/VNX-0705a-review.md`); 432/432; nội dung từ `docs/legal/*.md` (Owner duyệt); cron `0 1 * * *` xóa `rate_limits` > 2 ngày, token/session hết hạn. Merge vào `main` qua PR #3 (`19115d3`) |
-| VNX-0709 Thiết kế lại đợt A (font, token, header, footer, logo B, landing v2) | ✅ | 953b507…628e61e | review APPROVE (`.ai/reviews/VNX-0709-review.md`); 468/468; font 344 KB tự host; `landing.js` 1.7 KB; audit `docs/design/2026-10-04-ui-audit-and-redesign.md`. Chưa merge |
+| VNX-0709 Thiết kế lại đợt A (font, token, header, footer, logo B, landing v2) | ✅ | 953b507…628e61e | review APPROVE (`.ai/reviews/VNX-0709-review.md`); 468/468; font 344 KB tự host; `landing.js` 1.7 KB; audit `docs/design/2026-10-04-ui-audit-and-redesign.md`. Merge vào `main` qua PR #4 (`3169e6d`) |
+| VNX-0710 Form liên hệ, `/admin/feedback` | ✅ | df893a0…c6fcf8b | migration `0009_feedback`; Turnstile ở khối "Ask us" của landing (F1); Privacy thêm form liên hệ. Merge qua PR #4 (`3169e6d`) |
+| VNX-0711 Chạy khi chưa có R2 | ✅ | c86130a, 4b726ba | không có binding `MEDIA`: `/media/*` 404, upload / xóa ảnh 503; `r2_buckets` comment trong `wrangler.jsonc`. Merge qua PR #4 (`3169e6d`) |
+| VNX-0601 Dữ liệu, state machine, điểm gợi ý request | ✅ | f7222e8, f91f587 | migration `0008_requests`; kiểu `ClientRequest` (không phải `Request`); chọn đề xuất có điều kiện bảo vệ lời mời và builder |
+| VNX-0602a Email request, thông báo, `request_verify` | ✅ | 26cd57a | 9 email (thêm "lời mời đã kết thúc"); `builderFacingName` che tên giống email; `notify/request.ts` không ném lỗi |
+| VNX-0602b Form `/request`, `/me`, lối vào, sitemap, Privacy | ✅ | e381bcf, 75d0bb3, a32f397 | Turnstile fail closed, 3/ngày mỗi email, 10/giờ mỗi IP; nút "Post a request" ở `/builders`, `/products` rỗng, landing; `/request` trong sitemap; bỏ email kết thúc cho builder không công khai |
+| VNX-0603 Hàng chờ admin, gợi ý, mời | ✅ | b217503 | cổng 5 lời mời nằm trong câu `INSERT`; gợi ý theo 5 luật §8.10; spam → `removed` |
+| VNX-0604 Lời mời trong Hub, đề xuất, từ chối | ✅ | d484b16 | `ANSWERABLE` (lời mời `invited`, request `matching`, builder công khai) |
+| VNX-0605 + 0605b Chọn đề xuất → Inquiry; che tên ở Inquiry | ✅ | 69069c8, a5c7554 | một batch: compare-and-set request, Inquiry `type = request`, tin nhắn đầu; test cổng ra M6 (`test/request-gate.test.ts`); 0605b che tên client ở mọi bề mặt Inquiry builder thấy (M5) |
+| VNX-0606 Cron request | ✅ | 1d1ea62 | nhắc lời mời 3 ngày, hết hạn 7 / 30 ngày, xóa request chưa xác nhận 48 giờ; khóa builder / user → lời mời `expired` |
+| Sửa sau review toàn nhánh M6 | ✅ | f9f895d, e08de3b, b66ce34, da2745f, 018f276, 9e83fd7, 6ecd24f, 53f8729 | F2 khớp kỹ năng Latin theo từ; F3 audit `request_invite.expire`; F4 cron xóa cả request / Inquiry đã gỡ mà chưa từng xác nhận; F5 giới hạn 5 chỉ đếm builder công khai (SQL + form admin); F7 khóa user → gỡ request đang mở; `deleteGhostUsers` xét `request_invites.invited_by`; email hết hạn gửi trước audit. 802/802 |
+| Gộp `main` vào M6 | ✅ | 2865d7e | `origin/main` `d3d1f4f` (PR #4, #5); giữ cả hai phía ở `app.ts`, `db/audit.ts`, `AdminLayout`, landing, `privacy.md` / `content.ts` |
+| Merge M6 vào `main` | ⏳ | `<merge SHA>` | chờ cổng cuối; sau đó push |
 
 ## Điều kiện trước khi deploy `main`
 
-Theo thứ tự (cũng ghi trong `apps/web/wrangler.jsonc`):
-0. (khi có M3) `npx wrangler r2 bucket create vnxsi-media` — cần Owner bật R2 trước; wrangler từ chối deploy nếu binding trỏ tới bucket chưa có.
-1. `npm run db:migrate:remote -w apps/web` (áp `0003_identity`, `0004_builders`, `0005_products`, `0006_catalog`, và `0007_inquiries` khi M5 đã merge; code M5 cần `0007` trước khi phục vụ `/hub`, `/me`). Từ `0006_catalog` trở đi, migration và `npm run deploy` phải chạy liền nhau: code trước M4 trả 409 khi sửa product đang publish nếu bảng đã có trigger FTS.
-2. Xác minh domain gửi mail trên Resend; `wrangler secret put RESEND_API_KEY`, `wrangler secret put ADMIN_EMAILS`.
-3. `npm run deploy`.
+Production chạy code PR #4 (`3169e6d`); D1 remote đã có `0001`–`0007` và `0009`, **chưa có `0008_requests`**. Lần deploy `main` tiếp theo (có M6), theo thứ tự (cũng ghi trong `apps/web/wrangler.jsonc`):
+1. `npm run db:migrate:remote -w apps/web` (áp `0008_requests`). Code M6 cần bảng `requests`, `request_invites` (`/request`, `/me`, `/hub`, `/admin/requests`, cron hằng ngày).
+2. `npm run deploy`, chạy liền sau bước 1.
 
-Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để sửa nhanh landing: `/login` sẽ lỗi.
+Không có secret mới (`RESEND_API_KEY`, `ADMIN_EMAILS`, `TURNSTILE_SECRET` đã có). R2 không bắt buộc (VNX-0711): khi Owner bật R2 thì `npx wrangler r2 bucket create vnxsi-media`, bỏ comment `r2_buckets`, rồi mới deploy.
+
+Chưa áp `0008_requests` thì **không deploy `main`**, kể cả để sửa nhanh landing.
 
 ## Quyết định phát sinh
+
+- **Owner (M6):**
+  - 2026-10-04: Opus duyệt plan và khắc phục thay Owner; merge + push sau khi milestone được APPROVE.
+  - 2026-10-04: thêm email thứ 9 "lời mời đã kết thúc" gửi builder. Tên client trông giống email bị che trên mọi bề mặt builder thấy. Không gửi email kết thúc khi lời mời hết hạn vì builder / user bị khóa (chỉ khi quá hạn hoặc request kết thúc).
+  - 2026-10-04: điểm trừ −1 của §8.10 chỉ tính lời mời quá hạn không trả lời (7 ngày), không tính lời mời hết hạn vì request kết thúc sớm. Gỡ request `builder_selected` thì giữ Inquiry (cuộc trao đổi độc lập).
+  - 2026-10-05 (sau review toàn nhánh): F7 khóa user → các request `submitted` / `matching` của họ thành `removed` trong cùng batch, builder nhận email kết thúc như luồng spam. F4 cron xóa request và Inquiry chưa từng xác nhận sau 48 giờ, kể cả khi đã bị gỡ. F2 kỹ năng chữ Latin khớp nguyên từ, chữ CJK giữ khớp chuỗi con.
+- **Reviewer (M6):**
+  - Plan Task 2–7 viết ngay trước mỗi task (từ code thật); planner được dùng lại làm implementer cho chính task đó. Trailer commit ghi đúng model đã viết commit.
+  - Kiểu domain đổi `Request` → `ClientRequest` (tránh trùng `Request` của Fetch). Chọn đề xuất kiểm lời mời `proposed`, cùng request, builder công khai ngay trong SQL compare-and-set (sửa ở Task 1).
+  - Che tên: một helper `builderFacingName` (kiểu `BuilderFacingName`), áp cho cả bề mặt Inquiry M5 builder thấy; chỉ che tên, không lọc nội dung tự do (tiêu đề, mô tả, tin nhắn).
+  - Mọi email kết thúc gửi builder (`invite_expired`, `not_selected`) bỏ qua builder không công khai (`publicBuilderOnly`), mở rộng luật Owner sang `not_selected`.
+  - Quá hạn (điểm trừ) = lời mời `expired` có `updated_at − invited_at ≥ 7` ngày; lời mời còn `invited` khi request kết thúc từ ngày 7 trở đi cũng tính.
+  - Hạn 7 ngày (lời mời) và 30 ngày (ghép) là hạn mềm: vẫn nhận trả lời tới khi cron hằng ngày cho hết hạn (trễ ≤ 24 giờ).
+  - Client mở request đã bị gỡ (kể cả `builder_selected`) → 404; Inquiry vẫn còn.
+  - VNX-0602 tách 0602a / 0602b (roadmap đã ghi); thêm 0605b (che tên ở Inquiry), cùng implementer với 0605, review chung.
+  - F3: mọi lời mời hết hạn do hệ thống (cron, khóa builder, khóa user) ghi audit `request_invite.expire` (`reason` `lapsed` / `builder_inactive`); email hết hạn gửi trước, audit lỗi không chặn email. F5: giới hạn 5 lời mời chỉ đếm lời mời của builder công khai (cả SQL lẫn form admin). F8 giữ nguyên: builder bị khóa vẫn đọc lời mời của mình. Ruling cũ "request của client bị khóa vẫn chạy" thay bằng quyết định F7 của Owner.
 
 - **Owner 2026-10-04 (M5):** Turnstile do Owner tạo widget, thiếu khóa thì form chưa đăng nhập đóng (fail closed); chỉ người chưa đăng nhập qua Turnstile; tài khoản ngầm chưa xác nhận bị xóa sau 48 giờ; builder thấy tên client gõ trên form (`client_name`), không thấy email. Sau review toàn nhánh: nút "Gửi ngay" ở `/me` cho Inquiry chờ xác nhận (phiên đăng nhập đã chứng minh email); 5 lần/giờ mỗi email cho email xác nhận khi chưa đăng nhập.
 - **Reviewer (M5):** form chưa đăng nhập trả cùng trang "kiểm tra email" cho email của builder, tài khoản bị khóa, honeypot và quá giới hạn email (không lộ trạng thái tài khoản); `notifyInquiryMessage` không bao giờ ném lỗi; driver Turnstile giả chỉ có hiệu lực khi `MAIL_DRIVER=fake`; builder bị khóa không trả lời / từ chối / đóng được; khi gộp VNX-0705a, giữ khung cron và hàm dọn dữ liệu của VNX-0705a (`deleteExpiredLoginTokens`, `RATE_LIMIT_KEEP_SECONDS` 2 ngày), thêm các bước M5 vào danh sách bước (khác gợi ý trong `.ai/reviews/VNX-0705a-review.md` mục "Xung đột", cùng hành vi; theo comment của chính `jobs/daily.ts` bên VNX-0705a).
@@ -119,6 +150,17 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Header hiện link Builder Hub khi đã đăng nhập (người chưa là builder được đưa sang `/hub/apply`).
 
 ## Nghĩa vụ để lại
+- **Deploy M6:** `npm run db:migrate:remote -w apps/web` (`0008_requests`) rồi `npm run deploy` liền sau (mục "Điều kiện trước khi deploy `main`"). Cần `ADMIN_EMAILS` (đã có) để admin nhận email khi có request mới.
+- **Reviewer (tài liệu M6, còn treo):** ARCHITECTURE §2 dòng `notify/` ghi thêm M6 (`notify/request.ts`, gửi một lần, không có cột gửi lại).
+- **Mọi thông báo mới gửi builder khi lời mời / request kết thúc:** phải đi qua `publicBuilderOnly` (bỏ qua builder không công khai); không tự có.
+- **EPIC 21:** migration bắt đầu từ `0010` (`0010_feature_flags`, `0011_partners`, `0012_outbound_clicks`; plan đã sửa); nếu `main` có số cao hơn lúc bắt đầu thì đánh số lại. Privacy (khối C) sửa trong cùng task VNX-2103.
+- **M7 (số liệu, Live, test kiến trúc tiền):**
+  - "Request 30 ngày" đếm theo `requests.submitted_at`; bảng thước đo §3 (request đã gửi, tỷ lệ có ≥ 1 đề xuất, tỷ lệ chọn được builder) đọc thẳng `requests`, `request_invites`.
+  - Dải Live đọc audit `request.submit`, `request.verify` (chỉ `category`, `languages`), chịu được dòng trùng hiếm (cùng mili giây).
+  - Không dùng `closed_at` làm mốc kết thúc của request bị gỡ sau khi đã kết thúc (bị ghi đè).
+  - "Top builder: được chọn" đếm `request_invites.status = 'selected'`; "trả lời nhanh" lấy `invited_at → responded_at`.
+  - Test kiến trúc "ranking không đọc tiền" (ADR-007) phải gồm `db/requests.ts` (`listCandidates`) và `domain/request.ts` (`suggestBuilders`).
+- **Trước khi số builder `approved` vượt 1000:** `listCandidates` lấy 1000 builder đầu theo `user_id` rồi mới chấm điểm; khi đó lọc hoặc chấm điểm trong SQL.
 - **Owner (bảo mật):** Resend API key đã dán vào hội thoại 2026-10-04 → sau go-live, thu hồi key trên Resend, tạo key mới, chạy lại `npx wrangler secret put RESEND_API_KEY` (trong `apps/web`). Tương tự Turnstile secret (cũng dán vào hội thoại): Rotate secret key ở widget `vnx.si`, rồi `npx wrangler secret put TURNSTILE_SECRET`.
 - **M5 merge (thêm, VNX-0709):** `Layout.tsx`, `app.css`, 4 file i18n đã viết lại; class và biến CSS cũ còn (alias) nên view M5 không vỡ; gộp i18n theo key, footer test dùng `footer.company`.
 - **Đợt B/C thiết kế:** catalogue, product, builder, Hub, Admin theo design system mới; thống nhất trọng lượng tiêu đề 600/700.
@@ -130,7 +172,6 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - **Owner (monetization Q4):** tự kiểm điều khoản từng chương trình partner (có cho cá nhân tham gia không, mẫu thuế, cách payout) trước khi bật trên production; khi lập pháp nhân (VNX-1401) thì chuyển hợp đồng.
 
 - **Deploy sau khi merge M4:** áp `0006_catalog` cùng lúc với code M4 (ghi trong `wrangler.jsonc`). Trước lần `db:migrate:remote` đầu tiên: thử `0006_catalog` trên một D1 remote nháp (trigram, trigger, `json_each` trong trigger, `wrangler d1 export`).
-- **M6:** nút "Post a request" ở `/builders` và ở trạng thái rỗng của `/products`; thêm `/request` vào sitemap.
 - **M7:** `/`, `/for-builders`, `/terms`, `/privacy` vào sitemap kèm alternate; link header vào `<nav>`; nếu `/go/` có tiền tố locale thì `robots.txt` chặn cả các tiền tố.
 - **M8 (runbook):** backup D1 khi có bảng ảo FTS5 (bỏ `products_fts` và trigger → export → tạo lại và backfill, hoặc dùng Time Travel).
 
@@ -139,7 +180,6 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - **Deploy sau khi merge M2:** `db:migrate:remote` phải áp cả `0004_builders` (đã ghi trong `wrangler.jsonc`).
 - **Quyết định sau (ADR nhỏ):** hash invite đang vừa là khóa DB vừa là giá trị cookie, nên người đọc được D1/audit có thể tự duyệt builder; thiết kế lại (cookie ≠ khóa DB, hoặc HMAC) nếu cần.
 - **VNX-0507 (Owner):** tạo widget Turnstile cho `vnx.si`, đưa site key để Claude đặt vào `wrangler.jsonc`; `wrangler secret put TURNSTILE_SECRET`. Thiếu thì form Inquiry khi chưa đăng nhập tự đóng.
-- **M6:** `deleteGhostUsers` phải xét thêm bảng `requests`; email `request_verify` dùng lại trang xác nhận (`VERIFY_PURPOSES`); nút "Post a request" (từ M4).
 - **M7:** đếm `inquiries` vào `product_daily_stats` khi Inquiry vào `open`; cron hằng giờ (`scheduled` hiện chỉ chạy job cho `0 1 * * *`).
 - **M7:** độ tương phản `.error-msg` ở dark mode, vùng chạm 44 px cho brand/sign-in, skip link.
 - **M8 (VNX-0804):** chuyển `www.vnx.si` → `vnx.si` (cookie `__Host-` gắn với host).
@@ -149,6 +189,16 @@ Chưa làm đủ thì **không deploy `main` sau khi merge**, kể cả để s�
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
 ## Ghi nhận (minor, chưa làm)
+
+- M6: Windows: `test/hub/media-disabled.test.ts` (của `main`, AC1) lỗi khi working copy CRLF (`wrangler.jsonc` qua autocrlf; regex bỏ comment `//.*$` vướng `\r`); xanh trên LF / CI. Không phải lỗi merge.
+- M6: có thể "gài" request chờ xác nhận vào tài khoản người khác (giảm bằng Turnstile, rate limit, xóa sau 48 giờ); đăng request khi đã đăng nhập là 2 lần ghi; `/request` khi đã đăng nhập điền sẵn tên mà không có no-store (cùng khuôn M5).
+- M6: audit trùng khi hai thao tác cùng mili giây (xác nhận, gỡ, cron chạy đồng thời: nhắc / audit trùng); khuôn `status + updated_at` từ M5.
+- M6: `mentions()` (F2) chưa xử lý biên dấu câu (`.NET`, `C++17`) và NFD; `changeUser` TOCTOU: request được xác nhận giữa lúc đọc và batch khóa thì vẫn mở; mở khóa builder có thể để > 5 lời mời đang mở; audit lời mời bị quét là batch thứ hai (crash giữa hai batch mất audit, guard chặn trùng); route khóa user có thể gộp audit vào một batch.
+- M6: F8 giữ: builder bị khóa (tài khoản vẫn `active`) vẫn đọc `/hub/invitations/:id` của mình, kể cả lời mời đã hết hạn.
+- M6: admin: danh sách rỗng dùng lại `me.requests.empty`; cột "Proposals" đếm cả lời từ chối (nên đổi nhãn "Answered"); chuỗi số chỗ ghi cứng 5; `listCandidates` đọc ≤ 1000 builder; gỡ request đã kết thúc ghi đè `closed_at`.
+- M6: giao diện / a11y: ô lý do từ chối thiếu `aria-describedby`; bảng lời mời thiếu `<thead>`; từ chối một lần bấm, không hỏi lại; câu gợi ý chọn vẫn hiện khi không có gì để chọn; `requestTitle ?? ""` có thể ra tiêu đề rỗng.
+- M6: code: `auth.tsx` mặc định mục đích lạ thành "request" (không chạy tới); `timelineDays ?? 0`; kiểu `Email` lặp, 3 vòng gửi giống nhau; test quét kiến trúc lách được bằng destructuring, `notify/request.ts` ngoài danh sách quét; cron giới hạn 200 dòng không chặn số email mỗi lần chạy; thứ tự import ở `daily.ts`.
+- M6: test nhánh phụ còn thiếu (db: user bị khóa của builder `approved`, builder `pending`, id trùng trong batch, mời vào `pending_verification`, guard `inviteId`, user `suspended` sau khi đề xuất; route: request `removed` khi POST confirm / close, 502, GET khi Turnstile chưa cấu hình, `unavailable` → 503, chọn đồng thời hai đề xuất, `requestTitle` trong email admin, bộ lọc số lời mời ở tổng quan, cảnh báo `capped`; test spam không kiểm subject; test POST đồng thời có thể đi nhánh 400; fixture `inviteBuilders` báo lỗi khó hiểu; test cron không mock `console.log`). Đầy đủ: `.ai/reviews/M6-review.md`.
 
 - M5: có thể "gài" Inquiry chờ xác nhận vào tài khoản người khác (giảm bằng Turnstile, rate limit, xóa sau 48 giờ); email xác nhận không có nội dung tin nhắn.
 - M5: mở Inquiry ngay cả khi product / builder thôi công khai trong 15 phút chờ; thời gian phản hồi khác nhau giữa nhánh "không tạo gì" và nhánh tạo thật.
