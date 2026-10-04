@@ -22,7 +22,7 @@ import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
-import { handleWaitlist } from "./routes/waitlist.ts";
+import { registerLandingRoutes } from "./routes/landing.tsx";
 import { errorResponse } from "./views/error-response.tsx";
 
 export function createApp() {
@@ -32,6 +32,7 @@ export function createApp() {
   app.use("*", originCheck);
   app.use("*", sessionMiddleware);
 
+  registerLandingRoutes(app);
   registerAuthRoutes(app);
   registerJoinRoutes(app);
   registerApplyRoutes(app);
@@ -51,7 +52,6 @@ export function createApp() {
   registerUserAdminRoutes(app);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
-  app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));
   app.all("/api/*", (c) => c.json({ ok: false, error: "Not found" }, 404));
 
   app.onError((err, c) => {

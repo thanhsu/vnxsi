@@ -258,7 +258,7 @@ Nguồn: [phụ lục monetization](../superpowers/specs/2026-10-04-vnxsi-moneti
 
 ## EPIC 21 — Partner và affiliate
 
-Điều kiện bắt đầu: có hợp đồng partner thật đầu tiên (Owner tự kiểm điều khoản, Q4).
+Điều kiện bắt đầu: có hợp đồng partner thật đầu tiên (Owner tự kiểm điều khoản, Q4). **Đã có:** ElevenLabs qua PartnerStack (2026-10-04). Lát mỏng (phụ lục mục 3.8) = VNX-2101, 2102, 2103 (gồm `/go/:merchantSlug`), 2104; làm ngay sau VNX-0708. VNX-2105–2109 để sau.
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|

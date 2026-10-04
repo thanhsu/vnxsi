@@ -12,7 +12,7 @@
 | Phần | Nội dung | Làm ở | Mục |
 |---|---|---|---|
 | A. Outbound | `/go/` cho link demo/website của product, `outbound_clicks` | **M7** (VNX-0707, thay `/p/:slug/demo`) | 2 |
-| B. Partner | cờ tính năng, merchant, chương trình, offer, `/tools/:merchant`, disclosure, conversion, ledger, báo cáo | EPIC 21, khi có hợp đồng partner thật đầu tiên | 3 |
+| B. Partner | cờ tính năng, merchant, chương trình, offer, `/tools/:merchant`, disclosure, conversion, ledger, báo cáo | EPIC 21. **Lát mỏng** (mục 3.8) làm ngay sau VNX-0708 cho partner đầu tiên (ElevenLabs, Owner 2026-10-04); phần còn lại sau | 3 |
 | C. Nội dung | bài biên tập, trang category SEO, liên kết nội bộ | EPIC 22 (Wave 2, gộp EPIC 13) | 4 |
 | D. Sponsored | ô tách riêng | EPIC 23, sau cổng ra Wave 1 | 5 |
 | E. Quảng cáo | chỉ thiết kế | EPIC 24, chưa lên lịch | 6 |
@@ -84,7 +84,7 @@ Bảng `feature_flags` (`key` PK, `enabled` 0/1, `updated_by`, `updated_at`). Ke
 
 ### 3.2 Dữ liệu
 
-**`merchants`**: `id`, `slug` (unique, cùng luật slug product), `name`, `website_url` (https), `allowed_hosts` (JSON, host đích hợp lệ cho mọi offer của merchant; khớp chính xác hoặc là subdomain của một mục), `logo_key` (R2, nullable), `description` (markdown giới hạn, mục 4.3), `indexable` (0/1), `status` (`active`/`paused`/`archived`).
+**`merchants`**: `id`, `slug` (unique, cùng luật slug product), `name`, `website_url` (https), `allowed_hosts` (JSON, host đích hợp lệ cho mọi offer của merchant; khớp chính xác hoặc là subdomain của một mục), `logo_key` (R2, nullable), `description` (markdown giới hạn, mục 4.3; ở lát mỏng là văn bản thuần theo spec Wave 1 mục 8.6), `default_offer_id` (nullable, offer mà `/go/:merchantSlug` trỏ tới), `indexable` (0/1), `status` (`active`/`paused`/`archived`). Slug merchant không được là `p` hoặc `o` (đã dùng cho `/go/p/…`, `/go/o/…`); danh sách từ dành riêng nằm trong domain, giống handle builder.
 
 **`partner_programs`**: `id`, `merchant_id`, `name`, `type` (`affiliate`/`referral`/`revenue_share`/`direct`), `network` (văn bản tự do), `provider` (`generic_template`/`manual`), `commission_model` (`percent`/`flat`/`tiered`/`custom`, nullable), `commission_rate_bps`, `commission_flat_minor`, `currency`, `cookie_days` (đều nullable, **không có mặc định**), `attribution_notes`, `terms_url`, `terms_verified_at`, `status` (`draft`/`active`/`paused`/`ended`). Chỉ chuyển `active` khi có `terms_url` và `terms_verified_at`.
 
@@ -100,6 +100,7 @@ Bảng `feature_flags` (`key` PK, `enabled` 0/1, `updated_by`, `updated_at`). Ke
 - Khi lưu (admin) và khi redirect: URL cuối (sau khi điền template, hoặc `destination_url` nếu không có template) phải là `https:`, không có userinfo, không phải IP literal hay `localhost`, và host thuộc `merchants.allowed_hosts` của merchant tương ứng. Với offer của product mà không có chương trình, host phải khớp host `website_url`/`demo_url` của product.
 - Redirect chỉ khi: offer `active`, trong khoảng `starts_at`/`ends_at`, chương trình (nếu có) `active`, merchant `active`, và cờ của loại tương ứng đang bật (`affiliate` cho `type = affiliate`, `partner_referral` cho `referral`/`revenue_share`). Thiếu điều kiện nào → chuyển tới `destination_url` không có tracking nếu host hợp lệ; không thì 404.
 - Header và ghi click như mục 2.1–2.2, `link_kind = 'offer'`.
+- **`GET /go/:merchantSlug`** (Owner 2026-10-04): tra merchant theo slug, dùng `default_offer_id`, rồi xử lý y như `/go/o/:offerId`. Merchant không `active`, không có offer mặc định, hoặc slug không tồn tại → 404. Đây là URL dùng cho nút trên `/tools/:merchant` và để chia sẻ.
 
 ### 3.4 Hiển thị
 
@@ -130,6 +131,20 @@ Mọi thao tác ghi `audit_log`.
 
 - Hub "Quản lý offer" cho product của mình: thêm offer `trial` (không chương trình) hoặc offer gắn chương trình affiliate do **builder tự có** thì để sau, cần quyết riêng (ai nhận hoa hồng). Bản đầu chỉ `trial`.
 - `/hub/products/:id/stats` (sau M7): view, demo click, outbound click, Inquiry theo ngày, 30 ngày. Builder không thấy doanh thu, hoa hồng, hay số của product khác.
+
+### 3.8 Lát mỏng cho partner đầu tiên (Owner 2026-10-04)
+
+Đủ để chạy luồng: `/tools/elevenlabs` → nút **Try ElevenLabs** → `/go/elevenlabs` → link tracking PartnerStack → ElevenLabs.
+
+| Có trong lát mỏng | Để sau |
+|---|---|
+| `feature_flags` + `/admin/flags` (cờ `affiliate`) | Conversion, import CSV, ledger `revenue_entries`, `/admin/revenue` (doanh thu xem tạm trên dashboard PartnerStack) |
+| `merchants`, `partner_programs`, `offers` + admin nhập/sửa (kiểm host, xem trước URL cuối) | Offer gắn với product hoặc bài viết; offer `trial` trong Hub |
+| `/go/:merchantSlug`, `/go/o/:offerId`; `outbound_clicks` (tạo ở đây nếu VNX-0707 chưa làm) | Postback/webhook |
+| `/tools/:merchantSlug` (4 locale, mô tả văn bản thuần), disclosure, `/disclosure` | Markdown cho mô tả merchant (đi cùng VNX-2202) |
+| Sitemap: `/tools/:slug` khi `indexable = 1` và cờ `content_indexing` bật | Logo merchant (R2) |
+
+Dữ liệu ElevenLabs lấy từ `docs/partners/registry.md`, admin nhập qua giao diện; không seed bằng migration. Chương trình chỉ `active` khi Owner đã điền `terms_url` và `terms_verified_at`, nên nút chỉ dẫn tới link tracking sau bước đó (trước đó `/go/` chuyển về `website_url` không có tracking, theo mục 3.3).
 
 ## 4. Phần C — Nội dung biên tập (EPIC 22)
 

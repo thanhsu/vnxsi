@@ -142,6 +142,7 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m3-product.md`. Editor sinh form 
 |---|---|---|
 | VNX-0701 | `product_daily_stats`: đếm view (lọc bot, chủ product, admin) | AGENT |
 | VNX-0707 | `/go/p/:slug/{demo,site}`, bảng `outbound_clicks`, cột `outbound_clicks`/`demo_clicks`, secret `ANALYTICS_SALT` (phụ lục monetization mục 2; thay `/p/:slug/demo`, Owner duyệt 2026-10-04 Q3) | AGENT, HIGH-RISK |
+| VNX-0708 | Landing định vị ở `/` (4 locale), CTA builder qua `/login`, waitlist client; gỡ `/api/waitlist` JSON và `public/index.html` (plan `.ai/plans/VNX-0708-plan.md`; Owner duyệt 2026-10-04, làm trước M5) | AGENT |
 | VNX-0702 | Cron hằng giờ tính `public_stats` theo spec mục 8.11 | AGENT |
 | VNX-0703 | Homepage SSR: các khối kèm ngưỡng | AGENT |
 | VNX-0704 | Homepage: animation, chart, tooltip, bảng dữ liệu, reduced-motion | AGENT |

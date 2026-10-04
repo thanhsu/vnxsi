@@ -13,8 +13,7 @@ export function registerSeoRoutes(app: Hono<AppEnv>) {
   app.get("/sitemap.xml", async (c) => {
     const [products, builders] = await Promise.all([listSitemapProducts(c.env.DB), listSitemapBuilders(c.env.DB)]);
     const entries: SitemapEntry[] = [
-      // The home page has no locale versions until the M7 cutover.
-      { rest: "/", localized: false },
+      { rest: "/", localized: true },
       { rest: "/products", localized: true },
       { rest: "/builders", localized: true },
       ...products.map((p) => ({ rest: `/p/${p.slug}`, lastmod: p.updatedAt, localized: true })),
