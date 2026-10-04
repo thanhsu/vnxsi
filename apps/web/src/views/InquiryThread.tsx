@@ -35,7 +35,13 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
         <dd>{tr(INQUIRY_TYPE_KEY[inquiry.type])}</dd>
         <dt>{tr("inbox.about")}</dt>
         <dd>
-          {summary.productSlug && summary.productName ? <a href={localizedPath(locale, `/p/${summary.productSlug}`)}>{summary.productName}</a> : <a href={localizedPath(locale, `/b/${summary.builderHandle}`)}>{summary.builderName}</a>}
+          {summary.productSlug && summary.productName ? (
+            <a href={localizedPath(locale, `/p/${summary.productSlug}`)}>{summary.productName}</a>
+          ) : summary.requestTitle ? (
+            summary.requestTitle
+          ) : (
+            <a href={localizedPath(locale, `/b/${summary.builderHandle}`)}>{summary.builderName}</a>
+          )}
         </dd>
         <dt>{tr("thread.budget")}</dt>
         <dd>{tr(BUDGET_KEY[inquiry.budgetBand])}</dd>

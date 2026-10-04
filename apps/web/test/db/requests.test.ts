@@ -9,6 +9,7 @@ import {
   listCandidates,
   listClientRequests,
   listRequestInvites,
+  markInviteSelectedStatement,
   returnedRequest,
   setRequestStatusStatement,
 } from "../../src/db/requests.ts";
@@ -137,6 +138,38 @@ describe("db/requests (VNX-0601)", () => {
     const created = await findInquiryById(db(), inquiry.id);
     expect(created).toMatchObject({ type: "request", requestId: request.id, status: "open", openedAt: now });
     expect((await listMessages(db(), inquiry.id)).map((m) => m.id)).toEqual([inquiry.firstMessageId]);
+  });
+
+  it("marks the chosen invitation selected and never writes a second inquiry, even at the same instant", async () => {
+    const { client, request } = await makeRequest({ tag: "rq-sel2" });
+    const [builder] = await builders("rq-sel2-b", 1);
+    const [invite] = await inviteBuilders(request, [builder!]);
+    await proposeOn(invite!);
+    const now = later((await findRequestById(db(), request.id))!.updatedAt);
+    const attempt = () => {
+      const inquiry = createInquiryStatements(
+        db(),
+        { clientUserId: client.id, clientName: "Minh Tran", builderId: builder!.userId, productId: null, requestId: request.id, type: "request", message: "Request + proposal", budgetBand: "2k-10k", deadline: null, status: "open", locale: "en", now },
+        { requestId: request.id, inviteId: invite!.id, updatedAt: now },
+      );
+      const end = endRequestBatch(db(), { id: request.id, from: "matching", to: "builder_selected", now, selectedInviteId: invite!.id }, [
+        ...inquiry.statements,
+        markInviteSelectedStatement(db(), { inviteId: invite!.id, requestId: request.id, inquiryId: inquiry.id, now }),
+      ]);
+      const audit = auditStatement(db(), { actorUserId: client.id, action: "request.select", entity: "request", entityId: request.id, data: { inviteId: invite!.id, inquiryId: inquiry.id }, now }, { inquiryId: inquiry.id, status: "open", updatedAt: now });
+      return { inquiry, end, statements: [...end.statements, audit] };
+    };
+    const first = attempt();
+    expect(first.end.read(await db().batch(first.statements)).request?.status).toBe("builder_selected");
+    const second = attempt(); // same `now`: the request already carries that updated_at
+    expect(second.end.read(await db().batch(second.statements)).request).toBeNull();
+    expect(await findInquiryById(db(), second.inquiry.id)).toBeNull();
+    const n = await db().prepare("SELECT COUNT(*) AS n FROM inquiries WHERE request_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(n?.n).toBe(1);
+    const audits = await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.select' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(audits?.n).toBe(1);
+    const [row] = await listRequestInvites(db(), request.id);
+    expect(row?.invite).toMatchObject({ status: "selected", inquiryId: first.inquiry.id });
   });
 
   async function selectBatch(tag: string, mutate: (ctx: { request: { id: string }; invite: { id: string }; other: { id: string }; builderId: string }) => Promise<void>) {

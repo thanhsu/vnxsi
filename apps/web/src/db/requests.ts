@@ -447,3 +447,19 @@ export function returnedInvite(result: D1Result | undefined): RequestInvite | nu
   const row = result?.results[0] as InviteRow | undefined;
   return row ? toInvite(row) : null;
 }
+
+/**
+ * Spec §7.6 select, `between` of endRequestBatch (after the request's compare-and-set and the inquiry INSERTs):
+ * proposed -> selected, linked to the new inquiry, only when this batch won. RETURNING the row.
+ */
+export function markInviteSelectedStatement(db: D1Database, input: { inviteId: string; requestId: string; inquiryId: string; now: string }): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE request_invites SET status = 'selected', inquiry_id = ?3, updated_at = ?4
+       WHERE id = ?1 AND request_id = ?2 AND status = 'proposed'
+         AND EXISTS (SELECT 1 FROM requests WHERE id = ?2 AND status = 'builder_selected' AND selected_invite_id = ?1 AND updated_at = ?4)
+         AND EXISTS (SELECT 1 FROM inquiries WHERE id = ?3)
+       RETURNING id`,
+    )
+    .bind(input.inviteId, input.requestId, input.inquiryId, input.now);
+}

@@ -61,6 +61,8 @@ export interface InquirySummary {
   inquiry: Inquiry;
   productName: string | null;
   productSlug: string | null;
+  /** Title of the request the inquiry came from (type "request", M6); null otherwise. */
+  requestTitle: string | null;
   builderName: string;
   builderHandle: string;
 }

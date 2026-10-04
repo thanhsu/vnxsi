@@ -9,6 +9,7 @@ import {
   requestNotSelectedEmail,
   requestProposalEmail,
   requestRejectedEmail,
+  requestSelectedEmail,
   requestReminderEmail,
 } from "../../src/email/templates/request.ts";
 import { builderFacingName } from "../../src/domain/inquiry.ts";
@@ -92,5 +93,15 @@ describe("request e-mail templates (spec §8.3)", () => {
 
   it("uses the same category labels as the views", () => {
     expect(CATEGORY_KEY).toEqual(VIEW_CATEGORY_KEY);
+  });
+  it("requestSelectedEmail names the client by the masked name, quotes the first message and escapes HTML", () => {
+    const evil = "<script>x</script>";
+    const mail = requestSelectedEmail("en", { clientName: builderFacingName("Minh Tran"), title: evil, body: `Request: ${evil}`, url: "https://vnx.si/hub/inquiries/01J" });
+    expect(mail.subject).toBe("Minh Tran chose your proposal");
+    expect(mail.text).toContain("https://vnx.si/hub/inquiries/01J");
+    expect(mail.html).not.toContain("<script>");
+    for (const locale of ["vi", "zh-Hans", "zh-Hant"] as const) {
+      expect(requestSelectedEmail(locale, { clientName: builderFacingName("Minh"), title: "T", body: "B", url: "https://vnx.si/x" }).subject).toContain("Minh");
+    }
   });
 });

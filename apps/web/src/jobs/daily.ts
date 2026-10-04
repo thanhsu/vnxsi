@@ -36,7 +36,7 @@ async function remind(env: Bindings, now: Date): Promise<number> {
     if (!builder) continue;
     const locale = isLocale(builder.locale) ? builder.locale : "en";
     try {
-      await mailer.send({ to: builder.email, ...inquiryReminderEmail(locale, { clientName: item.inquiry.clientName, productName: item.productName, url: inquiryUrl(env, locale, item.inquiry.id, "builder") }) });
+      await mailer.send({ to: builder.email, ...inquiryReminderEmail(locale, { clientName: item.inquiry.clientName, productName: item.productName ?? item.requestTitle, url: inquiryUrl(env, locale, item.inquiry.id, "builder") }) });
       await markReminded(env.DB, item.inquiry.id, iso);
       sent++;
     } catch (err) {
@@ -57,7 +57,7 @@ async function alert(env: Bindings, now: Date): Promise<number> {
   }
   const mailer = getMailer(env);
   const mail = inquiryAdminAlertEmail(
-    late.map((i) => ({ id: i.inquiry.id, builderHandle: i.builderHandle, productName: i.productName, openedAt: i.inquiry.openedAt ?? i.inquiry.createdAt })),
+    late.map((i) => ({ id: i.inquiry.id, builderHandle: i.builderHandle, productName: i.productName ?? i.requestTitle, openedAt: i.inquiry.openedAt ?? i.inquiry.createdAt })),
     new URL("/admin/inquiries?status=open", env.APP_ORIGIN).toString(),
   );
   for (const to of admins) await mailer.send({ to, ...mail });

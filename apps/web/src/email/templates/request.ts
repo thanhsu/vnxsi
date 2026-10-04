@@ -124,3 +124,15 @@ export function requestAdminNewEmail(
   const intro = `A new request is waiting for your review: “${input.title}”.`;
   return { subject: `New request: ${input.title}`, text: `${intro}\n${lines.join("\n")}\n\n${url}`, html: wrap("en", [p(intro), ...lines.map(p), link(url)]) };
 }
+
+/** To the chosen builder: the client's typed name only; the request and the proposal come as the inquiry's first message. */
+export function requestSelectedEmail(locale: Locale, input: { clientName: BuilderFacingName; title: string; body: string; url: string }): Email {
+  const tr = translator(locale);
+  const intro = tr("email.requestSelected.intro", { client: input.clientName, title: input.title });
+  const cta = tr("email.requestSelected.cta");
+  return {
+    subject: tr("email.requestSelected.subject", { client: input.clientName }),
+    text: `${intro}\n\n${input.body}\n\n${cta}\n${input.url}`,
+    html: wrap(locale, [p(intro), quote(input.body), p(cta), link(input.url)]),
+  };
+}
