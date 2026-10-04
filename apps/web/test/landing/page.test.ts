@@ -13,6 +13,10 @@ const get = (path: string, cookie?: string) => fetchAt(`https://vnx.si${path}`, 
 const decode = (s: string) =>
   s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
+/** <main> without the "Ask us" block (VNX-0710): its form states a length rule ("20 to 2000 characters"), not a statistic. */
+const withoutAsk = (main: string) => (main.includes('<section id="ask"') ? main.slice(0, main.indexOf('<section id="ask"')) : main);
+/** The #notify section only. */
+const notifyOf = (main: string) => withoutAsk(main).slice(main.indexOf('<section id="notify"'));
 const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ");
 const jsonLd = (html: string) => JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)?.[1] ?? "null");
 
@@ -110,6 +114,15 @@ const COPY: [MessageKey, string, string][] = [
   ["footer.mediaKit", "Media kit", "Media kit"],
   ["footer.terms", "Terms", "Điều khoản"],
   ["footer.privacy", "Privacy", "Quyền riêng tư"],
+  // VNX-0710: the "Ask us" block and the Contact nav item.
+  ["landing.ask.eyebrow", "Ask us", "Hỏi chúng tôi"],
+  ["landing.ask.title", "Have a question or a suggestion?", "Bạn có câu hỏi hay góp ý?"],
+  [
+    "landing.ask.lead",
+    "Builders and clients alike: tell us what you need, what is missing, or what we should do better.",
+    "Dù là builder hay client: hãy cho chúng tôi biết bạn cần gì, còn thiếu gì, hay chúng tôi nên làm tốt hơn ở đâu.",
+  ],
+  ["nav.contact", "Contact", "Liên hệ"],
 ];
 
 /** Keys of the VNX-0708 landing that the new design no longer uses. */
@@ -171,7 +184,7 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
     }
   });
 
-  it("AC6: has the hero, the deck, the principles strip, #how, the trust layer, #builders and #notify, in that order", async () => {
+  it("AC6: has the hero, the deck, the principles strip, #how, the trust layer, #builders, #notify and #ask (VNX-0710), in that order", async () => {
     for (const { path } of PAGES) {
       const main = mainOf(await (await get(path)).text());
       const at = (needle: string) => {
@@ -187,6 +200,7 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
         at('<section id="trust"'),
         at('<section id="builders"'),
         at('<section id="notify"'),
+        at('<section id="ask"'),
       ];
       expect([...order].sort((a, b) => a - b), path).toEqual(order);
       expect(main.match(/<li class="lp-principle/g), path).toHaveLength(4);
@@ -250,7 +264,7 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
       for (const suffix of ["", "?joined=1"]) {
         const main = mainOf(await (await get(path + suffix)).text());
         expect(main, path + suffix).not.toBe("");
-        expect(textOf(main), path + suffix).not.toMatch(/\d/);
+        expect(textOf(withoutAsk(main)), path + suffix).not.toMatch(/\d/);
         expect(main, path + suffix).not.toMatch(/href="[^"]*\/products\b/);
       }
     }
@@ -312,12 +326,48 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
   it("AC11: ?joined=1 shows the success message instead of the form", async () => {
     for (const { path, locale } of PAGES) {
       const main = mainOf(await (await get(`${path}?joined=1`)).text());
-      expect(main, path).toContain('role="status"');
-      expect(textOf(main), path).toContain(t(locale, "landing.form.joined"));
-      expect(main, path).not.toContain("<form");
+      const notify = notifyOf(main);
+      expect(notify, path).toContain('role="status"');
+      expect(textOf(notify), path).toContain(t(locale, "landing.form.joined"));
+      expect(notify, path).not.toContain("<form");
       expect(main, path).toContain('id="notify"');
     }
     const plain = textOf(mainOf(await (await get("/")).text()));
     expect(plain).not.toContain(t("en", "landing.form.joined"));
+  });
+
+  it("VNX-0710 AC5: the #ask block has the eyebrow, title, lead and the contact form posting to /contact with from=landing", async () => {
+    for (const { path, locale } of PAGES) {
+      const main = mainOf(await (await get(path)).text());
+      const ask = main.slice(main.indexOf('<section id="ask"'));
+      expect(ask, path).toMatch(/^<section id="ask" class="[^"]*" aria-labelledby="ask-title">/);
+      const text = textOf(ask);
+      for (const key of ["landing.ask.eyebrow", "landing.ask.title", "landing.ask.lead", "contact.form.submit"] as const) expect(text, `${path} ${key}`).toContain(t(locale, key));
+      expect(ask).toMatch(/<h2 id="ask-title">/);
+      const action = locale === "en" ? "/contact" : `/${locale.toLowerCase()}/contact`;
+      expect(ask, path).toContain(`<form method="post" action="${action}"`);
+      expect(ask, path).toContain('<input type="hidden" name="from" value="landing"');
+      expect(ask, path).toContain('class="cf-turnstile" data-sitekey="fake-site-key"');
+      expect(ask, path).not.toContain('role="status"');
+    }
+  });
+
+  it("VNX-0710 AC5: ?asked=1 shows the thank-you notice in the #ask block, and the waitlist form stays", async () => {
+    for (const { path, locale } of PAGES) {
+      const main = mainOf(await (await get(`${path}?asked=1`)).text());
+      const ask = main.slice(main.indexOf('<section id="ask"'));
+      expect(ask, path).toContain('role="status"');
+      expect(textOf(ask), path).toContain(t(locale, "contact.sent"));
+      expect(ask, path).not.toContain("<form");
+      expect(notifyOf(main), path).toContain("<form");
+    }
+  });
+
+  it("VNX-0710 AC8: signed in, the #ask form has the account e-mail and no Turnstile", async () => {
+    const { cookie } = await signIn("landing-ask@vnx.si");
+    const main = mainOf(await (await get("/vi", cookie)).text());
+    const ask = main.slice(main.indexOf('<section id="ask"'));
+    expect(ask).toMatch(/<input[^>]*name="email"[^>]*value="landing-ask@vnx.si"/);
+    expect(ask).not.toContain("cf-turnstile");
   });
 });

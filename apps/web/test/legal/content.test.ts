@@ -89,3 +89,46 @@ describe("legal pages match docs/legal/*.md word for word (VNX-0705a AC2)", () =
     }
   });
 });
+
+/** Plan VNX-0710 "Privacy": the exact sentences added for the contact form. */
+const CONTACT_PRIVACY = {
+  EN: [
+    "- **Questions and feedback:** when you use our contact form, your email, the name you give (optional), whether you are a builder or a client, what your message is about, the message itself, the language of the page, and your account if you are signed in.",
+    "- **Bot check:** when you send an inquiry or a contact message without signing in, Cloudflare Turnstile checks that you are a person.",
+    "- To read and answer the questions and feedback you send us.",
+    "We rely on your consent (waitlist, contact form),",
+    "- Messages sent through the contact form are read only by the VNX.SI team; a copy is delivered to our mailbox through Resend.",
+    "- Questions and feedback: until we have answered and dealt with them, plus 12 months, or until you ask us to delete them.",
+  ],
+  VI: [
+    "- **Câu hỏi và góp ý:** khi bạn dùng form liên hệ, email của bạn, tên bạn cung cấp (không bắt buộc), bạn là builder hay client, tin nhắn nói về điều gì, nội dung tin nhắn, ngôn ngữ của trang, và tài khoản của bạn nếu đã đăng nhập.",
+    "khi bạn gửi yêu cầu hoặc tin nhắn liên hệ mà chưa đăng nhập",
+    "- Đọc và trả lời các câu hỏi, góp ý bạn gửi cho chúng tôi.",
+    "(danh sách chờ, form liên hệ)",
+    "- Tin nhắn gửi qua form liên hệ chỉ đội ngũ VNX.SI đọc; một bản được chuyển tới hộp thư của chúng tôi qua Resend.",
+    "- Câu hỏi và góp ý: tới khi chúng tôi đã trả lời và xử lý xong, cộng 12 tháng, hoặc tới khi bạn yêu cầu xóa.",
+  ],
+} as const;
+
+describe("privacy covers the contact form (VNX-0710 AC12)", () => {
+  for (const [lang, prefix] of [
+    ["EN", ""],
+    ["VI", "/vi"],
+  ] as const) {
+    it(`${lang}: docs/legal/privacy.md has the approved sentences and /privacy shows them`, async () => {
+      const part = partOf(sourceOf("privacy"), lang);
+      const text = textOf(mainOf(await (await get(`${prefix}/privacy`)).text()));
+      for (const sentence of CONTACT_PRIVACY[lang]) {
+        expect(part, sentence).toContain(sentence);
+        expect(text, sentence).toContain(plain(sentence.replace(/^- /, "")));
+      }
+      expect(part).not.toContain("when you send an inquiry without signing in");
+      expect(part).not.toContain("khi bạn gửi yêu cầu mà chưa đăng nhập");
+      // The new collection line follows the waitlist line.
+      const waitlist = part.indexOf(lang === "EN" ? "- **Waitlist:**" : "- **Danh sách chờ:**");
+      const contact = part.indexOf(CONTACT_PRIVACY[lang][0]);
+      expect(waitlist).toBeGreaterThan(0);
+      expect(part.slice(waitlist, contact).split("\n")).toHaveLength(2);
+    });
+  }
+});

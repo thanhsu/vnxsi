@@ -36,6 +36,7 @@ const NAV = [
   ["/builders", "nav.findBuilders"],
   ["/#how", "nav.howItWorks"],
   ["/#builders", "nav.forBuilders"],
+  ["/contact", "nav.contact"],
 ] as const;
 const navHref = (locale: Locale, target: string) => {
   const [path, hash] = target.split("#");
@@ -138,6 +139,28 @@ describe("header (VNX-0709 AC4)", () => {
   });
 });
 
+describe("contact links (VNX-0710 AC11)", () => {
+  it("marks Contact as the current page in the header on /contact", async () => {
+    for (const locale of LOCALES) {
+      const header = headerOf(await html(localizedPath(locale, "/contact")));
+      const desktop = inner(header, "nav", ' class="site-nav"');
+      expect(desktop).toContain(`<a href="${localizedPath(locale, "/contact")}" aria-current="page">${t(locale, "nav.contact")}</a>`);
+      const menu = inner(inner(header, "details", ' class="menu"'), "nav", ' class="menu-nav"');
+      expect(menu).toContain(`<a href="${localizedPath(locale, "/contact")}" aria-current="page">${t(locale, "nav.contact")}</a>`);
+    }
+  });
+
+  it("lists Feedback in the admin nav, in every locale", async () => {
+    const { cookie } = await signIn("owner@vnx.si", { admin: true });
+    for (const locale of LOCALES) {
+      const page = await html(localizedPath(locale, "/admin/builders"), cookie);
+      const nav = inner(page, "nav", ` aria-label="${t(locale, "admin.nav.label")}"`);
+      expect(hrefs(nav), locale).toContain(localizedPath(locale, "/admin/feedback"));
+      expect(textOf(nav), locale).toContain(t(locale, "admin.nav.feedback"));
+    }
+  });
+});
+
 describe("footer (VNX-0709 AC5)", () => {
   for (const locale of LOCALES) {
     it(`${locale}: four labelled groups, legal links, contact, copyright and languages`, async () => {
@@ -151,6 +174,7 @@ describe("footer (VNX-0709 AC5)", () => {
       expect(hrefs(inner(footer, "nav", ` aria-label="${t(locale, "footer.builders")}"`))).toEqual([ctaHref(locale), localizedPath(locale, "/login")]);
       expect(hrefs(inner(footer, "nav", ` aria-label="${t(locale, "footer.company")}"`))).toEqual([
         localizedPath(locale, "/media-kit"),
+        localizedPath(locale, "/contact"),
         "mailto:contact@vnx.si",
         localizedPath(locale, "/terms"),
         localizedPath(locale, "/privacy"),

@@ -64,7 +64,8 @@ describe("landing deck (VNX-0709)", () => {
       const main = mainOf(html);
       expect(main, path).not.toContain("Deckalpha");
       expect(main, path).not.toContain("Deckhidden");
-      expect(textOf(main), path).not.toMatch(/\d/);
+      // The "Ask us" form (VNX-0710) states a length rule ("20 to 2000 characters"), not a statistic.
+      expect(textOf(main.slice(0, main.indexOf('<section id="ask"'))), path).not.toMatch(/\d/);
     }
   });
 
