@@ -28,7 +28,7 @@ const WRITERS: Record<string, string> = {
   login_tokens: "../src/auth/tokens.ts",
   rate_limits: "../src/http/rate-limit.ts",
   audit_log: "../src/db/audit.ts",
-  waitlist: "../src/routes/waitlist.ts",
+  waitlist: "../src/db/waitlist.ts",
   builders: "../src/db/builders.ts",
   invites: "../src/db/invites.ts",
   portfolio_items: "../src/db/portfolio.ts",
