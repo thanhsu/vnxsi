@@ -3651,18 +3651,40 @@ Kiểm cuối (mỗi dòng phải đúng):
 
 ### Task 4: VNX-0603 — Admin: hàng chờ request, gợi ý builder, mời ≤ 5, trả về, spam
 
+**Quyết định kỹ thuật (Reviewer kiểm):**
+- **Admin thấy tên và email client** (spec 5.5; admin không phải bề mặt hướng builder): trang admin in `clientName` nguyên văn cùng `clientEmail`, và dùng `RequestFacts` **không** bật `showClient` (nếu bật, tên bị `builderFacingName` che). Task này không có view nào builder đọc được, nên không gọi `builderFacingName`; Task 5 dùng `RequestFacts showClient`.
+- **Hàng chờ:** mặc định chỉ `submitted` (hàng chờ của spec 5.5); `?status=all` = mọi trạng thái; `?status=<trạng thái>` lọc; giá trị lạ về mặc định. Thứ tự: cũ nhất trước (`COALESCE(submitted_at, created_at)`).
+- **Mời:** form gồm checkbox `builder` (từ 10 gợi ý) và một ô `handle` tùy chọn (handle công khai bất kỳ, kể cả builder `closed`: quyết định ở header plan). Route chỉ kiểm nhanh (trạng thái, form, "nhiều hơn số suất còn lại" → 400); **câu `INSERT` trong `inviteBuildersBatch` mới là chốt chặn thật** (trùng, chính client, builder không `approved` / user bị khóa, request không còn `submitted` | `matching`, đã đủ 5). Quy ước phản hồi: ≥ 1 lời mời được chèn → 303 `?done=1`; không chèn được dòng nào (trùng, chính client, không đủ điều kiện, request vừa đóng, thua đua về giới hạn) → 409 và không ghi gì (kể cả audit, vì `outcome.request` là null); lỗi form → 400. Chèn một phần (một số builder bị bỏ qua) vẫn 303, admin thấy kết quả thật ở bảng lời mời.
+- **Sửa nhỏ Task 1 (Review Focus 3):** câu `move` của `inviteBuildersBatch` chỉ tính các id do chính batch sinh ra (thay vì "có lời mời nào `invited_at = now`"). Nếu không, hai POST rơi cùng một mili giây thì POST không chèn được dòng nào vẫn thấy lời mời của POST kia, nhận `request` khác null và trả 303 thay vì 409. Audit `request.invite` dùng guard riêng `{ requestId, inviteIds }` (xem `db/audit.ts`): chỉ ghi khi chính batch này đã chèn ít nhất một trong các id của nó, nên batch thua đua không ghi gì, kể cả khi cùng mili giây. `inviteBuildersBatch(...)` trả thêm `inviteIds` (các id sinh sẵn).
+- **Handle không công khai** (builder bị khóa, user bị khóa, `pending`, không tồn tại) cho cùng một lỗi 400 `handle` (không lộ lý do). Checkbox giả mạo trỏ tới builder không đủ điều kiện được DB chặn (409, test bên dưới).
+- **Email sau khi commit:** mời → `notifyInvited(env, outcome.invited.map(id))` trả `NotifyTally`; `failed > 0` → `?done=mail_failed`. Trả về / spam đi qua `endRequestBatch`; sau khi batch thắng: `notifyNotSelected(notSelected)` và `notifyInviteExpired(expired)` (Owner 2026-10-04: thư "không được chọn" vẫn gửi khi request kết thúc vì spam); trả về còn `notifyRequestRejected` (client nhận lý do). Spam không báo client. Lỗi email không bao giờ làm mất thay đổi trạng thái; trả về hiện `?done=mail_failed` nếu thư client không `"sent"` hoặc `failed > 0` ở hai tally; spam chỉ ghi log (nằm trong `notify/request.ts`).
+- **`listCandidates`:** lọc đủ điều kiện ở SQL (spec 8.10: `approved`, user `active`, availability ≠ `closed`, không phải client, chưa được mời); **chấm điểm chỉ ở `suggestBuilders`** (thuần, hòa điểm theo handle: ADR-004, không tham số trả tiền). SQL lấy tối đa 1000 builder sắp theo `user_id` (quy mô Wave 1; nếu vượt thì phải đổi cách lấy, ghi vào "Ghi nhận").
+- **Điểm trừ (Owner 2026-10-04):** chỉ đếm lời mời đã **lapsed** (không trả lời trong 7 ngày): `status = 'expired' AND julianday(updated_at) - julianday(invited_at) >= 7`, trong cửa sổ 60 ngày theo `invited_at`. Lời mời hết hạn sớm vì request kết thúc không bị đếm.
+- **Gỡ request `builder_selected`** (Owner xác nhận 2026-10-04): Inquiry đã tạo vẫn giữ.
+- **Thứ tự danh sách:** `submitted` và `matching` cũ nhất trước; mọi bộ lọc khác, kể cả `all`, `updated_at DESC, id DESC`.
+- **Số "đã trả lời"** mỗi request (spec 5.5): đếm lời mời `proposed`, `selected`, `not_selected`, `declined` (`AdminRequest.proposals` giữ nguyên tên nhưng mang nghĩa này).
+- **Ghi nhận:** giới hạn 1000 builder của `listCandidates` sắp theo `user_id` ASC nên bỏ builder MỚI nhất trước (ảnh hưởng cả test).
+- **Cách ly dữ liệu giữa các file test:** `apps/web/vitest.config.ts` dùng `cloudflareTest` (pool-workers 0.22, vitest 4) với một D1 chung; `test/apply-migrations.ts` chỉ chạy migration, không xóa dữ liệu, và mọi test hiện có dùng tiền tố `tag` riêng, không test nào khẳng định số đếm toàn cục. Plan này coi D1 là **dùng chung giữa các file và giữa các test**: test gợi ý chọn từ khóa riêng chỉ builder của test mới khớp, chỉ khẳng định thứ tự tương đối giữa builder của chính nó và việc builder không đủ điều kiện vắng mặt (đúng dù D1 có được cách ly hay không).
+- **Cỡ (kể cả bổ sung sau review, ≈ 850 dòng chấp nhận):** code chạy được ≈ 480 dòng không tính locale, test ≈ 340 dòng (giống Task 3). Nếu Reviewer muốn nhỏ hơn, tách tại ranh giới 4a (db, view, danh sách + chi tiết + gợi ý, Step 1–5) và 4b (ba route POST, Step 6, cùng test Review Focus 3); không bắt buộc.
+
 **Files:**
 - Create: `apps/web/src/routes/admin-requests.tsx`, `apps/web/src/views/admin/RequestsPage.tsx`, `apps/web/src/views/admin/RequestDetailPage.tsx`, `apps/web/src/views/proposal.ts`
-- Modify: `apps/web/src/db/requests.ts` (`listRequestsForAdmin`, `findAdminRequest`, `listCandidates`), `apps/web/src/views/admin/AdminLayout.tsx` (mục `requests`), `apps/web/src/views/labels.ts` (`INVITE_STATUS_KEY`), `apps/web/src/app.ts`, `apps/web/src/i18n/messages/*.ts`
-- Test: `apps/web/test/admin/requests.test.ts`
+- Modify: `apps/web/src/db/requests.ts` (`listRequestsForAdmin`, `findAdminRequest`, `listCandidates`; siết câu `move` của `inviteBuildersBatch`), `apps/web/src/views/admin/AdminLayout.tsx` (mục `requests`), `apps/web/src/views/labels.ts` (`INVITE_STATUS_KEY`), `apps/web/src/app.ts`, `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`
+- Test: tạo `apps/web/test/admin/requests.test.ts`, `apps/web/test/views/proposal.test.ts`; sửa `apps/web/test/db/requests.test.ts` (một test điểm trừ)
 
 **Interfaces:**
-- Consumes: Task 1 (`inviteBuildersBatch`, `endRequestBatch`, `listRequestInvites`, `requestTransition`, `suggestBuilders`, `parseAdminNote`, `MAX_ACTIVE_INVITES`, `EXPIRED_PENALTY_WINDOW_MS`, `jsonList`), Task 2 (`notifyInvited`, `notifyNotSelected`, `notifyRequestEnded`), Task 3 (`RequestFacts`, `REQUEST_STATUS_KEY`), M2/M5 (`requireAdmin`, `findPublicBuilderByHandle`, `HANDLE_RE`, `auditStatement`, `formatUsd`).
+- Consumes (tên thật trong code):
+  - `domain/request.ts`: `AdminRequest`, `Candidate`, `Suggestion`, `SuggestionReason`, `InviteWithBuilder`, `RequestInvite`, `ClientRequest`, `RequestStatus`, `REQUEST_STATUSES`, `TerminalRequestStatus`, `InviteStatus`, `requestTransition`, `suggestBuilders` (mặc định `SUGGESTION_LIMIT` = 10), `parseAdminNote` (`{ ok: true, note } | { ok: false, error }`), `MAX_ACTIVE_INVITES`, `EXPIRED_PENALTY_WINDOW_MS`.
+  - `db/requests.ts`: `inviteBuildersBatch(db, { requestId, builderIds, invitedBy, now })` → `{ statements, read(results) → { request, invited: { id, builderId }[] } }`; `endRequestBatch(db, { id, from, to, now, adminNote? })` → `{ statements, read(results) → { request, notSelected: string[], expired: string[] } }`; `listRequestInvites(db, requestId)` (thứ tự `invited_at, rowid`); `toRequest`, `Row` (cục bộ trong file); `db/builders.ts`: `jsonList`, `findPublicBuilderByHandle`; `db/audit.ts`: `auditStatement(db, input, { requestId, status, updatedAt })`.
+  - `notify/request.ts`: `notifyInvited(env, ids): Promise<NotifyTally>`, `notifyNotSelected(env, ids)` và `notifyInviteExpired(env, ids)` (cùng trả `NotifyTally { sent, failed }`), `notifyRequestRejected(env, requestId): Promise<NotifyOutcome>` (`"sent" | "failed" | "skipped"`; chỉ gửi khi request đang `rejected` và có `adminNote`).
+  - Task 3: `views/RequestFacts.tsx` (`RequestFacts: FC<{ locale; request; showClient? }>`), `views/labels.ts` (`REQUEST_STATUS_KEY`, `CATEGORY_KEY`); M2–M5: `requireAdmin`, `HANDLE_RE` (`domain/builder-input.ts`), `onLocalized`, `requestOrigin`, `page`, `errorResponse`, `PlainText`, `formatUsd`, `AdminLayout`.
+  - Fixtures (`test/fixtures.ts`): `makeRequest({ tag, status?, category?, languages?, title?, description? })` (client `<tag>-c@vnx.si`, tên "Minh Tran"), `makeBuilder(email, handle, status, overrides)`, `addLiveProduct(builder, name, { fields })`, `inviteBuilders(request, builders)`, `proposeOn(invite)`, `ensureUser`, `signIn(email, { admin })`; helpers `formPost`, `getReq`, `testEnv`; `clearOutbox`, `outbox` (`email/fake.ts`).
 - Produces:
-  - `db/requests.ts`: `listRequestsForAdmin(db, status | null, limit?)`, `findAdminRequest(db, id)` → `AdminRequest | null`, `listCandidates(db, request, penaltySince, limit?)` → `Candidate[]`.
-  - `views/proposal.ts`: `proposalPrice(locale, invite)` → `"$4,500"` | `"$3,000 – $5,000"` | `"To discuss"` (Task 5, 6 dùng lại).
-  - `views/labels.ts`: `INVITE_STATUS_KEY: Record<InviteStatus, MessageKey>`.
-  - Route: `GET /admin/requests`, `GET /admin/requests/:id`, `POST /admin/requests/:id/invite`, `POST /admin/requests/:id/reject`, `POST /admin/requests/:id/remove`.
+  - `db/requests.ts`: `listRequestsForAdmin(db, status | null, limit?)` → `AdminRequest[]`, `findAdminRequest(db, id)` → `AdminRequest | null`, `listCandidates(db, request: Pick<ClientRequest, "id" | "clientUserId" | "category">, penaltySince: string, limit?)` → `Candidate[]`.
+  - `views/proposal.ts`: `proposalPrice(locale, invite: Pick<RequestInvite, "priceCents" | "priceMaxCents">)` → `"$4,500"` | `"$3,000 – $5,000"` | `"To discuss"` (Task 5, 6 dùng lại).
+  - `views/labels.ts`: `INVITE_STATUS_KEY: Record<InviteStatus, MessageKey>` (Task 5 dùng lại).
+  - `routes/admin-requests.tsx`: `registerAdminRequestRoutes(app)`; route `GET /admin/requests`, `GET /admin/requests/:id`, `POST /admin/requests/:id/invite`, `POST /admin/requests/:id/reject`, `POST /admin/requests/:id/remove` (mọi tiền tố locale).
+  - Key i18n dùng chung với Task 5, 6: `invite.status.*`, `proposal.approach|price|price.discuss|price.range|timeline|days|note`.
 
 - [ ] **Step 1: Chuỗi i18n**
 
@@ -3846,22 +3868,27 @@ Kiểm cuối (mỗi dòng phải đúng):
   "proposal.note": "價格說明",
 ```
 
-- [ ] **Step 2: Test admin (fail)**
+- [ ] **Step 2: Test (fail)**
 
 `apps/web/test/admin/requests.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { findRequestById, listRequestInvites } from "../../src/db/requests.ts";
+import { findAdminRequest, findRequestById, listRequestInvites } from "../../src/db/requests.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
+import type { Bindings } from "../../src/env.ts";
 import { addLiveProduct, inviteBuilders, makeBuilder, makeRequest, proposeOn, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const admin = () => signIn("owner@vnx.si", { admin: true });
 const get = (path: string, cookie: string) => app().request(getReq(path, cookie), undefined, testEnv);
-const post = (path: string, cookie: string, fields: Record<string, string | string[]> = {}) => app().request(formPost(path, fields, { cookie }), undefined, testEnv);
+const post = (path: string, cookie: string, fields: Record<string, string | string[]> = {}, env: Bindings = testEnv) => app().request(formPost(path, fields, { cookie }), undefined, env);
+const noMail = { ...testEnv, MAIL_DRIVER: undefined } as Bindings; // UnconfiguredMailer: every send fails
+const invitesOf = async (requestId: string) => (await listRequestInvites(testEnv.DB, requestId)).map((x) => x.invite);
+const activeOf = (invites: { status: string }[]) => invites.filter((i) => i.status === "invited" || i.status === "proposed");
+const builders = (tag: string, n: number) => Promise.all(Array.from({ length: n }, (_, i) => makeBuilder(`${tag}-${i}@vnx.si`, `${tag}-${i}`, "approved")));
 
 /** Handles offered in the invite form's suggestion table, in order. */
 function suggestedHandles(html: string): string[] {
@@ -3872,46 +3899,86 @@ function suggestedHandles(html: string): string[] {
 describe("admin requests (spec §5.5, §5.7 step 2, §8.10)", () => {
   beforeEach(() => clearOutbox());
 
-  it("is admin only", async () => {
+  it("is admin only, and an unknown request is 404", async () => {
+    const { request } = await makeRequest({ tag: "ar-auth" });
     const { cookie } = await signIn("ar-nobody@vnx.si");
     expect((await get("/admin/requests", cookie)).status).toBe(403);
+    expect((await get(`/admin/requests/${request.id}`, cookie)).status).toBe(403);
+    for (const action of ["invite", "reject", "remove"]) expect((await post(`/admin/requests/${request.id}/${action}`, cookie, { note: "x" })).status, action).toBe(403);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("submitted");
+    const root = await admin();
+    const noOrigin = await app().request(new Request(`https://vnx.si/admin/requests/${request.id}/remove`, { method: "POST", headers: { cookie: root.cookie } }), undefined, testEnv);
+    expect(noOrigin.status).toBe(403);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("submitted");
+    expect((await get("/admin/requests", root.cookie)).headers.get("cache-control")).toContain("no-store");
+    expect((await get("/admin/requests/01J0000000000000000000NONE", root.cookie)).status).toBe(404);
+    expect((await post("/admin/requests/01J0000000000000000000NONE/remove", root.cookie)).status).toBe(404);
   });
 
-  it("queues submitted requests with the client's e-mail; filters by status", async () => {
+  it("queues submitted requests; shows the client's name and e-mail to the admin; filters by status", async () => {
     const { request } = await makeRequest({ tag: "ar-queue" });
     const pending = await makeRequest({ tag: "ar-queue-p", status: "pending_verification" });
+    await testEnv.DB.prepare("UPDATE requests SET client_name = 'Lan (lan@x.vn)' WHERE id = ?1").bind(request.id).run();
     const { cookie } = await admin();
     const html = await (await get("/admin/requests", cookie)).text();
     expect(html).toContain(`href="/admin/requests/${request.id}"`);
     expect(html).toContain("ar-queue-c@vnx.si");
+    expect(html).toContain("Lan (lan@x.vn)"); // admin pages are not builder-facing: no builderFacingName mask
     expect(html).not.toContain(pending.request.id);
     expect(await (await get("/admin/requests?status=pending_verification", cookie)).text()).toContain(pending.request.id);
+    expect(await (await get("/admin/requests?status=all", cookie)).text()).toContain(pending.request.id);
+    expect((await get("/admin/requests?status=bogus", cookie)).status).toBe(200);
     expect(html).toContain('href="/admin/requests"');
+    const detail = await (await get(`/admin/requests/${request.id}`, cookie)).text();
+    expect(detail).toContain("ar-queue-c@vnx.si");
+    const answered = await makeRequest({ tag: "ar-answered" });
+    const [x, y, z] = await builders("ar-answered", 3);
+    const [ix, iy] = await inviteBuilders(answered.request, [x!, y!, z!]);
+    await proposeOn(ix!);
+    await testEnv.DB.prepare("UPDATE request_invites SET status = 'declined' WHERE id = ?1").bind(iy!.id).run();
+    const { activeInvites, totalInvites, proposals } = (await findAdminRequest(testEnv.DB, answered.request.id))!;
+    expect({ activeInvites, totalInvites, proposals }).toEqual({ activeInvites: 2, totalInvites: 3, proposals: 2 }); // answered: proposed + declined
+    const matching = await (await get("/admin/requests?status=matching", cookie)).text();
+    expect(matching).toContain(answered.request.id);
+    expect(detail).toContain("Lan (lan@x.vn)");
   });
 
-  // Builders from other tests share the database, so the request uses a category, wording and language they do not
-  // match: their best score is +1 (open), below both builders made here.
-  it("suggests eligible builders by the rules, best first, with reasons", async () => {
-    const { client, request } = await makeRequest({ tag: "ar-sug", title: "Payroll tool for a bakery", description: "Monthly payroll and leave tracking for twelve bakery staff.", category: "hr", languages: ["zh"] });
-    const withProduct = await makeBuilder("ar-sug-cat@vnx.si", "ar-sug-cat", "approved", { availability: "limited", workLanguages: ["en"], skills: "Flutter" });
-    await addLiveProduct(withProduct, "ar-sug payroll", { fields: { category: "hr" } });
-    await makeBuilder("ar-sug-plain@vnx.si", "ar-sug-plain", "approved", { availability: "open", workLanguages: ["zh"], skills: "Flutter" });
-    await makeBuilder("ar-sug-closed@vnx.si", "ar-sug-closed", "approved", { availability: "closed" });
-    await makeBuilder("ar-sug-pending@vnx.si", "ar-sug-pending", "pending");
-    await makeBuilder(client.email, "ar-sug-self", "approved");
-    const invited = await makeBuilder("ar-sug-inv@vnx.si", "ar-sug-inv", "approved");
+  // D1 is shared with other test files (see "Quyết định kỹ thuật"). The title carries three tokens with no common
+  // substrings, so (almost) no foreign builder matches a skill. Without an hr product a builder scores at most
+  // 3 skills + language + open = 5 only if it matched three skills, i.e. never; with one it can reach 6 only if it also
+  // matched skills. Own builders "top" (8) and "mid" (6) both carry an hr product plus own tokens. Only relative order
+  // and absence of ineligible builders are asserted.
+  it("suggests eligible builders by the rules, best first, with reasons; ineligible ones are absent", async () => {
+    const { client, request } = await makeRequest({
+      tag: "ar-sug",
+      title: "Qzarone qzartwo qzarthree tool",
+      description: "A small tool for twelve people to share their shifts.",
+      category: "hr",
+      languages: ["zh"],
+    });
+    const mid = await makeBuilder("ar-sug-mid@vnx.si", "ar-sug-mid", "approved", { availability: "limited", workLanguages: ["zh"], skills: "qzarone, qzartwo" });
+    await addLiveProduct(mid, "ar-sug shifts", { fields: { category: "hr" } });
+    const top = await makeBuilder("ar-sug-top@vnx.si", "ar-sug-top", "approved", { availability: "open", workLanguages: ["zh"], skills: "qzarone, qzartwo, qzarthree" });
+    await addLiveProduct(top, "ar-sug rota", { fields: { category: "hr" } });
+    await makeBuilder("ar-sug-closed@vnx.si", "ar-sug-closed", "approved", { availability: "closed", skills: "qzarone, qzartwo, qzarthree" });
+    await makeBuilder("ar-sug-pending@vnx.si", "ar-sug-pending", "pending", { skills: "qzarone, qzartwo, qzarthree" });
+    await makeBuilder(client.email, "ar-sug-self", "approved", { skills: "qzarone, qzartwo, qzarthree" });
+    const locked = await makeBuilder("ar-sug-locked@vnx.si", "ar-sug-locked", "approved", { skills: "qzarone, qzartwo, qzarthree" });
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(locked.userId).run();
+    const invited = await makeBuilder("ar-sug-inv@vnx.si", "ar-sug-inv", "approved", { skills: "qzarone, qzartwo, qzarthree" });
     await inviteBuilders(request, [invited]);
     const { cookie } = await admin();
     const html = await (await get(`/admin/requests/${request.id}`, cookie)).text();
     const suggested = suggestedHandles(html);
-    expect(suggested.slice(0, 2)).toEqual(["ar-sug-cat", "ar-sug-plain"]);
-    for (const hidden of ["ar-sug-closed", "ar-sug-pending", "ar-sug-self", "ar-sug-inv"]) expect(suggested, hidden).not.toContain(hidden);
+    expect(suggested.filter((h) => h.startsWith("ar-sug-"))).toEqual(["ar-sug-top", "ar-sug-mid"]);
+    expect(suggested.length).toBeLessThanOrEqual(10);
     expect(html).toContain("product in this category +3");
+    expect(html).toContain("skill “qzarthree” +1");
     expect(html).toContain("shared language +1 · open +1");
     expect(html).toContain("4 of 5 invitation slots free.");
   });
 
-  it("invites chosen builders and one by handle (even if closed), mails them, moves to matching", async () => {
+  it("invites chosen builders and one by handle (even if closed), mails them without the client's e-mail, moves to matching", async () => {
     const { request } = await makeRequest({ tag: "ar-inv" });
     const a = await makeBuilder("ar-inv-a@vnx.si", "ar-inv-a", "approved");
     const b = await makeBuilder("ar-inv-b@vnx.si", "ar-inv-b", "approved");
@@ -3921,16 +3988,27 @@ describe("admin requests (spec §5.5, §5.7 step 2, §8.10)", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/admin/requests/${request.id}?done=1`);
     expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("matching");
-    expect((await listRequestInvites(testEnv.DB, request.id)).map((x) => x.builderHandle).sort()).toEqual(["ar-inv-a", "ar-inv-b", "ar-inv-cl"]);
+    expect((await listRequestInvites(testEnv.DB, request.id)).map((x) => x.builderHandle)).toEqual(["ar-inv-a", "ar-inv-b", "ar-inv-cl"]);
     expect(outbox.map((m) => m.to).sort()).toEqual(["ar-inv-a@vnx.si", "ar-inv-b@vnx.si", "ar-inv-cl@vnx.si"]);
     for (const m of outbox) expect(`${m.text}${m.html}`).not.toContain("ar-inv-c@vnx.si");
     const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.invite' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
     expect(audit?.n).toBe(1);
   });
 
+  it("keeps the invitations but says so when an e-mail could not be sent", async () => {
+    const { request } = await makeRequest({ tag: "ar-mailfail" });
+    const [a] = await builders("ar-mailfail-b", 1);
+    const { cookie } = await admin();
+    const res = await post(`/admin/requests/${request.id}/invite`, cookie, { builder: a!.userId }, noMail);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/admin/requests/${request.id}?done=mail_failed`);
+    expect(await invitesOf(request.id)).toHaveLength(1);
+    expect(await (await get(`/admin/requests/${request.id}?done=mail_failed`, cookie)).text()).toContain("Saved, but some emails couldn&#39;t be sent.");
+  });
+
   it("refuses no choice, an unknown handle and more builders than free slots", async () => {
     const { request } = await makeRequest({ tag: "ar-bad" });
-    const four = await Promise.all([0, 1, 2, 3].map((i) => makeBuilder(`ar-bad-${i}@vnx.si`, `ar-bad-${i}`, "approved")));
+    const four = await builders("ar-bad", 4);
     await inviteBuilders(request, four);
     const x = await makeBuilder("ar-bad-x@vnx.si", "ar-bad-x", "approved");
     const y = await makeBuilder("ar-bad-y@vnx.si", "ar-bad-y", "approved");
@@ -3942,60 +4020,203 @@ describe("admin requests (spec §5.5, §5.7 step 2, §8.10)", () => {
     const tooMany = await post(`/admin/requests/${request.id}/invite`, cookie, { builder: [x.userId, y.userId] });
     expect(tooMany.status).toBe(400);
     expect(await tooMany.text()).toContain("That is more builders than the free slots.");
-    expect(await listRequestInvites(testEnv.DB, request.id)).toHaveLength(4);
+    expect(await invitesOf(request.id)).toHaveLength(4);
+    expect(outbox).toHaveLength(0);
+  });
+
+  describe("the invitation cap and eligibility cannot be bypassed (Review Focus 3)", () => {
+    it("refuses a 6th invitation, by checkbox or by handle; the full request offers no invite form", async () => {
+      const { request } = await makeRequest({ tag: "ar-six" });
+      await inviteBuilders(request, await builders("ar-six", 5));
+      const sixth = await makeBuilder("ar-six-x@vnx.si", "ar-six-x", "approved");
+      const { cookie } = await admin();
+      for (const fields of [{ builder: sixth.userId }, { handle: "ar-six-x" }] as Record<string, string>[]) {
+        expect((await post(`/admin/requests/${request.id}/invite`, cookie, fields)).status).toBe(400);
+      }
+      expect(await invitesOf(request.id)).toHaveLength(5);
+      expect(outbox).toHaveLength(0);
+      const html = await (await get(`/admin/requests/${request.id}`, cookie)).text();
+      expect(html).toContain("All 5 invitation slots are in use.");
+      expect(html).not.toContain(`/admin/requests/${request.id}/invite"`);
+    });
+
+    it("never inserts a duplicate: alone it is a 409, with a new builder only the new one is invited", async () => {
+      const { request } = await makeRequest({ tag: "ar-dup" });
+      const [a, b] = await builders("ar-dup", 2);
+      await inviteBuilders(request, [a!]);
+      const { cookie } = await admin();
+      for (const fields of [{ builder: a!.userId }, { handle: "ar-dup-0" }] as Record<string, string>[]) {
+        expect((await post(`/admin/requests/${request.id}/invite`, cookie, fields)).status).toBe(409);
+      }
+      expect(await invitesOf(request.id)).toHaveLength(1);
+      expect(outbox).toHaveLength(0);
+      expect((await post(`/admin/requests/${request.id}/invite`, cookie, { builder: [a!.userId, b!.userId] })).status).toBe(303);
+      const rows = await invitesOf(request.id);
+      expect(rows.map((i) => i.builderId).sort()).toEqual([a!.userId, b!.userId].sort());
+      expect(outbox.map((m) => m.to)).toEqual(["ar-dup-1@vnx.si"]);
+    });
+
+    it("never invites the client themself (a builder account that posted a request)", async () => {
+      const { client, request } = await makeRequest({ tag: "ar-self" });
+      const self = await makeBuilder(client.email, "ar-self-b", "approved");
+      const { cookie } = await admin();
+      for (const fields of [{ builder: self.userId }, { handle: "ar-self-b" }] as Record<string, string>[]) {
+        expect((await post(`/admin/requests/${request.id}/invite`, cookie, fields)).status).toBe(409);
+      }
+      expect(await invitesOf(request.id)).toHaveLength(0);
+      expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("submitted");
+      expect(outbox).toHaveLength(0);
+    });
+
+    it("never invites a builder who is suspended or whose account is suspended", async () => {
+      const { request } = await makeRequest({ tag: "ar-susp" });
+      const suspended = await makeBuilder("ar-susp-s@vnx.si", "ar-susp-s", "suspended");
+      const locked = await makeBuilder("ar-susp-l@vnx.si", "ar-susp-l", "approved");
+      await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(locked.userId).run();
+      const { cookie } = await admin();
+      for (const b of [suspended, locked]) {
+        expect((await post(`/admin/requests/${request.id}/invite`, cookie, { builder: b.userId })).status, "forged checkbox").toBe(409);
+        expect((await post(`/admin/requests/${request.id}/invite`, cookie, { handle: b.handle })).status, "typed handle").toBe(400);
+      }
+      expect(await invitesOf(request.id)).toHaveLength(0);
+      expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("submitted");
+      expect(outbox).toHaveLength(0);
+    });
+
+    it("never invites into a request that is no longer submitted or matching", async () => {
+      const { cookie } = await admin();
+      for (const [i, status] of (["closed", "removed", "rejected", "expired", "builder_selected", "pending_verification"] as const).entries()) {
+        const { request } = await makeRequest({ tag: `ar-end${i}`, status: status === "pending_verification" ? status : "submitted" });
+        if (status !== "pending_verification") await testEnv.DB.prepare("UPDATE requests SET status = ?2 WHERE id = ?1").bind(request.id, status).run();
+        const b = await makeBuilder(`ar-end${i}-b@vnx.si`, `ar-end${i}-b`, "approved");
+        expect((await post(`/admin/requests/${request.id}/invite`, cookie, { builder: b.userId })).status, status).toBe(409);
+        expect(await invitesOf(request.id), status).toHaveLength(0);
+        expect((await findRequestById(testEnv.DB, request.id))?.status).toBe(status);
+      }
+      expect(outbox).toHaveLength(0);
+    });
+
+    it("two concurrent invite POSTs never leave more than 5 active invitations, nor an invitation nobody asked for", async () => {
+      const { request } = await makeRequest({ tag: "ar-race" });
+      const seeded = await builders("ar-race-s", 2);
+      await inviteBuilders(request, seeded);
+      const left = await builders("ar-race-l", 3);
+      const right = await builders("ar-race-r", 3);
+      const { cookie } = await admin();
+      const path = `/admin/requests/${request.id}/invite`;
+      const [one, two] = await Promise.all([post(path, cookie, { builder: left.map((b) => b.userId) }), post(path, cookie, { builder: right.map((b) => b.userId) })]);
+      const rows = await invitesOf(request.id);
+      expect(rows).toHaveLength(5);
+      expect(activeOf(rows)).toHaveLength(5);
+      expect(new Set(rows.map((i) => i.builderId)).size).toBe(5);
+      const asked = new Set([...seeded, ...left, ...right].map((b) => b.userId));
+      expect(rows.every((i) => asked.has(i.builderId))).toBe(true);
+      // 6 asked for, 3 slots: exactly one POST wins (the other lost the race: 409, or already saw the full request: 400).
+      expect([one.status, two.status].filter((s) => s === 303)).toHaveLength(1);
+      expect([one.status, two.status].filter((s) => s !== 303).every((s) => s === 409 || s === 400)).toBe(true);
+      expect(outbox).toHaveLength(3);
+      expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("matching");
+      const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.invite' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
+      expect(audit?.n).toBe(1);
+    });
   });
 
   it("returns a submitted request with a required note and tells the client; 409 once matching", async () => {
     const { request } = await makeRequest({ tag: "ar-rej" });
     const { cookie } = await admin();
-    expect((await post(`/admin/requests/${request.id}/reject`, cookie, { note: " " })).status).toBe(400);
+    for (const note of [" ", "x".repeat(1001)]) {
+      const bad = await post(`/admin/requests/${request.id}/reject`, cookie, { note });
+      expect(bad.status).toBe(400);
+      expect(await bad.text()).toContain("Write a reason of 1–1000 characters.");
+    }
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("submitted");
     const res = await post(`/admin/requests/${request.id}/reject`, cookie, { note: "Please try the catalogue first." });
     expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/admin/requests/${request.id}?done=1`);
     expect(await findRequestById(testEnv.DB, request.id)).toMatchObject({ status: "rejected", adminNote: "Please try the catalogue first." });
+    expect(outbox).toHaveLength(1);
     expect(outbox[0]).toMatchObject({ to: "ar-rej-c@vnx.si" });
     expect(outbox[0]!.text).toContain("Please try the catalogue first.");
+    expect((await post(`/admin/requests/${request.id}/reject`, cookie, { note: "again" })).status).toBe(409);
 
     const other = await makeRequest({ tag: "ar-rej2" });
     await inviteBuilders(other.request, [await makeBuilder("ar-rej2-b@vnx.si", "ar-rej2-b", "approved")]);
     expect((await post(`/admin/requests/${other.request.id}/reject`, cookie, { note: "x" })).status).toBe(409);
+    expect((await findRequestById(testEnv.DB, other.request.id))?.status).toBe("matching");
+    const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.reject' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(audit?.n).toBe(1);
   });
 
-  it("removes spam: proposals become not selected and their builders are told; the client no longer sees it", async () => {
-    const { client, request } = await makeRequest({ tag: "ar-spam" });
-    const b = await makeBuilder("ar-spam-b@vnx.si", "ar-spam-b", "approved");
-    const [invite] = await inviteBuilders(request, [b]);
-    await proposeOn(invite!);
+  it("reports a failed e-mail to the client but keeps the return", async () => {
+    const { request } = await makeRequest({ tag: "ar-rejfail" });
     const { cookie } = await admin();
-    expect((await post(`/admin/requests/${request.id}/remove`, cookie)).status).toBe(303);
+    const res = await post(`/admin/requests/${request.id}/reject`, cookie, { note: "Not a fit." }, noMail);
+    expect(res.headers.get("location")).toBe(`/admin/requests/${request.id}?done=mail_failed`);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("rejected");
+  });
+
+  it("removes spam: proposals become not selected, open invitations expire, both builders are told, the client is not", async () => {
+    const { client, request } = await makeRequest({ tag: "ar-spam" });
+    const proposer = await makeBuilder("ar-spam-p@vnx.si", "ar-spam-p", "approved");
+    const waiting = await makeBuilder("ar-spam-w@vnx.si", "ar-spam-w", "approved");
+    const [first] = await inviteBuilders(request, [proposer, waiting]);
+    await proposeOn(first!);
+    const { cookie } = await admin();
+    const res = await post(`/admin/requests/${request.id}/remove`, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/admin/requests");
     expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("removed");
-    expect((await listRequestInvites(testEnv.DB, request.id))[0]?.invite.status).toBe("not_selected");
-    expect(outbox.map((m) => m.to)).toEqual(["ar-spam-b@vnx.si"]);
+    expect((await invitesOf(request.id)).map((i) => i.status)).toEqual(["not_selected", "expired"]);
+    expect(outbox.map((m) => m.to).sort()).toEqual(["ar-spam-p@vnx.si", "ar-spam-w@vnx.si"]);
+    expect(outbox.map((m) => m.to)).not.toContain(client.email);
     const mine = await signIn(client.email);
     expect((await get(`/me/requests/${request.id}`, mine.cookie)).status).toBe(404);
     expect((await post(`/admin/requests/${request.id}/remove`, cookie)).status).toBe(409);
+    expect(outbox).toHaveLength(2);
+    const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.remove' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(audit?.n).toBe(1);
   });
 });
 ```
 
-Chạy: `npm test -w apps/web -- test/admin/requests.test.ts` → FAIL.
+`apps/web/test/views/proposal.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { proposalPrice } from "../../src/views/proposal.ts";
+
+describe("proposalPrice (spec §5.7 step 3)", () => {
+  it("shows an amount, a range or 'to discuss'", () => {
+    expect(proposalPrice("en", { priceCents: 450000, priceMaxCents: null })).toBe("$4,500");
+    expect(proposalPrice("en", { priceCents: 300000, priceMaxCents: 500000 })).toBe("$3,000 – $5,000");
+    expect(proposalPrice("en", { priceCents: null, priceMaxCents: null })).toBe("To discuss");
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/admin/requests.test.ts test/views/proposal.test.ts` → FAIL (không resolve được `views/proposal.ts`; các route `/admin/requests*` trả 404 thay vì 200 / 403 / 303).
 
 - [ ] **Step 3: db cho admin**
 
-Thêm vào `apps/web/src/db/requests.ts` (thêm import `type Availability` từ `../domain/builder.ts`, `type AdminRequest`, `type Candidate` từ `../domain/request.ts`):
+Trong `apps/web/src/db/requests.ts`: sửa import đầu thành `import { WORK_LANGUAGES, type Availability, type WorkLanguage } from "../domain/builder.ts";` và thêm `type AdminRequest`, `type Candidate` vào khối import từ `../domain/request.ts`. Thêm cuối file:
 
 ```ts
 const ADMIN_SELECT = `SELECT r.*, u.email AS client_email,
     (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('invited', 'proposed')) AS active_invites,
     (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id) AS total_invites,
-    (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('proposed', 'selected', 'not_selected')) AS proposals
+    (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = r.id AND x.status IN ('proposed', 'selected', 'not_selected', 'declined')) AS proposals
   FROM requests r JOIN users u ON u.id = r.client_user_id`;
 type AdminRow = Row & { client_email: string; active_invites: number; total_invites: number; proposals: number };
 const toAdmin = (r: AdminRow): AdminRequest => ({ request: toRequest(r), clientEmail: r.client_email, activeInvites: r.active_invites, totalInvites: r.total_invites, proposals: r.proposals });
 
-/** Spec §5.5 queue: oldest first (first come, first served). `null` = every status. */
+/**
+ * Spec §5.5 queue: `submitted` and `matching` oldest first (first come, first served); any other filter, and `null`
+ * (every status), most recently changed first. Admin only: carries the client's e-mail.
+ */
 export async function listRequestsForAdmin(db: D1Database, status: RequestStatus | null, limit = 200): Promise<AdminRequest[]> {
+  const order = status === "submitted" || status === "matching" ? "ORDER BY COALESCE(r.submitted_at, r.created_at), r.id" : "ORDER BY r.updated_at DESC, r.id DESC";
   const { results } = await db
-    .prepare(`${ADMIN_SELECT} WHERE (?1 IS NULL OR r.status = ?1) ORDER BY COALESCE(r.submitted_at, r.created_at), r.id LIMIT ?2`)
+    .prepare(`${ADMIN_SELECT} WHERE (?1 IS NULL OR r.status = ?1) ${order} LIMIT ?2`)
     .bind(status, limit)
     .all<AdminRow>();
   return results.map(toAdmin);
@@ -4010,15 +4231,16 @@ type CandidateRow = { user_id: string; handle: string; name: string; availabilit
 
 /**
  * Spec §8.10 candidates: approved builders on active accounts, availability not closed, not the client, not yet
- * invited to this request. Scoring is domain/request.ts suggestBuilders. `penaltySince`: expired invitations sent
- * after this count against the builder. Capped at `limit` builders (Wave 1 scale).
+ * invited to this request. Scoring is domain/request.ts suggestBuilders (ties by handle, ADR-004: nothing paid).
+ * `penaltySince`: expired invitations sent at or after this instant count against the builder. Capped at `limit`
+ * builders, taken by user id (Wave 1 scale; revisit before approved builders pass `limit`).
  */
 export async function listCandidates(db: D1Database, request: Pick<ClientRequest, "id" | "clientUserId" | "category">, penaltySince: string, limit = 1000): Promise<Candidate[]> {
   const { results } = await db
     .prepare(
       `SELECT b.user_id, b.handle, b.name, b.availability, b.skills, b.work_languages,
          EXISTS (SELECT 1 FROM products p WHERE p.builder_id = b.user_id AND p.status = 'published' AND p.category = ?2) AS has_category_product,
-         (SELECT COUNT(*) FROM request_invites e WHERE e.builder_id = b.user_id AND e.status = 'expired' AND e.invited_at >= ?3) AS expired_invites
+         (SELECT COUNT(*) FROM request_invites e WHERE e.builder_id = b.user_id AND e.status = 'expired' AND e.invited_at >= ?3 AND julianday(e.updated_at) - julianday(e.invited_at) >= 7) AS expired_invites
        FROM builders b JOIN users u ON u.id = b.user_id
        WHERE b.status = 'approved' AND u.status = 'active' AND b.availability != 'closed' AND b.user_id != ?4
          AND NOT EXISTS (SELECT 1 FROM request_invites y WHERE y.request_id = ?1 AND y.builder_id = b.user_id)
@@ -4039,30 +4261,137 @@ export async function listCandidates(db: D1Database, request: Pick<ClientRequest
 }
 ```
 
-Thêm một test db vào `apps/web/test/db/requests.test.ts` cho điểm trừ (import thêm `listCandidates`):
+Thêm vào `apps/web/test/db/requests.test.ts` (import thêm `listCandidates` từ `../../src/db/requests.ts`; dùng `builders`, `db`, `makeRequest`, `makeBuilder`, `inviteBuilders` đã có trong file):
 
 ```ts
-  it("counts recent expired invitations against a candidate (spec §8.10)", async () => {
-    const { request } = await makeRequest({ tag: "rq-pen" });
-    const old = await makeRequest({ tag: "rq-pen-old" });
-    const [b] = await builders("rq-pen-b", 1);
-    const [inv] = await inviteBuilders(old.request, [b!]);
-    await db().prepare("UPDATE request_invites SET status = 'expired' WHERE id = ?1").bind(inv!.id).run();
-    const since = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
-    const [candidate] = (await listCandidates(db(), request, since)).filter((x) => x.userId === b!.userId);
-    expect(candidate?.expiredInvites).toBe(1);
+  it("lists only eligible candidates; only lapsed expired invitations count against them (spec §8.10)", async () => {
+    const { client, request } = await makeRequest({ tag: "rq-pen" });
+    const [b, taken] = await builders("rq-pen-b", 2);
+    const day = 24 * 3600 * 1000;
+    const t0 = Date.now() - 20 * day;
+    const lapsed = await makeRequest({ tag: "rq-pen-l" });
+    const early = await makeRequest({ tag: "rq-pen-e" });
+    const [lapsedInvite] = await inviteBuilders(lapsed.request, [b!], new Date(t0).toISOString());
+    const [earlyInvite] = await inviteBuilders(early.request, [b!], new Date(t0).toISOString());
+    const expire = (id: string, after: number) => db().prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE id = ?1").bind(id, new Date(t0 + after * day).toISOString()).run();
+    await expire(lapsedInvite!.id, 8); // no answer in 7 days
+    await expire(earlyInvite!.id, 1); // the request ended early
+    await inviteBuilders(request, [taken!]);
+    const self = await makeBuilder(client.email, "rq-pen-self", "approved");
+    const closed = await makeBuilder("rq-pen-cl@vnx.si", "rq-pen-cl", "approved", { availability: "closed" });
+    const pending = await makeBuilder("rq-pen-pe@vnx.si", "rq-pen-pe", "pending");
+    const suspended = await makeBuilder("rq-pen-su@vnx.si", "rq-pen-su", "suspended");
+    const locked = await makeBuilder("rq-pen-lo@vnx.si", "rq-pen-lo", "approved");
+    await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(locked.userId).run();
+    const since = new Date(Date.now() - 60 * day).toISOString();
+    const found = await listCandidates(db(), request, since);
+    expect(found.find((x) => x.userId === b!.userId)?.expiredInvites).toBe(1);
+    for (const gone of [taken!, self, closed, pending, suspended, locked]) expect(found.map((x) => x.userId)).not.toContain(gone.userId);
     const later = new Date(Date.now() + 1000).toISOString();
     expect((await listCandidates(db(), request, later)).find((x) => x.userId === b!.userId)?.expiredInvites).toBe(0);
   });
 ```
 
-- [ ] **Step 4: Nhãn, giá đề xuất, layout**
+Chạy: `npm test -w apps/web -- test/db/requests.test.ts` → PASS (các test admin vẫn FAIL tới Step 6).
 
-`apps/web/src/views/labels.ts`:
+**Siết câu chuyển `matching` của `inviteBuildersBatch` (sửa Task 1, cần cho Review Focus 3).** Hiện câu `move` chỉ hỏi "có lời mời nào có `invited_at = now` không". Hai POST mời đồng thời rơi vào cùng một mili giây (cùng `now`) thì POST thua đua, dù không chèn được dòng nào, vẫn thấy lời mời của POST thắng, trả `request` khác null và route trả 303 thay vì 409. Sửa để `move` chỉ tính các id do chính batch này sinh ra. Trong `apps/web/src/db/requests.ts`, thay cả hàm (thêm `inviteIds` vào kết quả; `db/audit.ts` thêm `AuditInvitesGuard = { requestId, inviteIds }` với câu `WHERE EXISTS (SELECT 1 FROM request_invites WHERE request_id = ?8 AND id IN (SELECT value FROM json_each(?9)))`, kiểm `"inviteIds" in onlyIf` trước nhánh `requestId`):
 
 ```ts
-import type { InviteStatus } from "../domain/request.ts";
+export function inviteBuildersBatch(
+  db: D1Database,
+  input: { requestId: string; builderIds: string[]; invitedBy: string; now: string },
+): { statements: D1PreparedStatement[]; inviteIds: string[]; read: (results: D1Result[]) => { request: ClientRequest | null; invited: { id: string; builderId: string }[] } } {
+  const at = Date.parse(input.now);
+  const inviteIds = input.builderIds.map(() => ulid(at));
+  const inserts = input.builderIds.map((builderId, i) =>
+    db
+      .prepare(
+        `INSERT INTO request_invites (id, request_id, builder_id, invited_by, status, invited_at, created_at, updated_at)
+         SELECT ?1, ?2, ?3, ?4, 'invited', ?5, ?5, ?5
+         WHERE EXISTS (SELECT 1 FROM requests r WHERE r.id = ?2 AND r.status IN ('submitted', 'matching') AND r.client_user_id != ?3)
+           AND EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?3 AND b.status = 'approved' AND u.status = 'active')
+           AND NOT EXISTS (SELECT 1 FROM request_invites x WHERE x.request_id = ?2 AND x.builder_id = ?3)
+           AND (SELECT COUNT(*) FROM request_invites x WHERE x.request_id = ?2 AND x.status IN ('invited', 'proposed')) < ?6
+         RETURNING id, builder_id`,
+      )
+      .bind(inviteIds[i], input.requestId, builderId, input.invitedBy, input.now, MAX_ACTIVE_INVITES),
+  );
+  // Only this batch's own ids count, so a batch that inserted nothing cannot move the request because another batch invited at the same instant.
+  const move = db
+    .prepare(
+      `UPDATE requests SET status = 'matching', matched_at = COALESCE(matched_at, ?2), updated_at = ?2
+       WHERE id = ?1 AND status IN ('submitted', 'matching')
+         AND EXISTS (SELECT 1 FROM request_invites WHERE request_id = ?1 AND id IN (SELECT value FROM json_each(?3)))
+       RETURNING *`,
+    )
+    .bind(input.requestId, input.now, JSON.stringify(inviteIds));
+  return {
+    statements: [...inserts, move],
+    inviteIds,
+    read: (results) => ({
+      request: returnedRequest(results[inserts.length]),
+      invited: results.slice(0, inserts.length).flatMap((r) => ((r?.results ?? []) as { id: string; builder_id: string }[]).map((x) => ({ id: x.id, builderId: x.builder_id }))),
+    }),
+  };
+}
+```
 
+Thêm vào `apps/web/test/db/requests.test.ts` một test cho đúng trường hợp đó:
+
+```ts
+  it("does not move the request, nor audit, when this batch invited nobody, even if another batch invited at the same instant", async () => {
+    const { request } = await makeRequest({ tag: "rq-same" });
+    const [a, b] = await builders("rq-same-b", 2);
+    const admin = await ensureUser("owner@vnx.si");
+    const now = new Date().toISOString();
+    await inviteBuilders(request, [a!], now);
+    const audits = async () => ((await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.invite' AND entity_id = ?1").bind(request.id).first<{ n: number }>())?.n ?? 0);
+    const run = async (builderId: string) => {
+      const batch = inviteBuildersBatch(db(), { requestId: request.id, builderIds: [builderId], invitedBy: admin.id, now });
+      const results = await db().batch([...batch.statements, auditStatement(db(), { actorUserId: admin.id, action: "request.invite", entity: "request", entityId: request.id, now }, { requestId: request.id, inviteIds: batch.inviteIds })]);
+      return batch.read(results);
+    };
+    expect(await run(a!.userId)).toEqual({ request: null, invited: [] }); // duplicate: inserts nothing
+    expect(await audits()).toBe(0);
+    expect((await run(b!.userId)).invited).toHaveLength(1);
+    expect(await audits()).toBe(1);
+  });
+
+  it("lists only eligible candidates; only lapsed expired invitations count against them (spec §8.10)", async () => {
+    const { client, request } = await makeRequest({ tag: "rq-pen" });
+    const [b, taken] = await builders("rq-pen-b", 2);
+    const day = 24 * 3600 * 1000;
+    const t0 = Date.now() - 20 * day;
+    const lapsed = await makeRequest({ tag: "rq-pen-l" });
+    const early = await makeRequest({ tag: "rq-pen-e" });
+    const [lapsedInvite] = await inviteBuilders(lapsed.request, [b!], new Date(t0).toISOString());
+    const [earlyInvite] = await inviteBuilders(early.request, [b!], new Date(t0).toISOString());
+    const expire = (id: string, after: number) => db().prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE id = ?1").bind(id, new Date(t0 + after * day).toISOString()).run();
+    await expire(lapsedInvite!.id, 8); // no answer in 7 days
+    await expire(earlyInvite!.id, 1); // the request ended early
+    await inviteBuilders(request, [taken!]);
+    const self = await makeBuilder(client.email, "rq-pen-self", "approved");
+    const closed = await makeBuilder("rq-pen-cl@vnx.si", "rq-pen-cl", "approved", { availability: "closed" });
+    const pending = await makeBuilder("rq-pen-pe@vnx.si", "rq-pen-pe", "pending");
+    const suspended = await makeBuilder("rq-pen-su@vnx.si", "rq-pen-su", "suspended");
+    const locked = await makeBuilder("rq-pen-lo@vnx.si", "rq-pen-lo", "approved");
+    await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(locked.userId).run();
+    const since = new Date(Date.now() - 60 * day).toISOString();
+    const found = await listCandidates(db(), request, since);
+    expect(found.find((x) => x.userId === b!.userId)?.expiredInvites).toBe(1);
+    for (const gone of [taken!, self, closed, pending, suspended, locked]) expect(found.map((x) => x.userId)).not.toContain(gone.userId);
+    const later = new Date(Date.now() + 1000).toISOString();
+    expect((await listCandidates(db(), request, later)).find((x) => x.userId === b!.userId)?.expiredInvites).toBe(0);
+  });
+```
+
+Chạy: `npm test -w apps/web -- test/db/requests.test.ts` → PASS (test mới FAIL trước khi sửa `move`: `request` khác null).
+
+- [ ] **Step 4: Nhãn, giá đề xuất, layout**
+
+`apps/web/src/views/labels.ts`: sửa import kiểu request thành `import type { InviteStatus, RequestStatus } from "../domain/request.ts";` và thêm cuối file:
+
+```ts
 export const INVITE_STATUS_KEY: Record<InviteStatus, MessageKey> = {
   invited: "invite.status.invited",
   proposed: "invite.status.proposed",
@@ -4090,7 +4419,8 @@ export function proposalPrice(locale: Locale, invite: Pick<RequestInvite, "price
 }
 ```
 
-`apps/web/src/views/admin/AdminLayout.tsx`: `AdminSection` thêm `"requests"`; `NAV` thêm `{ key: "requests", path: "/admin/requests", label: "admin.nav.requests" }` sau `inquiries`.
+`apps/web/src/views/admin/AdminLayout.tsx`: `AdminSection` thêm `"requests"`; `NAV` thêm `{ key: "requests", path: "/admin/requests", label: "admin.nav.requests" }` ngay sau `inquiries`.
+
 
 - [ ] **Step 5: View admin**
 
@@ -4104,6 +4434,7 @@ import { translator } from "../../i18n/t.ts";
 import { CATEGORY_KEY, REQUEST_STATUS_KEY } from "../labels.ts";
 import { AdminLayout } from "./AdminLayout.tsx";
 
+/** Admin only: names the client with the typed name and the e-mail (spec §5.5). Never reuse for a builder. */
 export const AdminRequestsPage: FC<{ locale: Locale; origin: string; status: RequestStatus | null; items: AdminRequest[] }> = (p) => {
   const tr = translator(p.locale);
   const base = localizedPath(p.locale, "/admin/requests");
@@ -4213,7 +4544,11 @@ function reasonText(tr: Translate, r: SuggestionReason): string {
   }
 }
 
-/** Spec §5.5 / §8.10: the admin reads the request, sees suggestions with reasons, invites, returns or removes. */
+/**
+ * Spec §5.5 / §8.10: the admin reads the request, sees suggestions with reasons, invites, returns or removes.
+ * Admin only: the client appears with the typed name and the e-mail, so RequestFacts is used without `showClient`
+ * (that flag masks e-mail-like names for builders). Never reuse this page's client line for a builder.
+ */
 export const RequestDetailPage: FC<Props> = (p) => {
   const tr = translator(p.locale);
   const r = p.item.request;
@@ -4237,7 +4572,7 @@ export const RequestDetailPage: FC<Props> = (p) => {
         </p>
       ) : null}
       <p>
-        <span class={`badge badge-request-${r.status}`}>{tr(REQUEST_STATUS_KEY[r.status])}</span> · <span class="muted">{p.item.clientEmail}</span>
+        <span class={`badge badge-request-${r.status}`}>{tr(REQUEST_STATUS_KEY[r.status])}</span> · {r.clientName} · <span class="muted">{p.item.clientEmail}</span>
       </p>
       {r.adminNote ? (
         <div class="notice">
@@ -4245,7 +4580,7 @@ export const RequestDetailPage: FC<Props> = (p) => {
         </div>
       ) : null}
       <section class="card wide">
-        <RequestFacts locale={p.locale} request={r} showClient />
+        <RequestFacts locale={p.locale} request={r} />
       </section>
 
       <section>
@@ -4389,14 +4724,15 @@ import {
   requestTransition,
   suggestBuilders,
   type AdminRequest,
+  type ClientRequest,
   type RequestStatus,
   type TerminalRequestStatus,
 } from "../domain/request.ts";
 import type { AppEnv } from "../env.ts";
-import { localizedPath } from "../i18n/locales.ts";
 import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
-import { notifyInvited, notifyNotSelected, notifyRequestEnded } from "../notify/request.ts";
+import { localizedPath } from "../i18n/locales.ts";
+import { notifyInvited, notifyInviteExpired, notifyNotSelected, notifyRequestRejected } from "../notify/request.ts";
 import { RequestDetailPage, type InviteError } from "../views/admin/RequestDetailPage.tsx";
 import { AdminRequestsPage } from "../views/admin/RequestsPage.tsx";
 import { errorResponse } from "../views/error-response.tsx";
@@ -4416,7 +4752,11 @@ async function detailPage(c: Context<AppEnv>, item: AdminRequest, extra: DetailE
 
 const listOf = (value: unknown): string[] => (Array.isArray(value) ? value : value === undefined ? [] : [value]).filter((v): v is string => typeof v === "string" && v !== "");
 
-/** Spec §5.7 step 2: up to 5 active invitations; the INSERT re-checks the cap, so a lost race invites fewer. */
+/**
+ * Spec §5.7 step 2: up to 5 active invitations. The checks here only give quick answers; the INSERT in
+ * inviteBuildersBatch is the real guard (cap, duplicate, client, eligibility, request status), so a lost race or a forged
+ * checkbox invites nobody and answers 409.
+ */
 async function invite(c: Context<AppEnv>) {
   const item = await findAdminRequest(c.env.DB, c.req.param("id") ?? "");
   if (!item) return errorResponse(c, "notFound", 404);
@@ -4442,28 +4782,35 @@ async function invite(c: Context<AppEnv>) {
     auditStatement(
       c.env.DB,
       { actorUserId: admin.id, action: "request.invite", entity: "request", entityId: item.request.id, data: { from: item.request.status, requested: [...picked] }, now },
-      { requestId: item.request.id, status: "matching", updatedAt: now },
+      { requestId: item.request.id, inviteIds: batch.inviteIds },
     ),
   ]);
   const outcome = batch.read(results);
-  if (!outcome.request) return errorResponse(c, "conflict", 409);
-  const failed = await notifyInvited(c.env, outcome.invited.map((i) => i.id));
-  return c.redirect(localizedPath(c.get("locale"), `/admin/requests/${item.request.id}?done=${failed > 0 ? "mail_failed" : "1"}`), 303);
+  if (!outcome.request) return errorResponse(c, "conflict", 409); // nobody was invited: nothing was written
+  const mailed = await notifyInvited(c.env, outcome.invited.map((i) => i.id));
+  return c.redirect(localizedPath(c.get("locale"), `/admin/requests/${item.request.id}?done=${mailed.failed > 0 ? "mail_failed" : "1"}`), 303);
 }
 
-/** Ends the request as the admin (returned or spam): settle invitations, audit, tell the builders whose proposals end. */
-async function end(c: Context<AppEnv>, item: AdminRequest, to: Extract<TerminalRequestStatus, "rejected" | "removed">, adminNote: string | null) {
+/**
+ * Ends the request as the admin (returned or spam): settles the invitations, audits, and after the commit tells the
+ * builders whose invitation ended (not_selected / expired; Owner: also after spam). `null` = lost the compare-and-set.
+ */
+async function end(c: Context<AppEnv>, item: AdminRequest, to: Extract<TerminalRequestStatus, "rejected" | "removed">, adminNote: string | null): Promise<{ request: ClientRequest; mailFailed: boolean } | null> {
   const now = new Date().toISOString();
   const r = item.request;
   const batch = endRequestBatch(c.env.DB, { id: r.id, from: r.status, to, now, adminNote });
   const results = await c.env.DB.batch([
     ...batch.statements,
-    auditStatement(c.env.DB, { actorUserId: c.get("user")!.id, action: to === "rejected" ? "request.reject" : "request.remove", entity: "request", entityId: r.id, data: { from: r.status }, now }, { requestId: r.id, status: to, updatedAt: now }),
+    auditStatement(
+      c.env.DB,
+      { actorUserId: c.get("user")!.id, action: to === "rejected" ? "request.reject" : "request.remove", entity: "request", entityId: r.id, data: { from: r.status }, now },
+      { requestId: r.id, status: to, updatedAt: now },
+    ),
   ]);
   const outcome = batch.read(results);
   if (!outcome.request) return null;
-  await notifyNotSelected(c.env, outcome.notSelected);
-  return outcome.request;
+  const tallies = [await notifyNotSelected(c.env, outcome.notSelected), await notifyInviteExpired(c.env, outcome.expired)];
+  return { request: outcome.request, mailFailed: tallies.some((t) => t.failed > 0) };
 }
 
 export function registerAdminRequestRoutes(app: Hono<AppEnv>) {
@@ -4491,11 +4838,12 @@ export function registerAdminRequestRoutes(app: Hono<AppEnv>) {
     if (!note.ok) return detailPage(c, item, { noteError: true, values: { note: typeof body.note === "string" ? body.note : "" } }, 400);
     const ended = await end(c, item, "rejected", note.note);
     if (!ended) return errorResponse(c, "conflict", 409);
-    const mailed = await notifyRequestEnded(c.env, ended.id, "rejected");
-    return c.redirect(localizedPath(c.get("locale"), `/admin/requests/${ended.id}?done=${mailed ? "1" : "mail_failed"}`), 303);
+    const mailed = await notifyRequestRejected(c.env, ended.request.id);
+    const ok = mailed === "sent" && !ended.mailFailed;
+    return c.redirect(localizedPath(c.get("locale"), `/admin/requests/${ended.request.id}?done=${ok ? "1" : "mail_failed"}`), 303);
   });
 
-  // Spec §5.5: spam. The client is not told; builders with a proposal are.
+  // Spec §5.5: spam. The client is not told; builders with an open or answered invitation are (not_selected / expired).
   onLocalized(app, "post", "/admin/requests/:id/remove", requireAdmin, async (c) => {
     const item = await findAdminRequest(c.env.DB, c.req.param("id") ?? "");
     if (!item) return errorResponse(c, "notFound", 404);
@@ -4506,16 +4854,16 @@ export function registerAdminRequestRoutes(app: Hono<AppEnv>) {
 }
 ```
 
-`apps/web/src/app.ts`: `registerAdminRequestRoutes(app)` sau `registerAdminInquiryRoutes(app)`.
+`apps/web/src/app.ts`: thêm `import { registerAdminRequestRoutes } from "./routes/admin-requests.tsx";` (cạnh import `registerAdminInquiryRoutes`) và gọi `registerAdminRequestRoutes(app);` ngay sau `registerAdminInquiryRoutes(app);`.
 
-Chạy: `npm test -w apps/web -- test/admin/requests.test.ts test/db/requests.test.ts test/admin` → PASS.
+Chạy: `npm test -w apps/web -- test/admin/requests.test.ts test/db/requests.test.ts test/views/proposal.test.ts test/admin` → PASS.
 
 - [ ] **Step 7: Toàn bộ test, typecheck, commit**
 
 ```bash
 npm run typecheck -w apps/web
 npm test
-git add apps/web/src apps/web/test
+git add apps/web/src/routes/admin-requests.tsx apps/web/src/views/admin/RequestsPage.tsx apps/web/src/views/admin/RequestDetailPage.tsx apps/web/src/views/proposal.ts apps/web/src/views/labels.ts apps/web/src/views/admin/AdminLayout.tsx apps/web/src/db/requests.ts apps/web/src/app.ts apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/admin/requests.test.ts apps/web/test/views/proposal.test.ts apps/web/test/db/requests.test.ts
 git commit -m "feat(web): admin request queue, rule-based builder suggestions and invitations (VNX-0603)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
