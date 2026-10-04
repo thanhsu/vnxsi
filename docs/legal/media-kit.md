@@ -33,7 +33,7 @@ We feature tools that builders and clients actually use, on dedicated tool pages
 - Name: write **VNX.SI** (capitals, with the dot). Do not write "VNX", "Vnx.si" or "VNXSI".
 - Colours: ink `#0D1526`, accent blue `#1D4ED8`, background `#F4F5F7`.
 - Fonts: Space Grotesk (headings), Be Vietnam Pro (text).
-- Logo files: coming soon. Until then, use the name VNX.SI in text.
+- Logo files: `/assets/brand/vnxsi-mark.svg` (light backgrounds), `/assets/brand/vnxsi-mark-dark.svg` (dark backgrounds), `/assets/brand/vnxsi-icon.svg` (app icon). Keep clear space around the mark at least the size of its blue dot; do not recolour, rotate or stretch it.
 
 **Contact**
 Press and partnerships: contact@vnx.si
@@ -66,7 +66,7 @@ Chúng tôi giới thiệu những công cụ mà builder và client thật sự
 - Tên: viết **VNX.SI** (chữ in hoa, có dấu chấm). Không viết "VNX", "Vnx.si" hay "VNXSI".
 - Màu: chữ `#0D1526`, xanh nhấn `#1D4ED8`, nền `#F4F5F7`.
 - Font: Space Grotesk (tiêu đề), Be Vietnam Pro (nội dung).
-- File logo: sắp có. Trong lúc chờ, dùng tên VNX.SI dạng chữ.
+- File logo: `/assets/brand/vnxsi-mark.svg` (nền sáng), `/assets/brand/vnxsi-mark-dark.svg` (nền tối), `/assets/brand/vnxsi-icon.svg` (biểu tượng app). Chừa khoảng trống quanh logo ít nhất bằng chấm xanh; không đổi màu, xoay hay kéo giãn.
 
 **Liên hệ**
 Báo chí và hợp tác: contact@vnx.si
@@ -77,4 +77,4 @@ Báo chí và hợp tác: contact@vnx.si
 
 - Bảng màu và font lấy từ `docs/blueprint/05-UI-SCOPE.md`. Hiện `app.css` chỉ nạp Be Vietnam Pro (không nạp Space Grotesk); trang Media Kit chỉ **mô tả** font, không đổi CSS.
 - Khi có số thật (product published, builder approved, quốc gia) vượt ngưỡng spec 8.11, thêm mục "Numbers" đọc từ `public_stats` (M7), không gõ tay.
-- Khi có file logo: thêm vào `public/assets/brand/` và mục "Logo files".
+- Logo (Connected nodes, Owner chọn 2026-10-04) thêm ở VNX-0709; mục Logo files đã cập nhật.
