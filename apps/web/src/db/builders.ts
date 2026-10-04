@@ -206,3 +206,15 @@ export async function listBuildersByStatus(db: D1Database, status: BuilderStatus
   const { results } = await db.prepare(`${ACCOUNT_SELECT} WHERE b.status = ?1 ORDER BY b.created_at, b.user_id LIMIT ?2`).bind(status, limit).all<AccountRow>();
   return results.map(toAccount);
 }
+
+/** Public builders for the sitemap. The cap keeps the sitemap under 50,000 URLs (× 4 locales). */
+export async function listSitemapBuilders(db: D1Database, limit = 2000): Promise<{ handle: string; updatedAt: string }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT b.handle, b.updated_at FROM builders b JOIN users u ON u.id = b.user_id
+       WHERE b.status = 'approved' AND u.status = 'active' ORDER BY b.approved_at DESC, b.user_id LIMIT ?1`,
+    )
+    .bind(limit)
+    .all<{ handle: string; updated_at: string }>();
+  return results.map((r) => ({ handle: r.handle, updatedAt: r.updated_at }));
+}

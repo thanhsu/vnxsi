@@ -270,3 +270,15 @@ export async function listPublicProductsByBuilder(db: D1Database, builderId: str
   const { results } = await db.prepare(`${WITH_BUILDER} WHERE p.builder_id = ?1 AND ${PUBLIC_PRODUCT} ORDER BY p.published_at DESC, p.id`).bind(builderId).all<WithBuilderRow>();
   return results.map(toProduct);
 }
+
+/** Public products for the sitemap, newest approval first. The cap keeps the sitemap under 50,000 URLs (× 4 locales). */
+export async function listSitemapProducts(db: D1Database, limit = 10000): Promise<{ slug: string; updatedAt: string }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.slug, p.updated_at FROM products p JOIN builders b ON b.user_id = p.builder_id JOIN users u ON u.id = p.builder_id
+       WHERE ${PUBLIC_PRODUCT} ORDER BY p.published_at DESC, p.id LIMIT ?1`,
+    )
+    .bind(limit)
+    .all<{ slug: string; updated_at: string }>();
+  return results.map((r) => ({ slug: r.slug, updatedAt: r.updated_at }));
+}
