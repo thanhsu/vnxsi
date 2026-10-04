@@ -24,10 +24,24 @@ describe("/sitemap.xml (spec §8.8)", () => {
     }
     expect(xml).toContain(`<xhtml:link rel="alternate" hreflang="x-default" href="https://vnx.si/p/${product.slug}"/>`);
     expect(xml).toContain(`<loc>https://vnx.si/zh-hant/b/${builder.handle}</loc>`);
-    for (const loc of ["https://vnx.si/products", "https://vnx.si/vi/builders", "https://vnx.si/"]) expect(xml, loc).toContain(`<loc>${loc}</loc>`);
-    expect(xml).not.toContain("<loc>https://vnx.si/vi/</loc>");
+    for (const loc of ["https://vnx.si/products", "https://vnx.si/vi/builders"]) expect(xml, loc).toContain(`<loc>${loc}</loc>`);
     expect(xml).not.toContain("preview.workers.dev");
     expect(xml).not.toContain("/request");
+  });
+
+  it("lists the home page once per locale with hreflang alternates (VNX-0708)", async () => {
+    const { xml } = await fetchSitemap();
+    const alternates = [
+      '<xhtml:link rel="alternate" hreflang="en" href="https://vnx.si/"/>',
+      '<xhtml:link rel="alternate" hreflang="vi" href="https://vnx.si/vi/"/>',
+      '<xhtml:link rel="alternate" hreflang="zh-Hans" href="https://vnx.si/zh-hans/"/>',
+      '<xhtml:link rel="alternate" hreflang="zh-Hant" href="https://vnx.si/zh-hant/"/>',
+      '<xhtml:link rel="alternate" hreflang="x-default" href="https://vnx.si/"/>',
+    ].join("");
+    for (const loc of ["https://vnx.si/", "https://vnx.si/vi/", "https://vnx.si/zh-hans/", "https://vnx.si/zh-hant/"]) {
+      expect(xml, loc).toContain(`<url><loc>${loc}</loc>${alternates}</url>`);
+    }
+    expect(xml).not.toContain("<loc>https://vnx.si/vi</loc>");
   });
 
   it("leaves out everything that is not public", async () => {
