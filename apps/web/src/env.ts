@@ -1,4 +1,5 @@
 import type { Locale } from "./i18n/locales.ts";
+import type { Builder } from "./domain/builder.ts";
 import type { SessionUser } from "./auth/sessions.ts";
 
 export interface Bindings {
@@ -18,5 +19,7 @@ export type AppEnv = {
     requestId: string;
     locale: Locale;
     user: SessionUser | null;
+    /** Only set after `requireBuilder`. */
+    builder: Builder;
   };
 };

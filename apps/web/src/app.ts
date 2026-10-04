@@ -6,6 +6,14 @@ import { requestId } from "./http/request-id.ts";
 import { localeFromPath } from "./i18n/locales.ts";
 import { localeMiddleware } from "./i18n/middleware.ts";
 import { registerAuthRoutes } from "./routes/auth.tsx";
+import { registerApplyRoutes } from "./routes/hub-apply.tsx";
+import { registerHubRoutes } from "./routes/hub.tsx";
+import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
+import { registerBuilderProfileRoutes } from "./routes/builder-profile.tsx";
+import { registerAdminRoutes } from "./routes/admin.tsx";
+import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
+import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
+import { registerJoinRoutes } from "./routes/join.ts";
 import { handleWaitlist } from "./routes/waitlist.ts";
 import { errorResponse } from "./views/error-response.tsx";
 
@@ -17,6 +25,14 @@ export function createApp() {
   app.use("*", sessionMiddleware);
 
   registerAuthRoutes(app);
+  registerJoinRoutes(app);
+  registerApplyRoutes(app);
+  registerHubRoutes(app);
+  registerPortfolioRoutes(app);
+  registerBuilderProfileRoutes(app);
+  registerAdminRoutes(app);
+  registerInviteAdminRoutes(app);
+  registerUserAdminRoutes(app);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/waitlist", (c) => handleWaitlist(c.req.raw, c.env));

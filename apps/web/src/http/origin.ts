@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import type { AppEnv } from "../env.ts";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -21,3 +21,7 @@ export const originCheck: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
   await next();
 };
+
+export function requestOrigin(c: Context<AppEnv>): string {
+  return new URL(c.req.url).origin;
+}

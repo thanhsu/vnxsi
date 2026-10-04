@@ -3,7 +3,7 @@ import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { Layout } from "./Layout.tsx";
 
-export type ErrorKind = "notFound" | "forbidden" | "server";
+export type ErrorKind = "notFound" | "forbidden" | "conflict" | "server";
 
 export const ErrorPage: FC<{ locale: Locale; origin: string; rest: string; kind: ErrorKind; reference?: string }> = (props) => {
   const tr = translator(props.locale);

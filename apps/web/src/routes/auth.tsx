@@ -3,6 +3,7 @@ import { z } from "zod";
 import { adminEmails } from "../auth/admin.ts";
 import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "../auth/cookies.ts";
 import { sha256Hex } from "../auth/crypto.ts";
+import { readInviteCookie, writeInviteCookie } from "../auth/invite-cookie.ts";
 import { createSession, deleteSession } from "../auth/sessions.ts";
 import { consumeLoginToken, createLoginToken } from "../auth/tokens.ts";
 import { writeAudit } from "../db/audit.ts";
@@ -50,7 +51,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
       return page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={tr("login.error.rateLimited")} />, 429);
     }
 
-    const token = await createLoginToken(c.env.DB, { email, purpose: "login", locale }, now);
+    const token = await createLoginToken(c.env.DB, { email, purpose: "login", locale, inviteCodeHash: readInviteCookie(c) }, now);
     const link = new URL("/auth/verify", c.env.APP_ORIGIN);
     link.searchParams.set("t", token);
     if (next) link.searchParams.set("next", next);
@@ -76,6 +77,8 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     await markLogin(c.env.DB, user.id, { now: iso, isAdmin: adminEmails(c.env).has(email) });
     await writeAudit(c.env.DB, { actorUserId: user.id, action: "auth.login", entity: "user", entityId: user.id, data: { purpose: result.token.purpose }, now: iso });
     writeSessionCookie(c, await createSession(c.env.DB, user.id, now));
+    // The link may be opened on another device: restore the invite there (spec §5.3).
+    if (result.token.inviteCodeHash) writeInviteCookie(c, result.token.inviteCodeHash);
     return c.redirect(safeNext(c.req.query("next")) ?? "/", 303);
   });
 

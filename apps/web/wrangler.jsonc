@@ -31,7 +31,7 @@
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity and 0004_builders)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy

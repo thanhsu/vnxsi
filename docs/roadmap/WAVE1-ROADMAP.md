@@ -57,13 +57,19 @@ Plan: cùng file với M0.
 
 ## M2 — Builder
 
+Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m2-builder.md` (task 0202, 0203, 0205 tách nhỏ cho vừa ≤ 1 ngày).
+
 | Task | Nội dung | Tag |
 |---|---|---|
-| VNX-0201 | Migration `builders`, `portfolio_items`, `invites`; state machine builder | AGENT, FOUNDATION |
-| VNX-0202 | `/join/:code`, gắn invite vào magic link, `/hub/apply` | AGENT |
-| VNX-0203 | Khung Builder Hub, sửa hồ sơ, portfolio (≤12) | AGENT |
+| VNX-0201 | Migration `0004_builders` (`builders`, `portfolio_items`, `invites`); state machine builder; test sở hữu bảng | AGENT, FOUNDATION |
+| VNX-0202a | `/join/:code`, gắn invite vào magic link; `requireUser` giữ query | AGENT |
+| VNX-0202b | `/hub/apply`, `requireBuilder` | AGENT |
+| VNX-0203a | Khung Builder Hub, tổng quan, sửa hồ sơ, gửi duyệt lại | AGENT |
+| VNX-0203b | Portfolio (≤12) | AGENT |
 | VNX-0204 | Trang công khai `/b/:handle` | AGENT |
-| VNX-0205 | Admin: hàng chờ builder, tạo invite, khóa/mở khóa | AGENT, HIGH-RISK |
+| VNX-0205a | Admin: hàng chờ builder, duyệt / từ chối, email | AGENT, HIGH-RISK |
+| VNX-0205b | Admin: invite link | AGENT, HIGH-RISK |
+| VNX-0205c | Admin: khóa / mở khóa builder và user; `ADMIN_EMAILS` cấp và thu quyền | AGENT, HIGH-RISK |
 
 **Cổng ra M2:**
 - Builder có invite đăng ký và được duyệt ngay; builder không có invite vào `pending`, admin duyệt được.

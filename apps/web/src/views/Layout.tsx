@@ -43,11 +43,14 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
               ))}
             </nav>
             {signedIn ? (
-              <form method="post" action="/logout">
-                <button type="submit" class="link">
-                  {tr("nav.signOut")}
-                </button>
-              </form>
+              <>
+                <a href={localizedPath(locale, "/hub")}>{tr("nav.hub")}</a>
+                <form method="post" action="/logout">
+                  <button type="submit" class="link">
+                    {tr("nav.signOut")}
+                  </button>
+                </form>
+              </>
             ) : (
               <a href={localizedPath(locale, "/login")}>{tr("nav.signIn")}</a>
             )}
