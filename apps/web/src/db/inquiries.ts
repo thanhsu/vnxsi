@@ -85,7 +85,7 @@ export function createInquiryStatements(db: D1Database, input: NewInquiry, onlyI
   const at = Date.parse(input.now);
   const id = ulid(at);
   const firstMessageId = ulid(at);
-  const guard = onlyIf ? "WHERE EXISTS (SELECT 1 FROM requests WHERE id = ?14 AND status = 'builder_selected' AND selected_invite_id = ?15 AND updated_at = ?16)" : "";
+  const guard = onlyIf ? "WHERE EXISTS (SELECT 1 FROM requests WHERE id = ?14 AND status = 'builder_selected' AND selected_invite_id = ?15 AND updated_at = ?16) AND EXISTS (SELECT 1 FROM request_invites WHERE id = ?15 AND request_id = ?14 AND builder_id = ?4)" : "";
   const insert = db
     .prepare(
       `INSERT INTO inquiries (id, client_user_id, client_name, builder_id, product_id, request_id, type, message, budget_band, deadline, status, locale,

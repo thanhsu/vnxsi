@@ -5,7 +5,7 @@ import {
   MAX_ACTIVE_INVITES,
   type InviteStatus,
   type InviteWithBuilder,
-  type Request,
+  type ClientRequest,
   type RequestInvite,
   type RequestStatus,
   type TerminalRequestStatus,
@@ -34,7 +34,7 @@ type Row = {
   updated_at: string;
 };
 
-export function toRequest(r: Row): Request {
+export function toRequest(r: Row): ClientRequest {
   return {
     id: r.id,
     clientUserId: r.client_user_id,
@@ -118,7 +118,7 @@ export type NewRequest = {
   now: string;
 };
 
-export async function createRequest(db: D1Database, input: NewRequest): Promise<Request> {
+export async function createRequest(db: D1Database, input: NewRequest): Promise<ClientRequest> {
   const row = await db
     .prepare(
       `INSERT INTO requests (id, client_user_id, client_name, title, description, category, budget_band, deadline, languages, status, locale,
@@ -132,19 +132,19 @@ export async function createRequest(db: D1Database, input: NewRequest): Promise<
   return toRequest(row);
 }
 
-export async function findRequestById(db: D1Database, id: string): Promise<Request | null> {
+export async function findRequestById(db: D1Database, id: string): Promise<ClientRequest | null> {
   const row = await db.prepare("SELECT * FROM requests WHERE id = ?1").bind(id).first<Row>();
   return row ? toRequest(row) : null;
 }
 
 // Spec §5.4: the client never sees a request the admin removed as spam.
-export async function findClientRequest(db: D1Database, clientUserId: string, id: string): Promise<Request | null> {
+export async function findClientRequest(db: D1Database, clientUserId: string, id: string): Promise<ClientRequest | null> {
   const row = await db.prepare("SELECT * FROM requests WHERE id = ?1 AND client_user_id = ?2 AND status != 'removed'").bind(id, clientUserId).first<Row>();
   return row ? toRequest(row) : null;
 }
 
 /** Most recently changed first. */
-export async function listClientRequests(db: D1Database, clientUserId: string, limit = 200): Promise<Request[]> {
+export async function listClientRequests(db: D1Database, clientUserId: string, limit = 200): Promise<ClientRequest[]> {
   const { results } = await db
     .prepare("SELECT * FROM requests WHERE client_user_id = ?1 AND status != 'removed' ORDER BY updated_at DESC, id DESC LIMIT ?2")
     .bind(clientUserId, limit)
@@ -153,7 +153,7 @@ export async function listClientRequests(db: D1Database, clientUserId: string, l
 }
 
 /** The request with its client's e-mail and locale, used only as a recipient (notifications) or on admin pages. */
-export async function findRequestWithClient(db: D1Database, id: string): Promise<{ request: Request; client: { email: string; locale: string } } | null> {
+export async function findRequestWithClient(db: D1Database, id: string): Promise<{ request: ClientRequest; client: { email: string; locale: string } } | null> {
   const row = await db
     .prepare("SELECT r.*, u.email AS client_email, u.locale AS client_locale FROM requests r JOIN users u ON u.id = r.client_user_id WHERE r.id = ?1")
     .bind(id)
@@ -180,13 +180,15 @@ export function setRequestStatusStatement(
          admin_note = COALESCE(?5, admin_note),
          selected_invite_id = COALESCE(?6, selected_invite_id)
        WHERE id = ?1 AND status = ?2
+         AND (?6 IS NULL OR EXISTS (SELECT 1 FROM request_invites x JOIN builders b ON b.user_id = x.builder_id JOIN users u ON u.id = b.user_id
+           WHERE x.id = ?6 AND x.request_id = ?1 AND x.status = 'proposed' AND b.status = 'approved' AND u.status = 'active'))
        RETURNING *`,
     )
     .bind(input.id, input.from, input.to, input.now, input.adminNote ?? null, input.selectedInviteId ?? null);
 }
 
 /** The request a batched compare-and-set returned, or null when it lost. */
-export function returnedRequest(result: D1Result | undefined): Request | null {
+export function returnedRequest(result: D1Result | undefined): ClientRequest | null {
   const row = result?.results[0] as Row | undefined;
   return row ? toRequest(row) : null;
 }
@@ -201,7 +203,7 @@ export function endRequestBatch(
   db: D1Database,
   input: { id: string; from: RequestStatus; to: TerminalRequestStatus; now: string; adminNote?: string | null; selectedInviteId?: string | null },
   between: D1PreparedStatement[] = [],
-): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: Request | null; notSelected: string[] } } {
+): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: ClientRequest | null; notSelected: string[] } } {
   const won = "EXISTS (SELECT 1 FROM requests WHERE id = ?1 AND status = ?2 AND updated_at = ?3)";
   const statements = [
     setRequestStatusStatement(db, input),
@@ -228,7 +230,7 @@ export function endRequestBatch(
 export function inviteBuildersBatch(
   db: D1Database,
   input: { requestId: string; builderIds: string[]; invitedBy: string; now: string },
-): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: Request | null; invited: { id: string; builderId: string }[] } } {
+): { statements: D1PreparedStatement[]; read: (results: D1Result[]) => { request: ClientRequest | null; invited: { id: string; builderId: string }[] } } {
   const at = Date.parse(input.now);
   const inserts = input.builderIds.map((builderId) =>
     db
@@ -267,7 +269,8 @@ export async function listRequestInvites(db: D1Database, requestId: string): Pro
     .prepare(
       `SELECT x.*, b.name AS builder_name, b.handle AS builder_handle, (b.status = 'approved' AND u.status = 'active') AS builder_public
        FROM request_invites x JOIN builders b ON b.user_id = x.builder_id JOIN users u ON u.id = b.user_id
-       WHERE x.request_id = ?1 ORDER BY x.invited_at, x.rowid`,
+       WHERE x.request_id = ?1 -- ulid is not monotonic within one ms, so rowid keeps insertion order
+       ORDER BY x.invited_at, x.rowid`,
     )
     .bind(requestId)
     .all<InviteBuilderRow>();

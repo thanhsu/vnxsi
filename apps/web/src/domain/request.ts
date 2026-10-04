@@ -34,7 +34,7 @@ export const INVITE_TTL_MS = 7 * DAY_MS;
 export const MATCHING_TTL_MS = 30 * DAY_MS;
 export const EXPIRED_PENALTY_WINDOW_MS = 60 * DAY_MS;
 
-export interface Request {
+export interface ClientRequest {
   id: string;
   clientUserId: string;
   clientName: string;
@@ -85,7 +85,7 @@ export interface InviteWithBuilder {
 
 /** Admin rows (spec §5.5): the admin may see the client's e-mail. */
 export interface AdminRequest {
-  request: Request;
+  request: ClientRequest;
   clientEmail: string;
   activeInvites: number;
   totalInvites: number;
@@ -103,7 +103,7 @@ export interface InvitationListItem {
 /** What an invited builder sees (spec §5.7 step 3): the request with the client's typed name; there is no e-mail in it. */
 export interface Invitation {
   invite: RequestInvite;
-  request: Request;
+  request: ClientRequest;
 }
 
 export type RequestAction = "verify" | "invite" | "reject" | "select" | "close" | "expire" | "remove";
@@ -334,7 +334,7 @@ const POINTS = (r: SuggestionReason): number => (r.kind === "category" ? 3 : r.k
  * Spec §8.10 rule-based suggestions. Only helps the admin; the admin decides. ADR-004: nothing paid reaches the order;
  * ties go by handle so the list is stable.
  */
-export function suggestBuilders(request: Pick<Request, "title" | "description" | "languages">, candidates: readonly Candidate[], limit = SUGGESTION_LIMIT): Suggestion[] {
+export function suggestBuilders(request: Pick<ClientRequest, "title" | "description" | "languages">, candidates: readonly Candidate[], limit = SUGGESTION_LIMIT): Suggestion[] {
   const haystack = `${request.title}\n${request.description}`.toLowerCase();
   return candidates
     .map((candidate) => {

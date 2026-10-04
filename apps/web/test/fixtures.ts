@@ -12,7 +12,7 @@ import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/build
 import type { TierInput } from "../src/domain/pricing-input.ts";
 import type { ProductFields } from "../src/domain/product-input.ts";
 import type { Inquiry, InquiryStatus, InquiryType } from "../src/domain/inquiry.ts";
-import type { Request, RequestInvite, RequestStatus } from "../src/domain/request.ts";
+import type { ClientRequest, RequestInvite, RequestStatus } from "../src/domain/request.ts";
 import type { BadgeKind, Category, DeliveryModel, Product } from "../src/domain/product.ts";
 import { testEnv } from "./helpers.ts";
 
@@ -211,7 +211,7 @@ export async function makeRequest(opts: {
   description?: string;
   now?: string;
   clientLocale?: string;
-}): Promise<{ client: UserRow; request: Request }> {
+}): Promise<{ client: UserRow; request: ClientRequest }> {
   const client = await ensureUser(`${opts.tag}-c@vnx.si`, opts.clientLocale);
   const request = await createRequest(testEnv.DB, {
     clientUserId: client.id,
@@ -230,7 +230,7 @@ export async function makeRequest(opts: {
 }
 
 /** Invites `builders` as the test admin, moving the request to matching. Returns the new invitations in order. */
-export async function inviteBuilders(request: Request, builders: Builder[], now = new Date().toISOString()): Promise<RequestInvite[]> {
+export async function inviteBuilders(request: ClientRequest, builders: Builder[], now = new Date().toISOString()): Promise<RequestInvite[]> {
   const admin = await ensureUser("owner@vnx.si");
   const batch = inviteBuildersBatch(testEnv.DB, { requestId: request.id, builderIds: builders.map((b) => b.userId), invitedBy: admin.id, now });
   const outcome = batch.read(await testEnv.DB.batch(batch.statements));

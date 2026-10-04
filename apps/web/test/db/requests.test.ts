@@ -137,6 +137,52 @@ describe("db/requests (VNX-0601)", () => {
     expect((await listMessages(db(), inquiry.id)).map((m) => m.id)).toEqual([inquiry.firstMessageId]);
   });
 
+  async function selectBatch(tag: string, mutate: (ctx: { request: { id: string }; invite: { id: string }; other: { id: string }; builderId: string }) => Promise<void>) {
+    const { client, request } = await makeRequest({ tag });
+    const other = await makeRequest({ tag: `${tag}-o` });
+    const [builder] = await builders(`${tag}-b`, 1);
+    const [invite] = await inviteBuilders(request, [builder!]);
+    const [otherBuilder] = await builders(`${tag}-ob`, 1);
+    const [otherInvite] = await inviteBuilders(other.request, [otherBuilder!]);
+    await proposeOn(invite!);
+    await proposeOn(otherInvite!);
+    await mutate({ request, invite: invite!, other: otherInvite!, builderId: builder!.userId });
+    const before = (await findRequestById(db(), request.id))!;
+    const now = later(before.updatedAt);
+    const picked = (await db().prepare("SELECT selected_invite_id FROM requests WHERE id = ?1").bind(request.id).first<{ selected_invite_id: string | null }>())!;
+    expect(picked.selected_invite_id).toBeNull();
+    return { client, request, invite: invite!, otherInvite: otherInvite!, builder: builder!, before, now };
+  }
+
+  it("writes nothing when the selected builder was suspended after proposing", async () => {
+    const ctx = await selectBatch("rq-susp", async ({ builderId }) => {
+      await db().prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(builderId).run();
+    });
+    const inquiry = createInquiryStatements(db(), { clientUserId: ctx.client.id, clientName: "Minh Tran", builderId: ctx.builder.userId, productId: null, requestId: ctx.request.id, type: "request", message: "m", budgetBand: "2k-10k", deadline: null, status: "open", locale: "en", now: ctx.now }, { requestId: ctx.request.id, inviteId: ctx.invite.id, updatedAt: ctx.now });
+    const end = endRequestBatch(db(), { id: ctx.request.id, from: "matching", to: "builder_selected", now: ctx.now, selectedInviteId: ctx.invite.id }, inquiry.statements);
+    const audit = auditStatement(db(), { actorUserId: null, action: "request.select", entity: "request", entityId: ctx.request.id, now: ctx.now }, { requestId: ctx.request.id, status: "builder_selected", updatedAt: ctx.now });
+    expect(end.read(await db().batch([...end.statements, audit]))).toEqual({ request: null, notSelected: [] });
+    expect(await findRequestById(db(), ctx.request.id)).toEqual(ctx.before);
+    expect((await listRequestInvites(db(), ctx.request.id))[0]?.invite.status).toBe("proposed");
+    expect(await findInquiryById(db(), inquiry.id)).toBeNull();
+    const n = await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.select' AND entity_id = ?1").bind(ctx.request.id).first<{ n: number }>();
+    expect(n?.n).toBe(0);
+  });
+
+  it("writes nothing when the selected invitation belongs to another request", async () => {
+    const ctx = await selectBatch("rq-xreq", async () => {});
+    const inquiry = createInquiryStatements(db(), { clientUserId: ctx.client.id, clientName: "Minh Tran", builderId: ctx.builder.userId, productId: null, requestId: ctx.request.id, type: "request", message: "m", budgetBand: "2k-10k", deadline: null, status: "open", locale: "en", now: ctx.now }, { requestId: ctx.request.id, inviteId: ctx.otherInvite.id, updatedAt: ctx.now });
+    const end = endRequestBatch(db(), { id: ctx.request.id, from: "matching", to: "builder_selected", now: ctx.now, selectedInviteId: ctx.otherInvite.id }, inquiry.statements);
+    const audit = auditStatement(db(), { actorUserId: null, action: "request.select", entity: "request", entityId: ctx.request.id, now: ctx.now }, { requestId: ctx.request.id, status: "builder_selected", updatedAt: ctx.now });
+    expect(end.read(await db().batch([...end.statements, audit]))).toEqual({ request: null, notSelected: [] });
+    expect(await findRequestById(db(), ctx.request.id)).toEqual(ctx.before);
+    expect((await listRequestInvites(db(), ctx.request.id))[0]?.invite.status).toBe("proposed");
+    expect((await listRequestInvites(db(), ctx.otherInvite.requestId))[0]?.invite.status).toBe("proposed");
+    expect(await findInquiryById(db(), inquiry.id)).toBeNull();
+    const n = await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.select' AND entity_id = ?1").bind(ctx.request.id).first<{ n: number }>();
+    expect(n?.n).toBe(0);
+  });
+
   it("keeps an implicit account that has a request, and deletes one that has nothing", async () => {
     const old = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
     const { client } = await makeRequest({ tag: "rq-ghost", status: "pending_verification", now: old });
