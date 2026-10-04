@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { firstPublicProducts } from "../db/catalog.ts";
 import { addClientSignup } from "../db/waitlist.ts";
 import { externalReferrerHost, parseWaitlistForm, refHost, siteHosts, utmFrom, type Utm } from "../domain/waitlist-input.ts";
 import type { AppEnv } from "../env.ts";
@@ -8,6 +9,7 @@ import { siteOrigin } from "../http/origin.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { LandingPage, type LandingForm } from "../views/LandingPage.tsx";
+import { DECK_SIZE } from "../views/landing/Deck.tsx";
 import { page } from "../views/render.ts";
 
 const HOUR = 3600;
@@ -16,7 +18,9 @@ const WAITLIST_PER_IP = 10;
 
 type RenderOpts = { joined: boolean; utm: Utm; referrer: string | null; form?: LandingForm };
 
-function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: ContentfulStatusCode = 200) {
+async function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: ContentfulStatusCode = 200) {
+  // Real products replace the category cards only once DECK_SIZE are public (plan VNX-0709 §6).
+  const deck = await firstPublicProducts(c.env.DB, DECK_SIZE);
   return page(
     c,
     <LandingPage
@@ -27,6 +31,7 @@ function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: ContentfulS
       utm={opts.utm}
       referrer={opts.referrer}
       form={opts.form}
+      deck={deck}
     />,
     status,
   );
