@@ -245,6 +245,17 @@ describe("db/requests (VNX-0601)", () => {
     expect(await db().prepare("SELECT id FROM users WHERE id = ?1").bind(bare.id).first()).toBeNull();
   });
 
+  it("keeps an implicit account that invited someone (request_invites.invited_by) (M6 review, Task 7 leftover)", async () => {
+    const { request } = await makeRequest({ tag: "rq-inviter" });
+    const [b] = await builders("rq-inviter-b", 1);
+    await inviteBuilders(request, [b!]); // invited by the fixture admin, who never signed in
+    const admin = await ensureUser("owner@vnx.si");
+    await db().prepare("UPDATE users SET created_at = ?2, last_login_at = NULL, is_admin = 0 WHERE id = ?1").bind(admin.id, "2020-01-01T00:00:00.000Z").run();
+    await db().prepare("DELETE FROM audit_log WHERE actor_user_id = ?1").bind(admin.id).run();
+    await deleteGhostUsers(db(), new Date().toISOString());
+    expect(await db().prepare("SELECT id FROM users WHERE id = ?1").bind(admin.id).first()).not.toBeNull();
+  });
+
   it("does not move the request, nor audit, when this batch invited nobody, even if another batch invited at the same instant", async () => {
     const { request } = await makeRequest({ tag: "rq-same" });
     const [a, b] = await builders("rq-same-b", 2);

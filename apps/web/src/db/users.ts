@@ -86,6 +86,7 @@ export async function deleteGhostUsers(db: D1Database, cutoff: string): Promise<
          AND NOT EXISTS (SELECT 1 FROM inquiries i WHERE i.client_user_id = users.id)
          AND NOT EXISTS (SELECT 1 FROM inquiry_messages m WHERE m.sender_user_id = users.id)
          AND NOT EXISTS (SELECT 1 FROM requests r WHERE r.client_user_id = users.id)
+         AND NOT EXISTS (SELECT 1 FROM request_invites x WHERE x.invited_by = users.id)
          AND NOT EXISTS (SELECT 1 FROM invites v WHERE v.created_by = users.id)
          AND NOT EXISTS (SELECT 1 FROM product_verifications pv WHERE pv.verified_by = users.id)
          AND NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.actor_user_id = users.id)`,
