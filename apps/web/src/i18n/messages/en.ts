@@ -332,6 +332,16 @@ export const en = {
   "email.productChanges.subject": "Changes needed on your VNX.SI product",
   "email.productChanges.body": "An admin reviewed {name} and asked for these changes:",
   "email.productChanges.cta": "Edit the product and submit it again:",
+  "admin.products.edited": "Recently edited",
+  "admin.products.editedAt": "Edited",
+  "admin.badges.grant": "Add badge",
+  "admin.badges.kind": "Badge",
+  "admin.badges.evidence": "Evidence (what you checked)",
+  "admin.badges.revoke": "Revoke",
+  "admin.badges.reason": "Reason",
+  "admin.badges.error.kind": "Choose a badge.",
+  "admin.badges.error.evidence": "Describe the evidence (up to 500 characters).",
+  "admin.badges.error.reason": "Enter a reason (up to 300 characters).",
 } as const;
 
 export type MessageKey = keyof typeof en;

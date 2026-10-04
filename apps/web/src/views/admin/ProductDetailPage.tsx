@@ -24,9 +24,10 @@ type Props = {
   badges: Badge[];
   notice: AdminNotice;
   noteError?: ProductAction;
+  badgeError: "kind" | "evidence" | "reason" | null;
 };
 
-export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, media, badges, notice, noteError }) => {
+export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, media, badges, notice, noteError, badgeError }) => {
   const tr = translator(locale);
   const p = item.product;
   const action = (name: ProductAction) => localizedPath(locale, `/admin/products/${p.id}/${name}`);
@@ -130,9 +131,57 @@ export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, medi
           <li>
             {tr(BADGE_KEY[b.kind])} · {b.verifiedAt.slice(0, 10)}
             {b.evidence ? ` · ${b.evidence}` : ""}
+            {b.kind !== "listed" ? (
+              <form method="post" action={localizedPath(locale, `/admin/products/${p.id}/badges/${b.kind}/revoke`)} class="row-actions">
+                <label for={`revoke-${b.kind}`}>{tr("admin.badges.reason")}</label>
+                <input id={`revoke-${b.kind}`} name="reason" maxlength={300} required />
+                <button class="link" type="submit">
+                  {tr("admin.badges.revoke")}
+                </button>
+              </form>
+            ) : null}
           </li>
         ))}
       </ul>
+      {badgeError === "reason" ? (
+        <p class="error-msg" role="alert">
+          {tr("admin.badges.error.reason")}
+        </p>
+      ) : null}
+      {p.status !== "archived" ? (
+        <form method="post" action={localizedPath(locale, `/admin/products/${p.id}/badges`)} class="card">
+          <div class="field">
+            <label for="badge-kind">{tr("admin.badges.kind")}</label>
+            <select id="badge-kind" name="kind" aria-invalid={badgeError === "kind" ? "true" : undefined}>
+              {(["demo_verified", "in_production"] as const)
+                .filter((k) => !badges.some((b) => b.kind === k))
+                .map((k) => (
+                  <option value={k}>{tr(BADGE_KEY[k])}</option>
+                ))}
+            </select>
+            {badgeError === "kind" ? <p class="error-msg">{tr("admin.badges.error.kind")}</p> : null}
+          </div>
+          <div class="field">
+            <label for="badge-evidence">{tr("admin.badges.evidence")}</label>
+            <textarea
+              id="badge-evidence"
+              name="evidence"
+              maxlength={500}
+              required
+              aria-invalid={badgeError === "evidence" ? "true" : undefined}
+              aria-describedby={badgeError === "evidence" ? "badge-evidence-error" : undefined}
+            ></textarea>
+            {badgeError === "evidence" ? (
+              <p id="badge-evidence-error" class="error-msg">
+                {tr("admin.badges.error.evidence")}
+              </p>
+            ) : null}
+          </div>
+          <button class="btn" type="submit">
+            {tr("admin.badges.grant")}
+          </button>
+        </form>
+      ) : null}
       {p.reviewNote ? (
         <>
           <h2>{tr("hub.reviewNote")}</h2>

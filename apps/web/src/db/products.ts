@@ -222,3 +222,12 @@ export async function listProductsByStatus(db: D1Database, status: ProductStatus
   const { results } = await db.prepare(`${WITH_BUILDER} WHERE p.status = ?1 ORDER BY p.updated_at, p.id LIMIT ?2`).bind(status, limit).all<WithBuilderRow>();
   return results.map(toWithBuilder);
 }
+
+/** Spec §5.5 "Mới chỉnh sửa": published products edited since `since`, newest edit first. */
+export async function listRecentlyEdited(db: D1Database, since: string, limit = 200): Promise<ProductWithBuilder[]> {
+  const { results } = await db
+    .prepare(`${WITH_BUILDER} WHERE p.status = 'published' AND p.edited_after_publish_at >= ?1 ORDER BY p.edited_after_publish_at DESC, p.id LIMIT ?2`)
+    .bind(since, limit)
+    .all<WithBuilderRow>();
+  return results.map(toWithBuilder);
+}
