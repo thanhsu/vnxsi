@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { findProductById, setProductStatus } from "../../src/db/products.ts";
 import { grantBadge, listActiveBadges } from "../../src/db/verifications.ts";
-import { ensureUser, makeBuilder, makeDraft, signIn } from "../fixtures.ts";
+import { demoStepStatements } from "../../src/routes/hub-products.tsx";
+import { ensureUser, makeBuilder, makeDraft, makeReadyProduct, publishProduct, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
@@ -159,5 +160,23 @@ describe("product editor text steps", () => {
     const row = await testEnv.DB.prepare("SELECT revoke_reason FROM product_verifications WHERE product_id = ?1").bind(product.id).first<{ revoke_reason: string }>();
     expect(row?.revoke_reason).toBe("demo_url_changed");
     expect(await audits("badge.revoke", product.id)).toBe(1);
+  });
+
+  it("changes nothing when the demo save loses its compare-and-set", async () => {
+    const { builder, product } = await makeReadyProduct("ed-demo-stale@vnx.si", "ed-demo-stale", "Stale Demo");
+    await publishProduct(product.id);
+    const admin = await ensureUser("owner@vnx.si");
+    await grantBadge(testEnv.DB, { productId: product.id, kind: "demo_verified", verifiedBy: admin.id, evidence: "ok", now: new Date().toISOString() });
+    // The editor read the product while it was published; an admin suspends it before the save commits.
+    const stale = (await findProductById(testEnv.DB, product.id))!;
+    await setProductStatus(testEnv.DB, { id: product.id, from: "published", to: "suspended", reviewNote: null, now: new Date().toISOString() });
+    const now = new Date(Date.now() + 1).toISOString();
+    const statements = demoStepStatements(testEnv.DB, { product: stale, actorUserId: builder.userId, fields: { demoUrl: "https://two.example", websiteUrl: null }, now });
+    const results = await testEnv.DB.batch(statements);
+    expect(results[0]!.meta.changes).toBe(0);
+    expect((await findProductById(testEnv.DB, product.id))?.demoUrl).toBe("https://demo.example");
+    expect((await listActiveBadges(testEnv.DB, product.id)).map((b) => b.kind).sort()).toEqual(["demo_verified", "listed"]);
+    expect(await audits("badge.revoke", product.id)).toBe(0);
+    expect(await audits("product.edit", product.id)).toBe(0);
   });
 });

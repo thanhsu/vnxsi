@@ -357,4 +357,7 @@ export const zhHans: Messages = {
   "productPage.builder": "开发者",
   "productPage.verifiedOn": "自 {date}",
   "bprofile.products": "产品",
+  "productPage.description": "产品介绍",
+  "editor.unlisted": "此产品已从市场隐藏。修改会保存，重新显示后生效。",
+  "products.viewPublic": "查看公开页面",
 };

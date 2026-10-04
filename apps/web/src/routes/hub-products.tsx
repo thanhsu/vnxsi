@@ -1,12 +1,12 @@
 import type { Context, Hono } from "hono";
 import { requireBuilder } from "../auth/middleware.ts";
-import { writeAudit } from "../db/audit.ts";
+import { auditStatement, writeAudit } from "../db/audit.ts";
 import { listMedia } from "../db/media.ts";
 import { listTiers, replaceTiers } from "../db/pricing.ts";
-import { createProductDraft, findOwnedProduct, listBuilderProducts, setProductStatus, updateProductFields } from "../db/products.ts";
-import { revokeBadge } from "../db/verifications.ts";
+import { createProductDraft, findOwnedProduct, listBuilderProducts, setProductStatus, updateProductFields, updateProductFieldsStatement, type ProductGuard } from "../db/products.ts";
+import { revokeBadgeStatement } from "../db/verifications.ts";
 import { canEditProfile } from "../domain/builder.ts";
-import { isTextStep, parseProductName, parseStep, stepValuesFromBody, stepValuesFromProduct, type FieldErrorCode, type StepErrors, type StepValues, type TextStep } from "../domain/product-input.ts";
+import { isTextStep, parseProductName, parseStep, stepValuesFromBody, stepValuesFromProduct, type FieldErrorCode, type ProductFields, type StepErrors, type StepValues, type TextStep } from "../domain/product-input.ts";
 import { parseTiers, tierValuesFromBody, tierValuesFromTiers, type TierErrors, type TierValues } from "../domain/pricing-input.ts";
 import { canChangeSlug, editLock, submitGaps, transition, type EditLock, type Product, type ProductAction, type ReadinessGap } from "../domain/product.ts";
 import type { AppEnv } from "../env.ts";
@@ -98,6 +98,34 @@ async function pricingPage(c: Context<AppEnv>, product: Product, values: TierVal
   );
 }
 
+/**
+ * The Demo step save as one transaction (run with db.batch): the field compare-and-set first, then — when the demo URL
+ * changed — the system revoke of Demo verified (spec §7.2) and its audit row, then the `product.edit` audit row once
+ * published. Every statement after the first is guarded on that compare-and-set, so a lost race (results[0] changed
+ * 0 rows) changes nothing.
+ */
+export function demoStepStatements(
+  db: D1Database,
+  input: { product: Product; actorUserId: string; fields: Partial<ProductFields>; now: string },
+): D1PreparedStatement[] {
+  const { product, fields, now } = input;
+  const markEdited = product.firstPublishedAt !== null;
+  const guard: ProductGuard = { productId: product.id, status: product.status, updatedAt: now };
+  const statements = [updateProductFieldsStatement(db, { productId: product.id, builderId: product.builderId, expectedStatus: product.status, fields, now, markEdited })];
+  const demoUrl = fields.demoUrl === undefined ? product.demoUrl : fields.demoUrl;
+  if (demoUrl !== product.demoUrl) {
+    const revoke = { kind: "demo_verified", reason: "demo_url_changed" } as const;
+    statements.push(
+      revokeBadgeStatement(db, { productId: product.id, ...revoke, now }, { ...guard, demoUrl }),
+      auditStatement(db, { actorUserId: null, action: "badge.revoke", entity: "product", entityId: product.id, data: revoke, now }, { ...guard, revoked: revoke.kind }),
+    );
+  }
+  if (markEdited) {
+    statements.push(auditStatement(db, { actorUserId: input.actorUserId, action: "product.edit", entity: "product", entityId: product.id, data: { step: "demo" }, now }, guard));
+  }
+  return statements;
+}
+
 const OWNER_ACTIONS = new Set<ProductAction>(["submit", "withdraw", "unlist", "relist", "archive"]);
 
 export function registerProductEditorRoutes(app: Hono<AppEnv>) {
@@ -173,18 +201,16 @@ export function registerProductEditorRoutes(app: Hono<AppEnv>) {
     if (step === "license" && product.deliveryModel !== "source") fields.license = null;
 
     const now = new Date().toISOString();
+    if (step === "demo") {
+      // One transaction, so a new demo URL never keeps Demo verified (spec §7.2).
+      const results = await c.env.DB.batch(demoStepStatements(c.env.DB, { product, actorUserId: builder.userId, fields, now }));
+      if (results[0]?.meta.changes !== 1) return errorResponse(c, "conflict", 409);
+      return c.redirect(editorPath(c, product.id, step, "?saved=1"), 303);
+    }
     const markEdited = product.firstPublishedAt !== null;
     const result = await updateProductFields(c.env.DB, { productId: product.id, builderId: builder.userId, expectedStatus: product.status, fields, now, markEdited });
     if (result === "slug_taken") return stepPage(c, product, step, values, { slug: "slug_taken" }, 409);
     if (result === "stale") return errorResponse(c, "conflict", 409);
-
-    // Spec §7.2: a new demo URL invalidates Demo verified.
-    if (step === "demo" && fields.demoUrl !== product.demoUrl) {
-      const revoked = await revokeBadge(c.env.DB, { productId: product.id, kind: "demo_verified", reason: "demo_url_changed", now });
-      if (revoked) {
-        await writeAudit(c.env.DB, { actorUserId: null, action: "badge.revoke", entity: "product", entityId: product.id, data: { kind: "demo_verified", reason: "demo_url_changed" }, now });
-      }
-    }
     if (markEdited) {
       await writeAudit(c.env.DB, { actorUserId: builder.userId, action: "product.edit", entity: "product", entityId: product.id, data: { step }, now });
     }

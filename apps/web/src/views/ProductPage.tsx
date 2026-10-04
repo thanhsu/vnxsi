@@ -69,11 +69,15 @@ export const ProductPage: FC<Props> = ({ locale, origin, item, tiers, media, bad
         ) : null}
 
         <section>
+          <h2>{tr("productPage.description")}</h2>
+          <PlainText text={p.description} />
+        </section>
+
+        <section>
           <h2>{tr("productPage.problem")}</h2>
           <PlainText text={p.problem} />
           <h2>{tr("productPage.audience")}</h2>
           <PlainText text={p.targetUsers} />
-          <PlainText text={p.description} />
         </section>
 
         <section>

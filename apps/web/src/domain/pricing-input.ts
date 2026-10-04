@@ -39,7 +39,7 @@ export function tierValuesFromTiers(tiers: PricingTier[]): TierValues {
   });
 }
 
-/** Rows with every field blank are skipped; any other row must be a complete tier. */
+/** Rows with a blank name, price and description are skipped whatever their billing; any other row must be a complete tier. */
 export function parseTiers(values: TierValues): { ok: true; tiers: TierInput[] } | { ok: false; errors: TierErrors } {
   const tiers: TierInput[] = [];
   const errors: TierErrors = {};
@@ -49,7 +49,8 @@ export function parseTiers(values: TierValues): { ok: true; tiers: TierInput[] }
     const billing = row.billing.trim() || "one_time";
     const price = row.price.trim();
     const description = row.description.trim();
-    if (!name && !price && !description && billing === "one_time") return;
+    // "Leave a tier empty to remove it": the billing select always posts a value, so it does not count.
+    if (!name && !price && !description) return;
     const rowErrors: Partial<Record<keyof TierRowValues, TierFieldError>> = {};
     if (!name) rowErrors.name = "required";
     else if (name.length > 40) rowErrors.name = "too_long";

@@ -97,6 +97,50 @@ describe("product lifecycle in the Hub", () => {
   });
 });
 
+describe("editor notices and links by status", () => {
+  const editor = async (id: string, cookie: string) => (await createApp().request(getReq(`/hub/products/${id}/edit/product`, cookie), undefined, testEnv)).text();
+  const LIVE = "This product is live: your changes appear right away.";
+  const HIDDEN = "This product is hidden from the marketplace. Changes are saved and will show when you make it visible again.";
+
+  it("shows the suspend reason to the builder", async () => {
+    const { product } = await makeReadyProduct("lc-reason@vnx.si", "lc-reason", "Reason Kit");
+    await publishProduct(product.id);
+    await setProductStatus(testEnv.DB, { id: product.id, from: "published", to: "suspended", reviewNote: "Broken demo link", now: new Date().toISOString() });
+    const { cookie } = await signIn("lc-reason@vnx.si");
+    const html = await editor(product.id, cookie);
+    expect(html).toContain("Broken demo link");
+    expect(html).toContain("Changes requested by the admin:");
+  });
+
+  it("says a hidden product is hidden, not live", async () => {
+    const { product } = await makeReadyProduct("lc-hidden@vnx.si", "lc-hidden", "Hidden Kit");
+    await publishProduct(product.id);
+    const { cookie } = await signIn("lc-hidden@vnx.si");
+    expect(await editor(product.id, cookie)).toContain(LIVE);
+    await act(product.id, "unlist", cookie);
+    const html = await editor(product.id, cookie);
+    expect(html).toContain(HIDDEN);
+    expect(html).not.toContain(LIVE);
+    const vi = await (await createApp().request(getReq(`/vi/hub/products/${product.id}/edit/product`, cookie), undefined, testEnv)).text();
+    expect(vi).toContain("Sản phẩm đang ẩn khỏi marketplace.");
+  });
+
+  it("links a published product to its public page", async () => {
+    const { product } = await makeReadyProduct("lc-public@vnx.si", "lc-public", "Public Link Kit");
+    const draft = await makeReadyProduct("lc-draftlink@vnx.si", "lc-draftlink", "Draft Link Kit");
+    const live = await publishProduct(product.id);
+    const { cookie } = await signIn("lc-public@vnx.si");
+    const list = await (await createApp().request(getReq("/hub/products", cookie), undefined, testEnv)).text();
+    expect(list).toContain(`href="/p/${live.slug}"`);
+    expect(list).toContain("View public page");
+    expect(await editor(product.id, cookie)).toContain(`href="/p/${live.slug}"`);
+    const vi = await (await createApp().request(getReq("/vi/hub/products", cookie), undefined, testEnv)).text();
+    expect(vi).toContain(`href="/vi/p/${live.slug}"`);
+    const other = await signIn("lc-draftlink@vnx.si");
+    expect(await (await createApp().request(getReq("/hub/products", other.cookie), undefined, testEnv)).text()).not.toContain(`href="/p/${draft.product.slug}"`);
+  });
+});
+
 describe("Hub overview product counts (spec §5.3)", () => {
   it("shows products by status", async () => {
     const { product } = await makeReadyProduct("lc-count@vnx.si", "lc-count", "Count A");

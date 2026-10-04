@@ -22,6 +22,19 @@ describe("admin badges (spec §5.5, §7.2)", () => {
     expect(audit?.n).toBe(1);
   });
 
+  it("hides the grant form once both badges are active", async () => {
+    const { product } = await makeReadyProduct("bd-both@vnx.si", "bd-both", "Both Kit");
+    await publishProduct(product.id);
+    const { cookie } = await admin();
+    const form = `action="/admin/products/${product.id}/badges"`;
+    const detail = async () => (await createApp().request(getReq(`/admin/products/${product.id}`, cookie), undefined, testEnv)).text();
+    await post(`/admin/products/${product.id}/badges`, cookie, { kind: "demo_verified", evidence: "Tried it" });
+    expect(await detail()).toContain(form);
+    await post(`/admin/products/${product.id}/badges`, cookie, { kind: "in_production", evidence: "Live at a client" });
+    expect(await kinds(product.id)).toEqual(["demo_verified", "in_production", "listed"]);
+    expect(await detail()).not.toContain(form);
+  });
+
   it("requires evidence and a grantable kind (400)", async () => {
     const { product } = await makeReadyProduct("bd-bad@vnx.si", "bd-bad", "Bad Badge Kit");
     await publishProduct(product.id);

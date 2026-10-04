@@ -4,7 +4,7 @@ import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { formatUsd } from "../format.ts";
-import { BADGE_KEY, BILLING_KEY, CATEGORY_KEY, DELIVERY_KEY, LICENSE_KEY, PRODUCT_STATUS_KEY } from "../labels.ts";
+import { BADGE_KEY, BILLING_KEY, CATEGORY_KEY, DELIVERY_KEY, LICENSE_KEY, PRODUCT_LANG_KEY, PRODUCT_STATUS_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { AdminLayout } from "./AdminLayout.tsx";
 import type { AdminNotice } from "./BuilderDetailPage.tsx";
@@ -21,9 +21,20 @@ type Props = {
   badgeError: "kind" | "evidence" | "reason" | null;
 };
 
+const GRANTABLE = ["demo_verified", "in_production"] as const;
+
 export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, media, badges, notice, noteError, badgeError }) => {
   const tr = translator(locale);
   const p = item.product;
+  const grantable = GRANTABLE.filter((k) => !badges.some((b) => b.kind === k));
+  const link = (url: string | null) =>
+    url ? (
+      <a href={url} rel="nofollow ugc noopener" target="_blank">
+        {url}
+      </a>
+    ) : (
+      "—"
+    );
   const action = (name: ProductAction) => localizedPath(locale, `/admin/products/${p.id}/${name}`);
   const noteForm = (name: ProductAction, required: boolean, label: MessageKey, submit: MessageKey) => (
     <form method="post" action={action(name)} class="card">
@@ -77,22 +88,23 @@ export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, medi
         <dd>{p.deliveryModel ? tr(DELIVERY_KEY[p.deliveryModel]) : "—"}</dd>
         <dt>{tr("product.field.license")}</dt>
         <dd>{p.license ? tr(LICENSE_KEY[p.license]) : "—"}</dd>
+        <dt>{tr("product.field.primaryLang")}</dt>
+        <dd>{tr(PRODUCT_LANG_KEY[p.primaryLang])}</dd>
+        <dt>{tr("product.field.tags")}</dt>
+        <dd>{p.tags.length > 0 ? p.tags.join(", ") : "—"}</dd>
         <dt>{tr("product.field.demoUrl")}</dt>
-        <dd>
-          {p.demoUrl ? (
-            <a href={p.demoUrl} rel="nofollow ugc noopener" target="_blank">
-              {p.demoUrl}
-            </a>
-          ) : (
-            "—"
-          )}
-        </dd>
+        <dd>{link(p.demoUrl)}</dd>
+        <dt>{tr("product.field.websiteUrl")}</dt>
+        <dd>{link(p.websiteUrl)}</dd>
       </dl>
       {media.length > 0 ? (
         <ul class="media-grid">
           {media.map((m) => (
             <li>
-              <img src={`/media/${m.r2Key}`} alt={m.alt || p.name} width={160} loading="lazy" />
+              <figure>
+                <img src={`/media/${m.r2Key}`} alt={m.alt || p.name} width={160} loading="lazy" />
+                <figcaption>{m.alt || "—"}</figcaption>
+              </figure>
             </li>
           ))}
         </ul>
@@ -109,14 +121,25 @@ export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, medi
           <li>{f}</li>
         ))}
       </ul>
+      <h2>{tr("product.field.techStack")}</h2>
+      <p>{p.techStack.length > 0 ? p.techStack.join(", ") : "—"}</p>
       <h2>{tr("product.step.pricing")}</h2>
       <ul>
         {tiers.map((t) => (
           <li>
             {t.name}: {t.priceCents === null ? tr(BILLING_KEY.contact) : `${formatUsd(locale, t.priceCents)} · ${tr(BILLING_KEY[t.billing])}`}
+            {t.description ? <p>{t.description}</p> : null}
           </li>
         ))}
       </ul>
+      <h2>{tr("product.field.customizable")}</h2>
+      <p>{tr(p.customizable ? "admin.yes" : "admin.no")}</p>
+      {p.customizable && p.customizationNotes ? (
+        <>
+          <h3>{tr("product.field.customizationNotes")}</h3>
+          <PlainText text={p.customizationNotes} />
+        </>
+      ) : null}
       <h2>{tr("product.field.supportPolicy")}</h2>
       <PlainText text={p.supportPolicy} />
       <h2>{tr("admin.products.badges")}</h2>
@@ -142,16 +165,14 @@ export const ProductDetailPage: FC<Props> = ({ locale, origin, item, tiers, medi
           {tr("admin.badges.error.reason")}
         </p>
       ) : null}
-      {p.status !== "archived" ? (
+      {p.status !== "archived" && grantable.length > 0 ? (
         <form method="post" action={localizedPath(locale, `/admin/products/${p.id}/badges`)} class="card">
           <div class="field">
             <label for="badge-kind">{tr("admin.badges.kind")}</label>
             <select id="badge-kind" name="kind" aria-invalid={badgeError === "kind" ? "true" : undefined}>
-              {(["demo_verified", "in_production"] as const)
-                .filter((k) => !badges.some((b) => b.kind === k))
-                .map((k) => (
-                  <option value={k}>{tr(BADGE_KEY[k])}</option>
-                ))}
+              {grantable.map((k) => (
+                <option value={k}>{tr(BADGE_KEY[k])}</option>
+              ))}
             </select>
             {badgeError === "kind" ? <p class="error-msg">{tr("admin.badges.error.kind")}</p> : null}
           </div>

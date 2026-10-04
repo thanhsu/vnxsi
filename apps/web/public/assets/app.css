@@ -72,6 +72,8 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
 .media-section { margin-top: 24px; }
 .media-grid { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
 .media-grid img { display: block; width: 160px; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+.media-grid figure { margin: 0; width: 160px; }
+.media-grid figcaption { color: var(--muted); font-size: 0.875rem; margin-top: 4px; overflow-wrap: anywhere; }
 .product { max-width: 960px; }
 .gallery { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .gallery img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--radius); }

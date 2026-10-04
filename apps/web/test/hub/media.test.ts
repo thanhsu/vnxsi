@@ -66,6 +66,30 @@ describe("product images (spec §8.5)", () => {
     expect(await objects(product.id)).toEqual([]);
   });
 
+  it("refuses an oversized upload from its Content-Length without reading the body", async () => {
+    const { product } = await makeDraft("md-huge@vnx.si", "md-huge", "Huge Kit");
+    const { cookie } = await signIn("md-huge@vnx.si");
+    const big = new Uint8Array(3 * 1024 * 1024);
+    big.set(PNG);
+    const form = new FormData();
+    form.append("file", new File([big], "huge.png", { type: "image/png" }));
+    form.append("alt", "Huge");
+    const encoded = new Response(form);
+    const contentType = encoded.headers.get("content-type")!;
+    const body = await encoded.arrayBuffer();
+    const req = new Request(`https://vnx.si/hub/products/${product.id}/media`, {
+      method: "POST",
+      headers: { origin: "https://vnx.si", cookie, "content-type": contentType, "content-length": String(body.byteLength) },
+      body,
+    });
+    const res = await createApp().request(req, undefined, testEnv);
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("larger than 2 MB");
+    expect(req.bodyUsed).toBe(false);
+    expect(await listMedia(testEnv.DB, product.id)).toEqual([]);
+    expect(await objects(product.id)).toEqual([]);
+  });
+
   it("refuses a 9th image (409) without leaving an object behind", async () => {
     const { product } = await makeDraft("md-full@vnx.si", "md-full", "Full Kit");
     for (let i = 0; i < 8; i++) {

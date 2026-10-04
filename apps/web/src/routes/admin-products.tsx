@@ -1,11 +1,11 @@
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import { requireAdmin } from "../auth/middleware.ts";
-import { writeAudit } from "../db/audit.ts";
+import { auditStatement, writeAudit } from "../db/audit.ts";
 import { listMedia } from "../db/media.ts";
 import { listTiers } from "../db/pricing.ts";
-import { findProductWithBuilder, listProductsByStatus, listRecentlyEdited, setProductStatus } from "../db/products.ts";
-import { grantBadge, listActiveBadges, revokeBadge } from "../db/verifications.ts";
+import { findProductWithBuilder, listProductsByStatus, listRecentlyEdited, returnedProduct, setProductStatusStatement, type ProductGuard } from "../db/products.ts";
+import { grantBadge, grantBadgeStatement, listActiveBadges, revokeBadge } from "../db/verifications.ts";
 import { normalizeNewlines } from "../domain/product-input.ts";
 import { isProductStatus, RECENTLY_EDITED_DAYS, transition, type BadgeKind, type ProductAction, type ProductWithBuilder } from "../domain/product.ts";
 import { getMailer } from "../email/index.ts";
@@ -77,12 +77,17 @@ async function decideProduct(c: Context<AppEnv>, action: AdminProductAction) {
   const next = transition(p.status, action, "admin");
   if (!next.ok) return errorResponse(c, "conflict", 409);
   const now = new Date().toISOString();
-  const updated = await setProductStatus(c.env.DB, { id: p.id, from: p.status, to: next.status, reviewNote: note, now });
+  // One transaction: status, the system "listed" badge and the audit row commit together. Everything after the
+  // compare-and-set is guarded on it, so a lost race (0 rows changed) writes nothing.
+  const guard: ProductGuard = { productId: p.id, status: next.status, updatedAt: now };
+  const statements = [setProductStatusStatement(c.env.DB, { id: p.id, from: p.status, to: next.status, reviewNote: note, now })];
+  // Spec §7.2: approval adds "listed" (no-op when one is already active); unsuspending repairs a missing one.
+  if (action === "approve" || action === "unsuspend") {
+    statements.push(grantBadgeStatement(c.env.DB, { productId: p.id, kind: "listed", verifiedBy: null, evidence: "", now }, guard));
+  }
+  statements.push(auditStatement(c.env.DB, { actorUserId: admin.id, action: `product.${action}`, entity: "product", entityId: p.id, data: { from: p.status, to: next.status, note }, now }, guard));
+  const updated = returnedProduct((await c.env.DB.batch(statements))[0]);
   if (!updated) return errorResponse(c, "conflict", 409);
-  // Spec §7.2: approval adds the system "listed" badge (no-op when one is already active).
-  if (action === "approve") await grantBadge(c.env.DB, { productId: p.id, kind: "listed", verifiedBy: null, evidence: "", now });
-  await writeAudit(c.env.DB, { actorUserId: admin.id, action: `product.${action}`, entity: "product", entityId: p.id, data: { from: p.status, to: next.status, note }, now });
-
   const mailed = action === "approve" || action === "request_changes" ? await notify(c, { ...item, product: updated }, action, note) : true;
   return c.redirect(localizedPath(c.get("locale"), `/admin/products/${p.id}?done=${mailed ? "1" : "mail_failed"}`), 303);
 }

@@ -45,7 +45,32 @@ describe("/p/:slug (spec §5.2, §8.8)", () => {
     const live = await publishProduct(product.id);
     const html = await (await get(`/p/${live.slug}`)).text();
     expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(jsonLd(html).name).toBe(evil);
+  });
+
+  it("escapes a hostile tagline in HTML", async () => {
+    const { builder, product } = await makeReadyProduct("pp-img@vnx.si", "pp-img", "Img Kit");
+    const evil = "<img src=x onerror=alert(1)>";
+    await updateProductFields(testEnv.DB, { productId: product.id, builderId: builder.userId, expectedStatus: "draft", fields: { tagline: evil }, now: new Date().toISOString(), markEdited: false });
+    const live = await publishProduct(product.id);
+    const html = await (await get(`/p/${live.slug}`)).text();
+    expect(html).not.toContain(evil);
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(jsonLd(html).description).toBe(evil);
+  });
+
+  it("puts the description under its own heading, before the problem", async () => {
+    const { product } = await makeReadyProduct("pp-desc@vnx.si", "pp-desc", "Desc Kit");
+    const live = await publishProduct(product.id);
+    const html = await (await get(`/p/${live.slug}`)).text();
+    const heading = html.indexOf("About this product");
+    const description = html.indexOf("Online booking.");
+    const problem = html.indexOf("The problem");
+    expect(heading).toBeGreaterThan(-1);
+    expect(description).toBeGreaterThan(heading);
+    expect(problem).toBeGreaterThan(description);
+    expect(await (await get(`/vi/p/${live.slug}`)).text()).toContain("Giới thiệu sản phẩm");
   });
 
   it("shows license for source products and customization only when offered", async () => {

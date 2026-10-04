@@ -279,7 +279,7 @@ export const en = {
   "media.error.type": "Only JPEG, PNG or WebP images are accepted.",
   "media.error.size": "This image is larger than 2 MB.",
   "media.error.full": "You already have 8 images. Delete one to add another.",
-  "media.error.alt": "Keep the description under 150 characters.",
+  "media.error.alt": "Keep the description to 150 characters or fewer.",
   "pricing.intro": "Add up to 5 pricing tiers. Leave a tier empty to remove it. Prices are in USD.",
   "pricing.tier": "Tier {n}",
   "pricing.name": "Tier name",
@@ -355,6 +355,9 @@ export const en = {
   "productPage.builder": "Built by",
   "productPage.verifiedOn": "since {date}",
   "bprofile.products": "Products",
+  "productPage.description": "About this product",
+  "editor.unlisted": "This product is hidden from the marketplace. Changes are saved and will show when you make it visible again.",
+  "products.viewPublic": "View public page",
 } as const;
 
 export type MessageKey = keyof typeof en;

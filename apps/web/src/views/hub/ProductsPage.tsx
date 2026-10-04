@@ -25,6 +25,12 @@ export const ProductsPage: FC<Props> = (p) => {
               </h2>
               <p>
                 <span class={`badge badge-${product.status}`}>{tr(PRODUCT_STATUS_KEY[product.status])}</span> <span class="muted">{product.updatedAt.slice(0, 10)}</span>
+                {product.status === "published" ? (
+                  <>
+                    {" · "}
+                    <a href={localizedPath(p.locale, `/p/${product.slug}`)}>{tr("products.viewPublic")}</a>
+                  </>
+                ) : null}
               </p>
             </li>
           ))}

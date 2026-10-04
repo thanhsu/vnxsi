@@ -41,6 +41,19 @@ describe("pricing input", () => {
     });
   });
 
+  it("drops a blank row whatever billing it shows", () => {
+    const values = tierValuesFromBody({
+      "tiers[0].name": "Starter",
+      "tiers[0].billing": "one_time",
+      "tiers[0].price": "19",
+      "tiers[1].billing": "monthly",
+      "tiers[2].billing": "contact",
+      "tiers[3].billing": "yearly",
+      "tiers[3].price": " ",
+    });
+    expect(parseTiers(values)).toEqual({ ok: true, tiers: [{ name: "Starter", billing: "one_time", priceCents: 1900, description: "" }] });
+  });
+
   it("reports errors per row", () => {
     const values = tierValuesFromBody({
       "tiers[0].name": "",

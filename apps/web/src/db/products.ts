@@ -121,12 +121,15 @@ export async function listBuilderProducts(db: D1Database, builderId: string): Pr
   return results.map(toProduct);
 }
 
-/** Compare-and-set on status. Publishing stamps published_at and, the first time, first_published_at. */
-export async function setProductStatus(
-  db: D1Database,
-  input: { id: string; from: ProductStatus; to: ProductStatus; reviewNote: string | null; now: string },
-): Promise<Product | null> {
-  const row = await db
+/**
+ * "This request's compare-and-set on the product went through": the product is in `status` and was last written at
+ * `updatedAt`. Statements batched after the compare-and-set use it so that a lost race (0 rows changed) writes nothing.
+ */
+export type ProductGuard = { productId: string; status: ProductStatus; updatedAt: string };
+
+/** Compare-and-set on status, as a statement for db.batch. Publishing stamps published_at and, the first time, first_published_at. */
+export function setProductStatusStatement(db: D1Database, input: { id: string; from: ProductStatus; to: ProductStatus; reviewNote: string | null; now: string }): D1PreparedStatement {
+  return db
     .prepare(
       `UPDATE products SET status = ?3, review_note = ?4, updated_at = ?5,
          published_at = CASE WHEN ?3 = 'published' THEN ?5 ELSE published_at END,
@@ -134,8 +137,21 @@ export async function setProductStatus(
        WHERE id = ?1 AND status = ?2
        RETURNING *`,
     )
-    .bind(input.id, input.from, input.to, input.reviewNote, input.now)
-    .first<ProductRow>();
+    .bind(input.id, input.from, input.to, input.reviewNote, input.now);
+}
+
+/** The product a batched setProductStatusStatement returned, or null when its compare-and-set lost. */
+export function returnedProduct(result: D1Result | undefined): Product | null {
+  const row = result?.results[0] as ProductRow | undefined;
+  return row ? toProduct(row) : null;
+}
+
+/** Compare-and-set on status. Publishing stamps published_at and, the first time, first_published_at. */
+export async function setProductStatus(
+  db: D1Database,
+  input: { id: string; from: ProductStatus; to: ProductStatus; reviewNote: string | null; now: string },
+): Promise<Product | null> {
+  const row = await setProductStatusStatement(db, input).first<ProductRow>();
   return row ? toProduct(row) : null;
 }
 
@@ -169,14 +185,14 @@ function encode(value: unknown): string | number | null {
 
 export type UpdateFieldsResult = "ok" | "stale" | "slug_taken";
 
+type UpdateFieldsInput = { productId: string; builderId: string; expectedStatus: Product["status"]; fields: Partial<ProductFields>; now: string; markEdited: boolean };
+
 /**
- * Writes the given fields while the product is still owned by `builderId` and in `expectedStatus`.
- * `markEdited` stamps edited_after_publish_at (spec §7.2: edits after the first publish go live and are flagged).
+ * Writes the given fields while the product is still owned by `builderId` and in `expectedStatus`, as a statement for
+ * db.batch (0 rows changed = lost compare-and-set). `markEdited` stamps edited_after_publish_at (spec §7.2: edits after
+ * the first publish go live and are flagged).
  */
-export async function updateProductFields(
-  db: D1Database,
-  input: { productId: string; builderId: string; expectedStatus: Product["status"]; fields: Partial<ProductFields>; now: string; markEdited: boolean },
-): Promise<UpdateFieldsResult> {
+export function updateProductFieldsStatement(db: D1Database, input: UpdateFieldsInput): D1PreparedStatement {
   const entries = Object.entries(input.fields).filter(([key]) => key in COLUMN) as [ProductField, unknown][];
   const params: (string | number | null)[] = [input.productId, input.builderId, input.expectedStatus, input.now, input.markEdited ? 1 : 0];
   const sets = entries.map(([key, value]) => {
@@ -185,8 +201,13 @@ export async function updateProductFields(
   });
   const sql = `UPDATE products SET ${[...sets, "updated_at = ?4", "edited_after_publish_at = CASE WHEN ?5 = 1 THEN ?4 ELSE edited_after_publish_at END"].join(", ")}
     WHERE id = ?1 AND builder_id = ?2 AND status = ?3`;
+  return db.prepare(sql).bind(...params);
+}
+
+/** updateProductFieldsStatement run on its own; reports a taken slug instead of throwing. */
+export async function updateProductFields(db: D1Database, input: UpdateFieldsInput): Promise<UpdateFieldsResult> {
   try {
-    const res = await db.prepare(sql).bind(...params).run();
+    const res = await updateProductFieldsStatement(db, input).run();
     return res.meta.changes === 1 ? "ok" : "stale";
   } catch (err) {
     if (String(err).includes("products.slug")) return "slug_taken";

@@ -357,4 +357,7 @@ export const vi: Messages = {
   "productPage.builder": "Builder",
   "productPage.verifiedOn": "từ {date}",
   "bprofile.products": "Sản phẩm",
+  "productPage.description": "Giới thiệu sản phẩm",
+  "editor.unlisted": "Sản phẩm đang ẩn khỏi marketplace. Thay đổi được lưu và sẽ hiện khi bạn hiện lại sản phẩm.",
+  "products.viewPublic": "Xem trang công khai",
 };

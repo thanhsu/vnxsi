@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { findProductById, setProductStatus } from "../../src/db/products.ts";
-import { listActiveBadges } from "../../src/db/verifications.ts";
+import { findProductById, setProductStatus, updateProductFields } from "../../src/db/products.ts";
+import { listActiveBadges, revokeBadge } from "../../src/db/verifications.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
 import { ensureUser, makeReadyProduct, publishProduct, signIn } from "../fixtures.ts";
@@ -32,6 +32,24 @@ describe("admin product queue (spec §5.5)", () => {
     const detail = await (await createApp().request(getReq(`/admin/products/${product.id}`, cookie), undefined, testEnv)).text();
     expect(detail).toContain("$19");
     expect(detail).toContain(`src="/media/products/${product.id}/`);
+  });
+
+  it("shows the admin everything the public page will show", async () => {
+    const { builder, product } = await makeReadyProduct("ap-full@vnx.si", "ap-full", "Full View Kit");
+    await updateProductFields(testEnv.DB, {
+      productId: product.id,
+      builderId: builder.userId,
+      expectedStatus: "draft",
+      fields: { websiteUrl: "https://site.example", tags: ["spa", "salon"], primaryLang: "vi", customizable: true, customizationNotes: "Branding and colors" },
+      now: new Date().toISOString(),
+      markEdited: false,
+    });
+    const { cookie } = await admin();
+    const html = await (await createApp().request(getReq(`/admin/products/${product.id}`, cookie), undefined, testEnv)).text();
+    for (const text of ["One location", "Hono", "salon", "Branding and colors", "Vietnamese"]) expect(html, text).toContain(text);
+    expect(html).toMatch(/<a href="https:\/\/site\.example" rel="nofollow ugc noopener"/);
+    expect(html).toContain('alt="Cover"');
+    expect(html).toMatch(/<figcaption>Cover<\/figcaption>/);
   });
 
   it("approves: publishes, adds the listed badge and e-mails the builder in their language", async () => {
@@ -75,6 +93,23 @@ describe("admin product queue (spec §5.5)", () => {
     await decide(product.id, "unsuspend", cookie);
     expect(await findProductById(testEnv.DB, product.id)).toMatchObject({ status: "published", reviewNote: null });
     expect(outbox).toHaveLength(0);
+  });
+
+  it("repairs a missing listed badge when a product is unsuspended", async () => {
+    const { product } = await makeReadyProduct("ap-repair@vnx.si", "ap-repair", "Repair Kit");
+    await publishProduct(product.id);
+    const { cookie } = await admin();
+    await decide(product.id, "suspend", cookie, { note: "Check" });
+    await revokeBadge(testEnv.DB, { productId: product.id, kind: "listed", reason: "test", now: new Date().toISOString() });
+    expect(await listActiveBadges(testEnv.DB, product.id)).toEqual([]);
+    expect((await decide(product.id, "unsuspend", cookie)).status).toBe(303);
+    expect((await listActiveBadges(testEnv.DB, product.id)).map((b) => [b.kind, b.verifiedBy])).toEqual([["listed", null]]);
+    // Unsuspending a product that still has it does not add a second one.
+    await decide(product.id, "suspend", cookie, { note: "Again" });
+    await decide(product.id, "unsuspend", cookie);
+    expect((await listActiveBadges(testEnv.DB, product.id)).map((b) => b.kind)).toEqual(["listed"]);
+    const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'product.unsuspend' AND entity_id = ?1").bind(product.id).first<{ n: number }>();
+    expect(audit?.n).toBe(2);
   });
 
   it("keeps the approval when the e-mail fails", async () => {

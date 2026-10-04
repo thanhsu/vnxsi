@@ -30,6 +30,9 @@ export function registerProductMediaRoutes(app: Hono<AppEnv>) {
     const product = await ownedProduct(c);
     if (!product) return errorResponse(c, "notFound", 404);
     if (editLock(product.status, c.get("builder").status)) return errorResponse(c, "conflict", 409);
+    // Refuse an oversized upload before buffering it; 64 KB covers the multipart framing and the alt field.
+    const declared = Number(c.req.header("content-length"));
+    if (declared > MAX_MEDIA_BYTES + 64 * 1024) return demoWithError(c, product, "size", 400);
 
     const body = await c.req.parseBody();
     const file = body.file;

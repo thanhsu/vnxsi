@@ -27,6 +27,11 @@ export const EditorLayout: FC<PropsWithChildren<Props>> = (p) => {
       <h1>
         {p.product.name} <span class={`badge badge-${p.product.status}`}>{tr(PRODUCT_STATUS_KEY[p.product.status])}</span>
       </h1>
+      {p.product.status === "published" ? (
+        <p>
+          <a href={localizedPath(p.locale, `/p/${p.product.slug}`)}>{tr("products.viewPublic")}</a>
+        </p>
+      ) : null}
       <nav class="subnav" aria-label={tr("editor.steps")}>
         {PRODUCT_STEPS.map((s, i) => (
           <a href={localizedPath(p.locale, `${base}/${s}`)} aria-current={s === p.step ? "step" : undefined}>
@@ -41,8 +46,9 @@ export const EditorLayout: FC<PropsWithChildren<Props>> = (p) => {
         </p>
       ) : null}
       {p.lock ? <p class="notice">{tr(LOCK_KEY[p.lock])}</p> : null}
-      {!p.lock && p.product.firstPublishedAt !== null ? <p class="notice">{tr("editor.live")}</p> : null}
-      {p.product.status === "changes_requested" && p.product.reviewNote ? (
+      {!p.lock && p.product.status === "published" ? <p class="notice">{tr("editor.live")}</p> : null}
+      {!p.lock && p.product.status === "unlisted" ? <p class="notice">{tr("editor.unlisted")}</p> : null}
+      {(p.product.status === "changes_requested" || p.product.status === "suspended") && p.product.reviewNote ? (
         <div class="notice">
           <p>{tr("editor.reviewNote")}</p>
           <PlainText text={p.product.reviewNote} />

@@ -357,4 +357,7 @@ export const zhHant: Messages = {
   "productPage.builder": "開發者",
   "productPage.verifiedOn": "自 {date}",
   "bprofile.products": "產品",
+  "productPage.description": "產品介紹",
+  "editor.unlisted": "此產品已從市集隱藏。修改會儲存，重新顯示後生效。",
+  "products.viewPublic": "查看公開頁面",
 };
