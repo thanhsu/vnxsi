@@ -6,7 +6,7 @@ import type { MessageKey } from "../i18n/messages/en.ts";
 import { Layout } from "./Layout.tsx";
 
 /** Echo of a rejected waitlist POST. */
-export type LandingForm = { email: string; errors?: WaitlistErrors; rateLimited?: boolean };
+export type LandingForm = { email: string; consent?: boolean; errors?: WaitlistErrors; rateLimited?: boolean };
 
 type Props = {
   locale: Locale;
@@ -14,6 +14,8 @@ type Props = {
   signedIn: boolean;
   joined: boolean;
   utm: Utm;
+  /** External host the visitor came from, carried to the POST in the `ref` hidden input. */
+  referrer: string | null;
   form?: LandingForm;
 };
 
@@ -36,7 +38,7 @@ export function builderCtaHref(locale: Locale, signedIn: boolean): string {
   return `${localizedPath(locale, "/login")}?next=${encodeURIComponent(localizedPath(locale, "/hub/apply"))}`;
 }
 
-export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, form }) => {
+export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form }) => {
   const tr = translator(locale);
   const builderHref = builderCtaHref(locale, signedIn);
   const emailError = form?.errors?.email ? tr("landing.form.error.email") : null;
@@ -45,6 +47,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
     ["utm_source", utm.utmSource],
     ["utm_medium", utm.utmMedium],
     ["utm_campaign", utm.utmCampaign],
+    ["ref", referrer],
   ];
   return (
     <Layout
@@ -139,6 +142,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
                     name="consent"
                     type="checkbox"
                     required
+                    checked={form?.consent === true}
                     aria-invalid={consentError ? "true" : undefined}
                     aria-describedby={consentError ? "waitlist-consent-error" : undefined}
                   />

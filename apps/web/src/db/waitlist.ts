@@ -1,6 +1,6 @@
 import type { ClientSignup } from "../domain/waitlist-input.ts";
 
-export type ClientSignupRow = ClientSignup & { lang: string; country: string | null; referrer: string | null };
+export type ClientSignupRow = ClientSignup & { lang: string; country: string | null };
 
 /**
  * Adds a client to the waitlist (VNX-0708). The only writer of `waitlist`.
