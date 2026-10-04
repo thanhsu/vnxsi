@@ -98,7 +98,7 @@ VI, các vị trí tương ứng:
 
 1. **Lộ email client cho builder:** email client không có trong HTML `/hub/invitations*`, email mời / nhắc / "được chọn", Inquiry sinh ra, kể cả khi client dùng email làm tên. Test ở Task 4 (0604) và Task 5 (0605).
 2. **Truy cập chéo:** builder không được mời mở `/hub/invitations/:id` của builder khác; client mở `/me/requests/:id` của người khác; client chọn đề xuất thuộc request khác (gửi `invite` của request khác) → 404, không ghi gì. Test ở Task 4, 5.
-3. **Lách giới hạn mời:** lời mời thứ 6, mời trùng, mời chính client, mời builder bị khóa, mời khi request đã đóng, hai lần mời đồng thời → không vượt 5, không chèn dòng nào sai. Test ở Task 1 (db) và Task 3.
+3. **Lách giới hạn mời:** lời mời thứ 6, mời trùng, mời chính client, mời builder bị khóa, mời khi request đã đóng, hai lần mời đồng thời → không vượt 5, không chèn dòng nào sai. Test ở Task 1 (db) và Task 4 (0603).
 4. **Trạng thái và đua:** gửi đề xuất khi request đã đóng / hết hạn / đã chọn; bấm "Chọn" hai lần; chọn đề xuất của builder bị khóa sau khi gửi; đóng request sau khi đã chọn → 409, không có Inquiry thứ hai, không có email thừa. Test ở Task 4, 5.
 5. **Form công khai bị lạm dụng:** honeypot, Turnstile sai / thiếu / dịch vụ lỗi, quá 3 lần / ngày mỗi email, email của user bị khóa → không tạo gì, không lộ trạng thái tài khoản. Test ở Task 3 (0602b).
 
@@ -119,6 +119,8 @@ Mỗi task kết thúc bằng `npm run typecheck -w apps/web` và `npm test` xan
 ---
 
 ### Task 1: VNX-0601 — Dữ liệu, domain và db của request
+
+Ghi chú sau khi làm: code dùng tên `ClientRequest` thay cho `Request`.
 
 **Files:**
 - Create: `apps/web/migrations/0008_requests.sql`
