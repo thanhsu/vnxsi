@@ -66,3 +66,20 @@ Q3 (h1 trùng tagline): xem F4.
 - **VNX-0802:** đo tương phản (axe) cho landing ở cả hai chế độ màu.
 - **VNX-0804:** redirect `www.vnx.si` → `vnx.si` (liên quan F3).
 - Ghi nhận (ngoài phạm vi): ở 360 px header xuống 2 dòng (nav + chọn ngôn ngữ + đăng nhập); có từ M4, không do task này.
+
+## Re-review lượt sửa F1–F3 (2026-10-04)
+
+- **Diff:** `0b853ca..0c1a1bc` (`615ca6f` test, `f5e7b56` fix, `0c1a1bc` báo cáo). Chỉ đụng file trong danh sách handoff; F4, F5 không đổi (đúng phạm vi Owner duyệt).
+- **Lệnh chạy lại:** `npm run typecheck -w apps/web` → exit 0; `npm test` → 62 file, **405/405** xanh.
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| F1 | ✓ Đã sửa | `GET /` lấy host từ `Referer` qua `externalReferrerHost` → input ẩn `ref`; `POST` nhận `ref` qua zod (`HOSTNAME_RE`, ≤ 200, `.catch(null)`), loại host của site; không còn đọc `Referer` ở POST. GET và POST dùng cùng `refHost`, nên GET chỉ phát giá trị POST chấp nhận. Test: `ref` hợp lệ được lưu; path / scheme / khoảng trắng / query / `<script>` / `user@` / 201 ký tự / `vnx.si` / `www.vnx.si` → null; `Referer` ngoài ở POST bị bỏ qua |
+| F2 | ✓ Đã sửa | `checked={form?.consent === true}`; 400 giữ trạng thái theo bài gửi, 429 luôn `true` (bài đã hợp lệ). Test có/không `consent=on` |
+| F3 | ✓ Đã sửa | `siteHosts(appOriginHost, requestHost)` gồm host `APP_ORIGIN`, `www.` + host đó, host request; unit test `https://www.vnx.si/x` → null |
+
+`ref` do trình duyệt gửi lại nên giả được, giống `utm_*`; chỉ dùng để ghi nguồn đăng ký, không ảnh hưởng quyền hay hiển thị. Chấp nhận.
+
+## Verdict cuối
+
+**APPROVE.** VNX-0708 sẵn sàng merge vào `main` khi Owner quyết. Go-live vẫn theo "Điều kiện go-live" của plan và OQ-1 (`/privacy`).
