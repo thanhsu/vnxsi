@@ -47,6 +47,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
               VNX.SI
             </a>
             <a href={localizedPath(locale, "/products")}>{tr("nav.products")}</a>
+            <a href={localizedPath(locale, "/builders")}>{tr("nav.findBuilders")}</a>
             <nav class="lang" aria-label={tr("nav.language")}>
               {LOCALES.map((l) => (
                 <a href={localizedPath(l, rest)} hreflang={l} lang={l} aria-current={l === locale ? "true" : undefined}>

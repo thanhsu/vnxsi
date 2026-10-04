@@ -379,6 +379,16 @@ export const en = {
   "pager.prev": "Previous",
   "pager.next": "Next",
   "pager.status": "Page {page} of {pages}",
+  "directory.title": "Find builders",
+  "directory.description": "Reviewed builders who ship AI-built products. Nobody can pay to rank higher.",
+  "directory.search": "Name or skill",
+  "directory.filter.category": "Has products in",
+  "directory.filter.lang": "Works in",
+  "directory.filter.country": "Country",
+  "directory.filter.availability": "Availability",
+  "directory.empty": "No builders match yet. Try fewer words or clear the filters.",
+  "directory.products": "Published products: {n}",
+  "directory.ranking": "Order: open to new work first, then most published products, then newest. Nobody can pay to rank higher.",
 } as const;
 
 export type MessageKey = keyof typeof en;
