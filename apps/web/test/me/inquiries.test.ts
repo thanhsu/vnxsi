@@ -97,6 +97,6 @@ describe("/me (spec §5.4)", () => {
     const { cookie } = await signIn("me-nav@vnx.si");
     const html = await (await get("/zh-hant/products", cookie)).text();
     const header = /<header class="site-header">([\s\S]*?)<\/header>/.exec(html)?.[1] ?? "";
-    expect(header).toContain('<a href="/zh-hant/me">我的詢問</a>');
+    expect(header).toContain('<a class="nav-account" href="/zh-hant/me">我的詢問</a>');
   });
 });

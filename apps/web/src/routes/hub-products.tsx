@@ -63,7 +63,7 @@ export async function stepPage(
   step: TextStep,
   values: StepValues,
   errors: StepErrors,
-  status: 200 | 400 | 409 = 200,
+  status: 200 | 400 | 409 | 503 = 200,
   mediaError: MediaError | null = null,
 ) {
   const { lock, gaps } = await editorState(c, product);
@@ -82,6 +82,7 @@ export async function stepPage(
       saved={c.req.query("saved") === "1"}
       media={media}
       mediaError={mediaError}
+      mediaEnabled={c.env.MEDIA !== undefined}
     />,
     status,
   );

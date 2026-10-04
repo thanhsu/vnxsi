@@ -38,6 +38,7 @@ const WRITERS: Record<string, string> = {
   product_verifications: "../src/db/verifications.ts",
   inquiries: "../src/db/inquiries.ts",
   inquiry_messages: "../src/db/inquiries.ts",
+  feedback: "../src/db/feedback.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {

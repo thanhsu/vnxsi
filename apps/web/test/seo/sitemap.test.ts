@@ -44,9 +44,9 @@ describe("/sitemap.xml (spec §8.8)", () => {
     expect(xml).not.toContain("<loc>https://vnx.si/vi</loc>");
   });
 
-  it("lists /terms, /privacy and /media-kit once per locale with hreflang alternates (VNX-0705a AC7)", async () => {
+  it("lists /terms, /privacy, /media-kit and /contact once per locale with hreflang alternates (VNX-0705a AC7, VNX-0710 AC3)", async () => {
     const { xml } = await fetchSitemap();
-    for (const rest of ["/terms", "/privacy", "/media-kit"]) {
+    for (const rest of ["/terms", "/privacy", "/media-kit", "/contact"]) {
       const alternates = [
         `<xhtml:link rel="alternate" hreflang="en" href="https://vnx.si${rest}"/>`,
         `<xhtml:link rel="alternate" hreflang="vi" href="https://vnx.si/vi${rest}"/>`,

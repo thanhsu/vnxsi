@@ -17,16 +17,16 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [
-    // Product images (spec §8.5). Owner must enable R2 on the account; then: wrangler r2 bucket create vnxsi-media
-    { "binding": "MEDIA", "bucket_name": "vnxsi-media" }
-  ],
+  // Product images (spec §8.5) need R2. VNX-0711: no R2 binding until the Owner enables R2 on the account (a binding to
+  // a missing bucket blocks the deploy). Without MEDIA, /media/* is 404 and image upload/delete answer 503 with a
+  // notice. To turn images on: wrangler r2 bucket create vnxsi-media, then put this back here:
+  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "vnxsi-media" }],
   "vars": {
     // Used to build absolute links in emails.
     "APP_ORIGIN": "https://vnx.si",
-    // Turnstile site key (public). Owner creates the widget for vnx.si (VNX-0507); empty = signed-out inquiries are
-    // refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
-    "TURNSTILE_SITE_KEY": ""
+    // Turnstile site key (public) of the vnx.si widget (Owner, 2026-10-04; VNX-0710). Empty = signed-out inquiries and
+    // contact messages are refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X"
   },
   "workers_dev": true,
   "routes": [

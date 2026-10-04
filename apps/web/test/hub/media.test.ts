@@ -16,7 +16,7 @@ function upload(productId: string, cookie: string, bytes: Uint8Array, type = "im
   return createApp().request(new Request(`https://vnx.si/hub/products/${productId}/media`, { method: "POST", headers: { origin: "https://vnx.si", cookie }, body: form }), undefined, testEnv);
 }
 
-const objects = async (productId: string) => (await testEnv.MEDIA.list({ prefix: `products/${productId}/` })).objects.map((o) => o.key);
+const objects = async (productId: string) => (await testEnv.MEDIA!.list({ prefix: `products/${productId}/` })).objects.map((o) => o.key);
 
 describe("product images (spec §8.5)", () => {
   it("uploads a PNG to R2, lists it on the Demo step and serves it immutably", async () => {

@@ -7,6 +7,8 @@ export function registerMediaRoutes(app: Hono<AppEnv>) {
   app.get("/media/*", async (c) => {
     const key = c.req.path.slice("/media/".length);
     if (!MEDIA_KEY_RE.test(key)) return c.text("Not found", 404);
+    // No R2 binding yet (VNX-0711): there can be no image to serve.
+    if (!c.env.MEDIA) return c.text("Not found", 404);
     const object = await c.env.MEDIA.get(key);
     if (!object) return c.text("Not found", 404);
     return new Response(object.body, {

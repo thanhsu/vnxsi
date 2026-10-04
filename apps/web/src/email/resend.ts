@@ -13,7 +13,14 @@ export class ResendMailer implements Mailer {
     const res = await this.fetchFn("https://api.resend.com/emails", {
       method: "POST",
       headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ from: this.from, to: [message.to], subject: message.subject, text: message.text, html: message.html }),
+      body: JSON.stringify({
+        from: this.from,
+        to: [message.to],
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+        ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+      }),
     });
     if (!res.ok) throw new MailError(`Resend responded ${res.status}`);
   }

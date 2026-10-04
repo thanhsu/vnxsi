@@ -4,17 +4,28 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { Layout } from "../Layout.tsx";
 
-export type AdminSection = "builders" | "products" | "inquiries" | "invites" | "users";
+export type AdminSection = "builders" | "products" | "inquiries" | "feedback" | "invites" | "users";
 
 const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [
   { key: "builders", path: "/admin/builders", label: "admin.nav.builders" },
   { key: "products", path: "/admin/products", label: "admin.nav.products" },
   { key: "inquiries", path: "/admin/inquiries", label: "admin.nav.inquiries" },
+  { key: "feedback", path: "/admin/feedback", label: "admin.nav.feedback" },
   { key: "invites", path: "/admin/invites", label: "admin.nav.invites" },
   { key: "users", path: "/admin/users", label: "admin.nav.users" },
 ];
 
-export const AdminLayout: FC<PropsWithChildren<{ locale: Locale; origin: string; title: string; rest: string; active: AdminSection }>> = (p) => {
+type Props = {
+  locale: Locale;
+  origin: string;
+  title: string;
+  rest: string;
+  active: AdminSection;
+  /** Contact messages waiting (status new); shown next to "Feedback" when above 0. Only the feedback pages count them. */
+  feedbackNew?: number;
+};
+
+export const AdminLayout: FC<PropsWithChildren<Props>> = (p) => {
   const tr = translator(p.locale);
   return (
     <Layout locale={p.locale} title={`${p.title} · ${tr("admin.title")}`} origin={p.origin} rest={p.rest} noindex signedIn>
@@ -22,6 +33,7 @@ export const AdminLayout: FC<PropsWithChildren<{ locale: Locale; origin: string;
         {NAV.map((item) => (
           <a href={localizedPath(p.locale, item.path)} aria-current={item.key === p.active ? "page" : undefined}>
             {tr(item.label)}
+            {item.key === "feedback" && p.feedbackNew ? <span class="count">{p.feedbackNew}</span> : null}
           </a>
         ))}
       </nav>
