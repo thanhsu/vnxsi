@@ -5692,25 +5692,42 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 6: VNX-0605 — `/me`: xem đề xuất, chọn → Inquiry `type = request`; test cổng ra M6
+### Task 6: VNX-0605 — `/me`: xem đề xuất, chọn → Inquiry `type = request`; Inquiry hiện tiêu đề request; test cổng ra M6
+
+> Đã đối chiếu với code thật sau Task 5 (2026-10-04). Task này tách thành **6** (đường chọn, `/me`, tiêu đề request trên Inquiry, cổng ra) và **6b** (che tên client ở các bề mặt M5, test lộ email đầu-cuối, test hồi quy admin gỡ request); 6b nằm cuối mục này và làm ngay sau 6, trước Task 7. Cổng ra M6 chỉ đóng khi cả hai xong.
 
 **Files:**
 - Create: `apps/web/src/views/me/Proposals.tsx`
-- Modify: `apps/web/src/routes/me-requests.tsx` (trang có đề xuất, `POST /me/requests/:id/select`)
+- Modify: `apps/web/src/routes/me-requests.tsx` (`requestPage` kèm đề xuất, `POST /me/requests/:id/select`)
 - Modify: `apps/web/src/db/requests.ts` (`markInviteSelectedStatement`)
-- Modify: `apps/web/src/domain/inquiry.ts` (`InquirySummary.requestTitle`), `apps/web/src/db/inquiries.ts` (`SUMMARY`, admin list, `findMessageContext` đọc `requests.title`)
+- Modify: `apps/web/src/db/inquiries.ts` (`SUMMARY`, `listInquiriesForAdmin`, `findMessageContext` đọc `requests.title`; siết điều kiện `onlyIf` của `createInquiryStatements`)
+- Modify: `apps/web/src/domain/inquiry.ts` (`InquirySummary.requestTitle`)
+- Modify: `apps/web/src/views/proposal.ts` (`requestFirstMessage`)
+- Modify: `apps/web/src/email/templates/request.ts` (`requestSelectedEmail`)
 - Modify: `apps/web/src/notify/inquiry.ts` (tin nhắn đầu của Inquiry `request` → email "được chọn"; "về" = tên product hoặc tiêu đề request), `apps/web/src/jobs/daily.ts` (nhắc / báo admin dùng tiêu đề request khi không có product)
-- Modify: `apps/web/src/views/InquiryThread.tsx`, `apps/web/src/views/hub/InquiriesPage.tsx`, `apps/web/src/views/admin/InquiriesPage.tsx` (hiện tiêu đề request)
-- Modify: `apps/web/src/i18n/messages/*.ts`
-- Test: `apps/web/test/me/select.test.ts`, `apps/web/test/requests/m6-gate.test.ts`
+- Modify: `apps/web/src/views/InquiryThread.tsx`, `apps/web/src/views/hub/InquiriesPage.tsx`, `apps/web/src/views/admin/InquiriesPage.tsx`
+- Modify: `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`
+- Test: `apps/web/test/me/select.test.ts`, `apps/web/test/request-gate.test.ts`, thêm ca vào `apps/web/test/db/requests.test.ts` và `apps/web/test/email/request-templates.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 (`createInquiryStatements`, `endRequestBatch`, `listRequestInvites`, `requestTransition`, `inviteTransition`), Task 2 (`requestSelectedEmail`, `notifyNotSelected`), Task 3 (`requestPage`, `RequestPage` children), Task 4 (`proposalPrice`), Task 5 (`ProposalView`), M5 (`notifyInquiryMessage`, `auditStatement`).
+- Consumes (code thật): `createInquiryStatements(db, input, onlyIf?: SelectedRequestGuard)` → `{ statements, id, firstMessageId }`; `endRequestBatch(db, { id, from, to, now, selectedInviteId }, between)` → `{ statements, read(results) → { request, notSelected, expired } }`; `setRequestStatusStatement` (đã kiểm invite `proposed` + builder `approved` + user `active` trong SQL); `listRequestInvites` → `InviteWithBuilder[]` (`builderPublic`); `requestTransition`, `inviteTransition`; `auditStatement` (guard `{ inquiryId, status, updatedAt }`); `notifyNotSelected`, `notifyInviteExpired` (bỏ qua builder không công khai); `notifyInquiryMessage(env, messageId, now)`; `ProposalView`, `proposalPrice` (`views/proposal.ts`); `requestPage`/`RequestPage` (Task 3); `builderFacingName`, `BuilderFacingName` (Task 2); fixtures `makeRequest`, `makeBuilder`, `inviteBuilders`, `proposeOn`, `signIn`.
 - Produces:
-  - `db/requests.ts`: `markInviteSelectedStatement(db, { inviteId, requestId, inquiryId, now })`.
+  - `db/requests.ts`: `markInviteSelectedStatement(db, { inviteId, requestId, inquiryId, now }): D1PreparedStatement`.
   - `domain/inquiry.ts`: `InquirySummary.requestTitle: string | null`.
-  - `views/me/Proposals.tsx`: `Proposals: FC<{ locale; request: ClientRequest; proposals: InviteWithBuilder[] }>`.
-  - Route: `POST /me/requests/:id/select` (trường `invite`).
+  - `views/proposal.ts`: `requestFirstMessage(request: Pick<ClientRequest, "title" | "description" | "locale">, invite: Pick<RequestInvite, "approach" | "priceCents" | "priceMaxCents" | "priceNote" | "timelineDays">): string`.
+  - `email/templates/request.ts`: `requestSelectedEmail(locale, { clientName: BuilderFacingName; title: string; body: string; url: string }): Email`.
+  - `views/me/Proposals.tsx`: `Proposals: FC<{ locale: Locale; request: ClientRequest; proposals: InviteWithBuilder[] }>`.
+  - Route `POST /me/requests/:id/select` (trường `invite`).
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Một `db.batch` duy nhất**, theo thứ tự: `setRequestStatusStatement` (compare-and-set `matching` → `builder_selected`, kèm `selected_invite_id`) → câu `INSERT` Inquiry và tin nhắn đầu (có `onlyIf`) → `markInviteSelectedStatement` (hai câu cuối là `between` của `endRequestBatch`, nên đề xuất được chọn không bị quét thành `not_selected`) → quét `invited` → `expired`, `proposed` → `not_selected` → audit. Mất compare-and-set thì không câu nào ghi (mỗi câu tự kiểm).
+2. **Siết `createInquiryStatements(onlyIf)`:** thêm `status = 'proposed'` vào `EXISTS` của lời mời. Lý do: guard cũ chỉ so `requests.updated_at = now`; hai lần bấm "Chọn" rơi vào cùng một mili giây thì lần thua vẫn qua guard (request đã `builder_selected` với đúng `updated_at` của lần thắng) và sẽ tạo Inquiry thứ hai. Khi lần thắng đã chạy, lời mời không còn `proposed`, nên lần thua không ghi gì. Test db ở Step 2.
+3. **Audit guard theo Inquiry vừa tạo** (`{ inquiryId, status: "open", updatedAt: iso }`), không theo request: id Inquiry sinh mới cho mỗi lần thử nên chỉ lần thắng mới có audit (cùng lý do mili giây như trên).
+4. **Email "được chọn" là email của tin nhắn đầu** và đi qua `notifyInquiryMessage` (M5 gửi lại khi lỗi, tối đa 3 lần). Thêm template `requestSelectedEmail` vì spec 8.3 liệt kê riêng "được chọn"; nó dùng `BuilderFacingName` ngay từ đầu để Task này không thêm chỗ lộ mới. Các email còn lại của Inquiry giữ `newInquiryEmail` / `inquiryMessageEmail` (mask ở Task 6b).
+5. **Tin nhắn đầu** ghép bởi `requestFirstMessage` (`views/proposal.ts`, cạnh `proposalPrice`): tiêu đề, mô tả, đề xuất (cách làm, giá, ghi chú giá, thời gian), nhãn theo `requests.locale`. Không có email client trong đó (chỉ nội dung client đã gõ).
+6. **Nút "Chọn"** chỉ hiện khi request `matching`, đề xuất `proposed` và builder còn công khai (`builderPublic`); builder hết công khai thì hiện câu giải thích. Route cũng chặn (409) và SQL của `setRequestStatusStatement` chặn lần nữa.
+7. **Trang Inquiry không link về request** (request `removed` sẽ 404 với client); chỉ hiện tiêu đề dạng chữ. Từ trang request có link sang Inquiry (`me.proposals.inquiry`).
+8. `/me/requests/:id/select` trả `404` cho request không phải của client hoặc `invite` không thuộc request này (kiểm bằng danh sách lời mời của chính request), `409` cho mọi trạng thái sai. Thành công `303` tới `/me/inquiries/:id`.
 
 - [ ] **Step 1: Chuỗi i18n**
 
@@ -5720,13 +5737,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   "me.proposals.title": "Proposals",
   "me.proposals.empty": "No proposals yet. Invited builders have 7 days to reply.",
   "me.proposals.choose": "Choose this proposal",
-  "me.proposals.chooseHint": "Choosing opens a conversation with that builder; the other proposals are declined.",
+  "me.proposals.chooseHint": "Choosing opens a conversation with that builder; the other proposals will not be chosen.",
   "me.proposals.from": "From {name}",
   "me.proposals.unavailable": "This builder is not available any more.",
   "me.proposals.chosen": "You chose this proposal.",
   "me.proposals.inquiry": "Open the conversation",
   "request.inquiry.request": "Request: {title}",
   "request.inquiry.proposal": "Proposal",
+  "email.requestSelected.subject": "{client} chose your proposal",
+  "email.requestSelected.intro": "{client} chose your proposal for “{title}”. A conversation with them is now open on VNX.SI; the request and your proposal are below.",
+  "email.requestSelected.cta": "Continue the conversation on VNX.SI (replies by e-mail are not delivered):",
 ```
 
 `vi.ts` (đổi giá trị `inquiry.type.request`, thêm các key):
@@ -5743,6 +5763,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   "me.proposals.inquiry": "Mở trao đổi",
   "request.inquiry.request": "Nhu cầu: {title}",
   "request.inquiry.proposal": "Đề xuất",
+  "email.requestSelected.subject": "{client} đã chọn đề xuất của bạn",
+  "email.requestSelected.intro": "{client} đã chọn đề xuất của bạn cho nhu cầu “{title}”. Trao đổi với họ đã mở trên VNX.SI; nhu cầu và đề xuất của bạn nằm bên dưới.",
+  "email.requestSelected.cta": "Tiếp tục trao đổi trên VNX.SI (trả lời bằng email sẽ không tới người gửi):",
 ```
 
 `zh-hans.ts`:
@@ -5758,6 +5781,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   "me.proposals.inquiry": "打开对话",
   "request.inquiry.request": "需求：{title}",
   "request.inquiry.proposal": "方案",
+  "email.requestSelected.subject": "{client} 选择了你的方案",
+  "email.requestSelected.intro": "{client} 选择了你为需求“{title}”提交的方案。与对方的对话已在 VNX.SI 上开启，需求和你的方案见下文。",
+  "email.requestSelected.cta": "请在 VNX.SI 上继续对话（通过邮件回复不会送达）：",
 ```
 
 `zh-hant.ts`:
@@ -5773,129 +5799,302 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   "me.proposals.inquiry": "打開對話",
   "request.inquiry.request": "需求：{title}",
   "request.inquiry.proposal": "方案",
+  "email.requestSelected.subject": "{client} 選擇了你的方案",
+  "email.requestSelected.intro": "{client} 選擇了你為需求「{title}」提交的方案。與對方的對話已在 VNX.SI 上開啟，需求與你的方案見下文。",
+  "email.requestSelected.cta": "請在 VNX.SI 上繼續對話（透過郵件回覆不會送達）：",
 ```
 
-- [ ] **Step 2: Test chọn đề xuất (fail)**
+(zh-hans / zh-hant: `inquiry.type.request` giữ "需求".)
+
+- [ ] **Step 2: Test db (fail): chặn Inquiry thứ hai và đánh dấu `selected`**
+
+Thêm vào `apps/web/test/db/requests.test.ts`, trong `describe` hiện có (dùng lại `builders`, `db()`, `later`; thêm import `markInviteSelectedStatement`, `endRequestBatch`, `listRequestInvites`, `auditStatement` nếu thiếu):
+
+```ts
+  it("marks the chosen invitation selected and never writes a second inquiry, even at the same instant", async () => {
+    const { client, request } = await makeRequest({ tag: "rq-sel2" });
+    const [builder] = await builders("rq-sel2-b", 1);
+    const [invite] = await inviteBuilders(request, [builder!]);
+    await proposeOn(invite!);
+    const now = later((await findRequestById(db(), request.id))!.updatedAt);
+    const attempt = () => {
+      const inquiry = createInquiryStatements(
+        db(),
+        { clientUserId: client.id, clientName: "Minh Tran", builderId: builder!.userId, productId: null, requestId: request.id, type: "request", message: "Request + proposal", budgetBand: "2k-10k", deadline: null, status: "open", locale: "en", now },
+        { requestId: request.id, inviteId: invite!.id, updatedAt: now },
+      );
+      const end = endRequestBatch(db(), { id: request.id, from: "matching", to: "builder_selected", now, selectedInviteId: invite!.id }, [
+        ...inquiry.statements,
+        markInviteSelectedStatement(db(), { inviteId: invite!.id, requestId: request.id, inquiryId: inquiry.id, now }),
+      ]);
+      const audit = auditStatement(db(), { actorUserId: client.id, action: "request.select", entity: "request", entityId: request.id, data: { inviteId: invite!.id, inquiryId: inquiry.id }, now }, { inquiryId: inquiry.id, status: "open", updatedAt: now });
+      return { inquiry, end, statements: [...end.statements, audit] };
+    };
+    const first = attempt();
+    expect(first.end.read(await db().batch(first.statements)).request?.status).toBe("builder_selected");
+    const second = attempt(); // same `now`: the request already carries that updated_at
+    expect(second.end.read(await db().batch(second.statements)).request).toBeNull();
+    expect(await findInquiryById(db(), second.inquiry.id)).toBeNull();
+    const n = await db().prepare("SELECT COUNT(*) AS n FROM inquiries WHERE request_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(n?.n).toBe(1);
+    const audits = await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.select' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(audits?.n).toBe(1);
+    const [row] = await listRequestInvites(db(), request.id);
+    expect(row?.invite).toMatchObject({ status: "selected", inquiryId: first.inquiry.id });
+  });
+```
+
+Chạy: `npm test -w apps/web -- test/db/requests.test.ts` → FAIL (`markInviteSelectedStatement` chưa có).
+
+- [ ] **Step 3: `markInviteSelectedStatement` và siết guard**
+
+`apps/web/src/db/requests.ts`:
+
+```ts
+/**
+ * Spec §7.6 select, `between` of endRequestBatch (after the request's compare-and-set and the inquiry INSERTs):
+ * proposed -> selected, linked to the new inquiry, only when this batch won. RETURNING the row.
+ */
+export function markInviteSelectedStatement(db: D1Database, input: { inviteId: string; requestId: string; inquiryId: string; now: string }): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE request_invites SET status = 'selected', inquiry_id = ?3, updated_at = ?4
+       WHERE id = ?1 AND request_id = ?2 AND status = 'proposed'
+         AND EXISTS (SELECT 1 FROM requests WHERE id = ?2 AND status = 'builder_selected' AND selected_invite_id = ?1 AND updated_at = ?4)
+         AND EXISTS (SELECT 1 FROM inquiries WHERE id = ?3)
+       RETURNING id`,
+    )
+    .bind(input.inviteId, input.requestId, input.inquiryId, input.now);
+}
+```
+
+`apps/web/src/db/inquiries.ts`, trong `createInquiryStatements`, đổi `guard` (chỉ thêm `AND status = 'proposed'` ở `EXISTS` thứ hai) và cập nhật chú thích của `SelectedRequestGuard` ("... and that invitation is still `proposed`"):
+
+```ts
+  const guard = onlyIf
+    ? "WHERE EXISTS (SELECT 1 FROM requests WHERE id = ?14 AND status = 'builder_selected' AND selected_invite_id = ?15 AND updated_at = ?16) AND EXISTS (SELECT 1 FROM request_invites WHERE id = ?15 AND request_id = ?14 AND builder_id = ?4 AND status = 'proposed')"
+    : "";
+```
+
+Chạy: `npm test -w apps/web -- test/db/requests.test.ts test/db/inquiries.test.ts` → PASS.
+
+- [ ] **Step 4: Test chọn đề xuất (fail)**
 
 `apps/web/test/me/select.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { findInquiryById, listMessages } from "../../src/db/inquiries.ts";
+import { findInquiryById, listMessages, listUnnotifiedMessages } from "../../src/db/inquiries.ts";
 import { findRequestById, listRequestInvites } from "../../src/db/requests.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
+import type { Bindings } from "../../src/env.ts";
+import { runDaily } from "../../src/jobs/daily.ts";
 import { inviteBuilders, makeBuilder, makeRequest, proposeOn, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const get = (path: string, cookie: string) => app().request(getReq(path, cookie), undefined, testEnv);
-const post = (path: string, cookie: string, fields: Record<string, string> = {}) => app().request(formPost(path, fields, { cookie }), undefined, testEnv);
+const post = (path: string, cookie: string, fields: Record<string, string> = {}, env: Bindings = testEnv) => app().request(formPost(path, fields, { cookie }), undefined, env);
+const noMail = { ...testEnv, MAIL_DRIVER: undefined } as Bindings; // UnconfiguredMailer: every send fails
+const count = async (sql: string, ...args: string[]) => (await testEnv.DB.prepare(sql).bind(...args).first<{ n: number }>())?.n ?? 0;
+const inquiries = (requestId: string) => count("SELECT COUNT(*) AS n FROM inquiries WHERE request_id = ?1", requestId);
+const selectAudits = (requestId: string) => count("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.select' AND entity_id = ?1", requestId);
+const inviteOf = async (requestId: string, inviteId: string) => (await listRequestInvites(testEnv.DB, requestId)).find((x) => x.invite.id === inviteId)!.invite;
 
 /** A matching request with three invitations: A and B proposed, C still invited. */
-async function threeWay(tag: string) {
-  const { client, request } = await makeRequest({ tag });
+async function threeWay(tag: string, clientLocale?: string) {
+  const { client, request } = await makeRequest({ tag, clientLocale });
   const [a, b, c] = await Promise.all(["a", "b", "x"].map((k) => makeBuilder(`${tag}-${k}@vnx.si`, `${tag}-${k}`, "approved", { name: `${tag} ${k.toUpperCase()}` })));
   const [ia, ib, ic] = await inviteBuilders(request, [a!, b!, c!]);
   await proposeOn(ia!);
   await proposeOn(ib!);
   const { cookie } = await signIn(client.email);
-  return { client, request, a: a!, b: b!, ia: ia!, ib: ib!, ic: ic!, cookie };
+  return { client, request, a: a!, b: b!, c: c!, ia: ia!, ib: ib!, ic: ic!, cookie };
 }
 
-describe("choosing a proposal (spec §5.7 step 4)", () => {
+/** Nothing was written: request still matching, no inquiry, no select audit, no e-mail. */
+async function expectUntouched(requestId: string) {
+  expect((await findRequestById(testEnv.DB, requestId))?.status).toBe("matching");
+  expect(await inquiries(requestId)).toBe(0);
+  expect(await selectAudits(requestId)).toBe(0);
+  expect((await listRequestInvites(testEnv.DB, requestId)).map((x) => x.invite.status).sort()).toEqual(["invited", "proposed", "proposed"]);
+  expect(outbox).toEqual([]);
+}
+
+describe("choosing a proposal (spec §5.7 step 4)", { timeout: 30_000 }, () => {
   beforeEach(() => clearOutbox());
 
-  it("shows proposals with a choose button only for proposed ones of public builders", async () => {
-    const { request, ia, ic, cookie } = await threeWay("ms-show");
+  it("shows proposals with a Choose button only for proposed ones of public builders", async () => {
+    const { request, ia, ib, ic, b, cookie } = await threeWay("ms-show");
+    await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(b.userId).run();
     const html = await (await get(`/me/requests/${request.id}`, cookie)).text();
     expect(html).toContain("From ms-show A");
     expect(html).toContain("$4,500");
+    expect(html).toContain("Next.js with a booking calendar.");
     expect(html).toContain(`name="invite" value="${ia.id}"`);
-    expect(html).not.toContain(`value="${ic.id}"`);
+    expect(html).not.toContain(`value="${ib.id}"`);
+    expect(html).toContain("This builder is not available any more.");
+    expect(html).not.toContain(`value="${ic.id}"`); // still invited: no proposal to show
   });
 
-  it("selects A: request builder_selected, invitations settle, an inquiry opens with request + proposal, emails go out", async () => {
+  it("selects A: request builder_selected, invitations settle, an inquiry opens with request + proposal, e-mails go out", async () => {
     const { client, request, a, ia, ib, ic, cookie } = await threeWay("ms-pick");
     const res = await post(`/vi/me/requests/${request.id}/select`, cookie, { invite: ia.id });
     expect(res.status).toBe(303);
     const after = await findRequestById(testEnv.DB, request.id);
     expect(after).toMatchObject({ status: "builder_selected", selectedInviteId: ia.id });
     expect(after?.closedAt).not.toBeNull();
-    const invites = await listRequestInvites(testEnv.DB, request.id);
-    const byId = Object.fromEntries(invites.map((x) => [x.invite.id, x.invite]));
-    expect(byId[ia.id]?.status).toBe("selected");
-    expect(byId[ib.id]?.status).toBe("not_selected");
-    expect(byId[ic.id]?.status).toBe("expired");
-    const inquiryId = byId[ia.id]!.inquiryId!;
+    const chosen = await inviteOf(request.id, ia.id);
+    expect(chosen.status).toBe("selected");
+    expect((await inviteOf(request.id, ib.id)).status).toBe("not_selected");
+    expect((await inviteOf(request.id, ic.id)).status).toBe("expired");
+    const inquiryId = chosen.inquiryId!;
     expect(res.headers.get("location")).toBe(`/vi/me/inquiries/${inquiryId}`);
-    const inquiry = await findInquiryById(testEnv.DB, inquiryId);
-    expect(inquiry).toMatchObject({ type: "request", requestId: request.id, clientUserId: client.id, builderId: a.userId, status: "open", productId: null, clientName: "Minh Tran" });
+    expect(await findInquiryById(testEnv.DB, inquiryId)).toMatchObject({ type: "request", requestId: request.id, clientUserId: client.id, builderId: a.userId, status: "open", productId: null, clientName: "Minh Tran" });
     const [first] = await listMessages(testEnv.DB, inquiryId);
     expect(first?.body).toContain(`Request: ${request.title}`);
+    expect(first?.body).toContain(request.description);
     expect(first?.body).toContain("Next.js with a booking calendar.");
+    expect(first?.body).toContain("Price: $4,500");
+    expect(first?.body).toContain("Timeline: 30 days");
+    expect(first?.body).not.toContain(client.email);
     expect(first?.notifiedAt).not.toBeNull();
-    const toA = outbox.find((m) => m.to === "ms-pick-a@vnx.si");
-    expect(toA?.subject).toBe("Minh Tran chose your proposal");
-    expect(toA?.text).toContain(`https://vnx.si/hub/inquiries/${inquiryId}`);
-    expect(`${toA?.text}${toA?.html}`).not.toContain("ms-pick-c@vnx.si");
-    expect(outbox.find((m) => m.to === "ms-pick-b@vnx.si")?.subject).toBe(`Your proposal for "${request.title}" was not chosen`);
-    expect(outbox.find((m) => m.to === "ms-pick-x@vnx.si")).toBeUndefined();
+    const toA = outbox.filter((m) => m.to === "ms-pick-a@vnx.si");
+    expect(toA).toHaveLength(1);
+    expect(toA[0]?.subject).toBe("Minh Tran chose your proposal");
+    expect(toA[0]?.text).toContain(`https://vnx.si/hub/inquiries/${inquiryId}`);
+    expect(toA[0]?.text).toContain("Next.js with a booking calendar.");
+    expect(outbox.find((m) => m.to === "ms-pick-b@vnx.si")?.subject).toBe(`Update on your proposal: ${request.title}`);
+    expect(outbox.find((m) => m.to === "ms-pick-x@vnx.si")?.subject).toBe(`Invitation ended: ${request.title}`);
+    expect(outbox.some((m) => m.to === client.email)).toBe(false);
+    for (const m of outbox) expect(`${m.subject}${m.text}${m.html}`).not.toContain(client.email);
     const audit = await testEnv.DB.prepare("SELECT data FROM audit_log WHERE action = 'request.select' AND entity_id = ?1").bind(request.id).first<{ data: string }>();
     expect(JSON.parse(audit!.data)).toEqual({ inviteId: ia.id, inquiryId });
   });
 
-  it("is single-shot: a second choice is 409 and makes no second inquiry or e-mail", async () => {
+  it("labels the first message in the request's language", async () => {
+    const { request, ia, cookie } = await threeWay("ms-vi", "vi");
+    await post(`/vi/me/requests/${request.id}/select`, cookie, { invite: ia.id });
+    const inquiryId = (await inviteOf(request.id, ia.id)).inquiryId!;
+    const [first] = await listMessages(testEnv.DB, inquiryId);
+    expect(first?.body).toContain(`Nhu cầu: ${request.title}`);
+    expect(first?.body).toContain("Đề xuất");
+  });
+
+  // Review Focus 4: bấm "Chọn" hai lần.
+  it("is single-shot: a second choice is 409 with no second inquiry or e-mail; closing afterwards is 409 too", async () => {
     const { request, ia, ib, cookie } = await threeWay("ms-twice");
     expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id })).status).toBe(303);
     clearOutbox();
     expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ib.id })).status).toBe(409);
     expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id })).status).toBe(409);
-    const n = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM inquiries WHERE request_id = ?1").bind(request.id).first<{ n: number }>();
-    expect(n?.n).toBe(1);
-    expect(outbox).toEqual([]);
     expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(409);
+    expect(await inquiries(request.id)).toBe(1);
+    expect(await selectAudits(request.id)).toBe(1);
+    expect(outbox).toEqual([]);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("builder_selected");
   });
 
-  it("404s another request's invitation and another client's request; 409 for a proposal not yet sent", async () => {
-    const mine = await threeWay("ms-cross");
-    const other = await threeWay("ms-cross2");
-    expect((await post(`/me/requests/${mine.request.id}/select`, mine.cookie, { invite: other.ia.id })).status).toBe(404);
-    expect((await post(`/me/requests/${other.request.id}/select`, mine.cookie, { invite: other.ia.id })).status).toBe(404);
-    expect((await post(`/me/requests/${mine.request.id}/select`, mine.cookie, { invite: mine.ic.id })).status).toBe(409);
-    expect((await findRequestById(testEnv.DB, mine.request.id))?.status).toBe("matching");
+  it("two simultaneous clicks make exactly one inquiry", async () => {
+    const { request, ia, cookie } = await threeWay("ms-race");
+    const results = await Promise.all([post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id }), post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id })]);
+    expect(results.map((r) => r.status).sort()).toEqual([303, 409]);
+    expect(await inquiries(request.id)).toBe(1);
+    expect(await selectAudits(request.id)).toBe(1);
+    expect(outbox.filter((m) => m.to === "ms-race-a@vnx.si")).toHaveLength(1);
   });
 
-  it("does not let the client choose a builder who is no longer public", async () => {
+  // Review Focus 4: builder bị khóa sau khi gửi đề xuất.
+  it("409s a proposal of a builder suspended after proposing, and writes nothing", async () => {
     const { request, a, ia, cookie } = await threeWay("ms-susp");
     await testEnv.DB.prepare("UPDATE builders SET status = 'suspended' WHERE user_id = ?1").bind(a.userId).run();
-    const html = await (await get(`/me/requests/${request.id}`, cookie)).text();
-    expect(html).not.toContain(`name="invite" value="${ia.id}"`);
-    expect(html).toContain("This builder is not available any more.");
     expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id })).status).toBe(409);
+    await expectUntouched(request.id);
   });
 
-  it("shows the request title in the inquiry for both sides", async () => {
-    const { request, a, ia, cookie } = await threeWay("ms-thread");
+  // Review Focus 2.
+  it("404s another request's invitation and another client's request; nothing is written", async () => {
+    const mine = await threeWay("ms-cross");
+    const other = await threeWay("ms-cross2");
+    clearOutbox();
+    expect((await post(`/me/requests/${mine.request.id}/select`, mine.cookie, { invite: other.ia.id })).status).toBe(404);
+    expect((await post(`/me/requests/${mine.request.id}/select`, mine.cookie, { invite: "no-such-invite" })).status).toBe(404);
+    expect((await post(`/me/requests/${other.request.id}/select`, mine.cookie, { invite: other.ia.id })).status).toBe(404);
+    await expectUntouched(mine.request.id);
+    await expectUntouched(other.request.id);
+  });
+
+  it("409s an invitation that has no proposal yet, and a request that was closed", async () => {
+    const { request, ic, ia, cookie } = await threeWay("ms-state");
+    expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ic.id })).status).toBe(409);
+    await expectUntouched(request.id);
+    expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(303);
+    clearOutbox();
+    expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id })).status).toBe(409);
+    expect(await inquiries(request.id)).toBe(0);
+    expect(outbox).toEqual([]);
+  });
+
+  it("keeps the choice when the e-mail fails: the first message is unsent and the M5 retry delivers it", async () => {
+    const { request, ia, cookie } = await threeWay("ms-retry");
+    expect((await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id }, noMail)).status).toBe(303);
+    const inquiryId = (await inviteOf(request.id, ia.id)).inquiryId!;
+    const [first] = await listMessages(testEnv.DB, inquiryId);
+    expect(first?.notifiedAt).toBeNull();
+    expect((await listUnnotifiedMessages(testEnv.DB)).some((m) => m.id === first!.id)).toBe(true);
+    await runDaily(testEnv, new Date()); // the M5 resend step
+    expect((await listMessages(testEnv.DB, inquiryId))[0]?.notifiedAt).not.toBeNull();
+    expect(outbox.find((m) => m.to === "ms-retry-a@vnx.si")?.subject).toBe("Minh Tran chose your proposal");
+  });
+
+  it("shows the request title wherever the inquiry names its subject, for both sides, the admin and the reminder", async () => {
+    const { request, ia, cookie } = await threeWay("ms-thread");
     await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id });
-    const inquiryId = (await listRequestInvites(testEnv.DB, request.id)).find((x) => x.invite.id === ia.id)!.invite.inquiryId!;
-    const clientHtml = await (await get(`/me/inquiries/${inquiryId}`, cookie)).text();
-    expect(clientHtml).toContain(`href="/me/requests/${request.id}"`);
-    const builderCookie = (await signIn(`ms-thread-a@vnx.si`)).cookie;
-    const builderHtml = await (await get(`/hub/inquiries/${inquiryId}`, builderCookie)).text();
-    expect(builderHtml).toContain(request.title);
-    expect(builderHtml).toContain("From Minh Tran");
-    expect(builderHtml).not.toContain("ms-thread-c@vnx.si");
-    expect(a.handle).toBe("ms-thread-a");
+    const inquiryId = (await inviteOf(request.id, ia.id)).inquiryId!;
+    const builderCookie = (await signIn("ms-thread-a@vnx.si")).cookie;
+    const adminCookie = (await signIn("owner@vnx.si", { admin: true })).cookie;
+    const about = `<dd>${request.title}</dd>`;
+    for (const html of [await (await get(`/me/inquiries/${inquiryId}`, cookie)).text(), await (await get(`/hub/inquiries/${inquiryId}`, builderCookie)).text()]) {
+      expect(html).toContain(about);
+      expect(html).not.toMatch(/<dd>\s*<a href="\/b\/ms-thread-a"/); // the "About" cell no longer falls back to the builder
+    }
+    expect(await (await get("/hub/inquiries", builderCookie)).text()).toContain(` · ${request.title}`);
+    expect(await (await get("/admin/inquiries", adminCookie)).text()).toContain(`@ms-thread-a · ${request.title}`);
+    clearOutbox();
+    await runDaily(testEnv, new Date(Date.now() + 4 * 24 * 3600 * 1000));
+    const reminder = outbox.find((m) => m.to === "ms-thread-a@vnx.si" && m.subject.includes("waiting for your reply"));
+    expect(reminder?.text).toContain(request.title);
+  });
+
+  // Nghĩa vụ 4: admin gỡ request đã chọn không làm mất Inquiry.
+  it("keeps the inquiry when an admin removes the builder_selected request", async () => {
+    const { client, request, ia, cookie } = await threeWay("ms-removed");
+    await post(`/me/requests/${request.id}/select`, cookie, { invite: ia.id });
+    const inquiryId = (await inviteOf(request.id, ia.id)).inquiryId!;
+    clearOutbox();
+    const adminCookie = (await signIn("owner@vnx.si", { admin: true })).cookie;
+    expect((await post(`/admin/requests/${request.id}/remove`, adminCookie)).status).toBe(303);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("removed");
+    expect(await findInquiryById(testEnv.DB, inquiryId)).toMatchObject({ status: "open", requestId: request.id, clientUserId: client.id });
+    expect(await listMessages(testEnv.DB, inquiryId)).toHaveLength(1);
+    expect((await inviteOf(request.id, ia.id)).status).toBe("selected");
+    expect((await get(`/me/requests/${request.id}`, cookie)).status).toBe(404);
+    expect((await get(`/me/inquiries/${inquiryId}`, cookie)).status).toBe(200);
+    const builderCookie = (await signIn("ms-removed-a@vnx.si")).cookie;
+    const thread = await get(`/hub/inquiries/${inquiryId}`, builderCookie);
+    expect(thread.status).toBe(200);
+    expect(await thread.text()).toContain(request.title);
+    expect(outbox).toEqual([]); // the chosen builder is told nothing more, the other invitations had settled already
   });
 });
 ```
 
-Chạy: `npm test -w apps/web -- test/me/select.test.ts` → FAIL.
+Chạy: `npm test -w apps/web -- test/me/select.test.ts` → FAIL (route chưa có).
 
-- [ ] **Step 3: Inquiry đọc tiêu đề request**
+- [ ] **Step 5: Inquiry đọc tiêu đề request**
 
-`apps/web/src/domain/inquiry.ts`, `InquirySummary` thêm:
+`apps/web/src/domain/inquiry.ts`, `InquirySummary` thêm sau `productSlug`:
 
 ```ts
   /** Title of the request the inquiry came from (type "request", M6); null otherwise. */
@@ -5920,13 +6119,67 @@ const toSummary = (r: SummaryRow): InquirySummary => ({
 });
 ```
 
-Trong `listInquiriesForAdmin` và `findMessageContext`: thêm `rq.title AS request_title` vào danh sách cột và `LEFT JOIN requests rq ON rq.id = i.request_id` sau `LEFT JOIN products p …`.
+Trong `listInquiriesForAdmin` và `findMessageContext`: thêm `rq.title AS request_title` vào danh sách cột và `LEFT JOIN requests rq ON rq.id = i.request_id` sau `LEFT JOIN products p …`. Nếu typecheck báo chỗ dựng `InquirySummary` bằng tay trong test thì thêm `requestTitle: null`.
 
-Sửa mọi chỗ dựng `InquirySummary` bằng tay trong test (nếu typecheck báo) bằng cách thêm `requestTitle: null`.
+- [ ] **Step 6: Template, tin nhắn đầu, thông báo, cron, view**
 
-- [ ] **Step 4: Thông báo và cron dùng tiêu đề request**
+`apps/web/src/email/templates/request.ts` (file đã import `quote`, `BuilderFacingName`):
 
-`apps/web/src/notify/inquiry.ts`, hàm `compose` (import `requestSelectedEmail` từ `../email/templates/request.ts`):
+```ts
+/** To the chosen builder: the client's typed name only; the request and the proposal come as the inquiry's first message. */
+export function requestSelectedEmail(locale: Locale, input: { clientName: BuilderFacingName; title: string; body: string; url: string }): Email {
+  const tr = translator(locale);
+  const intro = tr("email.requestSelected.intro", { client: input.clientName, title: input.title });
+  const cta = tr("email.requestSelected.cta");
+  return {
+    subject: tr("email.requestSelected.subject", { client: input.clientName }),
+    text: `${intro}\n\n${input.body}\n\n${cta}\n${input.url}`,
+    html: wrap(locale, [p(intro), quote(input.body), p(cta), link(input.url)]),
+  };
+}
+```
+
+Thêm vào `apps/web/test/email/request-templates.test.ts`:
+
+```ts
+  it("requestSelectedEmail names the client by the masked name, quotes the first message and escapes HTML", () => {
+    const evil = "<script>x</script>";
+    const mail = requestSelectedEmail("en", { clientName: builderFacingName("Minh Tran"), title: evil, body: `Request: ${evil}`, url: "https://vnx.si/hub/inquiries/01J" });
+    expect(mail.subject).toBe("Minh Tran chose your proposal");
+    expect(mail.text).toContain("https://vnx.si/hub/inquiries/01J");
+    expect(mail.html).not.toContain("<script>");
+    for (const locale of ["vi", "zh-Hans", "zh-Hant"] as const) expect(requestSelectedEmail(locale, { clientName: builderFacingName("Minh"), title: "T", body: "B", url: "https://vnx.si/x" }).subject).toContain("Minh");
+  });
+```
+
+(`zh-Hans`/`zh-Hant`: dùng đúng giá trị `Locale` thật của repo; chép từ test cùng file.)
+
+`apps/web/src/views/proposal.ts` (thêm import `isLocale`, `type ClientRequest`; `RequestInvite` đã import):
+
+```ts
+/**
+ * Spec §5.7 step 4: the first message of the inquiry made from a request: the request, then the chosen proposal,
+ * labelled in the request's language. Only what the client typed; no e-mail.
+ */
+export function requestFirstMessage(
+  request: Pick<ClientRequest, "title" | "description" | "locale">,
+  invite: Pick<RequestInvite, "approach" | "priceCents" | "priceMaxCents" | "priceNote" | "timelineDays">,
+): string {
+  const locale = isLocale(request.locale) ? request.locale : "en";
+  const tr = translator(locale);
+  const note = invite.priceNote ? ` (${invite.priceNote})` : "";
+  return [
+    tr("request.inquiry.request", { title: request.title }),
+    request.description,
+    tr("request.inquiry.proposal"),
+    invite.approach ?? "",
+    `${tr("proposal.price")}: ${proposalPrice(locale, invite)}${note}`,
+    `${tr("proposal.timeline")}: ${tr("proposal.days", { n: invite.timelineDays ?? 0 })}`,
+  ].join("\n\n");
+}
+```
+
+`apps/web/src/notify/inquiry.ts`: import `builderFacingName` từ `../domain/inquiry.ts` và `requestSelectedEmail` từ `../email/templates/request.ts`; thay phần `compose` (chỉ nhánh `toBuilder` và biến `about` thay đổi; các nhánh khác dùng `about` thay `summary.productName`):
 
 ```ts
 function compose(env: Bindings, ctx: MessageContext): { to: string; subject: string; text: string; html: string } {
@@ -5939,11 +6192,12 @@ function compose(env: Bindings, ctx: MessageContext): { to: string; subject: str
     const locale = asLocale(ctx.builder.locale);
     const url = inquiryUrl(env, locale, inquiry.id, "builder");
     // The builder sees the client's typed name only, never the e-mail (spec §5.6).
-    let mail;
-    if (!ctx.isFirst) mail = inquiryMessageEmail(locale, { fromName: inquiry.clientName, productName: about, body: message.body, url });
     // Spec §5.7 step 4: the first message of a request inquiry is the "you were chosen" e-mail.
-    else if (inquiry.type === "request") mail = requestSelectedEmail(locale, { clientName: inquiry.clientName, title: summary.requestTitle ?? "", url });
-    else mail = newInquiryEmail(locale, { clientName: inquiry.clientName, type: inquiry.type, productName: about, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url });
+    const mail = !ctx.isFirst
+      ? inquiryMessageEmail(locale, { fromName: inquiry.clientName, productName: about, body: message.body, url })
+      : inquiry.type === "request"
+        ? requestSelectedEmail(locale, { clientName: builderFacingName(inquiry.clientName), title: summary.requestTitle ?? "", body: message.body, url })
+        : newInquiryEmail(locale, { clientName: inquiry.clientName, type: inquiry.type, productName: about, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url });
     return { to: ctx.builder.email, ...mail };
   }
   const locale = asLocale(ctx.client.locale);
@@ -5956,9 +6210,9 @@ function compose(env: Bindings, ctx: MessageContext): { to: string; subject: str
 }
 ```
 
-`apps/web/src/jobs/daily.ts`: trong `remind`, `productName: item.productName ?? item.requestTitle`; trong `alert`, `productName: i.productName ?? i.requestTitle`.
+(`clientName` ở hai nhánh còn lại giữ nguyên tên thô cho đến Task 6b.)
 
-- [ ] **Step 5: View Inquiry**
+`apps/web/src/jobs/daily.ts`: trong `remind`, `productName: item.productName ?? item.requestTitle`; trong `alert`, `productName: i.productName ?? i.requestTitle`.
 
 `apps/web/src/views/InquiryThread.tsx`, ô "About":
 
@@ -5967,55 +6221,31 @@ function compose(env: Bindings, ctx: MessageContext): { to: string; subject: str
           {summary.productSlug && summary.productName ? (
             <a href={localizedPath(locale, `/p/${summary.productSlug}`)}>{summary.productName}</a>
           ) : summary.requestTitle ? (
-            viewer === "client" && inquiry.requestId ? (
-              <a href={localizedPath(locale, `/me/requests/${inquiry.requestId}`)}>{summary.requestTitle}</a>
-            ) : (
-              summary.requestTitle
-            )
+            summary.requestTitle
           ) : (
             <a href={localizedPath(locale, `/b/${summary.builderHandle}`)}>{summary.builderName}</a>
           )}
         </dd>
 ```
 
-`apps/web/src/views/hub/InquiriesPage.tsx`: lấy thêm `requestTitle` khi destructure; `{productName ?? requestTitle ? \` · ${productName ?? requestTitle}\` : null}` (viết thành biến `const about = productName ?? requestTitle;`).
-`apps/web/src/views/admin/InquiriesPage.tsx`: cùng cách, `@{builderHandle}{about ? \` · ${about}\` : null}`.
+`apps/web/src/views/hub/InquiriesPage.tsx`: destructure thêm `requestTitle`; `const about = productName ?? requestTitle;` (đặt trong hàm `map`, chuyển thành thân khối) và `{about ? ` · ${about}` : null}`.
+`apps/web/src/views/admin/InquiriesPage.tsx`: cùng cách, `{(productName ?? requestTitle) ? ` · ${productName ?? requestTitle}` : null}`.
 
-- [ ] **Step 6: Chọn đề xuất**
-
-`apps/web/src/db/requests.ts`:
-
-```ts
-/**
- * Spec §7.6 select, inside the select batch (after the request's compare-and-set and the inquiry INSERTs):
- * proposed -> selected, linked to the new inquiry, only when that batch won.
- */
-export function markInviteSelectedStatement(db: D1Database, input: { inviteId: string; requestId: string; inquiryId: string; now: string }): D1PreparedStatement {
-  return db
-    .prepare(
-      `UPDATE request_invites SET status = 'selected', inquiry_id = ?3, updated_at = ?4
-       WHERE id = ?1 AND request_id = ?2 AND status = 'proposed'
-         AND EXISTS (SELECT 1 FROM requests WHERE id = ?2 AND status = 'builder_selected' AND selected_invite_id = ?1 AND updated_at = ?4)
-         AND EXISTS (SELECT 1 FROM inquiries WHERE id = ?3)
-       RETURNING id`,
-    )
-    .bind(input.inviteId, input.requestId, input.inquiryId, input.now);
-}
-```
+- [ ] **Step 7: View đề xuất và route chọn**
 
 `apps/web/src/views/me/Proposals.tsx`:
 
 ```tsx
 import type { FC } from "hono/jsx";
-import type { InviteWithBuilder, ClientRequest } from "../../domain/request.ts";
+import type { ClientRequest, InviteWithBuilder } from "../../domain/request.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 import { ProposalView } from "../ProposalView.tsx";
 
-/** Spec §5.4 / §5.7 step 4: the proposals of a request; the client picks one while it is matching. */
+/** Spec §5.4 / §5.7 step 4: the proposals of a request; the client picks one while it is matching and its builder is still public. */
 export const Proposals: FC<{ locale: Locale; request: ClientRequest; proposals: InviteWithBuilder[] }> = ({ locale, request, proposals }) => {
   const tr = translator(locale);
-  const shown = proposals.filter((x) => x.invite.approach !== null && (x.invite.status === "proposed" || x.invite.status === "selected" || x.invite.status === "not_selected"));
+  const shown = proposals.filter(({ invite }) => invite.approach !== null && (invite.status === "proposed" || invite.status === "selected" || invite.status === "not_selected"));
   const matching = request.status === "matching";
   if (shown.length === 0 && !matching) return null;
   const action = localizedPath(locale, `/me/requests/${request.id}/select`);
@@ -6024,40 +6254,38 @@ export const Proposals: FC<{ locale: Locale; request: ClientRequest; proposals: 
       <h2>{tr("me.proposals.title")}</h2>
       {shown.length === 0 ? <p class="muted">{tr("me.proposals.empty")}</p> : null}
       {shown.length > 0 && matching ? <p class="hint">{tr("me.proposals.chooseHint")}</p> : null}
-      <ul class="cards">
-        {shown.map(({ invite, builderName, builderHandle, builderPublic }) => (
-          <li>
-            <h3>{builderPublic ? <a href={localizedPath(locale, `/b/${builderHandle}`)}>{tr("me.proposals.from", { name: builderName })}</a> : tr("me.proposals.from", { name: builderName })}</h3>
-            <ProposalView locale={locale} invite={invite} />
-            {invite.status === "selected" ? (
-              <p class="notice good">
-                {tr("me.proposals.chosen")} {invite.inquiryId ? <a href={localizedPath(locale, `/me/inquiries/${invite.inquiryId}`)}>{tr("me.proposals.inquiry")}</a> : null}
-              </p>
-            ) : null}
-            {matching && invite.status === "proposed" ? (
-              builderPublic ? (
-                <form method="post" action={action}>
-                  <input type="hidden" name="invite" value={invite.id} />
-                  <button class="btn" type="submit">
-                    {tr("me.proposals.choose")}
-                  </button>
-                </form>
-              ) : (
-                <p class="muted">{tr("me.proposals.unavailable")}</p>
-              )
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      {shown.map(({ invite, builderName, builderHandle, builderPublic }) => (
+        <section class="card wide">
+          <h3>{builderPublic ? <a href={localizedPath(locale, `/b/${builderHandle}`)}>{tr("me.proposals.from", { name: builderName })}</a> : tr("me.proposals.from", { name: builderName })}</h3>
+          <ProposalView locale={locale} invite={invite} />
+          {invite.status === "selected" ? (
+            <p class="notice good">
+              {tr("me.proposals.chosen")} {invite.inquiryId ? <a href={localizedPath(locale, `/me/inquiries/${invite.inquiryId}`)}>{tr("me.proposals.inquiry")}</a> : null}
+            </p>
+          ) : null}
+          {matching && invite.status === "proposed" ? (
+            builderPublic ? (
+              <form method="post" action={action}>
+                <input type="hidden" name="invite" value={invite.id} />
+                <button class="btn" type="submit">
+                  {tr("me.proposals.choose")}
+                </button>
+              </form>
+            ) : (
+              <p class="muted">{tr("me.proposals.unavailable")}</p>
+            )
+          ) : null}
+        </section>
+      ))}
     </section>
   );
 };
 ```
 
-`apps/web/src/routes/me-requests.tsx` — thay `requestPage` và thêm route chọn (import thêm `createInquiryStatements` từ `../db/inquiries.ts`; `listRequestInvites`, `markInviteSelectedStatement` từ `../db/requests.ts`; `inviteTransition`, `type RequestInvite` từ `../domain/request.ts`; `isLocale` từ `../i18n/locales.ts`; `translator` từ `../i18n/t.ts`; `notifyInquiryMessage` từ `../notify/inquiry.ts`; `Proposals` từ `../views/me/Proposals.tsx`; `proposalPrice` từ `../views/proposal.ts`):
+`apps/web/src/routes/me-requests.tsx` — thêm import (`createInquiryStatements` từ `../db/inquiries.ts`; `listRequestInvites`, `markInviteSelectedStatement` vào import `../db/requests.ts`; `inviteTransition` vào import `../domain/request.ts`; `notifyInquiryMessage` từ `../notify/inquiry.ts`; `Proposals` từ `../views/me/Proposals.tsx`; `requestFirstMessage` từ `../views/proposal.ts`), thay `requestPage` (bỏ câu chú thích "Task 6 adds the proposals"):
 
 ```tsx
-/** The client's request page with its proposals. */
+/** The client's request page with its proposals. `findClientRequest` already limits it to the owner and hides `removed`. */
 export async function requestPage(c: Context<AppEnv>, request: ClientRequest, status: 200 | 400 = 200) {
   const locale = c.get("locale");
   const proposals = await listRequestInvites(c.env.DB, request.id);
@@ -6069,36 +6297,23 @@ export async function requestPage(c: Context<AppEnv>, request: ClientRequest, st
     status,
   );
 }
-
-/** Spec §5.7 step 4: the inquiry's first message is the request and the chosen proposal, labelled in the request's language. */
-function firstMessage(request: ClientRequest, invite: RequestInvite): string {
-  const locale = isLocale(request.locale) ? request.locale : "en";
-  const tr = translator(locale);
-  const price = `${tr("proposal.price")}: ${proposalPrice(locale, invite)}${invite.priceNote ? ` (${invite.priceNote})` : ""}`;
-  return [
-    tr("request.inquiry.request", { title: request.title }),
-    request.description,
-    tr("request.inquiry.proposal"),
-    invite.approach ?? "",
-    price,
-    `${tr("proposal.timeline")}: ${tr("proposal.days", { n: invite.timelineDays ?? 0 })}`,
-  ].join("\n\n");
-}
 ```
 
-và trong `registerMeRequestRoutes`:
+và thêm route trong `registerMeRequestRoutes` (sau route `close`):
 
 ```tsx
   /**
-   * Spec §5.7 step 4 / §7.5 / §7.6, one batch: request matching -> builder_selected (compare-and-set), the inquiry and
-   * its first message (guarded on that), the chosen invitation -> selected, the rest settled, the audit row. Then the
-   * builder's "chosen" e-mail goes out as the inquiry's first notification (M5 retries apply) and the others are told.
+   * Spec §5.7 step 4 / §7.5 / §7.6, ONE batch: request matching -> builder_selected (compare-and-set), the inquiry and its
+   * first message (guarded on that), the chosen invitation -> selected, the rest settled, the audit row (guarded on the
+   * inquiry this batch made). A lost race writes nothing. After the commit the builder's "chosen" e-mail goes out as the
+   * inquiry's first notification (the M5 daily job retries it) and the other builders are told.
    */
   onLocalized(app, "post", "/me/requests/:id/select", requireUser, async (c) => {
     const request = await load(c);
     if (!request) return errorResponse(c, "notFound", 404);
     const body = await c.req.parseBody();
     const inviteId = typeof body.invite === "string" ? body.invite : "";
+    // Looked up among THIS request's invitations: another request's id reads as missing (Review Focus 2).
     const chosen = (await listRequestInvites(c.env.DB, request.id)).find((x) => x.invite.id === inviteId);
     if (!chosen) return errorResponse(c, "notFound", 404);
     if (!requestTransition(request.status, "select", "client").ok || !inviteTransition(chosen.invite.status, "select", "client").ok || !chosen.builderPublic) {
@@ -6109,7 +6324,7 @@ và trong `registerMeRequestRoutes`:
     const iso = now.toISOString();
     const inquiry = createInquiryStatements(
       c.env.DB,
-      { clientUserId: user.id, clientName: request.clientName, builderId: chosen.invite.builderId, productId: null, requestId: request.id, type: "request", message: firstMessage(request, chosen.invite), budgetBand: request.budgetBand, deadline: request.deadline, status: "open", locale: request.locale, now: iso },
+      { clientUserId: user.id, clientName: request.clientName, builderId: chosen.invite.builderId, productId: null, requestId: request.id, type: "request", message: requestFirstMessage(request, chosen.invite), budgetBand: request.budgetBand, deadline: request.deadline, status: "open", locale: request.locale, now: iso },
       { requestId: request.id, inviteId: chosen.invite.id, updatedAt: iso },
     );
     const end = endRequestBatch(c.env.DB, { id: request.id, from: request.status, to: "builder_selected", now: iso, selectedInviteId: chosen.invite.id }, [
@@ -6118,59 +6333,63 @@ và trong `registerMeRequestRoutes`:
     ]);
     const results = await c.env.DB.batch([
       ...end.statements,
-      auditStatement(c.env.DB, { actorUserId: user.id, action: "request.select", entity: "request", entityId: request.id, data: { inviteId: chosen.invite.id, inquiryId: inquiry.id }, now: iso }, { requestId: request.id, status: "builder_selected", updatedAt: iso }),
+      auditStatement(c.env.DB, { actorUserId: user.id, action: "request.select", entity: "request", entityId: request.id, data: { inviteId: chosen.invite.id, inquiryId: inquiry.id }, now: iso }, { inquiryId: inquiry.id, status: "open", updatedAt: iso }),
     ]);
     const outcome = end.read(results);
     if (!outcome.request) return errorResponse(c, "conflict", 409);
     await notifyInquiryMessage(c.env, inquiry.firstMessageId, now);
     await notifyNotSelected(c.env, outcome.notSelected);
+    await notifyInviteExpired(c.env, outcome.expired);
     return c.redirect(localizedPath(c.get("locale"), `/me/inquiries/${inquiry.id}`), 303);
   });
 ```
 
-Chạy: `npm test -w apps/web -- test/me test/notify test/jobs test/hub/inquiries.test.ts test/admin/inquiries.test.ts` → PASS.
+Chạy: `npm test -w apps/web -- test/me test/db test/notify test/jobs test/hub test/admin test/email test/i18n test/views` → PASS.
 
-- [ ] **Step 7: Test cổng ra M6 (spec 9, phần Request)**
+- [ ] **Step 8: Test cổng ra M6 (spec §9, phần Request)**
 
-`apps/web/test/requests/m6-gate.test.ts`:
+`apps/web/test/request-gate.test.ts` (cạnh `inquiry-gate.test.ts`):
 
 ```ts
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../../src/app.ts";
-import { findInquiryById } from "../../src/db/inquiries.ts";
-import { findRequestById, listClientRequests, listRequestInvites } from "../../src/db/requests.ts";
-import { findUserByEmail } from "../../src/db/users.ts";
-import { clearOutbox, outbox } from "../../src/email/fake.ts";
-import { FAKE_TURNSTILE_PASS, TURNSTILE_FIELD } from "../../src/http/turnstile.ts";
-import { inviteBuilders, makeBuilder, makeRequest, signIn } from "../fixtures.ts";
-import { followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
+import { createApp } from "../src/app.ts";
+import { findInquiryById } from "../src/db/inquiries.ts";
+import { findRequestById, listClientRequests, listRequestInvites } from "../src/db/requests.ts";
+import { findUserByEmail } from "../src/db/users.ts";
+import { clearOutbox, outbox } from "../src/email/fake.ts";
+import { FAKE_TURNSTILE_PASS, TURNSTILE_FIELD } from "../src/http/turnstile.ts";
+import { addLiveProduct, inviteBuilders, makeBuilder, makeRequest, proposeOn, signIn } from "./fixtures.ts";
+import { followMagicLink, formPost, getReq, setCookieValue, testEnv } from "./helpers.ts";
 
 const app = () => createApp();
-const post = (path: string, fields: Record<string, string | string[]>, cookie?: string) =>
-  app().request(formPost(path, fields, { "cf-connecting-ip": "192.0.2.66", ...(cookie ? { cookie } : {}) }), undefined, testEnv);
+const post = (path: string, fields: Record<string, string | string[]>, cookie?: string) => app().request(formPost(path, fields, { "cf-connecting-ip": "192.0.2.66", ...(cookie ? { cookie } : {}) }), undefined, testEnv);
 const get = (path: string, cookie: string) => app().request(getReq(path, cookie), undefined, testEnv);
 const linkFrom = (text: string) => /https:\/\/vnx\.si\/auth\/verify\?[^\s"<]+/.exec(text)![0];
+const clientEmail = "gate6-client@request.example";
 
 describe("M6 exit gate (spec §9, Request)", { timeout: 30_000 }, () => {
   beforeEach(() => clearOutbox());
 
-  it("signed-out request -> confirm -> submitted -> admin invites 2 -> A proposes, B declines -> client picks A -> inquiry type request", async () => {
-    const a = await makeBuilder("gate-a@vnx.si", "gate-a", "approved", { name: "Gate A" });
-    const b = await makeBuilder("gate-b@vnx.si", "gate-b", "approved", { name: "Gate B" });
+  it("signed-out request -> confirm -> submitted -> admin invites 2 -> A proposes, B declines -> client picks A -> inquiry open for both; the builder never sees the client's e-mail", async () => {
+    const a = await makeBuilder("gate6-a@vnx.si", "gate6-a", "approved", { name: "Gate A" });
+    const b = await makeBuilder("gate6-b@vnx.si", "gate6-b", "approved", { name: "Gate B" });
 
     const posted = await post("/request", {
       title: "Booking app for three salons",
       description: "We need online booking with SMS reminders for three salons in Hanoi.",
       category: "booking",
       budgetBand: "2k-10k",
+      deadline: "",
       languages: ["vi"],
       name: "Gate Client",
-      email: "gate-client@request.example",
+      email: clientEmail,
       [TURNSTILE_FIELD]: FAKE_TURNSTILE_PASS,
     });
     expect(posted.status).toBe(200);
-    const confirmed = await followMagicLink(app(), linkFrom(outbox.find((m) => m.to === "gate-client@request.example")!.text));
-    const client = (await findUserByEmail(testEnv.DB, "gate-client@request.example"))!;
+    const confirmed = await followMagicLink(app(), linkFrom(outbox.find((m) => m.to === clientEmail)!.text));
+    expect(confirmed.status).toBe(303);
+    const clientCookie = `__Host-vnx_session=${setCookieValue(confirmed, "__Host-vnx_session")}`;
+    const client = (await findUserByEmail(testEnv.DB, clientEmail))!;
     const [request] = await listClientRequests(testEnv.DB, client.id);
     expect(confirmed.headers.get("location")).toBe(`/me/requests/${request!.id}`);
     expect(request?.status).toBe("submitted");
@@ -6182,54 +6401,248 @@ describe("M6 exit gate (spec §9, Request)", { timeout: 30_000 }, () => {
     const ia = invites.find((x) => x.invite.builderId === a.userId)!.invite;
     const ib = invites.find((x) => x.invite.builderId === b.userId)!.invite;
 
-    const aCookie = (await signIn("gate-a@vnx.si")).cookie;
-    const bCookie = (await signIn("gate-b@vnx.si")).cookie;
-    expect(await (await get(`/hub/invitations/${ia.id}`, aCookie)).text()).not.toContain("gate-client@request.example");
+    const aCookie = (await signIn("gate6-a@vnx.si")).cookie;
+    const bCookie = (await signIn("gate6-b@vnx.si")).cookie;
+    const seenByBuilders: string[] = [await (await get(`/hub/invitations/${ia.id}`, aCookie)).text(), await (await get("/hub/invitations", aCookie)).text()];
     expect((await post(`/hub/invitations/${ia.id}/propose`, { approach: "Next.js and SMS reminders.", priceMode: "fixed", price: "4500", timelineDays: "30" }, aCookie)).status).toBe(303);
     expect((await post(`/hub/invitations/${ib.id}/decline`, { reason: "Busy" }, bCookie)).status).toBe(303);
 
-    const clientCookie = (await signIn("gate-client@request.example")).cookie;
-    const picked = await post(`/me/requests/${request!.id}/select`, { invite: ia.id }, clientCookie);
-    expect(picked.status).toBe(303);
+    const proposals = await (await get(`/me/requests/${request!.id}`, clientCookie)).text();
+    expect(proposals).toContain("$4,500");
+    expect(proposals).not.toContain(`value="${ib.id}"`); // B declined: nothing to choose
+    expect((await post(`/me/requests/${request!.id}/select`, { invite: ia.id }, clientCookie)).status).toBe(303);
     expect((await findRequestById(testEnv.DB, request!.id))?.status).toBe("builder_selected");
-    const inquiryId = (await listRequestInvites(testEnv.DB, request!.id)).find((x) => x.invite.id === ia.id)!.invite.inquiryId!;
+    const settled = await listRequestInvites(testEnv.DB, request!.id);
+    expect(settled.find((x) => x.invite.id === ia.id)?.invite.status).toBe("selected");
+    expect(settled.find((x) => x.invite.id === ib.id)?.invite.status).toBe("declined");
+    const inquiryId = settled.find((x) => x.invite.id === ia.id)!.invite.inquiryId!;
     expect(await findInquiryById(testEnv.DB, inquiryId)).toMatchObject({ type: "request", clientUserId: client.id, builderId: a.userId, requestId: request!.id, status: "open" });
+
+    // Open for both sides: each opens the thread and replies; the other side reads it.
     const hub = await (await get(`/hub/inquiries/${inquiryId}`, aCookie)).text();
-    expect(hub).toContain("From Gate Client");
-    expect(hub).not.toContain("gate-client@request.example");
+    expect(hub).toContain("Gate Client");
+    expect(hub).toContain("Booking app for three salons");
+    expect(await (await get(`/me/inquiries/${inquiryId}`, clientCookie)).text()).toContain("Booking app for three salons");
+    expect((await post(`/hub/inquiries/${inquiryId}/reply`, { body: "I can start Monday." }, aCookie)).status).toBe(303);
+    expect(await (await get(`/me/inquiries/${inquiryId}`, clientCookie)).text()).toContain("I can start Monday.");
+    expect((await post(`/me/inquiries/${inquiryId}/reply`, { body: "Great, see you Monday." }, clientCookie)).status).toBe(303);
+    seenByBuilders.push(hub, await (await get("/hub/inquiries", aCookie)).text(), await (await get(`/hub/inquiries/${inquiryId}`, aCookie)).text());
+
+    // Spec §5.7 step 3 / §5.6: the builders never see the client's e-mail, in pages or in e-mails.
+    const toBuilders = outbox.filter((m) => m.to.startsWith("gate6-") && m.to.endsWith("@vnx.si"));
+    expect(toBuilders.length).toBeGreaterThanOrEqual(3); // invitation, chosen, client's reply
+    for (const seen of [...seenByBuilders, ...toBuilders.flatMap((m) => [m.subject, m.text, m.html])]) expect(seen).not.toContain(clientEmail);
+  });
+
+  it("the admin's suggestions rank a builder with a live product in the category above one without, and leave out closed builders", async () => {
+    const { request } = await makeRequest({ tag: "gate6-sug", category: "booking" });
+    const withProduct = await makeBuilder("gate6-sug-p@vnx.si", "gate6-sug-p", "approved", { name: "Sug With" });
+    await addLiveProduct(withProduct, "gate6-sug product");
+    await makeBuilder("gate6-sug-n@vnx.si", "gate6-sug-n", "approved", { name: "Sug Without" });
+    await makeBuilder("gate6-sug-c@vnx.si", "gate6-sug-c", "approved", { name: "Sug Closed", availability: "closed" });
+    const adminCookie = (await signIn("owner@vnx.si", { admin: true })).cookie;
+    const html = await (await get(`/admin/requests/${request.id}`, adminCookie)).text();
+    expect(html).toContain("gate6-sug-p");
+    expect(html).toContain("gate6-sug-n");
+    expect(html.indexOf("gate6-sug-p")).toBeLessThan(html.indexOf("gate6-sug-n"));
+    expect(html).not.toContain("gate6-sug-c");
   });
 
   it("cannot invite a 6th builder while 5 are active", async () => {
-    const { request } = await makeRequest({ tag: "gate-cap" });
-    const five = await Promise.all([0, 1, 2, 3, 4].map((i) => makeBuilder(`gate-cap-${i}@vnx.si`, `gate-cap-${i}`, "approved")));
-    await inviteBuilders(request, five);
-    const sixth = await makeBuilder("gate-cap-6@vnx.si", "gate-cap-6", "approved");
+    const { request } = await makeRequest({ tag: "gate6-cap" });
+    const five = await Promise.all([0, 1, 2, 3, 4].map((i) => makeBuilder(`gate6-cap-${i}@vnx.si`, `gate6-cap-${i}`, "approved")));
+    const invites = await inviteBuilders(request, five);
+    await proposeOn(invites[0]!);
+    await proposeOn(invites[1]!); // invited and proposed both count against the cap
+    const sixth = await makeBuilder("gate6-cap-6@vnx.si", "gate6-cap-6", "approved");
     const adminCookie = (await signIn("owner@vnx.si", { admin: true })).cookie;
     expect((await post(`/admin/requests/${request.id}/invite`, { builder: [sixth.userId] }, adminCookie)).status).toBe(400);
     expect(await listRequestInvites(testEnv.DB, request.id)).toHaveLength(5);
   });
 
   it("a builder who was not invited cannot see the request (404)", async () => {
-    const { request } = await makeRequest({ tag: "gate-404" });
-    const [invite] = await inviteBuilders(request, [await makeBuilder("gate-404-a@vnx.si", "gate-404-a", "approved")]);
-    await makeBuilder("gate-404-x@vnx.si", "gate-404-x", "approved");
-    const cookie = (await signIn("gate-404-x@vnx.si")).cookie;
+    const { request } = await makeRequest({ tag: "gate6-404" });
+    const [invite] = await inviteBuilders(request, [await makeBuilder("gate6-404-a@vnx.si", "gate6-404-a", "approved")]);
+    await makeBuilder("gate6-404-x@vnx.si", "gate6-404-x", "approved");
+    const cookie = (await signIn("gate6-404-x@vnx.si")).cookie;
     expect((await get(`/hub/invitations/${invite!.id}`, cookie)).status).toBe(404);
   });
 });
 ```
 
-(Gợi ý builder: "có product cùng category xếp trên" và "builder `closed` không xuất hiện" đã có ở `test/admin/requests.test.ts` Task 4.)
+Chạy: `npm test -w apps/web -- test/request-gate.test.ts` → PASS.
 
-Chạy: `npm test -w apps/web -- test/requests/m6-gate.test.ts` → PASS.
-
-- [ ] **Step 8: Toàn bộ test, typecheck, commit**
+- [ ] **Step 9: Toàn bộ test, typecheck, commit**
 
 ```bash
 npm run typecheck -w apps/web
 npm test
-git add apps/web/src apps/web/test
+git add apps/web/src/views/me/Proposals.tsx apps/web/src/routes/me-requests.tsx apps/web/src/db/requests.ts apps/web/src/db/inquiries.ts apps/web/src/domain/inquiry.ts apps/web/src/views/proposal.ts apps/web/src/email/templates/request.ts apps/web/src/notify/inquiry.ts apps/web/src/jobs/daily.ts apps/web/src/views/InquiryThread.tsx apps/web/src/views/hub/InquiriesPage.tsx apps/web/src/views/admin/InquiriesPage.tsx apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/me/select.test.ts apps/web/test/request-gate.test.ts apps/web/test/db/requests.test.ts apps/web/test/email/request-templates.test.ts
 git commit -m "feat(web): choose a proposal and open a request inquiry; M6 exit gate (VNX-0605)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+(Thêm vào `git add` mọi test hiện có phải sửa vì `InquirySummary.requestTitle`, nếu có.)
+
+#### Task 6b: VNX-0605b — Che tên client ở mọi bề mặt M5 mà builder thấy; test lộ email đầu-cuối
+
+**Khi nào:** ngay sau Task 6, trước Task 7. Quyết định của Owner (2026-10-04): `builderFacingName` áp cho mọi bề mặt M5 mà builder thấy, kể cả tiêu đề email, và dùng kiểu có nhãn `BuilderFacingName` để không truyền nhầm tên thô. Lý do cần: Inquiry sinh từ request sao chép `requests.client_name` vào `inquiries.client_name`; client gõ email làm tên thì Inquiry M5 lộ nó cho builder.
+
+**Files:**
+- Modify: `apps/web/src/email/templates/inquiry.ts` (`newInquiryEmail`, `inquiryReminderEmail` nhận `clientName: BuilderFacingName`; thêm `inquiryMessageForBuilderEmail`)
+- Modify: `apps/web/src/notify/inquiry.ts`, `apps/web/src/jobs/daily.ts`
+- Modify: `apps/web/src/views/hub/InquiriesPage.tsx`, `apps/web/src/views/InquiryThread.tsx`, `apps/web/src/routes/hub-inquiries.tsx`
+- Test: `apps/web/test/me/mask.test.ts` (mới), `apps/web/test/architecture.test.ts`, sửa `apps/web/test/email/inquiry-templates.test.ts` (và test khác nếu typecheck báo)
+
+**Interfaces:**
+- Consumes: `builderFacingName`, `BuilderFacingName` (`domain/inquiry.ts`), `notifyInvited`, `notifyInviteReminder`, `runDaily`, `requestSelectedEmail` (Task 6).
+- Produces: `newInquiryEmail` / `inquiryReminderEmail` với `clientName: BuilderFacingName`; `inquiryMessageForBuilderEmail(locale, { fromName: BuilderFacingName; productName: string | null; body: string; url }): Email`. `inquiryMessageEmail` giữ nguyên chữ ký và chỉ còn cho hướng builder → client (`fromName` là tên công khai của builder).
+
+**Quyết định kỹ thuật:**
+1. Tách `inquiryMessageEmail` làm hai hàm mỏng gọi chung một hàm riêng `messageEmail`: kiểu có nhãn chỉ bắt buộc được ở hướng tới builder; hướng tới client mang tên builder (đã công khai) nên không cần nhãn.
+2. Che ở lúc hiển thị / gửi, **không** sửa dữ liệu `inquiries.client_name` (admin vẫn thấy tên thật; M5 không đổi schema).
+3. View không ép được bằng kiểu (chuỗi vào `tr()`), nên thêm test quét nguồn trong `architecture.test.ts`: ở bảy file hướng builder (gồm `InvitationsPage`, `RequestFacts`), sau khi bỏ các lời gọi `builderFacingName(…clientName)` không dòng nào còn `.clientName`; mỗi file phải tồn tại và có ít nhất một `builderFacingName(`.
+4. Chỉ che **tên**; nội dung client gõ (tin nhắn, mô tả request) giữ nguyên, như spec 5.6 / 5.7 (chỉ cấm email của tài khoản, không quét văn bản tự do).
+
+- [ ] **Step 1: Test lộ email đầu-cuối (fail)**
+
+`apps/web/test/me/mask.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { findInquiryById } from "../../src/db/inquiries.ts";
+import { listRequestInvites } from "../../src/db/requests.ts";
+import { clearOutbox, outbox } from "../../src/email/fake.ts";
+import { runDaily } from "../../src/jobs/daily.ts";
+import { notifyInvited, notifyInviteReminder } from "../../src/notify/request.ts";
+import { inviteBuilders, makeBuilder, makeRequest, proposeOn, signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+
+const app = () => createApp();
+const get = (path: string, cookie: string) => app().request(getReq(path, cookie), undefined, testEnv);
+const post = (path: string, cookie: string, fields: Record<string, string> = {}) => app().request(formPost(path, fields, { cookie }), undefined, testEnv);
+
+describe("a client who types their e-mail as their name (Owner 2026-10-04, Review Focus 1)", { timeout: 30_000 }, () => {
+  beforeEach(() => clearOutbox());
+
+  it("never reaches the builder: not in subjects, texts, html, inbox or thread, from invitation to reminder", async () => {
+    const { client, request } = await makeRequest({ tag: "mk" });
+    await testEnv.DB.prepare("UPDATE requests SET client_name = ?2 WHERE id = ?1").bind(request.id, client.email).run();
+    const builder = await makeBuilder("mk-a@vnx.si", "mk-a", "approved", { name: "Mk A" });
+    const [invite] = await inviteBuilders(request, [builder]);
+    await notifyInvited(testEnv, [invite!.id]);
+    await notifyInviteReminder(testEnv, invite!.id);
+    await proposeOn(invite!);
+
+    const clientCookie = (await signIn(client.email)).cookie;
+    const builderCookie = (await signIn("mk-a@vnx.si")).cookie;
+    expect((await post(`/me/requests/${request.id}/select`, clientCookie, { invite: invite!.id })).status).toBe(303);
+    const inquiryId = (await listRequestInvites(testEnv.DB, request.id))[0]!.invite.inquiryId!;
+    expect((await findInquiryById(testEnv.DB, inquiryId))?.clientName).toBe(client.email); // stored as typed: the mask is applied on the way out
+    expect((await post(`/me/inquiries/${inquiryId}/reply`, clientCookie, { body: "Can you start Monday?" })).status).toBe(303);
+    await runDaily(testEnv, new Date(Date.now() + 4 * 24 * 3600 * 1000)); // inquiry reminder for the unanswered thread
+
+    const toBuilder = outbox.filter((m) => m.to === "mk-a@vnx.si");
+    expect(toBuilder.length).toBeGreaterThanOrEqual(5); // invited, reminder, chosen, new message, inquiry reminder
+    for (const m of toBuilder) for (const part of [m.subject, m.text, m.html]) expect(part, m.subject).not.toContain(client.email);
+    expect(toBuilder.find((m) => m.subject.includes("chose your proposal"))?.subject).toBe("••• chose your proposal");
+    const pages = [await (await get("/hub/inquiries", builderCookie)).text(), await (await get(`/hub/inquiries/${inquiryId}`, builderCookie)).text()];
+    for (const html of pages) expect(html).not.toContain(client.email);
+    expect(pages[0]).toContain("From •••");
+    // The client still sees what was typed.
+    expect(await (await get(`/me/inquiries/${inquiryId}`, clientCookie)).text()).toContain("To Mk A");
+  });
+});
+```
+
+Thêm vào `apps/web/test/architecture.test.ts`:
+
+```ts
+// Owner 2026-10-04: a client's typed name may be their e-mail; builder-facing code reads it only through builderFacingName.
+const BUILDER_FACING_FILES = [
+  "../src/views/hub/InquiriesPage.tsx",
+  "../src/views/hub/InvitationsPage.tsx",
+  "../src/views/InquiryThread.tsx",
+  "../src/views/RequestFacts.tsx",
+  "../src/routes/hub-inquiries.tsx",
+  "../src/notify/inquiry.ts",
+  "../src/jobs/daily.ts",
+];
+
+describe("builder-facing client name", () => {
+  it("every use of .clientName in builder-facing code is wrapped in builderFacingName", () => {
+    for (const file of BUILDER_FACING_FILES) {
+      const src = sources[file];
+      expect(src, file).toBeDefined();
+      expect(src, file).toContain("builderFacingName(");
+      for (const line of (src ?? "").split("\n")) {
+        expect(line.replace(/builderFacingName\([\w.]*clientName\)/g, ""), file).not.toMatch(/\.clientName\b/);
+      }
+    }
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/me/mask.test.ts test/architecture.test.ts` → FAIL.
+
+- [ ] **Step 2: Template, thông báo, cron, view**
+
+`apps/web/src/email/templates/inquiry.ts` (import `type BuilderFacingName` từ `../../domain/inquiry.ts`):
+
+```ts
+export function newInquiryEmail(
+  locale: Locale,
+  input: { clientName: BuilderFacingName; type: InquiryType; productName: string | null; budgetBand: BudgetBand; deadline: string | null; message: string; url: string },
+): Email {
+  /* thân hàm giữ nguyên */
+}
+
+function messageEmail(locale: Locale, input: { fromName: string; productName: string | null; body: string; url: string }): Email {
+  /* thân của inquiryMessageEmail hiện tại */
+}
+
+/** To the client: `fromName` is the builder's public name. */
+export const inquiryMessageEmail = messageEmail;
+
+/** To the builder: the client's typed name only, masked (Owner 2026-10-04). */
+export function inquiryMessageForBuilderEmail(locale: Locale, input: { fromName: BuilderFacingName; productName: string | null; body: string; url: string }): Email {
+  return messageEmail(locale, input);
+}
+
+export function inquiryReminderEmail(locale: Locale, input: { clientName: BuilderFacingName; productName: string | null; url: string }): Email {
+  /* thân hàm giữ nguyên */
+}
+```
+
+`apps/web/src/notify/inquiry.ts`, nhánh `toBuilder` (import `inquiryMessageForBuilderEmail`):
+
+```ts
+    if (!ctx.isFirst) mail = inquiryMessageForBuilderEmail(locale, { fromName: builderFacingName(inquiry.clientName), productName: about, body: message.body, url });
+    else if (inquiry.type === "request") mail = requestSelectedEmail(locale, { clientName: builderFacingName(inquiry.clientName), title: summary.requestTitle ?? "", body: message.body, url });
+    else mail = newInquiryEmail(locale, { clientName: builderFacingName(inquiry.clientName), type: inquiry.type, productName: about, budgetBand: inquiry.budgetBand, deadline: inquiry.deadline, message: message.body, url });
+```
+
+(Test quét ở Step 1 yêu cầu mỗi dòng có `clientName` tự gọi `builderFacingName(`, nên không gom vào một biến riêng.)
+
+`apps/web/src/jobs/daily.ts`, `remind`: `clientName: builderFacingName(item.inquiry.clientName)` (import từ `../domain/inquiry.ts`).
+
+`apps/web/src/views/hub/InquiriesPage.tsx`: `tr("inbox.from", { name: builderFacingName(inquiry.clientName) })` (hàm này chỉ dùng `clientName` ở nhánh `viewer === "builder"`).
+`apps/web/src/views/InquiryThread.tsx`: `return fromClient ? builderFacingName(inquiry.clientName) : summary.builderName;` (nhánh này chỉ chạy khi người xem là builder: với client, tin của họ hiện "Bạn").
+`apps/web/src/routes/hub-inquiries.tsx`, `threadPage`: `const from = builderFacingName(summary.inquiry.clientName);` thành `tr("inbox.from", { name: builderFacingName(summary.inquiry.clientName) })` ở cả `title` và `<h1>` (mỗi dòng tự gọi hàm).
+
+Sửa `apps/web/test/email/inquiry-templates.test.ts` và mọi test typecheck báo: bọc tên truyền vào `newInquiryEmail` / `inquiryReminderEmail` bằng `builderFacingName("Minh")`; ca XSS (`evil`) dùng `builderFacingName(evil)`; gọi `inquiryMessageEmail` hướng builder thì đổi sang `inquiryMessageForBuilderEmail`.
+
+Chạy: `npm test -w apps/web -- test/me test/email test/notify test/jobs test/hub test/architecture.test.ts` → PASS.
+
+- [ ] **Step 3: Toàn bộ test, typecheck, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/email/templates/inquiry.ts apps/web/src/notify/inquiry.ts apps/web/src/jobs/daily.ts apps/web/src/views/hub/InquiriesPage.tsx apps/web/src/views/InquiryThread.tsx apps/web/src/routes/hub-inquiries.tsx apps/web/test/me/mask.test.ts apps/web/test/architecture.test.ts apps/web/test/email/inquiry-templates.test.ts
+git commit -m "fix(web): mask the client's typed name on every builder-facing inquiry surface (VNX-0605b)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
