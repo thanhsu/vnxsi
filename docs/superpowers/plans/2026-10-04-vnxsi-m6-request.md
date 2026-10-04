@@ -2437,25 +2437,48 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 3: VNX-0602b — Form `/request`, `/me`, lối vào, sitemap, Privacy
 
-**Điều kiện bắt đầu:** Reviewer đã sửa `docs/legal/privacy.md` theo mục "Bổ sung Privacy" (Owner đã duyệt) và commit trên nhánh.
+**Điều kiện bắt đầu:** controller đã áp lại commit `953fa21` (văn bản Privacy M6 do Owner duyệt) vào `docs/legal/privacy.md` trên nhánh. Kiểm bằng Step 0; không đạt thì dừng, không tự sửa `privacy.md` (Reviewer viết tài liệu mô tả).
 
 **Files:**
 - Create: `apps/web/src/routes/request-form.tsx`, `apps/web/src/routes/me-requests.tsx`
-- Create: `apps/web/src/views/RequestFormPage.tsx`, `apps/web/src/views/RequestFacts.tsx`, `apps/web/src/views/me/RequestPage.tsx`, `apps/web/src/views/me/RequestList.tsx`
+- Create: `apps/web/src/views/RequestFormPage.tsx`, `apps/web/src/views/RequestFacts.tsx`, `apps/web/src/views/me/RequestPage.tsx`, `apps/web/src/views/me/RequestList.tsx` (thư mục `views/me/` là mới)
 - Modify: `apps/web/src/app.ts` (đăng ký 2 nhóm route), `apps/web/src/routes/me.tsx` (danh sách có request), `apps/web/src/views/labels.ts` (`REQUEST_STATUS_KEY`)
 - Modify: `apps/web/src/views/DirectoryPage.tsx`, `apps/web/src/views/CatalogPage.tsx`, `apps/web/src/views/LandingPage.tsx` (lối vào `/request`), `apps/web/src/routes/seo.ts` (sitemap có `/request`)
-- Modify: `apps/web/src/legal/content.ts` (chép nguyên văn phần bổ sung trong `docs/legal/privacy.md`)
+- Modify: `apps/web/src/legal/content.ts` (chép nguyên văn phần M6 của `docs/legal/privacy.md`, Step 7)
 - Modify: `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`
-- Test: `apps/web/test/public/request-form.test.ts`, `apps/web/test/me/requests.test.ts`; sửa `apps/web/test/seo/sitemap.test.ts`, `apps/web/test/public/builders-page.test.ts`, `apps/web/test/public/products-page.test.ts`, `apps/web/test/landing/page.test.ts`, `apps/web/test/auth/verify-page.test.ts` (câu gợi ý đổi tên mục)
+- Test: tạo `apps/web/test/public/request-form.test.ts`, `apps/web/test/me/requests.test.ts`; sửa `apps/web/test/seo/sitemap.test.ts`, `apps/web/test/public/builders-page.test.ts`, `apps/web/test/public/products-page.test.ts`, `apps/web/test/landing/page.test.ts`, `apps/web/test/auth/verify-page.test.ts` (câu gợi ý đổi tên mục), `apps/web/test/me/inquiries.test.ts` (dòng 100: nhãn `nav.me` zh-hant)
 
 **Interfaces:**
-- Consumes: Task 1 (`createRequest`, `findClientRequest`, `listClientRequests`, `endRequestBatch`, `deletePendingRequestStatement`, `requestTransition`, `requestValuesFromBody`, `isRequestHoneypotFilled`, `parseRequestForm`, `REQUEST_DAILY_LIMIT_PER_EMAIL`, `REQUEST_HOURLY_LIMIT_PER_IP`), Task 2 (`requestConfirmEmail`, `notifyAdminsOfRequest`, `notifyNotSelected`, `openPendingRequest`), M5 (`hitRateLimit`, `verifyTurnstile`, `turnstileSiteKey`, `TURNSTILE_FIELD`, `createLoginToken`, `createUser`, `findUserByEmail`, `findUserById`, `sha256Hex`, `writeAudit`, `auditStatement`, `requireUser`, `InquiryList`).
+- Consumes (tên thật trong code):
+  - Task 1: `domain/request.ts` (`ClientRequest`, `RequestStatus`, `RequestInput`, `RequestFormValues`, `RequestErrors`, `RequestFieldError`, `requestValuesFromBody`, `isRequestHoneypotFilled`, `parseRequestForm`, `requestTransition`, `TITLE_MAX`, `DESCRIPTION_MIN`, `DESCRIPTION_MAX`, `REQUEST_DAILY_LIMIT_PER_EMAIL`, `REQUEST_HOURLY_LIMIT_PER_IP`); `db/requests.ts` (`createRequest`, `findClientRequest`, `listClientRequests`, `endRequestBatch` (`.read(results)` trả `{ request, notSelected, expired }`), `deletePendingRequestStatement`); `domain/inquiry.ts` (`builderFacingName`).
+  - Task 2: `email/templates/request.ts` (`requestConfirmEmail`); `notify/request.ts` (`notifyRequestSubmitted`, `notifyNotSelected`, `notifyInviteExpired`); `routes/request-confirm.ts` (`openPendingRequest(c, request, user, now, via)`, **không kiểm chủ sở hữu**: route gọi nó phải kiểm trước); `auth/tokens.ts` (`createLoginToken` nhận `purpose: "request_verify"` và `requestId`).
+  - M5: `hitRateLimit`, `verifyTurnstile`, `turnstileSiteKey`, `TURNSTILE_FIELD`, `createUser`, `findUserByEmail`, `findUserById`, `UserRow`, `sha256Hex`, `writeAudit`, `auditStatement`, `requireUser`, `getMailer`, `Mailer`, `InquiryList` (`views/hub/InquiriesPage.tsx`), `errorResponse`, `page`, `siteOrigin`, `requestOrigin`, `onLocalized`.
 - Produces:
-  - `views/RequestFacts.tsx`: `RequestFacts: FC<{ locale; request: ClientRequest; showClient?: boolean }>` (Task 4, 5 dùng lại).
+  - `views/RequestFacts.tsx`: `RequestFacts: FC<{ locale; request: ClientRequest; showClient?: boolean }>` (Task 4, 5 dùng lại). Khi `showClient`, tên hiện qua `builderFacingName(request.clientName)` (Owner 2026-10-04: mọi view hướng builder che phần giống email). Trang của client (Task 3) không bật `showClient`.
   - `views/labels.ts`: `REQUEST_STATUS_KEY: Record<RequestStatus, MessageKey>`.
   - `views/me/RequestPage.tsx`: `RequestPage: FC<{ locale; origin; request: ClientRequest; sent: boolean; children?: unknown }>` (Task 6 truyền khối đề xuất qua `children`).
-  - `routes/me-requests.tsx`: `registerMeRequestRoutes(app)`, hàm `requestPage(c, request, status?)` (Task 6 thay phần thân để thêm đề xuất).
+  - `routes/request-form.tsx`: `registerRequestFormRoutes(app)`; `createPendingRequestAndMail(env, { client, input, locale, now }, mailer = getMailer(env)): Promise<"sent" | "send_failed">` (xuất ra để test lỗi gửi email).
+  - `routes/me-requests.tsx`: `registerMeRequestRoutes(app)`, `requestPage(c, request, status?)` (Task 6 thay phần thân để thêm đề xuất).
   - Route: `GET|POST /request`, `GET /me/requests/:id`, `POST /me/requests/:id/confirm`, `POST /me/requests/:id/close` (mọi tiền tố locale).
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+- Client không thấy tên nào hướng builder trong task này (trang `/me*` của chính họ; tên họ gõ là của họ) nên không dùng `builderFacingName` ở route; chỉ `RequestFacts` áp nó khi `showClient` (Task 4, 5).
+- "Send now" kiểm chủ sở hữu và trạng thái **trước** khi gọi `openPendingRequest` (hàm đó không kiểm; xem Task 2 review): request của người khác, đã `removed` hoặc không tồn tại → 404 và không ghi gì (kể cả audit); của chính mình nhưng không còn `pending_verification` → 409 (như M5, bấm hai lần).
+- Gửi email xác nhận lỗi: `createPendingRequestAndMail` xóa request chờ rồi trả `send_failed`; route trả 502 với `inquiry.error.sendFailed` (dùng lại chuỗi M5, không thêm key). Turnstile giả chỉ hoạt động cùng `MAIL_DRIVER=fake` nên test lỗi gửi gọi hàm này với Mailer hỏng, không đổi env.
+- Rate limit: IP đếm sau khi form hợp lệ (M5 F4) và trước Turnstile; email đếm sau Turnstile (người chưa đăng nhập) hoặc ngay sau IP (đã đăng nhập).
+- `badge-request-<status>` dùng lớp `.badge` nền, không thêm CSS (không có màu riêng cho trạng thái request ở M6).
+- Cỡ: code chạy được ≈ 560 dòng không tính locale, test ≈ 350 dòng. Nếu Reviewer muốn nhỏ hơn, tách tại ranh giới 3a (Step 0–5 phần `/request`, Step 7 lối vào + sitemap + Privacy) và 3b (`/me`, Step 5–6 phần `/me`); không bắt buộc.
+
+- [ ] **Step 0: Kiểm điều kiện Privacy**
+
+Chạy từ gốc repo:
+
+```bash
+grep -c "^- \*\*Requests:\*\*" docs/legal/privacy.md
+git log --oneline -3 -- docs/legal/privacy.md
+```
+
+Kỳ vọng: `1`; `git log` có một commit sửa `docs/legal/privacy.md` sau `32d70e0` (commit áp lại văn bản Owner đã duyệt); và `docs/legal/privacy.md` có dòng "Bổ sung M6 (request): APPROVED". Thiếu một trong ba → dừng, báo controller.
 
 - [ ] **Step 1: Chuỗi i18n**
 
@@ -2472,7 +2495,7 @@ Sửa giá trị 3 key đã có và thêm key mới. `en.ts`:
   "me.requests.empty": "No requests yet.",
   "request.cta": "Post a request",
   "request.form.title": "Post a request",
-  "request.form.intro": "Describe what you need. Our team reads every request and invites up to five builders to send you proposals. Builders see your name, never your email.",
+  "request.form.intro": "Describe what you need. Our team reads every request and invites up to five builders to send you proposals. Builders see your name, never your e-mail.",
   "request.form.titleField": "Title",
   "request.form.titleHint": "Up to 120 characters, for example \"Booking app for three salons\".",
   "request.form.descriptionField": "What do you need?",
@@ -2665,7 +2688,9 @@ Sửa giá trị 3 key đã có và thêm key mới. `en.ts`:
   "landing.clients.request": "不想等？發佈需求，VNX.SI 團隊會人工為你媒合開發者。",
 ```
 
-Sửa `apps/web/test/auth/verify-page.test.ts:61` theo câu `vi` mới của `auth.invalidLink.inquiryHint`. Tìm và sửa mọi test so chuỗi `"My inquiries"` / `"Yêu cầu của tôi"` (`grep -rn "My inquiries\|Yêu cầu của tôi" apps/web/test`).
+`auth.invalidLink.requestHint` (Task 2) ghép `tr("nav.me")` và `tr("me.sendNow")` nên tự theo tên mới. Chỉ `inquiryHint` của M5 là chữ cứng (đã ghi nhận ở Task 2): bước này đổi nó cho khớp `nav.me`, không làm gì thêm.
+
+Sửa `apps/web/test/auth/verify-page.test.ts:61` thành `expect(html).toContain("Nếu bạn đang xác nhận một yêu cầu: hãy đăng nhập, mở Yêu cầu và nhu cầu và bấm Gửi ngay.");`. Sửa `apps/web/test/me/inquiries.test.ts:100` thành `expect(header).toContain(`<a href="/zh-hant/me">${zhHant["nav.me"]}</a>`);` với `import zhHant from "../../src/i18n/messages/zh-hant.ts";` (xem cách `test/auth/request-verify.test.ts` nạp `vi`; dùng đúng kiểu import đó), để lần đổi tên sau không vỡ test. `test/auth/request-verify.test.ts:111` đọc `vi["nav.me"]` nên không cần sửa. Kiểm không còn test nào so chuỗi cũ: `grep -rn "My inquiries\|Yêu cầu của tôi\|我的咨询\|我的詢問" apps/web/test` → không còn dòng nào.
 
 - [ ] **Step 2: Test form `/request` (fail)**
 
@@ -2679,6 +2704,7 @@ import { findUserByEmail } from "../../src/db/users.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
 import { FAKE_TURNSTILE_PASS, TURNSTILE_FIELD } from "../../src/http/turnstile.ts";
+import { createPendingRequestAndMail } from "../../src/routes/request-form.tsx";
 import { ensureUser, signIn } from "../fixtures.ts";
 import { followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
 
@@ -2766,17 +2792,29 @@ describe("/request form (spec §5.7 step 1)", () => {
   it("treats a filled honeypot as success and creates nothing", async () => {
     const res = await post("/request", signedOut("bot@request.example", { website: "http://spam" }));
     expect(res.status).toBe(200);
+    expect(await res.text()).toContain("We sent a confirmation link to bot@request.example"); // same page as success
     expect(await findUserByEmail(testEnv.DB, "bot@request.example")).toBeNull();
+    expect(outbox).toEqual([]);
+  });
+
+  it("signed-in honeypot: redirects to /me and creates nothing", async () => {
+    const { user, cookie } = await signIn("rf-hp@vnx.si");
+    const res = await post("/request", valid({ website: "http://spam" }), { cookie });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/me");
+    expect(await listClientRequests(testEnv.DB, user.id)).toEqual([]);
     expect(outbox).toEqual([]);
   });
 
   it("refuses a failed Turnstile, and fails closed when Turnstile is not configured", async () => {
     expect((await post("/request", signedOut("t1@request.example", { [TURNSTILE_FIELD]: "nope" }))).status).toBe(400);
+    expect((await post("/request", valid({ email: "t3@request.example" }))).status).toBe(400); // no token at all
     const unconfigured = { ...testEnv, TURNSTILE_DRIVER: undefined, TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as Bindings;
     const res = await post("/request", signedOut("t2@request.example"), {}, unconfigured);
     expect(res.status).toBe(503);
     expect(await findUserByEmail(testEnv.DB, "t1@request.example")).toBeNull();
     expect(await findUserByEmail(testEnv.DB, "t2@request.example")).toBeNull();
+    expect(await findUserByEmail(testEnv.DB, "t3@request.example")).toBeNull();
   });
 
   it("allows 3 requests a day per e-mail: signed in gets 429, signed out gets the same page and nothing new", async () => {
@@ -2791,6 +2829,7 @@ describe("/request form (spec §5.7 step 1)", () => {
     clearOutbox();
     const res = await post("/request", signedOut("day@request.example"));
     expect(res.status).toBe(200);
+    expect(await res.text()).toContain("We sent a confirmation link to day@request.example");
     expect(outbox).toEqual([]);
     const owner = await findUserByEmail(testEnv.DB, "day@request.example");
     expect(await listClientRequests(testEnv.DB, owner!.id)).toHaveLength(3);
@@ -2801,9 +2840,10 @@ describe("/request form (spec §5.7 step 1)", () => {
     const ip = { "cf-connecting-ip": "203.0.113.77" };
     for (let i = 0; i < 10; i++) await post("/request", valid({ title: "" }), { cookie, ...ip }); // invalid forms do not count
     const accounts = await Promise.all([0, 1, 2, 3].map((i) => signIn(`rf-ip-${i}@vnx.si`)));
-    let last = 0;
-    for (let i = 0; i < 11; i++) last = (await post("/request", valid(), { cookie: accounts[i % 4]!.cookie, ...ip })).status;
-    expect(last).toBe(429);
+    let last!: Response;
+    for (let i = 0; i < 11; i++) last = await post("/request", valid(), { cookie: accounts[i % 4]!.cookie, ...ip });
+    expect(last.status).toBe(429);
+    expect(await last.text()).toContain("Too many requests from your network");
   });
 
   it("answers a suspended account's e-mail like success, creating and sending nothing", async () => {
@@ -2811,6 +2851,7 @@ describe("/request form (spec §5.7 step 1)", () => {
     await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(user.id).run();
     const res = await post("/request", signedOut("susp@request.example"));
     expect(res.status).toBe(200);
+    expect(await res.text()).toContain("We sent a confirmation link to susp@request.example");
     expect(await listClientRequests(testEnv.DB, user.id)).toEqual([]);
     expect(outbox).toEqual([]);
   });
@@ -2825,15 +2866,16 @@ describe("/request form (spec §5.7 step 1)", () => {
     };
     const client = await ensureUser("fail@request.example");
     const input = { title: "T", description: "d".repeat(40), category: "booking" as const, budgetBand: "unsure" as const, deadline: null, languages: ["en" as const], name: "N", email: "fail@request.example" };
+    const before = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.create'").first<{ n: number }>();
     expect(await createPendingRequestAndMail(testEnv, { client, input, locale: "en", now: new Date() }, broken)).toBe("send_failed");
     expect(await listClientRequests(testEnv.DB, client.id)).toEqual([]);
+    const after = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request.create'").first<{ n: number }>();
+    expect(after?.n).toBe(before?.n); // the audit row is written only after the e-mail went out
   });
 });
 ```
 
-(Thêm `import { createPendingRequestAndMail } from "../../src/routes/request-form.tsx";` vào đầu file.)
-
-Chạy: `npm test -w apps/web -- test/public/request-form.test.ts` → FAIL.
+Chạy: `npm test -w apps/web -- test/public/request-form.test.ts` → FAIL (không tìm thấy `routes/request-form.tsx`).
 
 - [ ] **Step 3: View form và facts**
 
@@ -2860,11 +2902,12 @@ export const REQUEST_STATUS_KEY: Record<RequestStatus, MessageKey> = {
 import type { FC } from "hono/jsx";
 import type { ClientRequest } from "../domain/request.ts";
 import type { Locale } from "../i18n/locales.ts";
+import { builderFacingName } from "../domain/inquiry.ts";
 import { translator } from "../i18n/t.ts";
 import { BUDGET_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "./labels.ts";
 import { PlainText } from "./PlainText.tsx";
 
-/** The request as the client, the invited builders and the admin read it. Never shows an e-mail. */
+/** The request as the client, the invited builders and the admin read it. Never shows an e-mail; `showClient` names the client the way a builder may see it. */
 export const RequestFacts: FC<{ locale: Locale; request: ClientRequest; showClient?: boolean }> = ({ locale, request, showClient }) => {
   const tr = translator(locale);
   return (
@@ -2873,7 +2916,7 @@ export const RequestFacts: FC<{ locale: Locale; request: ClientRequest; showClie
         {showClient ? (
           <>
             <dt>{tr("request.facts.client")}</dt>
-            <dd>{request.clientName}</dd>
+            <dd>{builderFacingName(request.clientName)}</dd>
           </>
         ) : null}
         <dt>{tr("request.facts.category")}</dt>
@@ -3096,7 +3139,7 @@ import { onLocalized } from "../http/localized.ts";
 import { siteOrigin } from "../http/origin.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
 import { TURNSTILE_FIELD, turnstileSiteKey, verifyTurnstile } from "../http/turnstile.ts";
-import { notifyAdminsOfRequest } from "../notify/request.ts";
+import { notifyRequestSubmitted } from "../notify/request.ts";
 import { page } from "../views/render.ts";
 import { RequestFormPage, RequestSentPage } from "../views/RequestFormPage.tsx";
 
@@ -3166,7 +3209,7 @@ async function submitForm(c: Context<AppEnv>) {
     if (!byEmail.allowed) return formPage(c, values, {}, 429, tr("request.error.dailyLimit"));
     const request = await createRequest(c.env.DB, { clientUserId: user.id, clientName: input.name, title: input.title, description: input.description, category: input.category, budgetBand: input.budgetBand, deadline: input.deadline, languages: input.languages, status: "submitted", locale, now: iso });
     await writeAudit(c.env.DB, { actorUserId: user.id, action: "request.submit", entity: "request", entityId: request.id, data: { category: request.category, languages: request.languages }, now: iso });
-    await notifyAdminsOfRequest(c.env, request.id);
+    await notifyRequestSubmitted(c.env, request.id);
     return c.redirect(localizedPath(locale, `/me/requests/${request.id}?sent=1`), 303);
   }
 
@@ -3318,13 +3361,13 @@ import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
-import { notifyNotSelected } from "../notify/request.ts";
+import { notifyInviteExpired, notifyNotSelected } from "../notify/request.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { RequestPage } from "../views/me/RequestPage.tsx";
 import { page } from "../views/render.ts";
 import { openPendingRequest } from "./request-confirm.ts";
 
-/** The client's request page. Task 6 adds the proposals. */
+/** The client's request page. Task 6 adds the proposals. `findClientRequest` already limits it to the owner and hides `removed`. */
 export async function requestPage(c: Context<AppEnv>, request: ClientRequest, status: 200 | 400 = 200) {
   return page(c, <RequestPage locale={c.get("locale")} origin={requestOrigin(c)} request={request} sent={c.req.query("sent") === "1"} />, status);
 }
@@ -3339,12 +3382,14 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
     return request ? requestPage(c, request) : errorResponse(c, "notFound", 404);
   });
 
-  // "Send now": the session proves the e-mail, same rule as the link (domain "verify").
+  // "Send now": the session proves the e-mail, same rule as the link (domain "verify"). openPendingRequest does not check
+  // who owns the request (Task 2 review), so it is checked here first: someone else's, removed or missing = 404, nothing written.
   onLocalized(app, "post", "/me/requests/:id/confirm", requireUser, async (c) => {
+    const user = c.get("user")!;
     const request = await load(c);
-    if (!request) return errorResponse(c, "notFound", 404);
+    if (!request || request.clientUserId !== user.id) return errorResponse(c, "notFound", 404);
     if (request.status !== "pending_verification") return errorResponse(c, "conflict", 409);
-    if (!(await openPendingRequest(c, request, c.get("user")!, new Date(), "me"))) return errorResponse(c, "conflict", 409);
+    if (!(await openPendingRequest(c, request, user, new Date(), "me"))) return errorResponse(c, "conflict", 409);
     return c.redirect(localizedPath(c.get("locale"), `/me/requests/${request.id}`), 303);
   });
 
@@ -3361,7 +3406,9 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
     ]);
     const outcome = end.read(results);
     if (!outcome.request) return errorResponse(c, "conflict", 409);
+    // Proposals that were not selected and invitations that lapsed each get their own neutral e-mail.
     await notifyNotSelected(c.env, outcome.notSelected);
+    await notifyInviteExpired(c.env, outcome.expired);
     return c.redirect(localizedPath(c.get("locale"), `/me/requests/${request.id}`), 303);
   });
 }
@@ -3413,9 +3460,9 @@ describe("/me requests (spec §5.4)", () => {
   beforeEach(() => clearOutbox());
 
   it("lists requests and inquiries on /me", async () => {
+    // Same tag: makeRequest and makeInquiry both use the client <tag>-c@vnx.si.
     const { client, request } = await makeRequest({ tag: "mr-list" });
-    const inquiry = await makeInquiry({ tag: "mr-list-i", status: "open" });
-    await testEnv.DB.prepare("UPDATE inquiries SET client_user_id = ?1 WHERE id = ?2").bind(client.id, inquiry.inquiry.id).run();
+    const inquiry = await makeInquiry({ tag: "mr-list", status: "open" });
     const { cookie } = await signIn(client.email);
     const html = await (await get("/me", cookie)).text();
     expect(html).toContain(`href="/me/requests/${request.id}"`);
@@ -3462,21 +3509,47 @@ describe("/me requests (spec §5.4)", () => {
     expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("closed");
     const statuses = (await listRequestInvites(testEnv.DB, request.id)).map((x) => x.invite.status);
     expect(statuses).toEqual(["not_selected", "expired"]);
-    expect(outbox.map((m) => m.to)).toEqual(["mr-close-a@vnx.si"]);
+    // A's proposal was not selected, B's invitation lapsed: each builder gets one e-mail, and none shows the client's e-mail.
+    expect(outbox.map((m) => m.to).sort()).toEqual(["mr-close-a@vnx.si", "mr-close-b@vnx.si"]);
+    expect(outbox.every((m) => !m.text.includes(client.email))).toBe(true);
     expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(409);
-    expect(outbox).toHaveLength(1);
+    expect(outbox).toHaveLength(2);
   });
 
-  it("does not let another client close or confirm", async () => {
+  it("lets the owner close a submitted request: 303, nobody to e-mail; a pending one cannot be closed (409)", async () => {
+    const { client, request } = await makeRequest({ tag: "mr-close-sub" });
+    const { cookie } = await signIn(client.email);
+    expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(303);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("closed");
+    expect(outbox).toEqual([]);
+    const pending = await makeRequest({ tag: "mr-close-pend", status: "pending_verification" });
+    const other = await signIn(pending.client.email);
+    expect((await post(`/me/requests/${pending.request.id}/close`, other.cookie)).status).toBe(409);
+    expect((await findRequestById(testEnv.DB, pending.request.id))?.status).toBe("pending_verification");
+  });
+
+  it("does not let another client close a request", async () => {
     const { request } = await makeRequest({ tag: "mr-other" });
     const { cookie } = await signIn("mr-other-x@vnx.si");
     expect((await post(`/me/requests/${request.id}/close`, cookie)).status).toBe(404);
     expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("submitted");
   });
+
+  // Task 2 review: openPendingRequest does not check the owner, so "Send now" must (404, nothing written).
+  it("does not let another user send someone else's pending request: 404, no e-mail, no audit row, still pending", async () => {
+    const { request } = await makeRequest({ tag: "mr-own", status: "pending_verification" });
+    const { cookie } = await signIn("mr-own-x@vnx.si");
+    expect((await post(`/me/requests/${request.id}/confirm`, cookie)).status).toBe(404);
+    expect((await findRequestById(testEnv.DB, request.id))?.status).toBe("pending_verification");
+    expect(outbox).toEqual([]);
+    const audit = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity = 'request' AND entity_id = ?1").bind(request.id).first<{ n: number }>();
+    expect(audit?.n).toBe(0);
+    expect((await post("/me/requests/does-not-exist/confirm", cookie)).status).toBe(404);
+  });
 });
 ```
 
-Chạy: `npm test -w apps/web -- test/public/request-form.test.ts test/me/requests.test.ts test/me/inquiries.test.ts` → PASS.
+Chạy: `npm test -w apps/web -- test/me/requests.test.ts` → FAIL trước khi có route (404 ở `/me/requests/...`); sau Step 4–5: `npm test -w apps/web -- test/public/request-form.test.ts test/me/requests.test.ts test/me/inquiries.test.ts` → PASS.
 
 - [ ] **Step 7: Lối vào, sitemap, Privacy**
 
@@ -3511,13 +3584,51 @@ Chạy: `npm test -w apps/web -- test/public/request-form.test.ts test/me/reques
 ```
 
 - `apps/web/src/routes/seo.ts`: thêm `{ rest: "/request", localized: true },` sau `/builders`.
-- `apps/web/src/legal/content.ts`: chép nguyên văn các dòng mới / sửa của `docs/legal/privacy.md` (EN vào `privacyEn`, VI vào `privacyVi`), đúng vị trí. `LEGAL_UPDATED_AT` giữ nguyên trừ khi Reviewer đã đổi ngày trong `docs/legal/privacy.md` (nếu đổi, dùng đúng ngày đó).
+- `apps/web/src/legal/content.ts`: xem "Privacy" bên dưới.
 
-Sửa test cũ:
-- `test/seo/sitemap.test.ts`: thay `expect(xml).not.toContain("/request")` bằng `expect(xml).toContain("<loc>https://vnx.si/vi/request</loc>")`.
-- `test/public/builders-page.test.ts`: thay `expect(html).not.toContain("/request")` bằng `expect(html).toContain('href="/request"')`.
-- `test/public/products-page.test.ts`: trong test trạng thái rỗng, thêm `expect(html).toContain('href="/request"')`; nếu có `not.toContain("/request")` thì bỏ.
-- `test/landing/page.test.ts`: thêm một test: `/vi` có `href="/vi/request"` trong khối `#notify` và form waitlist vẫn còn.
+Sửa test cũ và thêm test (viết trước khi sửa code ở trên nếu chưa làm; chạy thấy FAIL rồi mới sửa):
+- `test/seo/sitemap.test.ts` (dòng 29): thay `expect(xml).not.toContain("/request");` bằng `expect(xml).toContain("<loc>https://vnx.si/vi/request</loc>");` và thêm `expect(xml).not.toContain("/me/requests");` (request không bao giờ có trang công khai).
+- `test/public/builders-page.test.ts` (dòng 21): thay `expect(html).not.toContain("/request");` bằng `expect(html).toContain('href="/request"');`.
+- `test/public/products-page.test.ts`: chưa có test trạng thái rỗng; thêm trong `describe("/products …")`:
+
+```ts
+  it("offers to post a request when nothing matches", async () => {
+    const html = await (await get("/products?q=zzznomatchzzz")).text();
+    expect(html).toContain("No products match yet.");
+    expect(html).toContain('href="/request"');
+  });
+```
+
+- `test/landing/page.test.ts`: thêm (dùng `get`, `mainOf` đã có trong file):
+
+```ts
+  it("links to /request next to the waitlist form without replacing it (Owner 2026-10-04)", async () => {
+    const main = mainOf(await (await get("/vi")).text());
+    expect(main).toMatch(/<section id="notify"[\s\S]*href="\/vi\/request"[\s\S]*<form method="post" action="\/vi\/waitlist#notify"/);
+  });
+```
+
+  Test AC4 cũ của file đó ("không có chữ số trong `<main>`", không link `/products|/builders`) vẫn phải xanh: `landing.clients.request` ở 4 locale không có chữ số và `/request` không khớp regex đó.
+
+**Privacy.** `docs/legal/privacy.md` (đã áp ở Step 0) có phần EN và VI của M6; `test/legal/content.test.ts` so từng dòng của hai phần `## EN` và `## VI` với trang `/privacy` và `/vi/privacy`. Chạy trước: `npm test -w apps/web -- test/legal/content.test.ts` → FAIL ở `privacy EN` và `privacy VI` (thiếu dòng "Requests:" / "Nhu cầu (request):"). Sửa `apps/web/src/legal/content.ts` đúng như dưới đây, chép nguyên văn (đối chiếu `git show 953fa21 -- docs/legal/privacy.md` nếu nghi ngờ). Mỗi mục là một chuỗi trong mảng `ul` đã có; `**…**` giữ nguyên như các dòng quanh nó. `LEGAL_UPDATED_AT` không đổi (`953fa21` không đổi `{date}`). `zh-Hans`, `zh-Hant` dùng văn bản EN nên không cần sửa riêng.
+
+`privacyEn`:
+1. Mục 2, ngay sau dòng bắt đầu `"**Inquiries:** when you contact a builder`, thêm hai chuỗi:
+   - `"**Requests:** when you post a request, the name you type, the title, the description, the category, your budget range, an optional deadline and the languages you want to work in. If you are not signed in, we also take your email address and create an account for it; nothing is reviewed until you confirm that email."`
+   - `"**Proposals:** if you are a builder and we invite you to a request, the approach, price, timeline and notes you send, or that you declined."`
+2. Mục 2, dòng `**Bot check:**` thành: `"**Bot check:** when you send an inquiry or a request without signing in, Cloudflare Turnstile checks that you are a person. Cloudflare receives your IP address and information from your browser for this check."`
+3. Mục 3, ngay sau dòng `"To pass inquiries and replies between clients and builders…"`, thêm: `"To match requests with builders: our team reads each request and invites up to five builders, who see the request and send proposals; when you pick a proposal we start an inquiry between you and that builder with the request and the proposal as the first message."`
+4. Mục 4, dòng `"Builders do not see clients' email addresses. …"` thành: `"Builders do not see clients' email addresses. A builder sees the name you typed, your messages, your budget range and deadline; a builder invited to your request also sees the request."`
+5. Mục 6, ngay sau dòng `"Inquiries and their messages: …"`, thêm: `"Requests and proposals: while your account exists, under the same rule as your account below. Requests you never confirmed: deleted after 48 hours."`
+
+`privacyVi`:
+1. Mục 2, ngay sau dòng `"**Yêu cầu (Inquiry):** …"`, thêm:
+   - `"**Nhu cầu (request):** khi bạn đăng nhu cầu, tên bạn gõ, tiêu đề, mô tả, danh mục, khoảng ngân sách, hạn chót (nếu có) và các ngôn ngữ bạn muốn làm việc. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; nhu cầu chưa được xem xét cho tới khi bạn xác nhận email."`
+   - `"**Đề xuất:** nếu bạn là builder và được mời vào một nhu cầu, cách làm, giá, thời gian và ghi chú bạn gửi, hoặc việc bạn từ chối."`
+2. Dòng `**Kiểm tra chống bot:**` thành: `"**Kiểm tra chống bot:** khi bạn gửi yêu cầu hoặc nhu cầu mà chưa đăng nhập, Cloudflare Turnstile kiểm tra bạn là người thật. Cloudflare nhận địa chỉ IP và thông tin từ trình duyệt của bạn để kiểm tra."`
+3. Mục 3, ngay sau dòng `"Chuyển yêu cầu và trả lời giữa client và builder, …"`, thêm: `"Ghép nhu cầu với builder: đội ngũ của chúng tôi đọc từng nhu cầu và mời tối đa năm builder; các builder đó xem nhu cầu và gửi đề xuất; khi bạn chọn một đề xuất, chúng tôi mở một yêu cầu giữa bạn và builder đó với nội dung nhu cầu và đề xuất làm tin nhắn đầu tiên."`
+4. Mục 4, dòng `"Builder không thấy email của client. …"` thành: `"Builder không thấy email của client. Builder thấy tên bạn gõ, các tin nhắn, khoảng ngân sách và hạn chót; builder được mời vào nhu cầu của bạn thấy thêm nhu cầu đó."`
+5. Mục 6, ngay sau dòng `"Yêu cầu và tin nhắn: …"`, thêm: `"Nhu cầu và đề xuất: trong thời gian tài khoản tồn tại, theo cùng quy tắc với tài khoản bên dưới. Nhu cầu bạn chưa xác nhận: xóa sau 48 giờ."`
 
 Chạy: `npm test -w apps/web -- test/seo test/public test/landing test/legal` → PASS.
 
@@ -3526,12 +3637,16 @@ Chạy: `npm test -w apps/web -- test/seo test/public test/landing test/legal` �
 ```bash
 npm run typecheck -w apps/web
 npm test
-git add apps/web/src apps/web/test
+git add apps/web/src/routes/request-form.tsx apps/web/src/routes/me-requests.tsx apps/web/src/routes/me.tsx apps/web/src/routes/seo.ts apps/web/src/app.ts apps/web/src/views/RequestFormPage.tsx apps/web/src/views/RequestFacts.tsx apps/web/src/views/me/RequestPage.tsx apps/web/src/views/me/RequestList.tsx apps/web/src/views/labels.ts apps/web/src/views/DirectoryPage.tsx apps/web/src/views/CatalogPage.tsx apps/web/src/views/LandingPage.tsx apps/web/src/legal/content.ts apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/public/request-form.test.ts apps/web/test/me/requests.test.ts apps/web/test/seo/sitemap.test.ts apps/web/test/public/builders-page.test.ts apps/web/test/public/products-page.test.ts apps/web/test/landing/page.test.ts apps/web/test/auth/verify-page.test.ts apps/web/test/me/inquiries.test.ts
 git commit -m "feat(web): post a request form, client request pages and entry points (VNX-0602b)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+Kiểm cuối (mỗi dòng phải đúng):
+- `git status --short` không còn file nào ngoài `.claude/`.
+- `grep -rn "notifyAdminsOfRequest" apps/web` → không có dòng nào.
+- `npm test -w apps/web -- test/architecture.test.ts test/i18n` xanh (ranh giới module, `requests` chỉ ghi từ `db/requests.ts`, 4 locale đủ key).
 ---
 
 ### Task 4: VNX-0603 — Admin: hàng chờ request, gợi ý builder, mời ≤ 5, trả về, spam
@@ -5971,6 +6086,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## Ghi nhận (dự kiến)
 
+- Đăng request khi đã đăng nhập là hai lần ghi (`createRequest`, rồi audit `request.submit`), như Inquiry ở M5; mất kết nối giữa hai lần thì request có mà thiếu dòng audit.
 - Email về request gửi một lần, không gửi lại (trừ email "được chọn" đi theo Inquiry).
 - Gợi ý xét tối đa 1 000 builder; khớp kỹ năng là chuỗi con không phân biệt hoa thường (kỹ năng "Go" khớp "good").
 - Audit `request.invite` ghi danh sách admin chọn (`requested`), không phải danh sách thực sự được mời; trang request hiện danh sách thật.
