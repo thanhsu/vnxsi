@@ -3,6 +3,7 @@
 _Cập nhật lần cuối: 2026-10-04 bởi Reviewer (Claude)._
 
 ## Tóm tắt
+- **Production (2026-10-05):** `main` `3169e6d` (PR #4: VNX-0709 thiết kế lại đợt A, VNX-0710 contact/feedback, VNX-0711 chạy khi chưa có R2, kèm M5 + VNX-0508) **đã deploy** lên https://vnx.si (version `b5d0f063`, cron `0 1 * * *`). D1 production đã áp `0003`–`0007`, `0009`. Smoke: 20 route trả mã đúng, magic link thật gửi qua Resend tới `thanhsu604@gmail.com`. Chưa có R2: `/media/*` 404, upload ảnh báo "sắp mở" (builder chưa submit product được). Việc còn lại: Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → bỏ comment `r2_buckets` trong `wrangler.jsonc` → deploy.
 
 - **Hướng sản phẩm:** marketplace cho sản phẩm được xây bằng AI và builder (pivot 2026-10-03). Blueprint: `docs/blueprint/README.md`.
 - **Đợt hiện tại:** Wave 1 (Supply). Spec: `docs/superpowers/specs/2026-10-03-vnxsi-marketplace-wave1-design.md`.
