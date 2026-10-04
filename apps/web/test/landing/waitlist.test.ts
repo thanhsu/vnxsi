@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
+import { externalReferrerHost, siteHosts } from "../../src/domain/waitlist-input.ts";
 import { t } from "../../src/i18n/t.ts";
 import { formPost, testEnv } from "../helpers.ts";
 
@@ -58,20 +59,68 @@ describe("POST /waitlist (VNX-0708)", () => {
     }
   });
 
-  it("stores utm_* (capped at 200) and only an external referrer host", async () => {
+  it("stores utm_* (capped at 200)", async () => {
     const res = await post(
       "/waitlist",
       { email: "utm@example.com", consent: "on", utm_source: "newsletter", utm_medium: "email", utm_campaign: "y".repeat(300) },
       "198.51.100.3",
-      { referer: "https://News.Example.org/some/path?q=1" },
     );
     expect(res.status).toBe(303);
     const row = await rowOf("utm@example.com");
-    expect(row).toMatchObject({ utm_source: "newsletter", utm_medium: "email", referrer: "news.example.org" });
+    expect(row).toMatchObject({ utm_source: "newsletter", utm_medium: "email" });
     expect(row!.utm_campaign).toBe("y".repeat(200));
+  });
 
-    await post("/waitlist", { email: "same-site@example.com", consent: "on" }, "198.51.100.3", { referer: "https://vnx.si/vi/?x=1" });
-    expect((await rowOf("same-site@example.com"))?.referrer).toBeNull();
+  it("F1: stores the referrer host carried in ref, and ignores the POST's own Referer header", async () => {
+    const res = await post("/waitlist", { email: "ref-hn@example.com", consent: "on", ref: "news.ycombinator.com" }, "198.51.100.10", {
+      referer: "https://vnx.si/",
+    });
+    expect(res.status).toBe(303);
+    expect((await rowOf("ref-hn@example.com"))?.referrer).toBe("news.ycombinator.com");
+
+    await post("/waitlist", { email: "ref-header@example.com", consent: "on" }, "198.51.100.10", { referer: "https://news.example.org/a" });
+    expect((await rowOf("ref-header@example.com"))?.referrer).toBeNull();
+  });
+
+  it("F1: a ref that is not a plain external hostname is stored as null", async () => {
+    const odd = [
+      "news.ycombinator.com/item",
+      "https://news.ycombinator.com",
+      "news ycombinator.com",
+      "news.ycombinator.com?x=1",
+      "<script>",
+      "user@host.com",
+      "a".repeat(201),
+      "vnx.si",
+      "www.vnx.si",
+    ];
+    for (const [i, ref] of odd.entries()) {
+      const email = `ref-odd-${i}@example.com`;
+      const res = await post("/waitlist", { email, consent: "on", ref }, "198.51.100.11");
+      expect(res.status, ref).toBe(303);
+      expect((await rowOf(email))?.referrer, ref).toBeNull();
+    }
+  });
+
+  it("F3: treats APP_ORIGIN, www. + APP_ORIGIN and the request host as the site itself", () => {
+    const hosts = siteHosts("vnx.si", "vnxsi-web.preview.workers.dev");
+    expect(hosts).toEqual(expect.arrayContaining(["vnx.si", "www.vnx.si", "vnxsi-web.preview.workers.dev"]));
+    expect(externalReferrerHost("https://www.vnx.si/x", hosts)).toBeNull();
+    expect(externalReferrerHost("https://vnx.si/vi/", hosts)).toBeNull();
+    expect(externalReferrerHost("https://vnxsi-web.preview.workers.dev/", hosts)).toBeNull();
+    expect(externalReferrerHost("https://News.YCombinator.com/item?id=1", hosts)).toBe("news.ycombinator.com");
+    expect(externalReferrerHost("ftp://files.example.com/", hosts)).toBeNull();
+    expect(externalReferrerHost(undefined, hosts)).toBeNull();
+  });
+
+  it("F2: keeps the consent box ticked when the form comes back with an error", async () => {
+    const ticked = await post("/vi/waitlist", { email: "bad-but-consented", consent: "on" }, "198.51.100.12");
+    expect(ticked.status).toBe(400);
+    expect(await ticked.text()).toMatch(/<input id="waitlist-consent"[^>]*\schecked[\s=>]/);
+
+    const unticked = await post("/vi/waitlist", { email: "no-tick@example.com" }, "198.51.100.12");
+    expect(unticked.status).toBe(400);
+    expect(await unticked.text()).not.toMatch(/<input id="waitlist-consent"[^>]*\schecked[\s=>]/);
   });
 
   it("AC6: adds client to an existing entry, keeps old personas and never duplicates client", async () => {

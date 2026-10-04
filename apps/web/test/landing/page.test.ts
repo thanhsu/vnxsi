@@ -127,6 +127,19 @@ describe("landing page GET / (VNX-0708)", () => {
     expect(plain).not.toContain('name="utm_source"');
   });
 
+  it("F1: carries an external Referer host into a hidden ref input, never the site's own hosts", async () => {
+    const withRef = (path: string, referer: string) =>
+      createApp().request(new Request(`https://vnx.si${path}`, { headers: { referer } }), undefined, testEnv);
+    const main = mainOf(await (await withRef("/vi", "https://news.ycombinator.com/item?id=1")).text());
+    expect(main).toContain('<input type="hidden" name="ref" value="news.ycombinator.com"');
+    expect(main).not.toContain("item?id");
+    for (const internal of ["https://vnx.si/products", "https://www.vnx.si/x", "not a url"]) {
+      const html = mainOf(await (await withRef("/", internal)).text());
+      expect(html, internal).not.toContain('name="ref"');
+    }
+    expect(mainOf(await (await get("/")).text())).not.toContain('name="ref"');
+  });
+
   it("AC11: ?joined=1 shows the success message instead of the form", async () => {
     for (const { path, locale } of PAGES) {
       const main = mainOf(await (await get(`${path}?joined=1`)).text());
