@@ -292,6 +292,7 @@ export const zhHans: Messages = {
   "media.error.size": "图片超过 2 MB。",
   "media.error.full": "已有 8 张图片。请先删除一张再添加。",
   "media.error.alt": "描述最多 150 个字符。",
+  "media.unavailable": "图片上传即将开放。",
   "pricing.intro": "最多添加 5 个价格方案。留空即可删除该方案。价格以美元计。",
   "pricing.tier": "方案 {n}",
   "pricing.name": "方案名称",

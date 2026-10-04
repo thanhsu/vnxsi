@@ -292,6 +292,7 @@ export const zhHant: Messages = {
   "media.error.size": "圖片超過 2 MB。",
   "media.error.full": "已有 8 張圖片。請先刪除一張再新增。",
   "media.error.alt": "描述最多 150 個字元。",
+  "media.unavailable": "圖片上傳即將開放。",
   "pricing.intro": "最多新增 5 個價格方案。留空即可刪除該方案。價格以美元計。",
   "pricing.tier": "方案 {n}",
   "pricing.name": "方案名稱",

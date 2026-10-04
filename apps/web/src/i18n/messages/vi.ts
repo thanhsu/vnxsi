@@ -292,6 +292,7 @@ export const vi: Messages = {
   "media.error.size": "Ảnh này lớn hơn 2 MB.",
   "media.error.full": "Bạn đã có 8 ảnh. Xóa bớt một ảnh để thêm ảnh mới.",
   "media.error.alt": "Mô tả tối đa 150 ký tự.",
+  "media.unavailable": "Tải ảnh lên sẽ sớm mở.",
   "pricing.intro": "Thêm tối đa 5 mức giá. Để trống một mức để xóa mức đó. Giá tính bằng USD.",
   "pricing.tier": "Mức {n}",
   "pricing.name": "Tên mức giá",

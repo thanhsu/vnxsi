@@ -290,6 +290,7 @@ export const en = {
   "media.error.size": "This image is larger than 2 MB.",
   "media.error.full": "You already have 8 images. Delete one to add another.",
   "media.error.alt": "Keep the description to 150 characters or fewer.",
+  "media.unavailable": "Image uploads open soon.",
   "pricing.intro": "Add up to 5 pricing tiers. Leave a tier empty to remove it. Prices are in USD.",
   "pricing.tier": "Tier {n}",
   "pricing.name": "Tier name",

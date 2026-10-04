@@ -18,6 +18,8 @@ type Props = {
   saved: boolean;
   media: ProductMedia[];
   mediaError: MediaErrorCode | null;
+  /** False while there is no R2 binding (VNX-0711): the upload form gives way to a notice. */
+  mediaEnabled: boolean;
 };
 
 export const EditorPage: FC<Props> = (p) => (
@@ -34,7 +36,7 @@ export const EditorPage: FC<Props> = (p) => (
       />
     )}
     {p.step === "demo" ? (
-      <MediaSection locale={p.locale} productId={p.product.id} productName={p.product.name} media={p.media} error={p.mediaError} editable={p.lock === null} />
+      <MediaSection locale={p.locale} productId={p.product.id} productName={p.product.name} media={p.media} error={p.mediaError} editable={p.lock === null} enabled={p.mediaEnabled} />
     ) : null}
   </EditorLayout>
 );
