@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { findPublicBuilderByHandle } from "../db/builders.ts";
 import { listPortfolio } from "../db/portfolio.ts";
+import { listPublicProductsByBuilder } from "../db/products.ts";
 import { HANDLE_RE } from "../domain/builder-input.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
@@ -18,7 +19,7 @@ export function registerBuilderProfileRoutes(app: Hono<AppEnv>) {
     if (raw !== handle) return c.redirect(localizedPath(c.get("locale"), `/b/${handle}`), 301);
     const builder = await findPublicBuilderByHandle(c.env.DB, handle);
     if (!builder) return errorResponse(c, "notFound", 404);
-    const portfolio = await listPortfolio(c.env.DB, builder.userId);
-    return page(c, <BuilderProfilePage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} portfolio={portfolio} signedIn={c.get("user") !== null} />);
+    const [portfolio, products] = await Promise.all([listPortfolio(c.env.DB, builder.userId), listPublicProductsByBuilder(c.env.DB, builder.userId)]);
+    return page(c, <BuilderProfilePage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} portfolio={portfolio} products={products} signedIn={c.get("user") !== null} />);
   });
 }

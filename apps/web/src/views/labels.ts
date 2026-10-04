@@ -1,6 +1,6 @@
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
 import type { UserStatus } from "../domain/user.ts";
-import type { Billing, Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
+import type { Badge, Billing, Category, DeliveryModel, License, ProductLang, ProductStatus } from "../domain/product.ts";
 import type { ProductStep } from "../domain/product-input.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 
@@ -99,4 +99,10 @@ export const BILLING_KEY: Record<Billing, MessageKey> = {
   monthly: "pricing.billing.monthly",
   yearly: "pricing.billing.yearly",
   contact: "pricing.billing.contact",
+};
+
+export const BADGE_KEY: Record<Badge["kind"], MessageKey> = {
+  listed: "badge.listed",
+  demo_verified: "badge.demo_verified",
+  in_production: "badge.in_production",
 };

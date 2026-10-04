@@ -4,16 +4,10 @@ import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { formatUsd } from "../format.ts";
-import { BILLING_KEY, CATEGORY_KEY, DELIVERY_KEY, LICENSE_KEY, PRODUCT_STATUS_KEY } from "../labels.ts";
+import { BADGE_KEY, BILLING_KEY, CATEGORY_KEY, DELIVERY_KEY, LICENSE_KEY, PRODUCT_STATUS_KEY } from "../labels.ts";
 import { PlainText } from "../PlainText.tsx";
 import { AdminLayout } from "./AdminLayout.tsx";
 import type { AdminNotice } from "./BuilderDetailPage.tsx";
-
-export const BADGE_KEY: Record<Badge["kind"], MessageKey> = {
-  listed: "badge.listed",
-  demo_verified: "badge.demo_verified",
-  in_production: "badge.in_production",
-};
 
 type Props = {
   locale: Locale;

@@ -13,6 +13,7 @@ import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
 import { registerMediaRoutes } from "./routes/media.ts";
 import { registerBuilderProfileRoutes } from "./routes/builder-profile.tsx";
+import { registerProductPageRoutes } from "./routes/product-page.tsx";
 import { registerAdminProductRoutes } from "./routes/admin-products.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
@@ -37,6 +38,7 @@ export function createApp() {
   registerProductEditorRoutes(app);
   registerMediaRoutes(app);
   registerBuilderProfileRoutes(app);
+  registerProductPageRoutes(app);
   registerAdminRoutes(app);
   registerAdminProductRoutes(app);
   registerInviteAdminRoutes(app);

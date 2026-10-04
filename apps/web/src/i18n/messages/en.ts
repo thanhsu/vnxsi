@@ -342,6 +342,19 @@ export const en = {
   "admin.badges.error.kind": "Choose a badge.",
   "admin.badges.error.evidence": "Describe the evidence (up to 500 characters).",
   "admin.badges.error.reason": "Enter a reason (up to 300 characters).",
+  "productPage.problem": "The problem",
+  "productPage.audience": "Who it is for",
+  "productPage.features": "Features",
+  "productPage.techStack": "Built with",
+  "productPage.pricing": "Pricing",
+  "productPage.license": "License",
+  "productPage.customization": "Customization",
+  "productPage.support": "Support",
+  "productPage.demo": "Try the demo",
+  "productPage.website": "Website",
+  "productPage.builder": "Built by",
+  "productPage.verifiedOn": "since {date}",
+  "bprofile.products": "Products",
 } as const;
 
 export type MessageKey = keyof typeof en;

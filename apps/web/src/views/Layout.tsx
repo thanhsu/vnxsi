@@ -1,6 +1,7 @@
 import type { FC, PropsWithChildren } from "hono/jsx";
 import { alternates, LOCALE_LABEL, LOCALES, localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
+import { jsonLdScript } from "./json-ld.ts";
 
 export type LayoutProps = {
   locale: Locale;
@@ -10,10 +11,12 @@ export type LayoutProps = {
   description?: string;
   noindex?: boolean;
   signedIn?: boolean;
+  ogImage?: string;
+  jsonLd?: unknown;
 };
 
 export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
-  const { locale, title, origin, rest, description, noindex, signedIn, children } = props;
+  const { locale, title, origin, rest, description, noindex, signedIn, ogImage, jsonLd, children } = props;
   const tr = translator(locale);
   return (
     <html lang={locale}>
@@ -24,6 +27,12 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         {description ? <meta name="description" content={description} /> : null}
         {noindex ? <meta name="robots" content="noindex" /> : null}
         <link rel="canonical" href={origin + localizedPath(locale, rest)} />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={title} />
+        <meta property="og:url" content={origin + localizedPath(locale, rest)} />
+        {description ? <meta property="og:description" content={description} /> : null}
+        {ogImage ? <meta property="og:image" content={ogImage} /> : null}
+        {jsonLd ? jsonLdScript(jsonLd) : null}
         {alternates(origin, rest).map((alt) => (
           <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
         ))}

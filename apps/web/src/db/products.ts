@@ -231,3 +231,16 @@ export async function listRecentlyEdited(db: D1Database, since: string, limit = 
     .all<WithBuilderRow>();
   return results.map(toWithBuilder);
 }
+
+const PUBLIC = "p.status = 'published' AND b.status = 'approved' AND u.status = 'active'";
+
+/** Spec §7.2: only published products of approved builders on active accounts are public. */
+export async function findPublicProductBySlug(db: D1Database, slug: string): Promise<ProductWithBuilder | null> {
+  const row = await db.prepare(`${WITH_BUILDER} WHERE p.slug = ?1 AND ${PUBLIC}`).bind(slug).first<WithBuilderRow>();
+  return row ? toWithBuilder(row) : null;
+}
+
+export async function listPublicProductsByBuilder(db: D1Database, builderId: string): Promise<Product[]> {
+  const { results } = await db.prepare(`${WITH_BUILDER} WHERE p.builder_id = ?1 AND ${PUBLIC} ORDER BY p.published_at DESC, p.id`).bind(builderId).all<WithBuilderRow>();
+  return results.map(toProduct);
+}

@@ -72,3 +72,10 @@ table.data th, table.data td { text-align: left; padding: 10px 12px; border-bott
 .media-section { margin-top: 24px; }
 .media-grid { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
 .media-grid img { display: block; width: 160px; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+.product { max-width: 960px; }
+.gallery { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.gallery img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.tiers { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.tiers > li { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); }
+.tiers h3 { margin: 0 0 4px; }
+.price { font-weight: 600; }
