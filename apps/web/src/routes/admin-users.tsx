@@ -3,6 +3,7 @@ import { adminEmails } from "../auth/admin.ts";
 import { requireAdmin } from "../auth/middleware.ts";
 import { deleteUserSessionsStatement } from "../auth/sessions.ts";
 import { auditStatement } from "../db/audit.ts";
+import { expireInvitesOfInactiveBuildersStatement } from "../db/requests.ts";
 import { findUserById, searchUsers, setUserStatusStatement } from "../db/users.ts";
 import { userTransition, type UserAction } from "../domain/user.ts";
 import type { AppEnv } from "../env.ts";
@@ -39,7 +40,7 @@ async function changeUser(c: Context<AppEnv>, action: UserAction) {
   const audit = { actorUserId: admin.id, action: `user.${action}`, entity: "user", entityId: target.id, data: { from: target.status, to: next.status }, now };
   const statements = [
     setUserStatusStatement(c.env.DB, { id: target.id, from: target.status, to: next.status, now }),
-    ...(action === "suspend" ? [deleteUserSessionsStatement(c.env.DB, target.id)] : []),
+    ...(action === "suspend" ? [deleteUserSessionsStatement(c.env.DB, target.id), expireInvitesOfInactiveBuildersStatement(c.env.DB, now, target.id)] : []),
     auditStatement(c.env.DB, audit, { userId: target.id, status: next.status, updatedAt: now }),
   ];
   const results = await c.env.DB.batch(statements);

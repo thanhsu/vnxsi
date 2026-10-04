@@ -463,3 +463,76 @@ export function markInviteSelectedStatement(db: D1Database, input: { inviteId: s
     )
     .bind(input.inviteId, input.requestId, input.inquiryId, input.now);
 }
+
+/** Sanity bound on rows one daily run takes from a list; the daily job warns when it is hit. */
+export const CRON_LIST_CAP = 200;
+
+/**
+ * Spec §8.4: invitations sent before `invitedBefore` that are still unanswered lapse (invited -> expired). Returns their ids
+ * for the "invitation ended" e-mail. `now >= invited_at + 7 days` holds for every row, so each one counts as a lapse in the
+ * §8.10 penalty (julianday(updated_at) - julianday(invited_at) >= 7); the cron must not call this with a shorter window.
+ */
+export async function expireStaleInvites(db: D1Database, invitedBefore: string, now: string): Promise<string[]> {
+  const { results } = await db
+    .prepare("UPDATE request_invites SET status = 'expired', updated_at = ?2 WHERE status = 'invited' AND invited_at < ?1 RETURNING id")
+    .bind(invitedBefore, now)
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
+}
+
+/**
+ * Spec §7.6: a builder who is not approved on an active account loses their unanswered invitations (invited -> expired),
+ * with no e-mail (Owner 2026-10-04). Checks the builder's CURRENT status itself, so it is safe to batch right after the
+ * change that suspended them, or to run for everyone (no `builderId`) from the daily job. `updated_at = now` of the
+ * suspension: a suspension before day 7 is not a lapse for the §8.10 penalty.
+ */
+export function expireInvitesOfInactiveBuildersStatement(db: D1Database, now: string, builderId: string | null = null): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE request_invites SET status = 'expired', updated_at = ?1
+       WHERE status = 'invited' AND (?2 IS NULL OR builder_id = ?2)
+         AND builder_id IN (SELECT b.user_id FROM builders b JOIN users u ON u.id = b.user_id WHERE b.status != 'approved' OR u.status != 'active')
+       RETURNING id`,
+    )
+    .bind(now, builderId);
+}
+
+export async function expireInvitesOfInactiveBuilders(db: D1Database, now: string): Promise<number> {
+  return (await expireInvitesOfInactiveBuildersStatement(db, now).all()).results.length;
+}
+
+/** Spec §8.4: unanswered invitations sent before `invitedBefore`, not yet reminded, on a matching request, to a public builder. */
+export async function listInvitesToRemind(db: D1Database, invitedBefore: string, limit = CRON_LIST_CAP): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT x.id FROM request_invites x
+       JOIN requests r ON r.id = x.request_id
+       JOIN builders b ON b.user_id = x.builder_id JOIN users u ON u.id = b.user_id
+       WHERE x.status = 'invited' AND x.reminded_at IS NULL AND x.invited_at < ?1 AND r.status = 'matching'
+         AND b.status = 'approved' AND u.status = 'active'
+       ORDER BY x.invited_at, x.id LIMIT ?2`,
+    )
+    .bind(invitedBefore, limit)
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
+}
+
+/** Set once, after the reminder went out (does not touch updated_at: only expiry stamps it). */
+export async function markInviteReminded(db: D1Database, id: string, now: string): Promise<void> {
+  await db.prepare("UPDATE request_invites SET reminded_at = ?2 WHERE id = ?1 AND reminded_at IS NULL").bind(id, now).run();
+}
+
+/** Spec §8.4: matching requests whose first invitation (matched_at) went out before `matchedBefore`. Oldest first. */
+export async function listRequestsToExpire(db: D1Database, matchedBefore: string, limit = CRON_LIST_CAP): Promise<string[]> {
+  const { results } = await db
+    .prepare("SELECT id FROM requests WHERE status = 'matching' AND matched_at < ?1 ORDER BY matched_at, id LIMIT ?2")
+    .bind(matchedBefore, limit)
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
+}
+
+/** Spec §8.4: unconfirmed requests created before `cutoff` go away (they never have invitations). Returns how many. */
+export async function deleteExpiredPendingRequests(db: D1Database, cutoff: string): Promise<number> {
+  const { results } = await db.prepare("DELETE FROM requests WHERE status = 'pending_verification' AND created_at < ?1 RETURNING id").bind(cutoff).all();
+  return results.length;
+}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "../auth/middleware.ts";
 import { writeAudit } from "../db/audit.ts";
 import { findBuilderAccount, listBuildersByStatus, setBuilderStatus } from "../db/builders.ts";
+import { expireInvitesOfInactiveBuildersStatement } from "../db/requests.ts";
 import { isBuilderStatus, transition, type BuilderAccount, type BuilderAction } from "../domain/builder.ts";
 import { getMailer } from "../email/index.ts";
 import { builderApprovedEmail, builderRejectedEmail } from "../email/templates/builder-decision.ts";
@@ -81,6 +82,8 @@ export async function decide(c: Context<AppEnv>, action: BuilderAction) {
     data: { from: builder.status, to: next.status, reason },
     now,
   });
+  // Spec §7.6: a suspended builder's unanswered invitations expire at once, with no e-mail (Owner 2026-10-04); the daily job re-sweeps.
+  if (action === "suspend") await expireInvitesOfInactiveBuildersStatement(c.env.DB, now, builder.userId).run();
 
   const mailed = action === "approve" || action === "reject" ? await notify(c, { ...builder, ...updated }, action, reason) : true;
   return c.redirect(localizedPath(c.get("locale"), `/admin/builders/${builder.userId}?done=${mailed ? "1" : "mail_failed"}`), 303);
