@@ -48,14 +48,15 @@ export function createApp() {
   const app = new Hono<AppEnv>();
   app.use("*", requestId);
   app.use("*", securityHeaders);
+  // Ops console (VNX-2502, spec §5): wraps everything after it, so every /ops response, the Origin and body-size
+  // refusals included, is no-store + noindex. Only /ops paths; the order of the site-wide middleware is unchanged.
+  app.use("/ops", opsHeaders);
+  app.use("/ops/*", opsHeaders);
   app.use("*", localeMiddleware);
   app.use("*", originCheck);
   app.use("*", requestBodyLimit);
   app.use("*", sessionMiddleware);
   app.use("*", noStorePrivate);
-  // Ops console (VNX-2502, spec §5): before any /ops route, so every /ops response is no-store + noindex.
-  app.use("/ops", opsHeaders);
-  app.use("/ops/*", opsHeaders);
 
   registerLandingRoutes(app);
   registerLegalRoutes(app);

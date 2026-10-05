@@ -48,6 +48,8 @@ function opsApp(asUser?: SessionUser) {
   const app = new Hono<AppEnv>();
   app.use("*", requestId);
   app.use("*", securityHeaders);
+  app.use("/ops", opsHeaders);
+  app.use("/ops/*", opsHeaders);
   app.use("*", localeMiddleware);
   app.use("*", originCheck);
   app.use("*", requestBodyLimit);
@@ -59,8 +61,6 @@ function opsApp(asUser?: SessionUser) {
       await next();
     });
   }
-  app.use("/ops", opsHeaders);
-  app.use("/ops/*", opsHeaders);
   app.get("/ops/fake", requireOps("marketplace.view"), (c) => c.text(`view:${c.get("opsRole")}`));
   app.post("/ops/fake", requireOps("marketplace.act"), (c) => c.text(`act:${c.get("opsRole")}`));
   app.get("/ops/fake/team", requireOps("team.manage"), (c) => c.text(`team:${c.get("opsRole")}`));
