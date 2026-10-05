@@ -6,6 +6,7 @@ import {
   LABELS,
   OFFER_KINDS,
   OFFER_STATUSES,
+  offerPreview,
   offersBrokenByHosts,
   parseOfferForm,
   parseProgramForm,
@@ -148,7 +149,7 @@ describe("parseOfferForm", () => {
   });
 
   it("rejects a template on an offer with no program", () => {
-    expect(parseOfferForm(offerValues({ trackingTemplate: "https://try.elevenlabs.io/x" }), ctx({ program: null }))).toEqual({ ok: false, errors: { trackingTemplate: "template_without_program" } });
+    expect(parseOfferForm(offerValues({ kind: "official", trackingTemplate: "https://try.elevenlabs.io/x" }), ctx({ program: null }))).toEqual({ ok: false, errors: { trackingTemplate: "template_without_program" } });
   });
 
   it("rejects a program of another merchant", () => {
@@ -470,5 +471,90 @@ describe("offersBrokenByHosts (re-check stored offers against new allowed hosts)
 
   it("a stored template with an unknown placeholder is broken too", () => {
     expect(offersBrokenByHosts([o("e", "https://example.com/", "https://example.com/r?c={nope}")], ["example.com"])).toEqual([{ id: "e", field: "trackingTemplate", error: "placeholder" }]);
+  });
+});
+
+describe("offer date inputs (UTC)", () => {
+  const ctx = { merchant: { id: "M", allowedHosts: ["example.com"] }, program: null };
+  const form = (o: Partial<OfferFormValues> = {}): OfferFormValues => ({
+    kind: "official", label: "visit_site", destinationUrl: "https://example.com/", trackingTemplate: "", startsAt: "", endsAt: "", status: "active", ...o,
+  });
+  const starts = (raw: string) => {
+    const r = parseOfferForm(form({ startsAt: raw }), ctx);
+    return r.ok ? r.offer.startsAt : r.errors.startsAt;
+  };
+
+  it("reads YYYY-MM-DDTHH:MM as UTC, and still accepts the canonical ISO form and a bare date", () => {
+    expect(starts("2026-10-05T09:30")).toBe("2026-10-05T09:30:00.000Z");
+    expect(starts("2026-10-05T09:30:15")).toBe("2026-10-05T09:30:15.000Z");
+    expect(starts("2026-10-05T09:30:00.000Z")).toBe("2026-10-05T09:30:00.000Z");
+    expect(starts("2026-10-05")).toBe("2026-10-05T00:00:00.000Z");
+    expect(starts("")).toBeNull();
+  });
+
+  it("rejects local-style and impossible values", () => {
+    for (const bad of ["2026-10-05 09:30", "2026-10-05T9:30", "2026-13-01T00:00", "2026-02-30T00:00", "2026-10-05T24:00", "2026-10-05T09:30+07:00", "tomorrow"]) expect(starts(bad), bad).toBe("date");
+  });
+});
+
+describe("offer kind rules (Controller 2026-10-05)", () => {
+  const withProgram = { merchant: { id: "M", allowedHosts: ["example.com"] }, program: { id: "P", merchantId: "M" } };
+  const none = { merchant: withProgram.merchant, program: null };
+  const form = (o: Partial<OfferFormValues>): OfferFormValues => ({
+    kind: "official", label: "visit_site", destinationUrl: "https://example.com/", trackingTemplate: "", startsAt: "", endsAt: "", status: "active", ...o,
+  });
+  const tpl = { trackingTemplate: "https://example.com/r?c={click_id}" };
+  const kindError = (v: OfferFormValues, ctx: Parameters<typeof parseOfferForm>[1]) => {
+    const r = parseOfferForm(v, ctx);
+    return r.ok ? null : (r.errors.kind ?? null);
+  };
+
+  it("affiliate and referral need a program", () => {
+    for (const kind of ["affiliate", "referral"]) {
+      expect(kindError(form({ kind }), none), kind).toBe("program_required");
+      expect(kindError(form({ kind, ...tpl }), withProgram), kind).toBeNull();
+    }
+  });
+
+  it("official and trial need none, and are fine with or without one", () => {
+    for (const kind of ["official", "trial"]) {
+      expect(kindError(form({ kind }), none), kind).toBeNull();
+      expect(kindError(form({ kind, ...tpl }), withProgram), kind).toBeNull();
+    }
+  });
+
+  it("sponsored is refused, with or without a program, until EPIC 23", () => {
+    expect(kindError(form({ kind: "sponsored" }), none)).toBe("sponsored_unavailable");
+    expect(kindError(form({ kind: "sponsored", ...tpl }), withProgram)).toBe("sponsored_unavailable");
+  });
+});
+
+describe("offerPreview", () => {
+  const merchant = { id: "M", status: "active" as const, websiteUrl: "https://example.com/", allowedHosts: ["example.com"] };
+  const offer = {
+    id: "O", subjectType: "merchant" as const, subjectId: "M", programId: "P", status: "active" as const,
+    destinationUrl: "https://example.com/", trackingTemplate: "https://example.com/r?c={click_id}&l={locale}", startsAt: null, endsAt: null,
+  };
+  const program = { id: "P", merchantId: "M", type: "affiliate" as const, status: "active" as const };
+  const base = { offer, program, merchant, now: "2026-10-05T00:00:00.000Z" };
+
+  it("shows the tracked link with the sample values next to the fallback link, whatever the flag says", () => {
+    for (const on of [true, false]) {
+      const p = offerPreview({ ...base, flags: { affiliate: on, partner_referral: false } });
+      expect(p.tracked).toEqual({ ok: true, url: "https://example.com/r?c=01HZZZZZZZZZZZZZZZZZZZZZZZ&l=en" });
+      expect(p.fallback).toEqual({ ok: true, url: "https://example.com/?utm_source=vnx.si&utm_medium=referral" });
+      expect(p.now).toMatchObject(on ? { kind: "tracked" } : { kind: "fallback", reason: "flag_off" });
+    }
+  });
+
+  it("an offer without a program previews its own link with utm, and a broken template says why", () => {
+    const own = offerPreview({ ...base, offer: { ...offer, programId: null, trackingTemplate: null }, program: null, flags: { affiliate: false, partner_referral: false } });
+    expect(own.tracked).toEqual({ ok: true, url: "https://example.com/?utm_source=vnx.si&utm_medium=referral" });
+    const bad = offerPreview({ ...base, offer: { ...offer, trackingTemplate: "https://other.com/r" }, flags: { affiliate: true, partner_referral: false } });
+    expect(bad.tracked).toEqual({ ok: false, error: "not_allowed" });
+    expect(bad.now).toEqual({ kind: "not_found", reason: "invalid_url" });
+    // the same gate as /go/: an unknown placeholder is named as such, not reported as bad characters
+    const unknown = offerPreview({ ...base, offer: { ...offer, trackingTemplate: "https://example.com/r?c={nope}" }, flags: { affiliate: true, partner_referral: false } });
+    expect(unknown.tracked).toEqual({ ok: false, error: "placeholder" });
   });
 });

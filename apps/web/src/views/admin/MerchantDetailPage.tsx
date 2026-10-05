@@ -6,6 +6,7 @@ import {
   PROGRAM_STATUSES,
   PROGRAM_TYPES,
   type CommissionModel,
+  type OfferPreview,
   type ProgramField,
   type ProgramFieldError,
   type ProgramFormValues,
@@ -18,6 +19,7 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { AdminLayout } from "./AdminLayout.tsx";
 import { MerchantFields, merchantValuesOf, type MerchantEdit, type MerchantView } from "./MerchantsPage.tsx";
+import { OfferSection, type OfferEdit, type OfferView } from "./OfferSection.tsx";
 import { aria, Field, STATUS_KEY } from "./partner-fields.tsx";
 
 export type ProgramView = {
@@ -172,9 +174,12 @@ type Props = {
   origin: string;
   merchant: MerchantView;
   programs: ProgramView[];
+  offers: OfferView[];
+  previews: Record<string, OfferPreview>;
   done: boolean;
   merchantEdit?: MerchantEdit;
   programEdit?: ProgramEdit;
+  offerEdit?: OfferEdit;
 };
 
 export const MerchantDetailPage: FC<Props> = (p) => {
@@ -213,6 +218,18 @@ export const MerchantDetailPage: FC<Props> = (p) => {
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {m.defaultOfferId && p.offers.find((o) => o.id === m.defaultOfferId)?.status === "archived" ? (
+        <div class="notice" role="note" data-warning="default-archived">
+          <p>{tr("merchants.defaultArchived")}</p>
+          <form method="post" action={localizedPath(p.locale, `${base}/default-offer`)}>
+            <input type="hidden" name="offerId" value="" />
+            <button class="btn btn-ghost" type="submit">
+              {tr("offers.clearDefault")}
+            </button>
+          </form>
         </div>
       ) : null}
 
@@ -265,6 +282,16 @@ export const MerchantDetailPage: FC<Props> = (p) => {
         action={localizedPath(p.locale, `${base}/programs`)}
         edit={p.programEdit?.id === "new" ? p.programEdit : { id: "new", values: NEW_PROGRAM_VALUES, errors: {} }}
         current={null}
+      />
+
+      <OfferSection
+        locale={p.locale}
+        merchantId={m.id}
+        defaultOfferId={m.defaultOfferId}
+        offers={p.offers}
+        programs={p.programs.map((x) => ({ id: x.id, name: x.name }))}
+        previews={p.previews}
+        edit={p.offerEdit}
       />
     </AdminLayout>
   );

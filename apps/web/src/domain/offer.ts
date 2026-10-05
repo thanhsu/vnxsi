@@ -1,7 +1,7 @@
 import { isHttpsUrl } from "./builder-input.ts";
 import type { FlagState } from "./flags.ts";
 import type { MerchantStatus } from "./merchant.ts";
-import { appendUtm, fillAndValidate, parseTemplate, previewUrl, validateFinalUrl, type TemplateError, type UrlError, type UrlResult } from "./offer-url.ts";
+import { appendUtm, fillAndValidate, parseTemplate, previewUrl, SAMPLE_VALUES, validateFinalUrl, type TemplateError, type UrlError, type UrlResult } from "./offer-url.ts";
 import { normalizeNewlines } from "./product-input.ts";
 
 /** Programs and offers (addendum §3.2–3.3 with the 2026-10-05 amendments). Pure rules: no Hono, no D1. */
@@ -24,12 +24,12 @@ export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
 const oneOf = <T extends string>(list: readonly T[], raw: string): T | null => ((list as readonly string[]).includes(raw) ? (raw as T) : null);
 
-/** `YYYY-MM-DD` (midnight UTC) or a full `…Z` instant: the ISO instant, null for empty, or not ok. */
+/** `YYYY-MM-DD` (midnight UTC), `YYYY-MM-DDTHH:MM[:SS[.mmm]]` (read as UTC) or the same with a trailing `Z`: the ISO instant, null for empty, or not ok. */
 function parseInstant(raw: string): { ok: true; value: string | null } | { ok: false } {
   const s = raw.trim();
   if (s === "") return { ok: true, value: null };
-  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z)?$/.test(s)) return { ok: false };
-  const d = new Date(s.length === 10 ? `${s}T00:00:00.000Z` : s);
+  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z?)?$/.test(s)) return { ok: false };
+  const d = new Date(s.length === 10 ? `${s}T00:00:00.000Z` : s.endsWith("Z") ? s : `${s}Z`);
   if (Number.isNaN(d.getTime()) || !d.toISOString().startsWith(s.slice(0, 10))) return { ok: false };
   return { ok: true, value: d.toISOString() };
 }
@@ -171,6 +171,8 @@ export type OfferFieldError =
   | "template_required"
   | "template_without_program"
   | "same_as_template"
+  | "program_required"
+  | "sponsored_unavailable"
   | `url_${UrlError}`
   | `template_${"braces" | "placeholder" | "placeholder_position" | UrlError}`;
 /** The merchant the offer belongs to (subject) and the program picked for it, if any. The caller loads both; the merchant match is checked here. */
@@ -193,6 +195,8 @@ export function parseOfferForm(v: OfferFormValues, ctx: OfferContext): { ok: tru
   const hosts = ctx.merchant.allowedHosts;
   const kind = oneOf(OFFER_KINDS, v.kind);
   if (!kind) errors.kind = "choice";
+  else if (kind === "sponsored") errors.kind = "sponsored_unavailable"; // not before EPIC 23 (ADR-008)
+  else if ((kind === "affiliate" || kind === "referral") && !ctx.program) errors.kind = "program_required";
   const label = oneOf(LABELS, v.label);
   if (!label) errors.label = "choice";
   const status = oneOf(OFFER_STATUSES, v.status);
@@ -325,6 +329,30 @@ const notFound = (reason: NotFoundReason): RedirectResult => ({ kind: "not_found
 function withUtm(raw: string, allowed: readonly string[]): UrlResult {
   const first = validateFinalUrl(raw, allowed);
   return first.ok ? validateFinalUrl(appendUtm(first.url), allowed) : first;
+}
+
+export type PreviewLink = { ok: true; url: string } | { ok: false; error: UrlError | TemplateError };
+export type OfferPreview = { tracked: PreviewLink; fallback: UrlResult; now: RedirectResult };
+
+/**
+ * What the admin sees for one offer: the tracked link (the template passes parseTemplate, the same gate /go/ applies, then gets the sample
+ * values, as it would with the flag on; an offer without a template shows its own link with utm), the fallback link (the merchant's website
+ * with utm) and the result /go/ gives right now with the flags passed in. Same gates as /go/; no I/O.
+ */
+export function offerPreview(i: { offer: RedirectOffer; program: RedirectProgram | null; merchant: RedirectMerchant; flags: RedirectInput["flags"]; now: string }): OfferPreview {
+  const hosts = i.merchant.allowedHosts;
+  let tracked: PreviewLink;
+  if (i.offer.trackingTemplate) {
+    const tpl = parseTemplate(i.offer.trackingTemplate, hosts);
+    tracked = tpl.ok ? previewUrl(tpl.template, hosts) : { ok: false, error: tpl.error };
+  } else {
+    tracked = withUtm(i.offer.destinationUrl, hosts);
+  }
+  return {
+    tracked,
+    fallback: withUtm(i.merchant.websiteUrl, hosts),
+    now: resolveOfferRedirect({ ...i, clickId: SAMPLE_VALUES.click_id, locale: SAMPLE_VALUES.locale, src: SAMPLE_VALUES.src }),
+  };
 }
 
 /** Only the canonical `YYYY-MM-DDTHH:MM:SS.mmmZ` form (what the form saves), round-tripped; anything else reads as NaN. */
