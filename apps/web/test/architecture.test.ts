@@ -45,6 +45,7 @@ const WRITERS: Record<string, string> = {
   merchants: "../src/db/merchants.ts",
   partner_programs: "../src/db/programs.ts",
   offers: "../src/db/offers.ts",
+  outbound_clicks: "../src/db/clicks.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {
@@ -106,15 +107,15 @@ const RANKING_FILES = [
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
 // the files it creates (Task 2c: db/{merchants,programs}.ts, and db/audit.ts, which only reads `write_id` of those rows to guard audit rows; Task 2d: db/offers.ts (setDefaultOffer stays in db/merchants.ts, which owns `merchants`); Task 3: routes/admin-merchants.tsx only (views take structural prop types and may not import db); Task 4: db/clicks.ts,
 // routes/go.ts, jobs/daily.ts; Task 5: routes/tools.tsx, routes/seo.ts; Task 6: routes/legal.tsx).
-const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/offers.ts", "../src/db/audit.ts", "../src/routes/admin-merchants.tsx"]);
+const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/offers.ts", "../src/db/audit.ts", "../src/routes/admin-merchants.tsx", "../src/db/clicks.ts", "../src/jobs/daily.ts"]);
 
 describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("lists only files that exist", () => {
     for (const file of RANKING_FILES) expect(sources[file], file).toBeDefined();
   });
 
-  it("after Task 3 the allowlist is exactly the four db files and the merchants admin route", () => {
-    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts", "../src/routes/admin-merchants.tsx"]);
+  it("after Task 4 the allowlist is exactly the files of Tasks 2c-4", () => {
+    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/clicks.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts", "../src/jobs/daily.ts", "../src/routes/admin-merchants.tsx"]);
   });
 
   it("the allowlist holds only files that exist, and no ranking file is on it", () => {

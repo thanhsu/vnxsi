@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { LEGAL } from "../../src/legal/content.ts";
+import { LEGAL, LEGAL_UPDATED_AT } from "../../src/legal/content.ts";
 import { LOCALES, localizedPath, type Locale } from "../../src/i18n/locales.ts";
 import type { MessageKey } from "../../src/i18n/messages/en.ts";
 import { t } from "../../src/i18n/t.ts";
@@ -53,7 +53,7 @@ describe("legal pages (VNX-0705a)", () => {
       for (const locale of ["en", "vi"] as const) {
         const main = mainOf(await (await get(localizedPath(locale, rest))).text());
         expect(main, rest).toMatch(new RegExp(`<h1[^>]*>${LEGAL[id][locale].title}</h1>`));
-        const dated = textOf(main).includes(t(locale, "legal.updated", { date: "2026-10-04" }));
+        const dated = textOf(main).includes(t(locale, "legal.updated", { date: LEGAL_UPDATED_AT }));
         expect(dated, `${locale} ${rest}`).toBe(id !== "mediaKit");
       }
     }
@@ -78,7 +78,7 @@ describe("legal pages (VNX-0705a)", () => {
     // The other zh notice never leaks, and the date line is in the page's own language.
     const hans = textOf(mainOf(await (await get("/zh-hans/privacy")).text()));
     expect(hans).not.toContain(t("zh-Hant", "legal.englishOnly"));
-    expect(hans).toContain(t("zh-Hans", "legal.updated", { date: "2026-10-04" }));
+    expect(hans).toContain(t("zh-Hans", "legal.updated", { date: LEGAL_UPDATED_AT }));
   });
 
   it("AC3: EN and VI pages carry no English-only notice", async () => {

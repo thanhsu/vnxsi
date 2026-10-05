@@ -128,7 +128,42 @@ describe("privacy covers the contact form (VNX-0710 AC12)", () => {
       const waitlist = part.indexOf(lang === "EN" ? "- **Waitlist:**" : "- **Danh sách chờ:**");
       const contact = part.indexOf(CONTACT_PRIVACY[lang][0]);
       expect(waitlist).toBeGreaterThan(0);
-      expect(part.slice(waitlist, contact).split("\n")).toHaveLength(2);
+      // VNX-2103: Outbound clicks now sits between Waitlist and Questions and feedback: the order is Waitlist, Outbound clicks, Questions and feedback.
+      const outbound = part.indexOf(lang === "EN" ? "- **Outbound clicks:**" : "- **Lượt bấm link ra ngoài:**");
+      expect(part.slice(waitlist, outbound).split("\n")).toHaveLength(2);
+      expect(part.slice(outbound, contact).split("\n")).toHaveLength(2);
     });
   }
+});
+
+/** Plan VNX-2103 block C (Owner approved 2026-10-05): where each line starts; the whole line is compared with the source file. */
+const OUTBOUND_PRIVACY = {
+  EN: ["- **Outbound clicks:**", "- To count how often links to other companies are followed", "- When you follow a link to a partner you leave VNX.SI.", "- Outbound click records: deleted after 13 months."],
+  VI: ["- **Lượt bấm link ra ngoài:**", "- Đếm số lần các link tới công ty khác được bấm", "- Khi bạn bấm link tới một partner, bạn rời VNX.SI.", "- Bản ghi lượt bấm link ra ngoài: xóa sau 13 tháng."],
+} as const;
+const lineStarting = (part: string, start: string) => part.split("\n").find((l) => l.startsWith(start)) ?? "";
+
+describe("privacy covers outbound clicks (VNX-2103)", () => {
+  for (const [lang, prefix] of [
+    ["EN", ""],
+    ["VI", "/vi"],
+  ] as const) {
+    it(`${lang}: docs/legal/privacy.md has the four approved lines and /privacy shows each one whole`, async () => {
+      const part = partOf(sourceOf("privacy"), lang);
+      const text = textOf(mainOf(await (await get(`${prefix}/privacy`)).text()));
+      for (const start of OUTBOUND_PRIVACY[lang]) {
+        const line = lineStarting(part, start);
+        expect(line, start).not.toBe("");
+        expect(text, start).toContain(plain(line.replace(/^- /, "")));
+      }
+      // The collection line follows the waitlist line, as block C says.
+      const waitlist = part.indexOf(lang === "EN" ? "- **Waitlist:**" : "- **Danh sách chờ:**");
+      expect(part.slice(waitlist).split("\n")[1]?.startsWith(OUTBOUND_PRIVACY[lang][0])).toBe(true);
+    });
+  }
+
+  it("LEGAL_UPDATED_AT moved forward, and Terms and Privacy both show it (the constant is shared)", async () => {
+    expect(LEGAL_UPDATED_AT >= "2026-10-05").toBe(true);
+    for (const path of ["/terms", "/privacy"]) expect(textOf(mainOf(await (await get(path)).text()))).toContain(LEGAL_UPDATED_AT);
+  });
 });
