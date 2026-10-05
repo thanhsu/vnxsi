@@ -21,6 +21,7 @@ import { registerMediaRoutes } from "./routes/media.ts";
 import { registerBuilderProfileRoutes } from "./routes/builder-profile.tsx";
 import { registerCatalogRoutes } from "./routes/catalog.tsx";
 import { registerDirectoryRoutes } from "./routes/directory.tsx";
+import { registerGoRoutes } from "./routes/go.ts";
 import { registerSeoRoutes } from "./routes/seo.ts";
 import { registerProductPageRoutes } from "./routes/product-page.tsx";
 import { registerInquiryFormRoutes } from "./routes/inquiry-form.tsx";
@@ -65,6 +66,7 @@ export function createApp() {
   registerBuilderProfileRoutes(app);
   registerCatalogRoutes(app);
   registerDirectoryRoutes(app);
+  registerGoRoutes(app);
   registerSeoRoutes(app);
   registerInquiryFormRoutes(app);
   registerRequestFormRoutes(app);
