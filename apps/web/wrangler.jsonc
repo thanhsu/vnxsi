@@ -55,6 +55,7 @@
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //
-  // MAIL_DRIVER selects the mailer. Local dev: set MAIL_DRIVER=console in apps/web/.dev.vars.
+  // MAIL_DRIVER selects the mailer only while RESEND_API_KEY is unset (VNX-0803 F6): a real key always sends through
+  // Resend, also in local dev. Local dev without a key: set MAIL_DRIVER=console in apps/web/.dev.vars.
   // Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.
 }

@@ -286,6 +286,9 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .legal code { font-family: var(--font-mono); font-size: 0.875em; padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); overflow-wrap: anywhere; }
 .legal-updated { color: var(--muted); }
 .swatch { display: inline-block; width: 1em; height: 1em; margin-right: 6px; vertical-align: -0.15em; border: 1px solid var(--border); border-radius: 4px; }
+.swatch[data-color="#0D1526"] { background-color: #0D1526; }
+.swatch[data-color="#1D4ED8"] { background-color: #1D4ED8; }
+.swatch[data-color="#F4F5F7"] { background-color: #F4F5F7; }
 
 /* VNX-0708 landing classes, kept for other branches; the VNX-0709 landing uses the lp-* blocks below. */
 .landing { max-width: 960px; }
