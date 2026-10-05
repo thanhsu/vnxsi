@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VNX.SI Ops overview, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#F4F5F7}
+a{color:#1D4ED8}a:hover{color:#1E40AF}
+.app{display:flex;min-height:100%;background:#F4F5F7;color:#0D1526;font:400 14px/1.5 'Be Vietnam Pro',system-ui,sans-serif}
+.side{flex:none;width:240px;background:#FFFFFF;border-right:1px solid #DCE0E6;display:flex;flex-direction:column;gap:20px;padding:16px 12px;box-sizing:border-box}
+.brand{display:flex;align-items:center;gap:8px;padding:4px 8px;text-decoration:none;color:#0D1526}
+.brand b{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:17px;letter-spacing:-.02em}
+.tag{font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px;border-radius:6px;background:#0D1526;color:#FFFFFF}
+.grp{display:flex;flex-direction:column;gap:2px}
+.grp h6{margin:0 0 4px;padding:0 8px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.04em;color:#5B6475;text-transform:uppercase}
+.nav{display:flex;align-items:center;gap:10px;min-height:36px;padding:0 8px;border-radius:8px;color:#3F4A5C;text-decoration:none;font-weight:500}
+.nav:hover{background:#F4F5F7;color:#0D1526}
+.nav.on{background:#E6EDFD;color:#1D4ED8}
+.nav .n{margin-left:auto;font:500 12px 'JetBrains Mono',monospace;color:#5B6475}
+.nav.on .n{color:#1D4ED8}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:16px;height:56px;padding:0 28px;background:#FFFFFF;border-bottom:1px solid #DCE0E6}
+.crumb{color:#5B6475;font-size:13px}
+.crumb b{color:#0D1526;font-weight:500}
+.env{margin-left:auto;font:500 11px 'JetBrains Mono',monospace;padding:3px 8px;border-radius:6px;background:#FDEBDD;color:#9A3412}
+.role{font:500 11px 'JetBrains Mono',monospace;padding:3px 8px;border-radius:6px;background:#EEF1F5;color:#3F4A5C}
+.who{color:#3F4A5C;font-size:13px}
+.page{padding:24px 28px 40px;display:flex;flex-direction:column;gap:20px}
+.ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.ph h1{margin:0;font:600 24px/1.25 'Space Grotesk',sans-serif;letter-spacing:-.015em}
+.ph p{margin:4px 0 0;color:#5B6475}
+.sample{font:500 11px 'JetBrains Mono',monospace;color:#9A3412}
+.card{background:#FFFFFF;border:1px solid #DCE0E6;border-radius:12px}
+.q{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.qc{padding:16px;display:flex;flex-direction:column;gap:8px}
+.qc .lbl{color:#3F4A5C;font-weight:500}
+.qc .num{font:600 30px/1 'Space Grotesk',sans-serif;font-variant-numeric:tabular-nums}
+.qc .meta{font-size:12px;color:#5B6475}
+.qc a{font-weight:500;text-decoration:none}
+.qc.zero .num{color:#9AA5B8}
+.warn{color:#9A5B00;font-weight:500}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:#5B6475;padding:10px 12px;border-bottom:1px solid #DCE0E6;background:#FAFBFC}
+td{padding:10px 12px;border-bottom:1px solid #EEF1F5;vertical-align:middle}
+tr.sel td{background:#F4F7FE}
+.mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:#3F4A5C}
+.st{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:600}
+.st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.st.pending{background:#FEF3DD;color:#9A5B00}
+.st.ok{background:#E3F4EC;color:#0B6B42}
+.st.bad{background:#FDE8E7;color:#B42318}
+.st.info{background:#E6EDFD;color:#1D4ED8}
+.st.mute{background:#EEF1F5;color:#3F4A5C}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;font:600 13px 'Be Vietnam Pro',sans-serif;cursor:pointer;text-decoration:none}
+.btn.p{background:#1D4ED8;color:#FFFFFF}
+.btn.s{background:#FFFFFF;color:#0D1526;border-color:#C9CFD8}
+.btn.d{background:#FFFFFF;color:#B42318;border-color:#F3B8B3}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #DCE0E6;padding:0 12px}
+.tab{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 10px;color:#3F4A5C;text-decoration:none;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:#0D1526;border-bottom-color:#0D1526}
+.tab .n{font:500 11px 'JetBrains Mono',monospace;color:#5B6475}
+.bar{display:flex;gap:8px;align-items:center;padding:12px}
+.in{min-height:36px;padding:0 10px;border:1px solid #C9CFD8;border-radius:8px;font:400 13px 'Be Vietnam Pro',sans-serif;background:#FFFFFF;color:#0D1526;box-sizing:border-box}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#3F4A5C;font-weight:500}
+.split{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.dl{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;margin:0}
+.dl dt{color:#5B6475}
+.dl dd{margin:0}
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.tl li{display:grid;grid-template-columns:88px 1fr;gap:8px;font-size:13px}
+.sec{padding:16px;display:flex;flex-direction:column;gap:12px}
+.sec h2{margin:0;font:600 15px 'Space Grotesk',sans-serif}
+.note{padding:10px 12px;border-radius:8px;background:#F4F5F7;color:#3F4A5C;font-size:12px}
+.lock{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#5B6475}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:12px;color:#5B6475;font-size:12px}
+</style>
+</helmet>
+<div style="width:390px;min-height:1100px;background:#F4F5F7;color:#0D1526;font:400 14px/1.5 'Be Vietnam Pro',system-ui,sans-serif">
+<header class="top" style="padding:0 16px;gap:10px">
+  <a class="brand" href="#" style="padding:0"><svg viewBox="0 0 64 64" width="24" height="24" aria-hidden="true"><path d="M14 16 L32 48 L50 16" fill="none" stroke="#0D1526" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="14" cy="16" r="6.5" fill="#FFFFFF" stroke="#0D1526" stroke-width="4"></circle><circle cx="50" cy="16" r="6.5" fill="#FFFFFF" stroke="#0D1526" stroke-width="4"></circle><circle cx="32" cy="48" r="8" fill="#1D4ED8"></circle></svg><b>VNX<span style="color:#1D4ED8">.</span>SI</b><span class="tag">OPS</span></a>
+  <span class="env" style="margin-left:auto">PROD</span>
+  <button class="btn s" type="button" aria-label="Open menu" style="min-height:44px;width:44px;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+</header>
+<main class="page" style="padding:16px">
+  <div class="ph" style="flex-direction:column;align-items:flex-start;gap:4px"><h1>Overview</h1><span class="sample">SAMPLE DATA · PROTOTYPE</span></div>
+  <section style="display:flex;flex-direction:column;gap:10px" aria-label="Queues">
+    <a class="card qc" href="#" style="flex-direction:row;align-items:center;text-decoration:none;color:#0D1526;min-height:44px"><span class="num" style="font-size:24px;width:36px">3</span><span style="display:flex;flex-direction:column"><span class="lbl">Builders to review</span><span class="meta">Oldest <span class="warn">2 days</span></span></span><span style="margin-left:auto;color:#1D4ED8">→</span></a>
+    <a class="card qc" href="#" style="flex-direction:row;align-items:center;text-decoration:none;color:#0D1526"><span class="num" style="font-size:24px;width:36px">5</span><span style="display:flex;flex-direction:column"><span class="lbl">Products in review</span><span class="meta">Oldest 9 hours</span></span><span style="margin-left:auto;color:#1D4ED8">→</span></a>
+    <a class="card qc" href="#" style="flex-direction:row;align-items:center;text-decoration:none;color:#0D1526"><span class="num" style="font-size:24px;width:36px">2</span><span style="display:flex;flex-direction:column"><span class="lbl">New feedback</span><span class="meta">1 e-mail not sent yet</span></span><span style="margin-left:auto;color:#1D4ED8">→</span></a>
+    <a class="card qc" href="#" style="flex-direction:row;align-items:center;text-decoration:none;color:#0D1526"><span class="num" style="font-size:24px;width:36px">1</span><span style="display:flex;flex-direction:column"><span class="lbl">Requests to match</span><span class="meta">Oldest 4 hours</span></span><span style="margin-left:auto;color:#1D4ED8">→</span></a>
+    <a class="card qc zero" href="#" style="flex-direction:row;align-items:center;text-decoration:none;color:#0D1526"><span class="num" style="font-size:24px;width:36px">0</span><span style="display:flex;flex-direction:column"><span class="lbl">Overdue inquiries</span><span class="meta">Nothing waiting</span></span><span style="margin-left:auto;color:#1D4ED8">→</span></a>
+  </section>
+  <p class="mono" style="margin:0">Counts read at 10:42 UTC</p>
+  <div class="note">The menu button opens the same sidebar groups as a full-height panel; tables scroll sideways inside their card.</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
