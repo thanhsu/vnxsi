@@ -185,6 +185,7 @@ Spec §5.3 "Tổng quan" Hub chưa nói builder thấy lượt xem/click của p
 - **GPC:** `Sec-GPC: 1` → không đặt cookie, không đếm `views`/`demo_clicks`/`outbound_clicks` vào `product_daily_stats`, không ghi `product_view_dedupe`; trang vẫn 200 và redirect vẫn chạy. Đây là cơ chế phản đối nêu trong Privacy (câu hỏi (b)).
 - **Dedupe:** một lần mỗi (`visitor_hash`, product, loại) mỗi ngày UTC; loại = `views`, `demo`, `site`. Click ra từ `/go/o/` và `/go/:merchant` (offer) KHÔNG BAO GIỜ cộng `product_daily_stats`; chỉ `demo` và `site` cộng.
 - **Thiếu `ANALYTICS_SALT` (một luật duy nhất):** không cộng gì vào `product_daily_stats` (không views, không clicks; Inquiry không cần salt nên vẫn đếm), không cookie, `visitor_hash = null`; dòng `outbound_clicks` VẪN ghi; `console.warn` một lần mỗi isolate. Lệch phụ lục 2.5 ("không dedupe", ngụ ý vẫn cộng): thiếu salt thì cộng không dedupe sẽ thổi phồng Trending nên không cộng; đây là lệch được ghi nhận, cần Opus/Owner chấp thuận.
+- **Click `/go/p/` (Reviewer ruling 2026-10-05, Owner FYI):** không có cookie hợp lệ → `visitor_hash = null` → không cộng `product_daily_stats` (dòng `outbound_clicks` vẫn ghi). **`ANALYTICS_SALT` là công tắc bật đếm trên production: Owner KHÔNG đặt `ANALYTICS_SALT` trên production cho tới ngày Task 3 + Privacy cùng lên (Task 4 được phép deploy trước Task 3). Trong khoảng đó mỗi isolate ghi một dòng log `visitor.no_salt`: bình thường, không phải lỗi.**
 - **Cookie:** tên `__Host-vnx_vid`; giá trị `^[0-9a-f]{32}$`; `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax`; `Max-Age` = số giây tới 00:00 UTC kế tiếp (không sàn: luôn ≥ 1; khuyến nghị (b), vì băm đã đổi theo ngày; 30 ngày chỉ là phương án phụ, không có lợi ích đếm). CHỈ đặt trên `GET /p/:slug` trả 200 cho một khách được đếm (không bot, không builder của product, không đội của chúng tôi, không GPC, có `ANALYTICS_SALT`). `/go/p/` chỉ ĐỌC cookie, không bao giờ đặt. Không đặt trên `/admin`, `/ops`, `/hub`, `/me`. Phản hồi có `Set-Cookie` kèm `Cache-Control: private`.
 - **Salt:** `ANALYTICS_SALT` là `wrangler secret`, `.dev.vars` ở local, KHÔNG trong repo, KHÔNG trong `wrangler.jsonc` `vars`; thêm `ANALYTICS_SALT?: string` vào `Bindings`.
 - **Tải ghi D1:** mỗi lượt xem được đếm là một `db.batch` (dedupe + upsert) qua `waitUntil`, tức tối đa 2 lần ghi mỗi lượt; bot, GPC, builder chủ, đội nội bộ không ghi. Mức này chấp nhận được ở quy mô Wave 1; nếu vượt, gom theo isolate (ngoài phạm vi).
@@ -1121,7 +1122,7 @@ Files, test, acceptance: viết chi tiết ngay trước khi làm, sau khi Owner
 
 **Scope:** (chặn bởi (b)). Migration `0015_view_dedupe.sql`: `product_view_dedupe (day TEXT NOT NULL, visitor_hash TEXT NOT NULL, product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE, PRIMARY KEY (day, visitor_hash, product_id)) WITHOUT ROWID`. `db/stats.ts` thêm `recordProductView(db, { productId, visitorHash, now }): Promise<boolean>` (`INSERT OR IGNORE … RETURNING` → nếu có dòng thì `bumpProductStatStatement` `views: 1`, một `db.batch`; trả `true` khi cộng), `purgeViewDedupe(db, now)` (xóa `day < ngày − 2`) và bước `view_dedupe` trong `STEPS` của `jobs/daily.ts` (`counts: "deleted"`): bảng, retention và câu Privacy "xóa sau 2 ngày" đi cùng một task. Middleware/helper `http/visitor.ts` đọc cookie, sinh nếu thiếu (không cho bot, không khi thiếu salt, không khi GPC, không cho builder chủ/đội nội bộ, không cho `/admin`, `/ops`, `/hub`, `/me`; chỉ `GET /p/:slug` trả 200 mới đặt; `Max-Age` = `visitorCookieMaxAge`; phản hồi có `Set-Cookie` kèm `Cache-Control: private`), tính `visitorHash`. `routes/product-page.tsx` chỉ gọi sau khi biết product `published`, gói `waitUntil`, lỗi chỉ log; không đếm bot/builder chủ product/đội nội bộ/GPC (`shouldCount`). Privacy: chép nguyên văn câu (b) vào `docs/legal/privacy.md` (Reviewer) và `src/legal/content.ts` (Implementer), tăng `LEGAL_UPDATED_AT`, thêm dòng Cookie `__Host-vnx_vid` vào mục 5 và dòng dedupe vào mục 6; sửa câu "for now we do not link it…" của "Outbound clicks".
 
-**Files:** Create `migrations/0015_view_dedupe.sql`, `src/http/visitor.ts`; Modify `src/db/stats.ts`, `src/jobs/daily.ts`, `src/routes/product-page.tsx`, `src/legal/content.ts`, `docs/legal/privacy.md`, 4 file i18n nếu cần (cookie mục Privacy là văn bản `legal/`, không `t()`), `test/architecture.test.ts` (`WRITERS.product_view_dedupe`), `wrangler.jsonc` (ghi chú); Test `test/db/view-dedupe.test.ts`, `test/jobs/daily.test.ts` (bước `view_dedupe`), `test/product-page-views.test.ts`, `test/legal/content.test.ts`.
+**Files:** Create `migrations/0015_view_dedupe.sql`; Modify `src/http/visitor.ts` (tạo bởi Task 4: `readVisitorCookie`, `warnNoSaltOnce`), `src/db/stats.ts`, `src/jobs/daily.ts`, `src/routes/product-page.tsx`, `src/legal/content.ts`, `docs/legal/privacy.md`, 4 file i18n nếu cần (cookie mục Privacy là văn bản `legal/`, không `t()`), `test/architecture.test.ts` (`WRITERS.product_view_dedupe`), `wrangler.jsonc` (ghi chú); Test `test/db/view-dedupe.test.ts`, `test/jobs/daily.test.ts` (bước `view_dedupe`), `test/product-page-views.test.ts`, `test/legal/content.test.ts`.
 
 **Acceptance:** lượt xem đầu → `views = 1` và `Set-Cookie` đủ thuộc tính (`__Host-`, `Secure`, `HttpOnly`, `SameSite=Lax`, `Max-Age` = giây tới 00:00 UTC kế tiếp, `Cache-Control: private`); lượt hai cùng cookie cùng ngày → vẫn 1; qua 00:00 UTC → 2; hai product khác nhau cùng cookie → mỗi cái 1; bot (UA `curl`, `Googlebot`, UA rỗng), builder chủ product, đội nội bộ, request `Sec-GPC: 1` → 0, không `Set-Cookie`, không dòng dedupe; `Set-Cookie` chỉ có trên `GET /p/:slug` 200 (không trên 404, không trên `/go/p/`); thiếu `ANALYTICS_SALT` → 0 views, không cookie, trang 200, `console.warn` một lần; product `draft`, builder bị khóa → 404, không đếm; `HEAD` không đếm; không có `Set-Cookie` trên `/admin`, `/hub`, `/me`; test `legal/content` so từng dòng xanh và câu cũ biến mất (`grep -n "for now we do not link" apps/web/src/legal/content.ts` rỗng); `product_view_dedupe` không có IP/email/user id; `purgeViewDedupe` xóa đúng dòng cũ hơn 2 ngày và chạy lại không đổi gì. Diff ~420 dòng (không tính văn bản pháp lý).
 
@@ -1129,11 +1130,876 @@ Files, test, acceptance: viết chi tiết ngay trước khi làm, sau khi Owner
 
 ### Task 4: VNX-0707b — `/go/p/:slug/{demo,site}`
 
-**Scope:** (HIGH-RISK, như EPIC 21 Task 4: open redirect.) Domain thuần `domain/outbound.ts` thêm `PRODUCT_LINKS = { demo: "demo_url", site: "website_url" }`, `appendUtm(url)` (đã có từ EPIC 21: dùng lại, không viết lại), `resolveProductRedirect(product, builder, kind): { kind: "redirect"; url } | { kind: "not_found"; reason }` (thuần, nhận `demoUrl`/`websiteUrl`, `status`, `builderStatus`). `db/products.ts` (hoặc `db/catalog.ts` nếu module đọc product công khai nằm ở đó) thêm đọc `findProductLinkBySlug(db, slug)` trả `{ id, builderUserId, demoUrl, websiteUrl }` chỉ cho product `published` của builder `approved`. `routes/go.ts` thêm hai route `app.get("/go/p/:slug/demo")` và `.../site` **trước** `app.get("/go/*")`; ghi `outbound_clicks` (`linkKind: "demo" | "site"`, `productId`, `offerId: null`) bằng `defer`/`saveClick` hiện có, kèm `visitorHash` (từ cookie của Task 3 nếu có, null nếu chưa); cộng `bumpProductStatStatement` `demo_clicks`+`outbound_clicks` (demo) hoặc `outbound_clicks` (site) khi `shouldCount` (kể cả `Sec-GPC: 1` thì không cộng và `visitor_hash` null) và là lượt đầu của (`visitor_hash`, product, `link_kind`) trong ngày UTC (kiểm bằng truy vấn trên `idx_clicks_visitor` TRƯỚC khi ghi click mới). Luật thiếu salt (Global Constraints): thiếu `ANALYTICS_SALT` → không cộng gì, vẫn ghi dòng; có salt nhưng không có cookie → `visitor_hash` null, không dedupe, cộng mọi lần không-bot (cùng quyết định 4, câu hỏi (f)). URL đích: chuẩn hóa `new URL(raw).href` rồi `validatePublicUrl` (thuần, ở `domain/offer-url.ts` hoặc `domain/product-url.ts`: `https:`, không userinfo, `isPublicHostname`, port rỗng); CÙNG hàm được gọi ở editor product khi lưu `demo_url`/`website_url` (`domain/product-input.ts`), và lúc redirect. Báo cáo ghi một truy vấn SQL kiểm toàn bộ `demo_url`/`website_url` hiện có để Owner chạy trước khi deploy. Dùng `isBotRequest` của Task 2. `views/ProductPage.tsx` đổi `href` của nút Demo và link Website sang `/go/p/:slug/demo?src=product_page` và `/go/p/:slug/site?src=product_page`, giữ `rel="nofollow ugc noopener"`, `target="_blank"`. Cập nhật `test/monetization/go.test.ts` (dòng ~326 bỏ `/go/p/some-product/{demo,site}` khỏi danh sách 404-trước-khi-đọc-D1; dòng ~338 đổi `/go/p/x/demo` sang `/go/p/does-not-exist/demo`) và `robots.txt` giữ `Disallow: /go/`. Cho bước nối `visitor_hash`: nếu Task 3 chưa xong, đọc cookie bằng helper của Task 2 (không đặt cookie ở route `/go/`).
+**Scope (HIGH-RISK, như EPIC 21 Task 4: open redirect; Review Focus 1, 2, 3).** Hai route `GET /go/p/:slug/demo` và `/site` đăng ký TRƯỚC `app.get("/go/*")`, dùng lại `outbound_clicks`, `db/clicks.ts`, và `saveClick`/`defer`/`notFound`/`redirectTo` của `routes/go.ts` (không bảng, không migration). Thêm: `validatePublicUrl` dùng CHUNG cho editor product (lúc lưu) và redirect (M4); cộng `product_daily_stats` qua `db/stats.ts` (Task 1) theo luật đếm của Task 2; dedupe click bằng `idx_clicks_visitor`; `ProductPage` đổi link sang `/go/p/…`; sửa hai kỳ vọng của `go.test.ts`. KHÔNG đặt cookie ở route `/go/` (M2: chỉ đọc). Click offer (`/go/o/`, `/go/:merchant`) giữ nguyên và không bao giờ chạm `product_daily_stats` (L4).
 
-**Files:** Modify `src/domain/outbound.ts`, `src/domain/product-input.ts` (gọi `validatePublicUrl` khi lưu), `src/db/products.ts` (hoặc nơi đọc product công khai), `src/db/clicks.ts` (thêm `hasClickToday(db, { visitorHash, productId, linkKind, day }): Promise<boolean>`), `src/routes/go.ts`, `src/views/ProductPage.tsx`, `test/monetization/go.test.ts`, `test/architecture.test.ts` (`MONEY_ALLOWED` giữ nguyên: `routes/go.ts` đã có; `db/stats.ts` KHÔNG import `db/clicks.ts`, `go.ts` ghép hai module); Test `test/monetization/go-product.test.ts`, `test/domain/outbound.test.ts`, `test/domain/product-input.test.ts` (editor từ chối cùng các URL hỏng), `test/views/product-page.test.tsx` (link mới).
+**Files:**
+- Create: `apps/web/src/domain/product-url.ts` (re-export `validatePublicUrl`; `resolveProductLink`)
+- Modify: `apps/web/src/domain/offer-url.ts` (R2: export `validatePublicUrl`; `check` = lõi + allowlist; không đổi hành vi)
+- Modify: `apps/web/wrangler.jsonc` (chỉ chú thích ANALYTICS_SALT: công tắc bật đếm, R1)
+- Create: `apps/web/src/http/visitor.ts` (chỉ `readVisitorCookie`, `warnNoSaltOnce`, `resetNoSaltWarning`; Task 3 MỞ RỘNG file này thay vì tạo mới, xem "Nghĩa vụ")
+- Modify: `apps/web/src/db/clicks.ts` (thêm `hasClickToday`; sửa chú thích `ClickInput.visitorHash`)
+- Modify: `apps/web/src/routes/go.ts` (hai route, `respondProduct`, `trackProductClick`)
+- Modify: `apps/web/src/domain/product-input.ts` (trường `url` dùng `validatePublicUrl`)
+- Modify: `apps/web/src/views/ProductPage.tsx` (hai `href`)
+- Test: Create `apps/web/test/domain/product-url.test.ts`, `apps/web/test/monetization/go-product.test.ts`, `apps/web/test/product-page-links.test.ts`; Modify `apps/web/test/monetization/go.test.ts` (2 chỗ), `apps/web/test/db/clicks.test.ts`, `apps/web/test/domain/product-input.test.ts`, `apps/web/test/hub/products.test.ts` (một ca)
+- Không đổi: `db/products.ts` (dùng `findPublicProductBySlug`: đã lọc `published` + builder `approved` + user `active`, trả `product.builderId`), `db/stats.ts`, migration, `robots.txt` (đã `Disallow: /go/`), `test/architecture.test.ts` (`routes/go.ts` và `db/clicks.ts` đã nằm trong `MONEY_ALLOWED`; `db/stats.ts` KHÔNG import `db/clicks.ts`, nếu import thì test "only allowlisted files" đỏ; chính `go.ts` ghép hai module).
 
-**Acceptance:** thêm: click offer (`/go/o/`, `/go/:merchant`) không đổi `product_daily_stats`; editor và redirect từ chối cùng tập URL (`http:`, `//evil.com`, IP, userinfo, cổng 8443, ``). `/go/p/<slug>/demo` và `/site` → `302` với `Location` = URL đã chuẩn hóa + `utm_source=vnx.si&utm_medium=referral` (không thêm khi đã có `utm_*`), đủ 4 header (`Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: origin`, `Location`); product `draft`/`pending`/builder không `approved`/thiếu URL/slug lạ/slug hoa → 404 và không ghi click; `src` lạ → `unknown`; `HEAD` redirect không ghi; `POST` → 405 `Allow: GET, HEAD`; `/go/p/…` hợp lệ KHÔNG rơi vào catch-all (test thứ tự); dữ liệu hỏng (`demo_url` = `http://…`, `//evil.com`, `https://127.0.0.1`, `https://u@evil.com`, có `\`/CR/LF) → 404 + `console.error`; `Location` không bao giờ lấy từ query (`?url=`, `?src=https://evil.com` bị bỏ qua); mỗi GET ghi đúng một dòng `outbound_clicks` kể cả khi không cộng; `demo_clicks`/`outbound_clicks` cộng đúng một lần mỗi (visitor, product, loại, ngày UTC), `site` chỉ tăng `outbound_clicks`, bot/chủ product/admin không cộng nhưng vẫn ghi dòng; `/p/:slug` render link `/go/p/…`. Kiểm: `npm test -w apps/web -- test/monetization test/domain/outbound.test.ts test/views`. Diff ~500 dòng; nếu vượt, tách 4a (route + ghi click) / 4b (cộng thống kê + dedupe + ProductPage).
+**Interfaces:**
+- Consumes (tên thật): `findPublicProductBySlug(db, slug): Promise<ProductWithBuilder | null>` (`.product.{id,builderId,slug,status,demoUrl,websiteUrl}`, `.builderStatus`); `appendUtm`, `isPublicHostname`, `isPrintableAscii`, `hasHttpsPrefix`, `authorityOf`, `isAuthorityClean`, `originError`, `MAX_URL_LENGTH`, `validateFinalUrl` (`domain/offer-url.ts`); `parseSrc`, `localeFromReferer`, `countryOf`, `referrerHost` (`domain/outbound.ts`); `isBotRequest`, `CfLike` (`domain/bot.ts`); `VISITOR_COOKIE`, `parseVisitorCookie`, `hasGpc`, `usableSalt`, `visitorHash`, `shouldCount` (`domain/visitor.ts`); `utcDay` (`domain/stats.ts`); `isStaff(env, user)` (`auth/staff.ts`); `bumpProductStat(db, { productId, day, delta })` (`db/stats.ts`); `recordClick`, `ClickInput` (`db/clicks.ts`); `c.get("user"): SessionUser | null` (đã nạp bởi `sessionMiddleware` cho mọi đường, kể cả `/go/`).
+- Produces:
+  - `domain/product-url.ts`: `type PublicUrlError = "length" | "chars" | "scheme" | "authority" | "parse" | "userinfo" | "port" | "host"`; `type PublicUrlResult = { ok: true; url: string } | { ok: false; error: PublicUrlError }`; `validatePublicUrl(raw: string): PublicUrlResult`; `PRODUCT_LINK_KINDS = ["demo", "site"] as const`; `type ProductLinkKind`; `type ProductLinkResult = { kind: "redirect"; url: string } | { kind: "not_found"; reason: "not_public" | "missing_url" | "invalid_url" }`; `resolveProductLink(p: { status: string; builderStatus: string; demoUrl: string | null; websiteUrl: string | null }, kind: ProductLinkKind): ProductLinkResult`.
+  - `db/clicks.ts`: `hasClickToday(db, { visitorHash: string; productId: string; linkKind: "demo" | "site"; day: string }): Promise<boolean>`.
+  - `http/visitor.ts`: `readVisitorCookie(c: Context<AppEnv>): string | null`, `warnNoSaltOnce(): void`, `resetNoSaltWarning(): void` (chỉ cho test).
+
+**Quyết định kỹ thuật** (Reviewer kiểm):
+1. **Thứ tự route.** Hono khớp theo thứ tự đăng ký. `/go/p/:slug/demo` có 4 đoạn nên `/go/:merchantSlug` (2 đoạn) không nuốt nó, nhưng catch-all `/go/*` sẽ trả 404 nếu route mới đứng sau. Đặt hai route ngay sau `/go/o/:offerId`. Test thứ tự khẳng định: `/go/p/<slug>/demo` hợp lệ → 302; `/go/p`, `/go/p/`, `/go/p/<slug>`, `/go/p/<slug>/other`, `/go/p/<slug>/demo/extra` → 404 (catch-all); `/go/:merchantSlug` với slug `p` giữ chỗ (`RESERVED_MERCHANT_SLUGS` có `p`).
+2. **Chỉ GET ghi.** HEAD vẫn đọc D1 và trả đúng 302/404 nhưng không ghi, không cộng. POST/PUT/DELETE → 405 `Allow: GET, HEAD` do `app.all("/go/*")` có sẵn; POST khác Origin vẫn 403 do `originCheck` chạy trước.
+3. **Không tin gì từ query ngoài `src`.** Đích chỉ từ `products.demo_url`/`website_url`; `Location` = `appendUtm(validatePublicUrl(raw).url)`, tức `new URL(raw).href` đã kiểm hai lượt rồi thêm `utm_source=vnx.si&utm_medium=referral` (không thêm nếu đã có `utm_*` ở bất kỳ chữ hoa/thường, như `appendUtm` của EPIC 21).
+4. **`validatePublicUrl` (M4)** = phần lõi của `check` trừ bước allowlist (R2). Refactor `domain/offer-url.ts`, KHÔNG đổi hành vi: export `validatePublicUrl(raw): { ok: true; url } | { ok: false; error: Exclude<UrlError, "not_allowed"> }` (cùng hai lượt kiểm); `check(raw, allowed)` = lõi đó + `hostAllowed`. `domain/product-url.ts` re-export `validatePublicUrl` và giữ `resolveProductLink`. Test EPIC 21 (`offer-url`, `go`) bảo vệ refactor; test "đồng ý với `validateFinalUrl` trên cả bộ dữ liệu" giữ làm kiểm hồi quy. Click `/go/p/` không cookie hợp lệ → `visitor_hash = null` → không đếm (Reviewer ruling 2026-10-05, Owner FYI). Luật: ≤ 2048 ký tự; chỉ ASCII in được, không `\`, không khoảng trắng/CR/LF; tiền tố đúng `https://` chữ thường; authority sạch (không `@`, `%`, `{}`); `new URL` phân tích được; không userinfo; cổng rỗng (`:443` bị parser bỏ, `:8443` bị từ chối); `isPublicHostname` (từ chối IPv4 mọi dạng, IPv6, `localhost`, tên một nhãn, dấu chấm cuối); `href` kiểm lại lần hai phải y hệt. Hệ quả: tên miền Unicode phải nhập dạng punycode (`xn--…`), giống offer ở EPIC 21.
+5. **Editor lưu chữ đã cắt khoảng trắng như cũ (`v`), chỉ KIỂM bằng `validatePublicUrl`; không ghi `href` vào DB.** Ghi `href` thêm dấu `/` cuối (`https://x.example` → `https://x.example/`), khiến so sánh `demoUrl !== product.demoUrl` ở `routes/hub-products.tsx:117` thu hồi nhầm huy hiệu `demo_verified` khi builder lưu lại cùng một link (và làm lệch dữ liệu đã có). Redirect luôn dùng `href` đã chuẩn hóa nên "host đang lưu là host được redirect" (ADR-007 luật 7) vẫn đúng. Chuỗi lỗi `product.error.url` giữ nguyên, không khóa i18n mới.
+6. **Dedupe click, race nêu rõ.** Một lần mỗi (`visitor_hash`, `product_id`, `link_kind`) mỗi ngày UTC. Truy vấn chạy TRƯỚC khi ghi dòng click mới (ghi trước thì dòng vừa ghi tự biến lượt này thành "trùng") và dùng đủ 4 cột của `idx_clicks_visitor (visitor_hash, product_id, link_kind, created_at)`:
+   `SELECT 1 FROM outbound_clicks WHERE visitor_hash = ?1 AND product_id = ?2 AND link_kind = ?3 AND created_at >= ?4 AND created_at < ?5 LIMIT 1`, với `?4 = day` (`YYYY-MM-DD` luôn nhỏ hơn mọi `YYYY-MM-DDT…` cùng ngày) và `?5` = ngày kế tiếp. **Sai số chấp nhận:** hai request đồng thời của cùng một người, product, loại (bấm đúp, hai tab) đều thấy "chưa có" và cùng cộng, tức đếm thừa tối đa 1 mỗi cú bấm đồng thời; không khóa. Không thể làm nguyên tử trong một `db.batch` mà giữ đúng ranh giới: câu "đã có chưa" phải đọc `outbound_clicks` (bảng tiền: cấm với `db/stats.ts` theo test kiến trúc) hoặc câu cộng phải ghi `product_daily_stats` từ `db/clicks.ts` (sai chủ sở hữu bảng). Không thêm bảng dedupe thứ hai cho click (quyết định thiết kế 5).
+   Dòng của bot/GPC/không cookie/không salt có `visitor_hash = null` nên không bao giờ khớp. Dòng của builder chủ và đội nội bộ CÓ hash (nếu có cookie) và sẽ chặn lượt đếm sau của chính người đó trong ngày kể cả khi họ đăng xuất: hiếm, đúng hướng (đếm thiếu), ghi nhận.
+7. **Luật đếm (M2, M3, L4, câu hỏi (f)).** `visitor_hash` chỉ có khi: không bot, không GPC, có `ANALYTICS_SALT` dùng được, và cookie `__Host-vnx_vid` hợp lệ; ngược lại `null` (dòng click vẫn ghi). Cộng `product_daily_stats` khi và chỉ khi `hash !== null` VÀ `shouldCount(...)` VÀ lượt đầu của ngày. `isStaff` chỉ gọi khi đã có `hash` và có người dùng đăng nhập (sau mọi kiểm tra rẻ). Bảng sự thật:
+
+   | Tình huống | Dòng `outbound_clicks` | `visitor_hash` | `product_daily_stats` |
+   |---|---|---|---|
+   | Bot (UA hoặc `verifiedBot`) | có, `is_bot = 1` | null | không |
+   | `Sec-GPC: 1` | có | null | không |
+   | Thiếu/trắng `ANALYTICS_SALT` (M3) | có | null | không; `console.warn` MỘT lần mỗi isolate |
+   | Có salt, KHÔNG có cookie hợp lệ | có | null | không |
+   | Builder chủ product, hoặc `isStaff` | có | có (nếu có cookie) | không |
+   | Khách thường, cookie hợp lệ, lần đầu trong ngày | có | có | `demo`: `demo_clicks + 1` và `outbound_clicks + 1`; `site`: `outbound_clicks + 1` |
+   | Lặp lại cùng (khách, product, loại) cùng ngày UTC | có | có | không |
+   | Sang ngày UTC mới | có | có (hash mới) | cộng lại |
+   | Click offer (`/go/o/`, `/go/:merchant`) | có (`link_kind = offer`) | null | KHÔNG BAO GIỜ |
+
+   **Đã quyết (Reviewer ruling 2026-10-05, Owner FYI; không còn là câu hỏi mở).** Bản nháp cũ của Task 4 (và quyết định 4) viết "có salt nhưng không cookie → cộng mọi lần không-bot". Task này theo chỉ dẫn mới của Controller: KHÔNG cộng khi thiếu cookie. Lý do: `/go/p/` không đặt cookie (M2) nên không biết được lượt đầu, và đếm mọi lần cho phép một vòng lặp `curl` giả UA trình duyệt thổi phồng `demo_clicks` (trọng số ×2 trong điểm Trending, câu hỏi (f)); khách thật đến từ `/p/:slug` luôn đã có cookie sau Task 3. Hệ quả: (a) trình duyệt chặn cookie không bao giờ được đếm click (đếm thiếu; khác `views`, nơi quyết định 4 đếm thừa); (b) TRƯỚC khi Task 3 chạy không ai có cookie nên `visitor_hash` luôn null, không click nào cộng thống kê, và câu Privacy "for now we do not link it…" vẫn đúng, không đổi Privacy ở task này. **Triển khai (R1): `ANALYTICS_SALT` là công tắc bật đếm trên production. Task 4 được phép deploy trước Task 3, nhưng Owner KHÔNG được đặt `ANALYTICS_SALT` trên production cho tới ngày Task 3 + Privacy cùng lên.** Không salt thì `visitor_hash` luôn null kể cả với cookie do người dùng tự gửi, nên Privacy không bị vi phạm. Trong khoảng đó mỗi isolate ghi một dòng `visitor.no_salt` (đã dự kiến, không phải lỗi). Câu này lặp lại ở "Nghĩa vụ để lại", "Sau M7" và ghi chú `wrangler.jsonc`.
+8. **Ghi click không bao giờ làm hỏng redirect.** Toàn bộ phần ghi (kiểm dedupe, dòng click, cộng thống kê) nằm trong `trackProductClick`, chạy qua `defer` (`waitUntil`; không có ExecutionContext thì chờ, như EPIC 21). Mỗi bước tự `try/catch` và `console.error` (`go.click_failed` có sẵn, `go.stat_failed`, `go.dedupe_failed`). Lỗi kiểm dedupe → coi như trùng (đếm thiếu, không thừa). Dòng click được ghi TRƯỚC khi cộng thống kê và không phụ thuộc nó (migration `0014` chưa áp chỉ làm mất số đếm, không mất dòng click).
+9. **Dữ liệu hỏng và đầu vào sai.** `demo_url` = `http://…`, `//evil.com`, IP, userinfo, có `\`/CR/LF → 404 + `console.error` `{ event: "go.corrupt_data", reason: "product_url_invalid", productId, linkKind, requestId }`, không ghi click. Product không public hoặc thiếu URL → 404 im lặng, không ghi click. Slug sai dạng hoặc có chữ hoa → 404 TRƯỚC khi đọc D1 (không chuyển hướng về chữ thường: đường này không phải trang và không có locale).
+10. **Truy vấn kiểm toán dữ liệu hiện có (M4)** ở Step 11; task chỉ chạy trên D1 local để kiểm cú pháp, và dán nguyên văn vào `.ai/tasks/VNX-0707b-report.md` để Owner chạy trước deploy.
+
+- [ ] **Step 1: Test `product-url` (fail)**
+
+`apps/web/test/domain/product-url.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { validateFinalUrl } from "../../src/domain/offer-url.ts";
+import { PRODUCT_LINK_KINDS, resolveProductLink, validatePublicUrl, type PublicUrlError } from "../../src/domain/product-url.ts";
+
+const GOOD = ["https://demo.example", "https://www.example.com/app?x=1#top", "https://sub.example.co.uk/a/b/", "https://EXAMPLE.com/Path", "https://example.com:443/", "https://xn--bcher-kva.example/", "https://demo.example/%0d%0a"];
+const BAD: [string, PublicUrlError][] = [
+  ["", "chars"], ["http://demo.example", "scheme"], ["//evil.com", "scheme"], ["HTTPS://demo.example", "scheme"], ["https:evil.com", "scheme"], ["javascript:alert(1)", "scheme"], ["ftp://demo.example", "scheme"],
+  ["https://127.0.0.1/", "host"], ["https://2130706433/", "host"], ["https://0x7f.1/", "host"], ["https://[::1]/", "host"], ["https://localhost/", "host"], ["https://a.localhost/", "host"], ["https://intranet/", "host"], ["https://demo.example./", "host"],
+  ["https://u@evil.com/", "authority"], ["https://u:p@evil.com/", "authority"], ["https://demo.example:8443/", "port"], ["https://demo.example:80/", "port"],
+  ["https://evil.com\\@demo.example/", "chars"], ["https://demo.example/\r\nSet-Cookie: a=b", "chars"], ["https://demo.example/a b", "chars"], ["https://demo.example/\u0000", "chars"], ["https://bücher.example/", "chars"], ["https://demo.example。evil.com/", "chars"],
+  ["https://demo%2eexample/", "authority"], ["https://{x}.example/", "authority"], [`https://demo.example/${"a".repeat(2100)}`, "length"],
+];
+
+describe("validatePublicUrl (M4): https only, no userinfo, public host, empty port", () => {
+  it.each(GOOD)("accepts %s and returns new URL(raw).href", (raw) => {
+    expect(validatePublicUrl(raw)).toEqual({ ok: true, url: new URL(raw).href });
+  });
+  it.each(BAD)("rejects %j", (raw, error) => {
+    expect(validatePublicUrl(raw)).toEqual({ ok: false, error });
+  });
+  it("is idempotent: the href validates to itself", () => {
+    for (const raw of GOOD) {
+      const first = validatePublicUrl(raw);
+      expect(first.ok && validatePublicUrl(first.url)).toEqual(first);
+    }
+  });
+  it("agrees with validateFinalUrl (EPIC 21) on every row once that host is allowed", () => {
+    for (const raw of [...GOOD, ...BAD.map(([r]) => r)]) {
+      let hosts: string[] = [];
+      try { hosts = [new URL(raw).hostname]; } catch { hosts = []; }
+      expect(validatePublicUrl(raw).ok, raw).toBe(validateFinalUrl(raw, hosts).ok);
+    }
+  });
+});
+
+describe("resolveProductLink", () => {
+  const p = { status: "published", builderStatus: "approved", demoUrl: "https://demo.example/app", websiteUrl: "https://www.example.com/?ref=1" };
+  it("lists exactly demo and site", () => expect(PRODUCT_LINK_KINDS).toEqual(["demo", "site"]));
+  it("redirects to the normalized URL plus UTM", () => {
+    expect(resolveProductLink(p, "demo")).toEqual({ kind: "redirect", url: "https://demo.example/app?utm_source=vnx.si&utm_medium=referral" });
+    expect(resolveProductLink(p, "site")).toEqual({ kind: "redirect", url: "https://www.example.com/?ref=1&utm_source=vnx.si&utm_medium=referral" });
+  });
+  it("does not add UTM when any utm_* is already present", () => {
+    expect(resolveProductLink({ ...p, demoUrl: "https://demo.example/?UTM_Campaign=x" }, "demo")).toEqual({ kind: "redirect", url: "https://demo.example/?UTM_Campaign=x" });
+  });
+  it("is not_found unless the product is published and its builder approved", () => {
+    for (const status of ["draft", "in_review", "changes_requested", "unlisted", "suspended", "archived"]) expect(resolveProductLink({ ...p, status }, "demo")).toEqual({ kind: "not_found", reason: "not_public" });
+    for (const builderStatus of ["pending", "rejected", "suspended"]) expect(resolveProductLink({ ...p, builderStatus }, "demo")).toEqual({ kind: "not_found", reason: "not_public" });
+  });
+  it("is missing_url for null or empty, invalid_url for a corrupt value", () => {
+    expect(resolveProductLink({ ...p, demoUrl: null }, "demo")).toEqual({ kind: "not_found", reason: "missing_url" });
+    expect(resolveProductLink({ ...p, websiteUrl: "" }, "site")).toEqual({ kind: "not_found", reason: "missing_url" });
+    for (const bad of ["http://demo.example", "//evil.com", "https://127.0.0.1/", "https://u@evil.com/", "https://demo.example/\r\nX: y"]) {
+      expect(resolveProductLink({ ...p, demoUrl: bad }, "demo")).toEqual({ kind: "not_found", reason: "invalid_url" });
+    }
+  });
+  it("reads demo from demoUrl and site from websiteUrl, never the other", () => {
+    expect(resolveProductLink({ ...p, demoUrl: null }, "site").kind).toBe("redirect");
+    expect(resolveProductLink({ ...p, websiteUrl: null }, "demo").kind).toBe("redirect");
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/domain/product-url.test.ts` → FAIL (`domain/product-url.ts` chưa có). Nếu một mã lỗi trong `BAD` khác hành vi thật của `validateFinalUrl` (cùng thứ tự kiểm), sửa MÃ trong bảng; điều kiện cứng là `ok: false`, KHÔNG nới luật.
+
+- [ ] **Step 2: `validatePublicUrl` trong `offer-url.ts` (refactor, R2) và `domain/product-url.ts` (impl)**
+
+`apps/web/src/domain/offer-url.ts`: thay hàm `check` hiện có bằng lõi dùng chung, rồi `check` gọi lõi. KHÔNG đổi hành vi của `validateFinalUrl`, `fillAndValidate`, `parseTemplate` (test `offer-url`, `offer`, `merchant`, `go` của EPIC 21 là rào chắn). Tìm `function check(raw: string, allowed: readonly string[]): UrlResult {` và thay cả hàm bằng:
+
+```ts
+export type PublicUrlError = Exclude<UrlError, "not_allowed">;
+export type PublicUrlResult = { ok: true; url: string } | { ok: false; error: PublicUrlError };
+
+/** One pass of every rule except the host allowlist. */
+function checkPublic(raw: string): PublicUrlResult {
+  const fail = (error: PublicUrlError): PublicUrlResult => ({ ok: false, error });
+  if (raw.length > MAX_URL_LENGTH) return fail("length");
+  if (!isPrintableAscii(raw)) return fail("chars");
+  if (!hasHttpsPrefix(raw)) return fail("scheme");
+  if (!isAuthorityClean(authorityOf(raw))) return fail("authority");
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return fail("parse");
+  }
+  if (url.protocol !== "https:") return fail("parse");
+  const origin = originError(url);
+  if (origin) return fail(origin);
+  if (!isPublicHostname(url.hostname)) return fail("host");
+  return { ok: true, url: url.href };
+}
+
+/**
+ * The gate for a product's demo and website URL (M7 ruling M4): every rule of `validateFinalUrl` except the allowlist, with the same double
+ * pass. On success `url` is `new URL(raw).href`, checked again.
+ */
+export function validatePublicUrl(raw: string): PublicUrlResult {
+  const first = checkPublic(raw);
+  if (!first.ok) return first;
+  const second = checkPublic(first.url);
+  if (!second.ok) return second;
+  return second.url === first.url ? second : { ok: false, error: "parse" };
+}
+
+function check(raw: string, allowed: readonly string[]): UrlResult {
+  const core = checkPublic(raw);
+  if (!core.ok) return core;
+  return hostAllowed(new URL(core.url).hostname, allowed) ? core : { ok: false, error: "not_allowed" };
+}
+```
+
+(`validateFinalUrl` no longer needs changing: it still calls `check` twice and compares.) `apps/web/src/domain/product-url.ts`:
+
+```ts
+import { appendUtm, validatePublicUrl } from "./offer-url.ts";
+
+export { validatePublicUrl, type PublicUrlError, type PublicUrlResult } from "./offer-url.ts";
+
+export const PRODUCT_LINK_KINDS = ["demo", "site"] as const;
+export type ProductLinkKind = (typeof PRODUCT_LINK_KINDS)[number];
+export type ProductLinkResult = { kind: "redirect"; url: string } | { kind: "not_found"; reason: "not_public" | "missing_url" | "invalid_url" };
+
+/** Where /go/p/:slug/{demo,site} goes. The destination comes only from the stored URL, never from the request. Pure: no Hono, no D1. */
+export function resolveProductLink(p: { status: string; builderStatus: string; demoUrl: string | null; websiteUrl: string | null }, kind: ProductLinkKind): ProductLinkResult {
+  if (p.status !== "published" || p.builderStatus !== "approved") return { kind: "not_found", reason: "not_public" };
+  const raw = kind === "demo" ? p.demoUrl : p.websiteUrl;
+  if (raw === null || raw === "") return { kind: "not_found", reason: "missing_url" };
+  const valid = validatePublicUrl(raw);
+  return valid.ok ? { kind: "redirect", url: appendUtm(valid.url) } : { kind: "not_found", reason: "invalid_url" };
+}
+```
+
+Chạy lại Step 1 → PASS, rồi `npm test -w apps/web -- test/domain/offer-url.test.ts test/domain/offer.test.ts test/domain/merchant.test.ts test/monetization/go.test.ts` → PASS (refactor không đổi hành vi).
+
+- [ ] **Step 3: Test `hasClickToday` (fail)**
+
+Thêm vào `apps/web/test/db/clicks.test.ts` (dùng `click()`, `NOW`, `testEnv` sẵn có; thêm `hasClickToday, CLICK_TODAY_SQL` vào import):
+
+```ts
+describe("hasClickToday (VNX-0707b: one count per visitor, product, kind, UTC day)", () => {
+  const H = (c: string) => c.repeat(64);
+  const key = { visitorHash: H("a"), productId: "clicks-prod-a", linkKind: "demo" as const, day: "2026-10-05" };
+  const seed = (o: Partial<ClickInput>) => recordClick(testEnv.DB, click({ offerId: null, productId: key.productId, linkKind: "demo", visitorHash: key.visitorHash, ...o }));
+
+  it("is false with no row, true with a row that day, false for the day before and after", async () => {
+    expect(await hasClickToday(testEnv.DB, key)).toBe(false);
+    await seed({ createdAt: "2026-10-05T00:00:00.000Z" });
+    expect(await hasClickToday(testEnv.DB, key)).toBe(true);
+    expect(await hasClickToday(testEnv.DB, { ...key, day: "2026-10-04" })).toBe(false);
+    expect(await hasClickToday(testEnv.DB, { ...key, day: "2026-10-06" })).toBe(false);
+  });
+  it("includes the last millisecond of the day and excludes the first of the next", async () => {
+    await seed({ visitorHash: H("b"), createdAt: "2026-10-05T23:59:59.999Z" });
+    expect(await hasClickToday(testEnv.DB, { ...key, visitorHash: H("b") })).toBe(true);
+    await seed({ visitorHash: H("c"), createdAt: "2026-10-06T00:00:00.000Z" });
+    expect(await hasClickToday(testEnv.DB, { ...key, visitorHash: H("c") })).toBe(false);
+  });
+  it("is keyed by visitor, product and link kind", async () => {
+    await seed({ visitorHash: H("d"), createdAt: "2026-10-05T10:00:00.000Z" });
+    const k = { ...key, visitorHash: H("d") };
+    expect(await hasClickToday(testEnv.DB, k)).toBe(true);
+    expect(await hasClickToday(testEnv.DB, { ...k, linkKind: "site" })).toBe(false);
+    expect(await hasClickToday(testEnv.DB, { ...k, productId: "other" })).toBe(false);
+    expect(await hasClickToday(testEnv.DB, { ...k, visitorHash: H("e") })).toBe(false);
+  });
+  it("uses idx_clicks_visitor", async () => {
+    const plan = await testEnv.DB.prepare(`EXPLAIN QUERY PLAN ${CLICK_TODAY_SQL}`)
+      .bind("x", "y", "demo", "2026-10-05", "2026-10-06").all<{ detail: string }>();
+    expect(plan.results.map((r) => r.detail).join(" ")).toContain("idx_clicks_visitor");
+  });
+});
+```
+
+Chạy `npm test -w apps/web -- test/db/clicks.test.ts` → FAIL.
+
+- [ ] **Step 4: `hasClickToday` (impl)**
+
+`apps/web/src/db/clicks.ts`, sau `recordClick`; đổi chú thích `ClickInput.visitorHash` thành "Null unless a visitor cookie, a usable salt, no GPC and no bot (VNX-0707b); never set for offers.":
+
+```ts
+/**
+ * "This visitor already clicked this product link today (UTC)": the de-duplication read behind product_daily_stats (routes/go.ts joins
+ * it to db/stats.ts; this file owns the table). Run it BEFORE recording the new click. The hash must be non-null. It uses all four columns
+ * of idx_clicks_visitor. Two simultaneous clicks of one visitor may both see "no": routes/go.ts collapses those within one isolate.
+ */
+
+/** The dedupe query, exported so the index test can EXPLAIN exactly this text. */
+export const CLICK_TODAY_SQL = "SELECT 1 AS hit FROM outbound_clicks WHERE visitor_hash = ?1 AND product_id = ?2 AND link_kind = ?3 AND created_at >= ?4 AND created_at < ?5 LIMIT 1";
+
+export async function hasClickToday(db: D1Database, input: { visitorHash: string; productId: string; linkKind: "demo" | "site"; day: string }): Promise<boolean> {
+  const next = new Date(Date.parse(`${input.day}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+  const row = await db
+    .prepare(CLICK_TODAY_SQL)
+    .bind(input.visitorHash, input.productId, input.linkKind, input.day, next)
+    .first<{ hit: number }>();
+  return row !== null;
+}
+```
+
+Chạy lại → PASS.
+
+- [ ] **Step 5: Test `/go/p/` (fail)**
+
+`apps/web/test/monetization/go-product.test.ts` (khung `call` sao chép từ `go.test.ts`, không export từ đó). Salt và cookie tiêm tường minh: `testEnv` không có salt (ca "thiếu salt" dùng nó). Ca ở sát nửa đêm UTC có thể chớp (hash tính theo `new Date()` của test và của route); chấp nhận.
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { recordClick } from "../../src/db/clicks.ts";
+import { utcDay } from "../../src/domain/stats.ts";
+import { visitorHash } from "../../src/domain/visitor.ts";
+import type { Bindings } from "../../src/env.ts";
+import { resetNoSaltWarning } from "../../src/http/visitor.ts";
+import { ulid } from "../../src/lib/ulid.ts";
+import { makeLiveProduct, makeMerchant, makeOffer, makeProgram, signIn } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const UTM = "utm_source=vnx.si&utm_medium=referral";
+const SALT = "go-product-test-salt-00000000000000";
+const ENV = { ...testEnv, ANALYTICS_SALT: SALT } as Bindings;
+const VID = "0123456789abcdef0123456789abcdef";
+const VID2 = "fedcba9876543210fedcba9876543210";
+const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+const EVIL = "evil.example.net";
+const DEMO = "https://demo.example/app";
+const SITE = "https://www.example.com/?ref=1";
+const ZERO = { views: 0, demo_clicks: 0, outbound_clicks: 0, inquiries: 0 };
+
+type Call = { method?: string; headers?: Record<string, string>; cf?: Record<string, unknown>; env?: Bindings };
+async function call(path: string, o: Call = {}): Promise<Response> {
+  const req = new Request(`https://vnx.si${path}`, { method: o.method ?? "GET", headers: o.headers });
+  if (o.cf) Object.defineProperty(req, "cf", { value: o.cf });
+  return await createApp().request(req, undefined, o.env ?? ENV);
+}
+/** A real browser carrying the visitor cookie (what Task 3 will set); `cookie` replaces the whole Cookie header. */
+const visitor = (vid = VID, extra: Record<string, string> = {}) => ({ "user-agent": CHROME, cookie: `__Host-vnx_vid=${vid}`, ...extra });
+
+let seq = 0;
+async function live(fields: { demoUrl?: string | null; websiteUrl?: string | null } = { demoUrl: DEMO, websiteUrl: SITE }) {
+  const email = `gp${++seq}@vnx.si`;
+  const { builder, product } = await makeLiveProduct(email, `gp${seq}`, `gp${seq} product`, { fields });
+  return { email, builder, product, slug: product.slug };
+}
+const clicks = async (productId: string) => (await testEnv.DB.prepare("SELECT * FROM outbound_clicks WHERE product_id = ?1 ORDER BY id").bind(productId).all<Record<string, unknown>>()).results;
+const stat = async (productId: string) => (await testEnv.DB.prepare("SELECT views, demo_clicks, outbound_clicks, inquiries FROM product_daily_stats WHERE product_id = ?1").bind(productId).first<Record<string, number>>()) ?? ZERO;
+const count = async (table: string) => (await testEnv.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())?.n ?? 0;
+
+beforeEach(() => resetNoSaltWarning());
+afterEach(() => vi.restoreAllMocks());
+
+describe("route order (the /go/* catch-all stays last)", { timeout: 30_000 }, () => {
+  it("a valid /go/p/<slug>/{demo,site} is a 302, not swallowed by the catch-all", async () => {
+    const { slug } = await live();
+    expect((await call(`/go/p/${slug}/demo`)).status).toBe(302);
+    expect((await call(`/go/p/${slug}/site`)).status).toBe(302);
+  });
+  it.each(["/go/p", "/go/p/", "/go/p/some-product", "/go/p/some-product/other", "/go/p/some-product/demo/extra", "/go/p//demo"])("%s stays a 404 from the catch-all", async (path) => {
+    const res = await call(path);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("404 cases write nothing", { timeout: 30_000 }, () => {
+  it("unknown, malformed and upper-case slugs", async () => {
+    const { slug } = await live();
+    const before = await count("outbound_clicks");
+    for (const path of ["/go/p/does-not-exist/demo", "/go/p/-x-/demo", "/go/p/a/demo", `/go/p/${slug.toUpperCase()}/demo`, "/go/p/%00/demo", "/go/p/..%2f/demo"]) {
+      const res = await call(path, { headers: visitor() });
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get("location"), path).toBeNull();
+    }
+    expect(await count("outbound_clicks")).toBe(before);
+  });
+  it("a product that is not published, or whose builder is not approved", async () => {
+    const { product, slug, builder } = await live();
+    for (const status of ["draft", "in_review", "changes_requested", "unlisted", "suspended", "archived"]) {
+      await testEnv.DB.prepare("UPDATE products SET status = ?2 WHERE id = ?1").bind(product.id, status).run();
+      expect((await call(`/go/p/${slug}/demo`, { headers: visitor() })).status, status).toBe(404);
+    }
+    await testEnv.DB.prepare("UPDATE products SET status = 'published' WHERE id = ?1").bind(product.id).run();
+    for (const status of ["pending", "rejected", "suspended"]) {
+      await testEnv.DB.prepare("UPDATE builders SET status = ?2 WHERE user_id = ?1").bind(builder.userId, status).run();
+      expect((await call(`/go/p/${slug}/demo`, { headers: visitor() })).status, status).toBe(404);
+    }
+    expect(await clicks(product.id)).toHaveLength(0);
+  });
+  it("a missing URL is a 404 for that kind only", async () => {
+    const { product, slug } = await live({ demoUrl: null, websiteUrl: SITE });
+    expect((await call(`/go/p/${slug}/demo`)).status).toBe(404);
+    expect((await call(`/go/p/${slug}/site`)).status).toBe(302);
+    expect(await clicks(product.id)).toHaveLength(1);
+  });
+  it.each(["http://demo.example/", "//evil.com", "https://127.0.0.1/", "https://u@evil.com/", "https://demo.example:8443/", "https://demo.example/a\\b", "https://demo.example/a\r\nSet-Cookie: x=y"])("a corrupt stored URL %j is a 404 with console.error and no click", async (bad) => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { product, slug } = await live();
+    await testEnv.DB.prepare("UPDATE products SET demo_url = ?2 WHERE id = ?1").bind(product.id, bad).run();
+    const res = await call(`/go/p/${slug}/demo`, { headers: visitor() });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+    expect(spy.mock.calls.map((c) => String(c[0])).some((l) => l.includes("go.corrupt_data") && l.includes("product_url_invalid"))).toBe(true);
+    expect(await clicks(product.id)).toHaveLength(0);
+  });
+});
+
+describe("the redirect", { timeout: 30_000 }, () => {
+  it("302 to the normalized URL plus UTM, with the headers", async () => {
+    const { slug } = await live();
+    const demo = await call(`/go/p/${slug}/demo?src=product_page`);
+    expect(demo.status).toBe(302);
+    expect(demo.headers.get("location")).toBe(`${DEMO}?${UTM}`);
+    expect(demo.headers.get("cache-control")).toBe("no-store");
+    expect(demo.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(demo.headers.get("referrer-policy")).toBe("origin");
+    expect((await call(`/go/p/${slug}/site`)).headers.get("location")).toBe(`https://www.example.com/?ref=1&${UTM}`);
+  });
+  it("adds no UTM when the stored URL already has any utm_*", async () => {
+    const { product, slug } = await live();
+    await testEnv.DB.prepare("UPDATE products SET demo_url = 'https://demo.example/?UTM_Campaign=x' WHERE id = ?1").bind(product.id).run();
+    expect((await call(`/go/p/${slug}/demo`)).headers.get("location")).toBe("https://demo.example/?UTM_Campaign=x");
+  });
+  it("Location comes from the database only: ?url=, ?src=<url>, ?to=//host change nothing", async () => {
+    const { product, slug } = await live();
+    const res = await call(`/go/p/${slug}/demo?url=https://${EVIL}/&src=https://${EVIL}/&to=//${EVIL}`);
+    expect(res.headers.get("location")).toBe(`${DEMO}?${UTM}`);
+    expect((await clicks(product.id))[0]?.src).toBe("unknown");
+  });
+  it("stores src from the enum, the locale of the Referer page, and no IP, e-mail or user id", async () => {
+    const { product, slug } = await live();
+    await call(`/go/p/${slug}/demo?src=product_page`, { headers: { "user-agent": CHROME, referer: `https://vnx.si/vi/p/${slug}` }, cf: { country: "VN" } });
+    const [row] = await clicks(product.id);
+    expect(row).toMatchObject({ link_kind: "demo", src: "product_page", locale: "vi", offer_id: null, country: "VN", referrer_host: "vnx.si", is_bot: 0, visitor_hash: null });
+    expect(Object.keys(row!).sort()).toEqual(["country", "created_at", "id", "is_bot", "link_kind", "locale", "offer_id", "product_id", "referrer_host", "src", "visitor_hash"]);
+  });
+  it("HEAD redirects and records nothing; POST/PUT/DELETE are 405 with Allow: GET, HEAD; a foreign Origin is 403", async () => {
+    const { product, slug } = await live();
+    const head = await call(`/go/p/${slug}/demo`, { method: "HEAD", headers: visitor() });
+    expect(head.status).toBe(302);
+    expect(head.headers.get("location")).toBe(`${DEMO}?${UTM}`);
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      const res = await call(`/go/p/${slug}/demo`, { method, headers: { origin: "https://vnx.si" } });
+      expect(res.status, method).toBe(405);
+      expect(res.headers.get("allow")).toBe("GET, HEAD");
+    }
+    expect((await call(`/go/p/${slug}/demo`, { method: "POST", headers: { origin: `https://${EVIL}` } })).status).toBe(403);
+    expect(await clicks(product.id)).toHaveLength(0);
+    expect(await stat(product.id)).toEqual(ZERO);
+  });
+  it("sets no cookie (M2: /go/p/ only reads it)", async () => {
+    const { slug } = await live();
+    expect((await call(`/go/p/${slug}/demo`, { headers: { "user-agent": CHROME } })).headers.get("set-cookie")).toBeNull();
+  });
+});
+
+describe("counting truth table (spec 8.11, M3, L4)", { timeout: 30_000 }, () => {
+  it("a normal visitor with the cookie: demo adds demo_clicks and outbound_clicks, site adds outbound_clicks; the row carries the day hash", async () => {
+    const { product, slug } = await live();
+    await call(`/go/p/${slug}/demo`, { headers: visitor() });
+    expect(await stat(product.id)).toEqual({ ...ZERO, demo_clicks: 1, outbound_clicks: 1 });
+    await call(`/go/p/${slug}/site`, { headers: visitor() });
+    expect(await stat(product.id)).toEqual({ ...ZERO, demo_clicks: 1, outbound_clicks: 2 });
+    const rows = await clicks(product.id);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.visitor_hash).toBe(await visitorHash(SALT, utcDay(new Date()), VID));
+    expect(rows[0]?.visitor_hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it.each([
+    ["a bot user agent", { headers: { "user-agent": "curl/8.5.0", cookie: `__Host-vnx_vid=${VID}` } }],
+    ["an empty user agent", { headers: { "user-agent": "", cookie: `__Host-vnx_vid=${VID}` } }],
+    ["a Cloudflare verified bot", { headers: visitor(), cf: { botManagement: { verifiedBot: true } } }],
+    ["Sec-GPC: 1", { headers: visitor(VID, { "sec-gpc": "1" }) }],
+    ["no ANALYTICS_SALT", { headers: visitor(), env: { ...testEnv, ANALYTICS_SALT: undefined } as Bindings }],
+    ["a blank ANALYTICS_SALT", { headers: visitor(), env: { ...testEnv, ANALYTICS_SALT: "   " } as Bindings }],
+    ["no cookie", { headers: { "user-agent": CHROME } }],
+    ["a malformed cookie", { headers: { "user-agent": CHROME, cookie: "__Host-vnx_vid=not-hex" } }],
+  ] as [string, Call][])("%s: the click row is written with a null hash, product_daily_stats is untouched", async (_name, o) => {
+    const { product, slug } = await live();
+    const before = await count("product_daily_stats");
+    expect((await call(`/go/p/${slug}/demo`, o)).status).toBe(302);
+    const rows = await clicks(product.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.visitor_hash).toBeNull();
+    expect(await stat(product.id)).toEqual(ZERO);
+    expect(await count("product_daily_stats")).toBe(before);
+  });
+
+  it("marks bot rows is_bot = 1", async () => {
+    const { product, slug } = await live();
+    await call(`/go/p/${slug}/demo`, { headers: { "user-agent": "Googlebot/2.1", cookie: `__Host-vnx_vid=${VID}` } });
+    expect((await clicks(product.id))[0]?.is_bot).toBe(1);
+  });
+
+  it("the product's own builder is not counted (row written)", async () => {
+    const { product, slug, email } = await live();
+    const { cookie } = await signIn(email);
+    expect((await call(`/go/p/${slug}/demo`, { headers: visitor(VID, { cookie: `${cookie}; __Host-vnx_vid=${VID}` }) })).status).toBe(302);
+    expect(await clicks(product.id)).toHaveLength(1);
+    expect(await stat(product.id)).toEqual(ZERO);
+  });
+
+  it("staff (admin listed in ADMIN_EMAILS) is not counted; a signed-in ordinary user is", async () => {
+    const a = await live();
+    const admin = await signIn("owner@vnx.si", { admin: true });
+    await call(`/go/p/${a.slug}/demo`, { headers: visitor(VID, { cookie: `${admin.cookie}; __Host-vnx_vid=${VID}` }) });
+    expect(await stat(a.product.id)).toEqual(ZERO);
+    const user = await signIn("gp-plain@vnx.si");
+    await call(`/go/p/${a.slug}/demo`, { headers: visitor(VID2, { cookie: `${user.cookie}; __Host-vnx_vid=${VID2}` }) });
+    expect(await stat(a.product.id)).toEqual({ ...ZERO, demo_clicks: 1, outbound_clicks: 1 });
+  });
+
+  it("the same visitor, product and kind counts once per UTC day; another visitor, kind or product counts separately", async () => {
+    const a = await live();
+    const b = await live();
+    for (let i = 0; i < 3; i++) await call(`/go/p/${a.slug}/demo`, { headers: visitor() });
+    expect(await stat(a.product.id)).toEqual({ ...ZERO, demo_clicks: 1, outbound_clicks: 1 });
+    expect(await clicks(a.product.id)).toHaveLength(3);
+    await call(`/go/p/${a.slug}/demo`, { headers: visitor(VID2) });
+    await call(`/go/p/${b.slug}/demo`, { headers: visitor() });
+    expect((await stat(a.product.id)).demo_clicks).toBe(2);
+    expect((await stat(b.product.id)).demo_clicks).toBe(1);
+  });
+
+  it("counts again on a new UTC day (a row from yesterday does not dedupe today)", async () => {
+    const { product, slug } = await live();
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+    await recordClick(testEnv.DB, { id: ulid(Date.parse(yesterday)), productId: product.id, offerId: null, linkKind: "demo", src: "unknown", locale: "en", visitorHash: await visitorHash(SALT, utcDay(new Date()), VID), country: null, referrerHost: null, isBot: false, createdAt: yesterday });
+    await call(`/go/p/${slug}/demo`, { headers: visitor() });
+    expect((await stat(product.id)).demo_clicks).toBe(1);
+  });
+
+  it("warns once per isolate when ANALYTICS_SALT is missing, and still redirects", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { slug } = await live();
+    for (let i = 0; i < 3; i++) expect((await call(`/go/p/${slug}/demo`, { headers: visitor(), env: { ...testEnv, ANALYTICS_SALT: undefined } as Bindings })).status).toBe(302);
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes("visitor.no_salt"))).toHaveLength(1);
+  });
+
+  /** The real D1 except that `prepare` throws for any SQL containing `match`. */
+  const breakDb = (match: string) =>
+    new Proxy(testEnv.DB, {
+      get(target, prop) {
+        if (prop === "prepare") return (sql: string) => { if (sql.includes(match)) throw new Error(`${match} unavailable`); return target.prepare(sql); };
+        const v = Reflect.get(target, prop) as unknown;
+        return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+  const logged = (spy: { mock: { calls: unknown[][] } }, event: string) => spy.mock.calls.some((c) => String(c[0]).includes(event));
+
+  it("a failing stats write never breaks the redirect or loses the click row", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { product, slug } = await live();
+    expect((await call(`/go/p/${slug}/demo`, { headers: visitor(), env: { ...ENV, DB: breakDb("product_daily_stats") } as Bindings })).status).toBe(302);
+    expect(await clicks(product.id)).toHaveLength(1);
+    expect(logged(error, "go.stat_failed")).toBe(true);
+  });
+
+  it("a failing dedupe read: 302, one click row, stats untouched, go.dedupe_failed logged (L6)", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { product, slug } = await live();
+    expect((await call(`/go/p/${slug}/demo`, { headers: visitor(), env: { ...ENV, DB: breakDb("SELECT 1 AS hit") } as Bindings })).status).toBe(302);
+    expect(await clicks(product.id)).toHaveLength(1);
+    expect(await stat(product.id)).toEqual(ZERO);
+    expect(logged(error, "go.dedupe_failed")).toBe(true);
+  });
+
+  it("a throwing staff check never rejects the tracker (M2): 302, one row with the hash, stats untouched, go.count_failed logged", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { product, slug } = await live();
+    const admin = await signIn("owner@vnx.si", { admin: true });
+    const env = { ...ENV } as Bindings;
+    Object.defineProperty(env, "ADMIN_EMAILS", { get() { throw new Error("staff lookup failed"); } });
+    const res = await call(`/go/p/${slug}/demo`, { headers: visitor(VID, { cookie: `${admin.cookie}; __Host-vnx_vid=${VID}` }), env });
+    expect(res.status).toBe(302);
+    const rows = await clicks(product.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.visitor_hash).toBe(await visitorHash(SALT, utcDay(new Date()), VID));
+    expect(await stat(product.id)).toEqual(ZERO);
+    expect(logged(error, "go.count_failed")).toBe(true);
+  });
+
+  it("two simultaneous first clicks of one visitor count once (S12: in-flight set), three rows are not needed: two rows, one count", async () => {
+    const { product, slug } = await live();
+    const [a, b] = await Promise.all([call(`/go/p/${slug}/demo`, { headers: visitor() }), call(`/go/p/${slug}/demo`, { headers: visitor() })]);
+    expect([a.status, b.status]).toEqual([302, 302]);
+    expect(await clicks(product.id)).toHaveLength(2);
+    expect(await stat(product.id)).toEqual({ ...ZERO, demo_clicks: 1, outbound_clicks: 1 });
+  });
+});
+describe("offer clicks never touch product_daily_stats (L4)", { timeout: 30_000 }, () => {
+  it("/go/o/:id and /go/:merchant, even with a valid visitor cookie, add no product_daily_stats row and keep a null hash", async () => {
+    const merchant = await makeMerchant();
+    const offer = await makeOffer(merchant, await makeProgram(merchant));
+    const before = await count("product_daily_stats");
+    expect((await call(`/go/o/${offer.id}`, { headers: visitor() })).status).toBe(302);
+    await call(`/go/${merchant.slug}`, { headers: visitor() });
+    expect(await count("product_daily_stats")).toBe(before);
+    const rows = (await testEnv.DB.prepare("SELECT link_kind, visitor_hash, product_id FROM outbound_clicks WHERE offer_id = ?1").bind(offer.id).all<Record<string, unknown>>()).results;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.link_kind === "offer" && r.visitor_hash === null && r.product_id === null)).toBe(true);
+  });
+});
+```
+
+Ghi chú: `go.test.ts` bật cờ `affiliate` trong `beforeEach` cho ca offer; ca L4 ở trên chỉ cần redirect (cờ tắt vẫn 302 qua nhánh dự phòng của offer). Nếu `/go/${merchant.slug}` cần `setDefaultOffer` mới 302, bỏ lời gọi đó và giữ `/go/o/`. Nếu `UPDATE builders SET status` bị ràng buộc/trigger chặn, dùng `setBuilderStatus` của fixtures. Nếu `signIn(email)` cho builder không khớp `builder.userId` vì `makeBuilder` đã tạo user bằng cùng email, thì chúng khớp (`ensureUser` tái dùng).
+
+Chạy: `npm test -w apps/web -- test/monetization/go-product.test.ts` → FAIL (route chưa có; `http/visitor.ts` chưa có).
+
+- [ ] **Step 6: `http/visitor.ts`**
+
+```ts
+import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
+import { VISITOR_COOKIE, parseVisitorCookie } from "../domain/visitor.ts";
+import type { AppEnv } from "../env.ts";
+
+/** The visitor id from the cookie when it has the exact shape, else null. Reads only: the /go/ routes never set the cookie (M2). */
+export function readVisitorCookie(c: Context<AppEnv>): string | null {
+  return parseVisitorCookie(getCookie(c, VISITOR_COOKIE) ?? null);
+}
+
+let warned = false;
+/** One warning per isolate when ANALYTICS_SALT is unset or blank (M3): product views and clicks are then not counted. */
+export function warnNoSaltOnce(): void {
+  if (warned) return;
+  warned = true;
+  console.warn(JSON.stringify({ event: "visitor.no_salt", note: "ANALYTICS_SALT is not set: product views and clicks are not counted" }));
+}
+
+/** For tests only. */
+export function resetNoSaltWarning(): void {
+  warned = false;
+}
+```
+
+- [ ] **Step 7: Routes trong `routes/go.ts` (impl)**
+
+Thêm import: `hasClickToday` (cùng dòng `recordClick`); `findPublicProductBySlug` (`../db/products.ts`); `bumpProductStat` (`../db/stats.ts`); `resolveProductLink`, `type ProductLinkKind` (`../domain/product-url.ts`); `utcDay` (`../domain/stats.ts`); `hasGpc`, `shouldCount`, `usableSalt`, `visitorHash` (`../domain/visitor.ts`); `type OutboundSrc` (từ `../domain/outbound.ts`, cùng dòng import cũ); `isStaff` (`../auth/staff.ts`); `type SessionUser` (`../auth/sessions.ts`); `type Bindings`, (`../env.ts`, cùng dòng `AppEnv`); `type Locale` (`../i18n/locales.ts`); `readVisitorCookie`, `warnNoSaltOnce` (`../http/visitor.ts`). Thêm trước `registerGoRoutes`:
+
+```ts
+type ProductClick = {
+  now: Date;
+  clickId: string;
+  productId: string;
+  builderId: string;
+  kind: ProductLinkKind;
+  src: OutboundSrc;
+  locale: Locale;
+  referer: string | undefined;
+  cf: CfLike;
+  isBot: boolean;
+  isGpc: boolean;
+  visitorId: string | null;
+  user: SessionUser | null;
+};
+
+/** Per isolate: keys (`hash|product|kind`) whose first click is still being recorded. Collapses a double click that lands in the same isolate. */
+const inFlight = new Set<string>();
+
+/**
+ * The click row first and always; then, only for a counted first click of the day, the product counters. NEVER rejects (M2): everything
+ * that decides "count or not" (hash, owner, staff, in-flight, dedupe) sits in one try/catch; on any error it logs `go.count_failed`,
+ * counts nothing and still records the click (with the hash if it was computed, null if hashing failed). A redirect never waits on or
+ * fails because of statistics (addendum 2.3). `isStaff` runs last, only for a signed-in visitor who is not the product's builder and
+ * who already passed every cheap check (a hash exists only without bot, GPC, missing salt or missing cookie).
+ */
+async function trackProductClick(env: Bindings, t: ProductClick): Promise<void> {
+  const day = utcDay(t.now);
+  let hash: string | null = null;
+  let first = false;
+  let key: string | null = null;
+  try {
+    const salt = usableSalt(env.ANALYTICS_SALT);
+    hash = salt !== null && !t.isBot && !t.isGpc && t.visitorId !== null ? await visitorHash(salt, day, t.visitorId) : null;
+    if (hash !== null) {
+      const own = t.user?.id === t.builderId;
+      const staff = !own && t.user ? await isStaff(env, t.user) : false;
+      if (shouldCount({ isBot: t.isBot, isStaff: staff, isOwnBuilder: own, isGpc: t.isGpc, hasSalt: true })) {
+        const k = `${hash}|${t.productId}|${t.kind}`;
+        // Check and add with no await between them, so two requests of one isolate cannot both pass.
+        if (!inFlight.has(k)) {
+          inFlight.add(k);
+          key = k;
+          try {
+            first = !(await hasClickToday(env.DB, { visitorHash: hash, productId: t.productId, linkKind: t.kind, day }));
+          } catch (err) {
+            console.error(JSON.stringify({ event: "go.dedupe_failed", productId: t.productId, error: String(err) }));
+          }
+        }
+      }
+    }
+  } catch (err) {
+    first = false;
+    console.error(JSON.stringify({ event: "go.count_failed", productId: t.productId, error: String(err) }));
+  }
+  try {
+    await saveClick(env.DB, {
+      id: t.clickId,
+      productId: t.productId,
+      offerId: null,
+      linkKind: t.kind,
+      src: t.src,
+      locale: t.locale,
+      visitorHash: hash,
+      country: countryOf(t.cf),
+      referrerHost: referrerHost(t.referer),
+      isBot: t.isBot,
+      createdAt: t.now.toISOString(),
+    });
+    if (!first) return;
+    try {
+      await bumpProductStat(env.DB, { productId: t.productId, day, delta: t.kind === "demo" ? { demo_clicks: 1, outbound_clicks: 1 } : { outbound_clicks: 1 } });
+    } catch (err) {
+      console.error(JSON.stringify({ event: "go.stat_failed", productId: t.productId, error: String(err) }));
+    }
+  } finally {
+    if (key !== null) inFlight.delete(key);
+  }
+}
+
+async function respondProduct(c: Context<AppEnv>, kind: ProductLinkKind): Promise<Response> {
+  const slug = c.req.param("slug") ?? "";
+  if (!SLUG_RE.test(slug)) return notFound(c);
+  const item = await findPublicProductBySlug(c.env.DB, slug);
+  if (!item) return notFound(c);
+  const result = resolveProductLink({ status: item.product.status, builderStatus: item.builderStatus, demoUrl: item.product.demoUrl, websiteUrl: item.product.websiteUrl }, kind);
+  if (result.kind === "not_found") {
+    if (result.reason === "invalid_url") {
+      console.error(JSON.stringify({ event: "go.corrupt_data", reason: "product_url_invalid", productId: item.product.id, linkKind: kind, requestId: c.get("requestId") }));
+    }
+    return notFound(c);
+  }
+  // HEAD is answered by the GET handler (Hono); it must not record or count.
+  if (c.req.method === "GET") {
+    const now = new Date();
+    const url = new URL(c.req.url);
+    const referer = c.req.header("referer");
+    const cf = c.req.raw.cf as CfLike;
+    if (usableSalt(c.env.ANALYTICS_SALT) === null) warnNoSaltOnce();
+    await defer(
+      c,
+      trackProductClick(c.env, {
+        now,
+        clickId: ulid(now.getTime()),
+        productId: item.product.id,
+        builderId: item.product.builderId,
+        kind,
+        src: parseSrc(url.searchParams.get("src")),
+        locale: localeFromReferer(referer, url.host),
+        referer,
+        cf,
+        isBot: isBotRequest(c.req.header("user-agent"), cf),
+        isGpc: hasGpc(c.req.raw.headers),
+        visitorId: readVisitorCookie(c),
+        user: c.get("user"),
+      }),
+    );
+  }
+  return redirectTo(result.url);
+}
+```
+
+Trong `registerGoRoutes`, ngay sau `app.get("/go/o/:offerId", …)` và trước `app.get("/go/:merchantSlug", …)`:
+
+```ts
+  // M7 (addendum 2.1): product links. Registered before the /go/* catch-all below, which would otherwise 404 them.
+  app.get("/go/p/:slug/demo", (c) => respondProduct(c, "demo"));
+  app.get("/go/p/:slug/site", (c) => respondProduct(c, "site"));
+```
+
+Sửa chú thích catch-all cuối file: bỏ cụm "(including /go/p/…, which is M7's)". Chạy `npm test -w apps/web -- test/monetization/go-product.test.ts test/db/clicks.test.ts` → PASS.
+
+- [ ] **Step 8: Sửa `test/monetization/go.test.ts`**
+
+Tìm bằng `grep -n "go/p/" apps/web/test/monetization/go.test.ts`. Ba chỗ: (1) danh sách "404 before any D1 read" bỏ `"/go/p/some-product/demo"` và `"/go/p/some-product/site"` (giờ phải đọc D1 mới biết product có không; ca tương đương nằm ở `go-product.test.ts`), đổi tên ca thành "(reserved or malformed slug)"; (2) cùng danh sách THÊM `"/go/p/-x-/demo"` và `"/go/p/UPPER-x/demo"` (slug sai dạng/chữ hoa: 404 trước mọi lần đọc D1, `untouchableDb`); (3) ca 405: `"/go/p/x/demo"` → `"/go/p/does-not-exist/demo"` (405 trả trước khi đọc D1 vì chỉ GET có route). Chạy `npm test -w apps/web -- test/monetization/go.test.ts` → PASS.
+
+- [ ] **Step 9: Editor từ chối URL không công khai (test fail, rồi impl)**
+
+`apps/web/test/domain/product-input.test.ts`, thêm trong khối "product step input":
+
+```ts
+  it("the demo step accepts only a public https URL, as the redirect does (M4)", () => {
+    for (const bad of ["http://spa.example", "//evil.com", "https://127.0.0.1/", "https://[::1]/", "https://localhost/", "https://u@evil.com/", "https://spa.example:8443/", "https://spa.example/a\\b", "javascript:alert(1)", "https://intranet/"]) {
+      expect(parseStep("demo", { demoUrl: bad, websiteUrl: "" }), bad).toEqual({ ok: false, errors: { demoUrl: "url" } });
+      expect(parseStep("demo", { demoUrl: "", websiteUrl: bad }), bad).toEqual({ ok: false, errors: { websiteUrl: "url" } });
+    }
+  });
+  it("keeps the trimmed text, not the normalized href (a re-save must not look like a change)", () => {
+    expect(parseStep("demo", { demoUrl: "  https://spa.example  ", websiteUrl: "https://www.example.com/a?b=1" })).toEqual({ ok: true, fields: { demoUrl: "https://spa.example", websiteUrl: "https://www.example.com/a?b=1" } });
+  });
+  it("every URL the editor accepts the redirect accepts too", () => {
+    for (const ok of ["https://spa.example", "https://spa.example/", "https://a.b.example/x?y=1#z", "https://spa.example:443/"]) {
+      expect(parseStep("demo", { demoUrl: ok, websiteUrl: "" }).ok, ok).toBe(true);
+      expect(validatePublicUrl(ok).ok, ok).toBe(true);
+    }
+  });
+```
+
+(thêm `import { validatePublicUrl } from "../../src/domain/product-url.ts";`). Trong `test/hub/products.test.ts` cạnh ca dòng ~84 thêm hai khẳng định `expect((await post("demo", { demoUrl: "https://127.0.0.1/", websiteUrl: "" })).status).toBe(400);` và cùng với `"https://u@evil.com/"` ở `websiteUrl`. Chạy → FAIL. Rồi `apps/web/src/domain/product-input.ts`: `import { splitCsv } from "./builder-input.ts";`, `import { validatePublicUrl } from "./product-url.ts";`, và trong `parseField`:
+
+```ts
+    case "url":
+      if (v === "") return { ok: true, value: null };
+      if (v.length > spec.max) return { ok: false, error: "too_long" };
+      return validatePublicUrl(v).ok ? { ok: true, value: v } : { ok: false, error: "url" };
+```
+
+(`isHttpsUrl` vẫn dùng ở builder-input, portfolio, offer: KHÔNG xóa.) Chạy `npm test -w apps/web -- test/domain/product-input.test.ts test/hub/products.test.ts` → PASS. Các ca hiện có (`https://demo.example`, `https://spa.example`, `https://one.example`, `https://new-demo.example`) là host công khai hợp lệ nên không đổi.
+
+- [ ] **Step 10: `ProductPage` đổi link (test fail, rồi impl)**
+
+`apps/web/test/product-page-links.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../src/app.ts";
+import { makeLiveProduct } from "./fixtures.ts";
+import { testEnv } from "./helpers.ts";
+
+const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
+const anchors = (html: string) => [...html.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
+
+describe("ProductPage outbound links (VNX-0707b)", () => {
+  it("Demo and Website point at /go/p/<slug>/…?src=product_page with rel nofollow ugc noopener and target _blank, in every locale, and never at the stored URL", async () => {
+    const { product } = await makeLiveProduct("ppl-a@vnx.si", "ppl-a", "Ppl A", { fields: { demoUrl: "https://demo.example/app", websiteUrl: "https://www.example.com/" } });
+    for (const prefix of ["", "/vi", "/zh-hans", "/zh-hant"]) {
+      const html = await (await get(`${prefix}/p/${product.slug}`)).text();
+      const tags = anchors(html);
+      for (const kind of ["demo", "site"]) {
+        const tag = tags.find((t) => t.includes(`href="/go/p/${product.slug}/${kind}?src=product_page"`));
+        expect(tag, `${prefix} ${kind}`).toBeDefined();
+        expect(tag).toContain('rel="nofollow ugc noopener"');
+        expect(tag).toContain('target="_blank"');
+      }
+      expect(html).not.toContain("https://demo.example/app");
+      expect(html).not.toContain('href="https://www.example.com/"');
+    }
+  });
+  it("renders no link for a URL the product does not have", async () => {
+    const { product } = await makeLiveProduct("ppl-b@vnx.si", "ppl-b", "Ppl B", { fields: { demoUrl: null, websiteUrl: null } });
+    const html = await (await get(`/p/${product.slug}`)).text();
+    expect(html).not.toContain(`/go/p/${product.slug}/demo`);
+    expect(html).not.toContain(`/go/p/${product.slug}/site`);
+  });
+});
+```
+
+Chạy → FAIL. Sửa `apps/web/src/views/ProductPage.tsx` (khối `row-actions`): `href={`/go/p/${p.slug}/demo?src=product_page`}` và `href={`/go/p/${p.slug}/site?src=product_page`}`; giữ `rel={EXTERNAL}`, `target="_blank"`, `class="btn"` và điều kiện `p.demoUrl ?` / `p.websiteUrl ?`. Chạy → PASS. Kiểm không còn view công khai nào tự dựng link tới URL của product: `grep -n "demoUrl\|websiteUrl" apps/web/src/views/*.tsx apps/web/src/views/json-ld.ts` (trang admin `ProductDetailPage.tsx` cố ý giữ link thật; nếu `json-ld.ts` đưa `websiteUrl` vào `sameAs`/`url`, ghi vào "Ghi nhận" của `CURRENT-STATUS`, không đổi trong task này).
+
+- [ ] **Step 11: Truy vấn kiểm toán dữ liệu hiện có (M4), chạy thử local, dán vào báo cáo**
+
+Dán nguyên văn vào `.ai/tasks/VNX-0707b-report.md`, mục "Việc Owner chạy trước deploy". Danh sách MỌI `demo_url`/`website_url` khác null kèm cờ `suspect` (heuristic gần đúng của `validatePublicUrl`; giá trị lọt qua ở đây vẫn bị redirect từ chối an toàn bằng 404 + `go.corrupt_data`, nên truy vấn dùng để PHÁT HIỆN builder cần sửa, không phải để bảo đảm):
+
+```sql
+WITH u AS (
+  SELECT id, slug, status, 'demo_url' AS col, demo_url AS url FROM products WHERE demo_url IS NOT NULL AND demo_url <> ''
+  UNION ALL
+  SELECT id, slug, status, 'website_url', website_url FROM products WHERE website_url IS NOT NULL AND website_url <> ''
+), r AS (
+  SELECT *, substr(url, 9) AS rest FROM u
+), a AS (
+  SELECT *, substr(rest, 1, min(instr(rest || '/', '/'), instr(rest || '?', '?'), instr(rest || '#', '#')) - 1) AS authority FROM r
+)
+SELECT id, slug, status, col, url,
+  CASE
+    WHEN length(url) > 2048 THEN 'length'
+    WHEN url GLOB '*[^!-~]*' OR instr(url, char(92)) > 0 THEN 'chars'
+    WHEN substr(url, 1, 8) <> 'https://' THEN 'scheme'
+    WHEN authority = '' OR instr(authority, '@') > 0 OR instr(authority, '%') > 0 OR instr(authority, '{') > 0 OR instr(authority, '}') > 0 THEN 'authority'
+    WHEN authority LIKE '%:443' AND instr(authority, '[') = 0 THEN NULL
+    WHEN instr(authority, ':') > 0 THEN 'port_or_ipv6'
+    WHEN instr(authority, '.') = 0 OR substr(authority, -1) = '.' THEN 'host'
+    WHEN lower(authority) = 'localhost' OR lower(authority) LIKE '%.localhost' THEN 'host'
+    WHEN authority GLOB '*[0-9]' THEN 'maybe_ipv4'
+    ELSE NULL
+  END AS suspect
+FROM a
+ORDER BY (suspect IS NULL), status, slug, col;
+```
+
+Lưu truy vấn thành một file trong scratchpad (ví dụ `audit-product-urls.sql`) và chạy thử cú pháp trên D1 local: `npx wrangler d1 execute vnxsi --local --file <đường dẫn file>` từ `apps/web` (kết quả rỗng là bình thường). Lệnh cho Owner: cùng câu với `--remote --file …`; mọi dòng có `suspect` khác `NULL` sẽ trả 404 sau deploy (riêng `maybe_ipv4` cần mắt người xem). **Ghi trong báo cáo:** giá trị là tên miền Unicode (IDN) hoặc có tiền tố `HTTPS://` chữ hoa sẽ 404 sau deploy cho tới khi builder lưu lại (editor giờ từ chối chính các giá trị đó); không tự sửa dữ liệu production.
+
+- [ ] **Step 11b: Ghi chú `wrangler.jsonc` (R1)**
+
+Trong chú thích `ANALYTICS_SALT (M7)` thêm một câu: `ANALYTICS_SALT is the production on-switch for counting: do NOT set it in production until Task 3 and the Privacy update go live (until then each isolate logs visitor.no_salt once, which is expected).` Chỉ chú thích, không đổi giá trị.
+
+- [ ] **Step 12: Toàn bộ, typecheck, commit**
+
+```
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/domain/offer-url.ts apps/web/wrangler.jsonc apps/web/src/domain/product-url.ts apps/web/src/http/visitor.ts apps/web/src/db/clicks.ts apps/web/src/routes/go.ts apps/web/src/domain/product-input.ts apps/web/src/views/ProductPage.tsx apps/web/test/domain/product-url.test.ts apps/web/test/monetization/go-product.test.ts apps/web/test/monetization/go.test.ts apps/web/test/product-page-links.test.ts apps/web/test/db/clicks.test.ts apps/web/test/domain/product-input.test.ts apps/web/test/hub/products.test.ts
+git commit -m "feat(web): /go/p/:slug/{demo,site} with click counting and public URL check (VNX-0707b)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận → cách kiểm:**
+
+| # | Tiêu chí | Kiểm bằng |
+|---|---|---|
+| AC1 | `validatePublicUrl` từ chối `http:`, `//evil.com`, IP mọi dạng, userinfo, cổng, `\`, CR/LF, không ASCII, quá dài; trả `href`; đồng ý với `validateFinalUrl` | `npm test -w apps/web -- test/domain/product-url.test.ts` |
+| AC2 | Editor và redirect từ chối cùng tập URL; editor lưu chữ đã cắt khoảng trắng, không phải `href` | `npm test -w apps/web -- test/domain/product-input.test.ts test/hub/products.test.ts` |
+| AC3 | Hai route đứng trước catch-all; `/go/p`, `/go/p/x`, `/go/p/x/y`, `/go/p/x/demo/z` 404; slug `p` vẫn bị giữ chỗ | `npm test -w apps/web -- test/monetization/go-product.test.ts` (khối "route order") |
+| AC4 | Mọi 404 (slug lạ/sai dạng/chữ hoa, product chưa `published`, builder không `approved`, thiếu URL, URL hỏng kèm `console.error`) không ghi click | cùng file, khối "404 cases" |
+| AC5 | 302 đủ `Location` (UTM trừ khi có `utm_*`), `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: origin`; `?url=`/`?src=<url>` bị bỏ qua; HEAD không ghi; 405 `Allow: GET, HEAD`; không `Set-Cookie` | cùng file, khối "the redirect" |
+| AC6 | Bảng sự thật (bot, GPC, thiếu/trắng salt, thiếu/sai cookie, builder chủ, staff, khách thường, trùng trong ngày, ngày mới, `console.warn` một lần, lỗi ghi thống kê không làm hỏng redirect) | cùng file, khối "counting truth table" |
+| AC7 | Click offer không đổi `product_daily_stats`, hash null | cùng file, khối "offer clicks" |
+| AC8 | `hasClickToday` đúng biên ngày, đúng khóa, dùng `idx_clicks_visitor` | `npm test -w apps/web -- test/db/clicks.test.ts` |
+| AC9 | `ProductPage` trỏ `/go/p/<slug>/{demo,site}?src=product_page`, `rel="nofollow ugc noopener"`, `target="_blank"`, không lộ URL gốc, 4 locale | `npm test -w apps/web -- test/product-page-links.test.ts` |
+| AC10 | EPIC 21 `go.test.ts` xanh sau hai chỉnh sửa; chủ sở hữu bảng không đổi | `npm test -w apps/web -- test/monetization test/architecture.test.ts` |
+| AC11 | Truy vấn kiểm toán chạy được trên D1 local và nằm trong báo cáo | `npx wrangler d1 execute vnxsi --local --command "…"` (từ `apps/web`) |
+| AC12 | Typecheck sạch, toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
+
+**Nghĩa vụ để lại.** (Task 3) `http/visitor.ts` đã có `readVisitorCookie`, `warnNoSaltOnce`, `resetNoSaltWarning` (tạo bởi Task 4): Task 3 SỬA file này, không tạo lại, và dùng lại `warnNoSaltOnce` cho `GET /p/:slug`; câu Privacy mới của Task 3 nêu "the record may hold the day-specific code", đúng với dòng click của task này. (Deploy, R1) áp `0014` trước; **`ANALYTICS_SALT` là công tắc bật đếm trên production: Task 4 được deploy trước Task 3, nhưng Owner KHÔNG đặt `ANALYTICS_SALT` trên production cho tới ngày Task 3 + Privacy cùng lên**; trong khoảng đó mỗi isolate log một dòng `visitor.no_salt` (bình thường); Owner chạy truy vấn Step 11 trước deploy (giá trị IDN hoặc `HTTPS://` chữ hoa sẽ 404 sau deploy cho tới khi builder lưu lại). (CURRENT-STATUS) click không cookie không được đếm (Reviewer ruling 2026-10-05, Owner FYI); sai số đồng thời của dedupe chỉ còn khi hai request rơi vào hai isolate khác nhau (trong cùng isolate đã gộp bằng `inFlight`); tên miền Unicode phải nhập punycode. **Ghi nhận (L10):** chuỗi `product.error.url` ("Enter a full https:// address, or leave it empty.") cần một lượt rà 4 locale để nói rõ "công khai, không IP/cổng/tên nội bộ". (Rate limit) Owner thêm rule Cloudflare cho `/go/p/*` (câu hỏi (f), F1).
+
+Diff ước tính ~600 dòng gồm test (mã sản xuất ~200: `product-url.ts` ~55, `go.ts` ~115, `clicks.ts` ~15, `visitor.ts` ~22, nhỏ lẻ ~10; test ~400). Sát giới hạn: nếu vượt 600, tách 4a (Step 1–2, 9: `product-url.ts` + editor, không đổi route) rồi 4b (Step 3–8, 10–12: route, dedupe, `ProductPage`). Không chuỗi giao diện, không locale, không migration.
 
 ---
 
@@ -2418,4 +3284,5 @@ Không có chuỗi giao diện, không locale. Diff ~1100 dòng gồm test (5a ~
 ## Sau M7 (không thuộc plan này)
 
 - Ops O2 đọc `public_stats`, `product_daily_stats` cho Overview; M7 không dựng màn nào trùng với O2.
-- Sau khi merge: Owner chạy `npx wrangler secret put ANALYTICS_SALT` (trong `apps/web`), `npm run db:migrate:remote -w apps/web` (áp `0014`–`0016`; `0014` phải áp TRƯỚC khi deploy code M7; sau `0013` của Ops nếu nó đã lên), rồi `npm run deploy` (đăng ký cron `5 * * * *` nếu (c) = C1).
+- **`ANALYTICS_SALT` là công tắc bật đếm trên production: Owner KHÔNG đặt nó cho tới ngày Task 3 + Privacy cùng lên** (Task 4 được deploy trước; trong khoảng đó mỗi isolate log `visitor.no_salt`, bình thường).
+- Sau khi merge (và, riêng `wrangler secret put ANALYTICS_SALT`, chỉ vào ngày go-live nói trên): Owner chạy `npx wrangler secret put ANALYTICS_SALT` (trong `apps/web`), `npm run db:migrate:remote -w apps/web` (áp `0014`–`0016`; `0014` phải áp TRƯỚC khi deploy code M7; sau `0013` của Ops nếu nó đã lên), rồi `npm run deploy` (đăng ký cron `5 * * * *` nếu (c) = C1).
