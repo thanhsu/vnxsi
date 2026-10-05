@@ -32,6 +32,7 @@ import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
 import { registerAdminFlagRoutes } from "./routes/admin-flags.tsx";
+import { registerAdminMerchantRoutes } from "./routes/admin-merchants.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
 import { registerLandingRoutes } from "./routes/landing.tsx";
 import { registerLegalRoutes } from "./routes/legal.tsx";
@@ -76,6 +77,7 @@ export function createApp() {
   registerInviteAdminRoutes(app);
   registerUserAdminRoutes(app);
   registerAdminFlagRoutes(app);
+  registerAdminMerchantRoutes(app);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/*", (c) => c.json({ ok: false, error: "Not found" }, 404));

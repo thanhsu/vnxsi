@@ -1,7 +1,7 @@
 import { isHttpsUrl } from "./builder-input.ts";
 import type { FlagState } from "./flags.ts";
 import type { MerchantStatus } from "./merchant.ts";
-import { appendUtm, fillAndValidate, parseTemplate, previewUrl, validateFinalUrl, type UrlError, type UrlResult } from "./offer-url.ts";
+import { appendUtm, fillAndValidate, parseTemplate, previewUrl, validateFinalUrl, type TemplateError, type UrlError, type UrlResult } from "./offer-url.ts";
 import { normalizeNewlines } from "./product-input.ts";
 
 /** Programs and offers (addendum §3.2–3.3 with the 2026-10-05 amendments). Pure rules: no Hono, no D1. */
@@ -247,6 +247,27 @@ export function parseOfferForm(v: OfferFormValues, ctx: OfferContext): { ok: tru
       status,
     },
   };
+}
+
+export type BrokenOffer = { id: string; field: "destinationUrl" | "trackingTemplate"; error: UrlError | TemplateError };
+
+/**
+ * Stored offers that would no longer pass the URL rules under `hosts` (the rules of /go/ itself: validateFinalUrl and parseTemplate).
+ * One entry per offer, the first failing field. Pure: the caller chooses which offers to pass (the admin passes the non-archived ones).
+ */
+export function offersBrokenByHosts(offers: readonly { id: string; destinationUrl: string; trackingTemplate: string | null }[], hosts: readonly string[]): BrokenOffer[] {
+  const broken: BrokenOffer[] = [];
+  for (const o of offers) {
+    const dest = validateFinalUrl(o.destinationUrl, hosts);
+    if (!dest.ok) {
+      broken.push({ id: o.id, field: "destinationUrl", error: dest.error });
+      continue;
+    }
+    if (o.trackingTemplate === null || o.trackingTemplate === "") continue;
+    const tpl = parseTemplate(o.trackingTemplate, hosts);
+    if (!tpl.ok) broken.push({ id: o.id, field: "trackingTemplate", error: tpl.error });
+  }
+  return broken;
 }
 
 // ---- Redirect resolution ----

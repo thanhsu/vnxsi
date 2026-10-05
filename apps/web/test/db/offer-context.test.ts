@@ -12,6 +12,13 @@ const actionsOf = async (entityId: string) =>
   (await testEnv.DB.prepare("SELECT action FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string }>()).results.map((a) => a.action);
 
 describe("setDefaultOffer (ownership inside the UPDATE)", () => {
+  it("accepts the merchant's own paused offer (only archived is refused)", async () => {
+    const admin = await ensureUser("d-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null, { status: "paused" });
+    expect(await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: o.id, actorUserId: admin.id, now: at(2) })).toMatchObject({ defaultOfferId: o.id });
+  });
+
   it("sets the merchant's own offer, audits merchant.update with the offer id, and can clear it", async () => {
     const admin = await ensureUser("d-admin@vnx.si");
     const m = await makeMerchant();

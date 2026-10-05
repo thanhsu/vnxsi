@@ -71,3 +71,36 @@ export function parseMerchantForm(v: MerchantFormValues): { ok: true; merchant: 
 export function merchantTransitionAllowed(from: MerchantStatus, to: MerchantStatus): boolean {
   return from === to || from !== "archived";
 }
+
+/** Shared-hosting suffixes: anyone can publish under them, so allowing one proves nothing about the merchant. A warning, not a rule. */
+export const MULTI_TENANT_SUFFIXES = [
+  "github.io",
+  "vercel.app",
+  "pages.dev",
+  "netlify.app",
+  "herokuapp.com",
+  "workers.dev",
+  "web.app",
+  "firebaseapp.com",
+  "azurewebsites.net",
+  "cloudfront.net",
+  "appspot.com",
+  "blogspot.com",
+  "onrender.com",
+  "fly.dev",
+  "r2.dev",
+  "s3.amazonaws.com",
+  "ngrok-free.app",
+] as const;
+
+/** The hosts that are a shared-hosting suffix or a subdomain of one (never a bare string suffix: `notgithub.io` is fine). */
+export function multiTenantHosts(hosts: readonly string[]): string[] {
+  return hosts.filter((h) => MULTI_TENANT_SUFFIXES.some((s) => h === s || h.endsWith(`.${s}`)));
+}
+
+/** True when the two allow-lists differ as sets. */
+export function hostsChanged(a: readonly string[], b: readonly string[]): boolean {
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.length !== right.length || left.some((h, i) => h !== right[i]);
+}

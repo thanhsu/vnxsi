@@ -32,6 +32,15 @@ const countFor = async (merchantId: string) => {
 };
 
 describe("db/offers writes (addendum §3.2)", () => {
+  it("an offer whose subject is a product, even with an id that is also a merchant's id, gets no row and no audit row", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const before = await countFor(m.id);
+    const forged = { ...input(m, null), subjectType: "product" } as unknown as OfferInput; // `subjectId` is the merchant's id on purpose
+    expect(await createOffer(testEnv.DB, { offer: forged, actorUserId: admin.id, now: at(1) })).toBeNull();
+    expect(await countFor(m.id)).toEqual(before);
+  });
+
   it("creates an offer with and without a program, one offer.create audit row each", async () => {
     const admin = await ensureUser("o-admin@vnx.si");
     const m = await makeMerchant();

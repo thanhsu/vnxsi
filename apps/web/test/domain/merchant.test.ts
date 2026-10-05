@@ -3,6 +3,9 @@ import {
   MERCHANT_DESCRIPTION_MAX,
   MERCHANT_NAME_MAX,
   MERCHANT_STATUSES,
+  hostsChanged,
+  MULTI_TENANT_SUFFIXES,
+  multiTenantHosts,
   merchantSlugError,
   merchantTransitionAllowed,
   parseAllowedHosts,
@@ -122,5 +125,27 @@ describe("merchantTransitionAllowed", () => {
     for (const from of MERCHANT_STATUSES) {
       for (const to of MERCHANT_STATUSES) expect(merchantTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "archived");
     }
+  });
+});
+
+describe("multi-tenant host suffixes", () => {
+  it("lists the seventeen shared-hosting suffixes", () => {
+    expect([...MULTI_TENANT_SUFFIXES].sort()).toEqual([
+      "appspot.com", "azurewebsites.net", "blogspot.com", "cloudfront.net", "firebaseapp.com", "fly.dev", "github.io", "herokuapp.com", "netlify.app",
+      "ngrok-free.app", "onrender.com", "pages.dev", "r2.dev", "s3.amazonaws.com", "vercel.app", "web.app", "workers.dev",
+    ]);
+  });
+
+  it("flags the suffix itself and its subdomains, never a look-alike", () => {
+    expect(multiTenantHosts(["github.io", "foo.github.io", "a.b.vercel.app", "example.com", "notgithub.io", "github.io.example.com"])).toEqual(["github.io", "foo.github.io", "a.b.vercel.app"]);
+    expect(multiTenantHosts([])).toEqual([]);
+  });
+});
+
+describe("hostsChanged", () => {
+  it("compares as sets: order does not matter, content does", () => {
+    expect(hostsChanged(["a.com", "b.com"], ["b.com", "a.com"])).toBe(false);
+    expect(hostsChanged(["a.com"], ["a.com", "b.com"])).toBe(true);
+    expect(hostsChanged(["a.com"], ["b.com"])).toBe(true);
   });
 });

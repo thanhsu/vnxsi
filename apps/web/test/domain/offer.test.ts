@@ -6,6 +6,7 @@ import {
   LABELS,
   OFFER_KINDS,
   OFFER_STATUSES,
+  offersBrokenByHosts,
   parseOfferForm,
   parseProgramForm,
   PROGRAM_PROVIDERS,
@@ -444,5 +445,30 @@ describe("offerTransitionAllowed", () => {
     expect(offerTransitionAllowed("archived", "archived")).toBe(true);
     expect(offerTransitionAllowed("active", "archived")).toBe(true);
     expect(offerTransitionAllowed("paused", "active")).toBe(true);
+  });
+});
+
+describe("offersBrokenByHosts (re-check stored offers against new allowed hosts)", () => {
+  const o = (id: string, destinationUrl: string, trackingTemplate: string | null = null) => ({ id, destinationUrl, trackingTemplate });
+
+  it("returns nothing when every offer still passes", () => {
+    expect(offersBrokenByHosts([o("a", "https://example.com/"), o("b", "https://x.example.com/", "https://example.com/r?c={click_id}")], ["example.com"])).toEqual([]);
+  });
+
+  it("lists each broken offer once, with the first failing field and the error code", () => {
+    expect(
+      offersBrokenByHosts(
+        [o("a", "https://example.com/"), o("b", "https://other.com/"), o("c", "https://example.com/", "https://other.com/r?c={click_id}"), o("d", "http://example.com/", "https://other.com/")],
+        ["example.com"],
+      ),
+    ).toEqual([
+      { id: "b", field: "destinationUrl", error: "not_allowed" },
+      { id: "c", field: "trackingTemplate", error: "not_allowed" },
+      { id: "d", field: "destinationUrl", error: "scheme" },
+    ]);
+  });
+
+  it("a stored template with an unknown placeholder is broken too", () => {
+    expect(offersBrokenByHosts([o("e", "https://example.com/", "https://example.com/r?c={nope}")], ["example.com"])).toEqual([{ id: "e", field: "trackingTemplate", error: "placeholder" }]);
   });
 });
