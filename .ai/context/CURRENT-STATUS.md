@@ -3,6 +3,7 @@
 _Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 
 ## Tóm tắt
+- **Production (2026-10-05, lần 2):** `main` `3c77ac5` (M6 + PR #6 bật lại R2) **đã deploy** (version `74b85569`, binding `MEDIA` = `vnxsi-media`, cron `0 1 * * *`). D1 production đã áp `0001`–`0009`. Smoke: 15 route OK (gồm `/request`), R2 đọc qua `/media` đã kiểm bằng object tạm (đã xóa). Upload ảnh và submit product giờ dùng được.
 - **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Đã merge vào `main` (`e9f53a2`, đã push).
 - **Cách làm từ M6 (Owner, 2026-10-04):** phiên Opus điều phối các subagent Sonnet (viết plan và code); Opus review và duyệt thay Owner (plan, khắc phục); sau mỗi milestone được APPROVE thì merge và push.
 - **Tiếp theo:** lát mỏng EPIC 21 (partner), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md` (đã duyệt, kể cả câu chữ khối A/B/C), nhánh `feat/epic21-partner-slice`. Migration EPIC 21 bắt đầu từ `0010` (`main` đã có `0009_feedback`).
