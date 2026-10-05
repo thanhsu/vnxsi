@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { sessionMiddleware } from "./auth/middleware.ts";
 import type { AppEnv } from "./env.ts";
 import { noStorePrivate } from "./http/no-store.ts";
+import { requestBodyLimit } from "./http/body-limit.ts";
 import { originCheck } from "./http/origin.ts";
 import { requestId } from "./http/request-id.ts";
 import { securityHeaders } from "./http/security-headers.ts";
@@ -44,6 +45,7 @@ export function createApp() {
   app.use("*", securityHeaders);
   app.use("*", localeMiddleware);
   app.use("*", originCheck);
+  app.use("*", requestBodyLimit);
   app.use("*", sessionMiddleware);
   app.use("*", noStorePrivate);
 
