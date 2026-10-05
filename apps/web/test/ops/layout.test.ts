@@ -45,9 +45,12 @@ describe("menu registry (spec §2.1, AC2)", () => {
     { group: "people", labelKey: "ops.nav.overview", path: "/ops/people/team", capability: "team.manage", icon: "overview" },
   ];
 
-  it("holds only Overview in this task", () => {
-    expect(OPS_MENU.map((i) => i.path)).toEqual(["/ops"]);
-    expect(OPS_MENU[0]?.capability).toBe("overview.view");
+  it("holds Overview and, since VNX-2504a, Marketplace › Builders with its waiting count", () => {
+    expect(OPS_MENU.map((i) => [i.group, i.path, i.capability])).toEqual([
+      ["main", "/ops", "overview.view"],
+      ["marketplace", "/ops/marketplace/builders", "marketplace.view"],
+    ]);
+    expect(OPS_MENU[1]?.count).toBe("builders");
   });
 
   it("shows an item only when its route is registered and the role holds its capability", () => {
@@ -79,24 +82,26 @@ describe("menu registry (spec §2.1, AC2)", () => {
 });
 
 describe("Ops shell on /ops (AC2, AC7)", () => {
-  it("renders the sidebar with Overview only, for every role, and no link to a page that does not exist", async () => {
+  it("renders Overview for every role and Marketplace › Builders for all but Content, and no link to a page that does not exist", async () => {
     for (const role of ROLES) {
       const { cookie } = await asRole(role);
       const { res, html } = await getOps(cookie);
       expect(res.status, role).toBe(200);
       const body = bodyOf(html);
       const navs = [...body.matchAll(/<nav class="ops-nav"[^>]*>([\s\S]*?)<\/nav>/g)].map((m) => m[1] ?? "");
+      const marketplace = role !== "content";
       // Desktop sidebar and the narrow-screen menu carry the same list.
       expect(navs, role).toHaveLength(2);
       for (const nav of navs) {
-        expect([...nav.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops"]);
+        expect([...nav.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(marketplace ? ["/ops", "/ops/marketplace/builders"] : ["/ops"]);
         expect(nav, role).toMatch(/<a class="ops-nav-link" href="\/ops" aria-current="page">[\s\S]*Overview<\/a>/);
-        // No group is left with an item, so no group heading.
-        expect(nav, role).not.toContain("ops-group-h");
+        // A group heading only for a group that has an item left: Content has none in Marketplace.
+        if (marketplace) expect(nav, role).toMatch(/<p class="ops-group-h" id="[^"]+">Marketplace<\/p>/);
+        else expect(nav, role).not.toContain("ops-group-h");
       }
-      // Every link in the page goes to a page that exists: /ops itself or the skip target.
+      // Every link in the page goes to a page that exists: /ops, the skip target and, for roles with marketplace.view, Builders.
       const hrefs = new Set([...body.matchAll(/href="([^"]*)"/g)].map((m) => m[1]));
-      expect([...hrefs].sort(), role).toEqual(["#ops-main", "/ops"]);
+      expect([...hrefs].sort(), role).toEqual(marketplace ? ["#ops-main", "/ops", "/ops/marketplace/builders"] : ["#ops-main", "/ops"]);
     }
   });
 

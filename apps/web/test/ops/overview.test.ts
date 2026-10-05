@@ -244,10 +244,13 @@ describe("queues (AC4)", () => {
     expect(numberOf(mainOf(html), "builders")).toBe("1");
   });
 
-  it("links no queue while its list page does not exist yet (no dead links)", async () => {
-    const { cookie } = await asRole("owner");
-    const main = mainOf((await getOverview(cookie)).html);
-    expect(main).not.toMatch(/href=/);
+  it("links the Builders queue to its list (VNX-2504a) and no queue whose list page does not exist yet (no dead links)", async () => {
+    for (const role of ["owner", "operator", "viewer"] as const) {
+      const { cookie } = await asRole(role);
+      const main = mainOf((await getOverview(cookie)).html);
+      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders"]);
+      expect(card(main, "builders"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/builders">Open queue/);
+    }
   });
 });
 
