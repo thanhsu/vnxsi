@@ -6095,7 +6095,7 @@ git commit -m "feat(web): admin offers with final-URL preview and default offer 
 
 **Tách đôi:** diff gộp ≈ 900 dòng (> 600), nên Task 4 tách thành **4 (dữ liệu, cron, Privacy)** và **4b (route `/go/`, HIGH-RISK)**. Thứ tự này đúng phụ thuộc (route cần `db/clicks.ts` và `domain/outbound.ts`) và đưa câu Privacy lên trước đoạn mã bắt đầu thu thập. Mã hóa task theo roadmap vẫn là VNX-2103; commit của hai phần cùng có hậu tố `(VNX-2103-1)` / `(VNX-2103-2)`.
 
-**Điều kiện đầu vào:** Controller đã commit khối C của header vào `docs/legal/privacy.md` (dòng đầu "Bổ sung EPIC 21 (outbound, partner): APPROVED bởi Owner …"). Kiểm: `grep -c "Outbound click" docs/legal/privacy.md` ≥ 2. Nếu chưa có, dừng và báo Controller; không tự viết văn bản pháp lý.
+**Điều kiện đầu vào:** Controller đã commit khối C của header vào `docs/legal/privacy.md` (dòng đầu "Bổ sung EPIC 21 (outbound, partner): APPROVED bởi Owner …"). Kiểm: `grep -ci "Outbound click" docs/legal/privacy.md` ≥ 2 và `grep -ci "lượt bấm link ra ngoài" docs/legal/privacy.md` ≥ 2. Nếu chưa có, dừng và báo Controller; không tự viết văn bản pháp lý.
 
 **Files:**
 - Create: `apps/web/migrations/0012_outbound_clicks.sql`
@@ -6114,10 +6114,10 @@ git commit -m "feat(web): admin offers with final-URL preview and default offer 
   - `jobs/daily.ts`: bước `{ step: "outbound_clicks", counts: "deleted" }`.
 
 **Quyết định kỹ thuật (Reviewer kiểm):**
-- Bảng **không có khóa ngoại** (`product_id`, `offer_id`): đây là nhật ký chỉ thêm, cron xóa dần; không để nó chặn xóa product / offer, và M7 dùng lại bảng này không cần migration thứ hai. Phụ lục 2.2 cũng nói `offer_id` chưa có FK.
+- Bảng **không có khóa ngoại** (`product_id`, `offer_id`): lệch phụ lục có Reviewer chấp nhận (phụ lục 2.2 chỉ nói chưa có FK vì `offers` chưa tồn tại lúc đó). Lý do: nhật ký chỉ thêm; product xóa được; offer không bao giờ bị xóa; test dùng id tổng hợp.
 - CHECK enum cho `link_kind`, `src`, `locale`, `is_bot` ở CSDL (cùng giá trị với code), ngoài CHECK `product_id IS NOT NULL OR offer_id IS NOT NULL` của phụ lục.
 - **Chỉ mục thứ tư `idx_clicks_created (created_at)` không có trong phụ lục:** để cron tìm dòng cũ mà không quét cả bảng. Ba chỉ mục của phụ lục giữ nguyên.
-- Cron **có chặn**: mỗi lần xóa tối đa `OUTBOUND_CLICK_PURGE_BATCH = 5000` dòng (`DELETE … WHERE id IN (SELECT id … ORDER BY created_at LIMIT ?)`), phần còn lại để ngày mai và có `console.warn`. So sánh chuỗi ISO với `<` (dòng đúng bằng ngưỡng được giữ).
+- Cron **có chặn**: mỗi lần chạy lặp tối đa `OUTBOUND_CLICK_PURGE_MAX_BATCHES = 10` đợt, mỗi đợt `OUTBOUND_CLICK_PURGE_BATCH = 5000` dòng; còn dư thì `console.warn` đúng dạng sẵn có `{ event: "jobs.daily.capped", step: "outbound_clicks", cap }` (không có sự kiện mới `clicks.purge_capped`) (`DELETE … WHERE id IN (SELECT id … ORDER BY created_at LIMIT ?)`), phần còn lại để ngày mai và có `console.warn`. So sánh chuỗi ISO với `<` (dòng đúng bằng ngưỡng được giữ).
 - Không có khóa i18n mới trong cả Task 4 và 4b (404 dùng `error.notFound.*` sẵn có).
 - `LEGAL_UPDATED_AT` đặt bằng ngày commit (không sớm hơn `2026-10-05`). Hằng này **dùng chung với Terms**: ngày "Last updated" của cả Terms và Privacy đổi theo; test ở Step 9 kiểm cả hai.
 
@@ -6560,7 +6560,7 @@ Run: `npm test -w apps/web -- test/architecture.test.ts` → FAIL: `jobs/daily.t
 - `WRITERS` thêm `outbound_clicks: "../src/db/clicks.ts",` sau `offers`.
 - Comment trên `MONEY_ALLOWED` giữ nguyên (đã ghi Task 4: `db/clicks.ts`, `routes/go.ts`, `jobs/daily.ts`).
 - `MONEY_ALLOWED` thêm `"../src/db/clicks.ts"` và `"../src/jobs/daily.ts"` (`routes/go.ts` thêm ở Task 4b).
-- Đổi test "after Task 2d the allowlist is exactly the four db files" thành danh sách đúng **sau Task 4**: lấy danh sách hiện có trong test (gồm cả mục Task 3 đã thêm, ví dụ `../src/routes/admin-merchants.tsx`) rồi chèn hai đường dẫn mới đúng vị trí sắp xếp:
+- Đổi test có tên thật "after Task 3 the allowlist is exactly the four db files and the merchants admin route" thành danh sách đúng **sau Task 4**: lấy danh sách hiện có trong test (gồm cả mục Task 3 đã thêm, ví dụ `../src/routes/admin-merchants.tsx`) rồi chèn hai đường dẫn mới đúng vị trí sắp xếp:
 
 ```ts
   it("after Task 4 the allowlist is exactly the files of Tasks 2c–4", () => {
@@ -7318,7 +7318,7 @@ git commit -m "feat(web): /go/ redirects with click logging (VNX-2103-2)" -m "Co
 ```
 
 **Tiêu chí chấp nhận (Task 4b; `npm test -w apps/web -- test/monetization/go.test.ts` bao phủ danh sách ADR-007 "Được bảo đảm bởi" và Review Focus 1, 2, 3, 7):**
-- Bảng chân lý qua HTTP: `tracked` (`Location` = template điền, `id` dòng click = `click_id`, cả `/go/o/` lẫn `/go/:slug`); `fallback` cho từng lý do (`merchant_paused`, `offer_paused`, `offer_not_started`, `offer_ended`, `program_not_active` với `draft` và `paused`, `flag_off`) tới `website_url` + UTM, không `click_id` trong `Location`, **có** một dòng click; `not_found` cho offer không tồn tại, offer `archived`, merchant `archived` (không log, không click). `program_direct` không tới được qua HTTP (CHECK của CSDL), do test domain Task 2b bao phủ.
+- Bảng chân lý qua HTTP: `tracked` (`Location` = template điền, `id` dòng click = `click_id`, cả `/go/o/` lẫn `/go/:slug`); `fallback` cho từng lý do (`merchant_paused`, `offer_paused`, `offer_not_started`, `offer_ended`, `program_not_active` với `draft` và `paused`, `flag_off`) tới `website_url` + UTM, không `click_id` trong `Location`, **có** một dòng click; `not_found` cho offer không tồn tại, offer `archived`, merchant `archived` (không log, không click). `program_direct` (lý do `fallback`, không phải `not_found`) không tới được qua HTTP vì CHECK của CSDL; test domain Task 2b bao phủ.
 - Dữ liệu hỏng `invalid_url`, `window_invalid`, `program_merchant`, `website_invalid` → 404, không click, đúng một dòng `console.error` `go.corrupt_data` (JSON, có `reason`, `offerId`, `merchantId`, `requestId`; không có host lạ, IP, UA, Referer). Tập lý do được log đúng bảy mục (test domain Task 4).
 - Open redirect và mánh URL: mọi đường dẫn `/go/https://…`, `%2F%2F`, `%5C`, `//`, CR/LF, `..` → 404 không `Location`; query ngoài `src` bị bỏ qua, `src` lạ → `unknown`, không chèn header; mười một template, chín `destination_url` và chín `website_url` hỏng → 404, không click.
 - ULID sai dạng, slug `p` / `o` / sai dạng, `/go/p/…` → 404 trước khi đọc D1 (DB giả đếm số lần gọi = 0).
@@ -7336,38 +7336,1131 @@ Ghi chú cho Reviewer: `test/monetization/conversions.test.ts` của ADR-007 ho�
 
 ### Task 5: VNX-2104a — `/tools/:slug`, khối offer, disclosure, sitemap
 
-**Lưu ý:** Layout, header, footer và `app.css` đã đổi trên `main` (thiết kế lại); mọi chỗ chạm footer / layout phải theo `main` mới và giữ xanh `test/design/layout.test.ts` (link header / footer) và `test/design/assets.test.ts` (không request bên thứ ba ngoài Turnstile).
+**Lưu ý:** Layout, header, footer và `app.css` đã đổi trên `main` (PR #4); task này không sửa footer (link `/disclosure` ở Task 6) và không thêm CSS (dùng `notice`, `btn`, `btn-primary`, `btn-secondary`, `row-actions`, `prose` có sẵn). `test/design/layout.test.ts` và `test/design/assets.test.ts` phải vẫn xanh (không tài nguyên ngoài).
 
-**Phạm vi:** `routes/tools.tsx` (`onLocalized` GET `/tools/:slug`), `views/ToolPage.tsx`, `views/Disclosure.tsx` (khối câu disclosure + link `/disclosure`, dùng chung cho các trang khác sau này), hàm thuần `showsDisclosure(offers)` trong `domain/offer.ts`. Trang: tên merchant, mô tả `PlainText`, danh sách offer `active` trong thời hạn (nút theo `label` qua `t()`, đích `/go/:merchantSlug` cho offer mặc định và `/go/o/:offerId?src=tools` cho offer khác; offer mặc định cũng thêm `?src=tools`), khối disclosure khi có offer có chương trình, JSON-LD không bắt buộc ở lát mỏng. 404 khi merchant không tồn tại hoặc không `active`. `noindex` theo Global Constraints. Sitemap: `routes/seo.ts` thêm `/tools/:slug` khi `active` + `indexable = 1` + cờ `content_indexing` bật (đọc cờ qua `isFlagEnabled`; thêm `listSitemapMerchants` vào `db/merchants.ts`). Footer: không đổi ở task này (link `/disclosure` đi kèm Task 6). i18n nhãn offer (khóa `offer.label.<label>`, đủ 4 locale): `learn_more` = Learn more about {name} / Tìm hiểu thêm về {name} / 了解 {name} / 瞭解 {name}; `get_started` = Get started with {name} / Bắt đầu với {name} / 开始使用 {name} / 開始使用 {name}; `start_trial` = Start a trial with {name} / Bắt đầu dùng thử {name} / 开始试用 {name} / 開始試用 {name}; `visit_site` = Visit {name} / Truy cập {name} / 访问 {name} / 前往 {name}; **`try_it` = Try {name} / Dùng thử {name} / 试用 {name} / 試用 {name}** (Owner 2026-10-05; offer mặc định của ElevenLabs); câu disclosure A (4 locale, đã Owner duyệt), "Learn more", chuỗi trang. Không có Buy / Customize / Hire.
+**Phạm vi:** trang công khai `/tools/:slug` ở 4 locale: tên merchant, mô tả văn bản thuần (một bản tiếng Anh), danh sách nút offer, câu disclosure (khối A của header, Owner đã duyệt) kèm link "Learn more" tới `/disclosure`. Thêm hai hàm đọc Task 2c hoãn lại (`findMerchantBySlug`, `listActiveMerchantOffers`), thêm `listSitemapMerchants`, bốn hàm thuần trong `domain/offer.ts`, luật sitemap. Không JSON-LD, không nút Buy / Customize / Hire.
 
-**Files (dự kiến):** Create `src/routes/tools.tsx`, `src/views/ToolPage.tsx`, `src/views/Disclosure.tsx`; Modify `src/domain/offer.ts`, `src/db/merchants.ts`, `src/routes/seo.ts`, `src/app.ts`, 4 file locale, `test/architecture.test.ts` (nếu thêm file xếp hạng: không); Test `test/monetization/tools.test.ts`, `test/domain/disclosure.test.ts`, mở rộng `test/seo/sitemap.test.ts`.
+**Files:**
+- Create: `apps/web/src/routes/tools.tsx`, `apps/web/src/views/ToolPage.tsx`, `apps/web/src/views/Disclosure.tsx`
+- Modify: `apps/web/src/domain/offer.ts` (`offerInWindow`, `visibleOffers`, `showsDisclosure`, `offerRel`, `toolIndexable`, kiểu `ListedOffer`, `VisibleOffer`; `windowState` nhận `Pick`)
+- Modify: `apps/web/src/db/merchants.ts` (`findMerchantBySlug`, `listSitemapMerchants`), `apps/web/src/db/offers.ts` (`listActiveMerchantOffers`; `CONTEXT_SQL` thêm cột `o.label`)
+- Modify: `apps/web/src/routes/seo.ts`, `apps/web/src/app.ts` (`registerToolsRoutes`), 4 file `src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`
+- Modify: `apps/web/test/architecture.test.ts` (`MONEY_ALLOWED` thêm `routes/tools.tsx`, `routes/seo.ts`)
+- Test: `apps/web/test/domain/disclosure.test.ts` (mới), `apps/web/test/db/partner-reads.test.ts` (mới; Task 6 thêm một bài), `apps/web/test/monetization/tools.test.ts` (mới), `apps/web/test/seo/sitemap.test.ts` (thêm)
 
-**Tiêu chí chấp nhận:**
-- Review Focus 4: có offer có `program_id` → HTML chứa câu disclosure đúng 4 locale, link `/disclosure` và `rel="sponsored noopener"` trên chính link đó; chỉ offer không chương trình → không câu, không `sponsored`; không offer → không khối offer, không disclosure; offer `paused` / ngoài thời hạn không hiện.
-- Merchant `paused` / `archived` / không tồn tại → 404 ở cả 4 locale; trang hiện không có từ Buy, Customize, Hire.
-- `noindex` + không canonical khi `indexable = 0` hoặc cờ `content_indexing` tắt (đây là trạng thái ra mắt của `/tools/elevenlabs`, Owner 2026-10-05: không index, không sitemap); có canonical + hreflang 4 locale + `x-default` khi cả hai bật.
-- Sitemap: ngay dưới điều kiện (thiếu một trong ba) không có `/tools/elevenlabs`; đủ ba thì có 4 dòng kèm alternate; `/tools/*` của merchant `paused` không có.
-- Tên và mô tả được escape (merchant tên `<script>` không tạo markup); mô tả render theo quy tắc văn bản thuần (spec 8.6).
-- Mô tả hiển thị bọc `lang="en"` trên `/vi`, `/zh-hans`, `/zh-hant`; nhãn `try_it` hiện đúng 4 locale.
-- Danh sách cho phép của test kiến trúc thêm `routes/tools.tsx`, `routes/seo.ts`.
-- Nút offer mặc định trỏ `/go/<slug>?src=tools`; test không có link trực tiếp tới host đối tác trong HTML (mọi link ra ngoài đi qua `/go/`).
-- Kiểm tay ElevenLabs (không thuộc CI, ghi trong báo cáo): nhập qua `/admin/merchants` theo `docs/partners/registry.md`, bật `affiliate`, `/tools/elevenlabs` → `/go/elevenlabs`.
-- `npm run typecheck -w apps/web`, `npm test` xanh. Diff ≲ 600 dòng không tính locale. Commit `feat(web): /tools/:slug with offers, disclosure and sitemap rule (VNX-2104a)`.
+**Interfaces:**
+- Consumes (đã commit): `isFlagEnabled` (`db/flags.ts`); `setFlag`, `resetFlagCache` (test); `Merchant`, `parseStoredHosts` (`db/merchants.ts`); `CONTEXT_SQL`, `ContextRow`, `toRedirectRows` (nội bộ `db/offers.ts`); `resolveOfferRedirect`, `RedirectOffer`, `RedirectProgram`, `RedirectMerchant`, `RedirectInput`, `OfferLabel` (`domain/offer.ts`); `SAMPLE_VALUES` (`domain/offer-url.ts`, đã import trong `domain/offer.ts`); `SLUG_RE`; `onLocalized`, `siteOrigin`, `errorResponse`, `page`, `translator`, `Layout` (`noindex` đã bỏ canonical, og:url và hreflang), `PlainText`; fixtures `makeMerchant`, `makeProgram`, `makeOffer`, `ensureUser`; `setDefaultOffer` (`db/merchants.ts`).
+- Produces (domain): `type ListedOffer = { offer: RedirectOffer; label: OfferLabel; program: RedirectProgram | null }`; `type VisibleOffer = { id: string; label: OfferLabel; isDefault: boolean; programId: string | null }`; `offerInWindow(o: Pick<RedirectOffer, "startsAt" | "endsAt">, now: string): boolean`; `visibleOffers(i: { merchant: RedirectMerchant & { defaultOfferId: string | null }; rows: readonly ListedOffer[]; flags: RedirectInput["flags"]; now: string }): VisibleOffer[]`; `showsDisclosure(offers: readonly { programId: string | null }[]): boolean`; `offerRel(o: { programId: string | null }): "sponsored noopener" | "noopener"`; `toolIndexable(m: { indexable: boolean }, contentIndexing: boolean): boolean`.
+- Produces (db): `findMerchantBySlug(db, slug): Promise<Merchant | null>` (mọi trạng thái; route quyết định 404); `listSitemapMerchants(db, limit = 10000): Promise<{ slug: string; updatedAt: string }[]>` (`status = 'active' AND indexable = 1`); `listActiveMerchantOffers(db, merchantId): Promise<ListedOffer[]>` (offer `status = 'active'` của merchant, mặc định trước, rồi `created_at, id`).
+- Produces (route/view): `registerToolsRoutes(app)`; `ToolPage` (props cấu trúc, không import db); `DisclosureNote({ locale })` (Task 6 thêm `ActivePartners` vào cùng file).
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Offer nào được liệt kê** = `status = 'active'` (SQL) **và** `now` trong `[starts_at, ends_at)` (domain `offerInWindow`, cùng `windowState` với `/go/`) **và** `resolveOfferRedirect` (cờ thật, `now` thật, `clickId`/`locale`/`src` mẫu) không trả `not_found`. Lý do: nút chỉ hiện khi bấm vào được (tracked hoặc fallback); không hiện offer `paused` (bấm sẽ rơi về `website_url`, gây hiểu nhầm là còn khuyến mãi), offer hết hạn / chưa bắt đầu, offer archived, và offer hỏng (host không còn hợp lệ, `window_invalid`) vì `/go/` sẽ trả 404. Cờ tắt hoặc chương trình chưa `active` **không** ẩn nút: đó là trạng thái ra mắt (offer mặc định đi qua `fallback` tới `website_url`). Header Global Constraints nói "status active, trong thời hạn, subject merchant"; phần "resolvable" là chặt hơn một bậc, và không bao giờ nới ra.
+2. **Một nguồn sự thật cho "đi qua `/go/`"**: trang gọi cùng `resolveOfferRedirect` thay vì chép lại điều kiện; không có điều kiện thứ hai để lệch.
+3. **Đích nút:** offer có `id === merchant.defaultOfferId` → `/go/<slug>?src=tools`; offer khác → `/go/o/<id>?src=tools`. Không có tiền tố locale (đúng `/go/`). Không bao giờ hiện URL đối tác trong HTML. Mọi nút `target="_blank"`; `rel` theo `offerRel`: `sponsored noopener` khi `programId !== null` (bất kể cờ, bất kể trạng thái chương trình, mục 11 của header), `noopener` khi null. Không có `nofollow ugc` (đó là cho nội dung người dùng).
+4. **Nút mặc định là `btn btn-primary`, offer khác `btn btn-secondary`**, trong `<p class="row-actions">`. Thứ tự: mặc định trước (SQL), rồi `created_at, id`.
+5. **Disclosure ngay trên nhóm nút**, trong cùng `<section>`: `<p class="notice" data-disclosure="partner-links">câu A + <a>Learn more</a></p>`, chỉ khi `showsDisclosure(offers)`. Không offer có chương trình thì không câu, không link (Review Focus 4).
+6. **`noindex`** = `!toolIndexable(merchant, contentIndexing)` = `indexable = 0` hoặc cờ `content_indexing` tắt (Owner 2026-10-05). `Layout` đã bỏ canonical, og:url và hreflang khi `noindex`. Sitemap dùng cùng điều kiện (SQL lọc `status` + `indexable`, route lọc cờ) và có test chéo trang ↔ sitemap.
+7. **Mô tả** (`merchants.description`, tiếng Anh, văn bản thuần): `PlainText`, bọc `<div lang="en">` trên mọi locale khác `en`. Meta description = 160 ký tự đầu của mô tả đã gộp khoảng trắng (không có thì bỏ thẻ). Tên merchant không dịch, không bọc.
+8. **404:** slug sai dạng, không tồn tại, `paused`, `archived` → `errorResponse(c, "notFound", 404)`. Slug có chữ hoa → 301 về chữ thường (như `/p/:slug`).
+9. **Đọc cờ tuần tự** (`affiliate`, `partner_referral`, `content_indexing`): lần đầu nạp cache 60 s, các lần sau trúng cache; đọc D1 lỗi → cờ tắt (đã xử lý trong `isFlagEnabled`), nghĩa là trang vẫn dựng, offer đi qua `fallback`, và `noindex`.
+10. **`MONEY_ALLOWED` thêm đúng `routes/tools.tsx` và `routes/seo.ts`** (hai file import `db/merchants.ts` / `db/offers.ts`). View không import db (kiểu cấu trúc), nên `ToolPage.tsx` và `Disclosure.tsx` không vào danh sách. `ListedOffer` nằm ở domain để `db/offers.ts` và view cùng dùng.
+11. **`CONTEXT_SQL` thêm `o.label AS o_label`** (và `ContextRow.o_label`); `toRedirectRows` bỏ qua cột này nên `findOfferWithContext` / `findDefaultOfferContext` không đổi kết quả (test của 2d vẫn xanh). Đây là thay đổi duy nhất lên code đã commit ngoài hàm mới.
+12. **Tên partner không bao giờ ở `src`**: tên đến từ `merchants.name`; test dùng "Acme" / tên ngẫu nhiên.
+
+- [ ] **Step 0: Tiền điều kiện**
+
+```bash
+git status --short            # sạch (ngoài các tệp ngoài phạm vi)
+git log --oneline -6          # Task 4 và 4b đã commit
+ls apps/web/src/routes/go.ts apps/web/src/db/clicks.ts
+npm test -w apps/web -- test/architecture.test.ts
+```
+
+Expected: `go.ts` và `clicks.ts` có mặt, architecture xanh. Nếu `go.ts` chưa có, dừng và báo Controller (nút `/go/` sẽ 404).
+
+- [ ] **Step 1: Test hàm thuần (fail trước)**
+
+`apps/web/test/domain/disclosure.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { offerInWindow, offerRel, showsDisclosure, toolIndexable, visibleOffers, type ListedOffer } from "../../src/domain/offer.ts";
+
+const NOW = "2026-10-05T12:00:00.000Z";
+const merchant = { id: "m1", status: "active", websiteUrl: "https://example.com/", allowedHosts: ["example.com"], defaultOfferId: "o1" } as const;
+const FLAGS_OFF = { affiliate: false, partner_referral: false };
+const PROGRAM = { id: "p1", merchantId: "m1", type: "affiliate", status: "active" } as const;
+
+const row = (id: string, over: Partial<ListedOffer["offer"]> = {}, prog: ListedOffer["program"] = null, label: ListedOffer["label"] = "visit_site"): ListedOffer => ({
+  offer: {
+    id,
+    subjectType: "merchant",
+    subjectId: "m1",
+    programId: prog?.id ?? null,
+    status: "active",
+    destinationUrl: "https://example.com/",
+    trackingTemplate: prog ? "https://example.com/r?c={click_id}" : null,
+    startsAt: null,
+    endsAt: null,
+    ...over,
+  },
+  label,
+  program: prog,
+});
+const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+describe("offerInWindow", () => {
+  it("starts inclusive, ends exclusive, open ends allowed, malformed instants outside", () => {
+    expect(offerInWindow({ startsAt: null, endsAt: null }, NOW)).toBe(true);
+    expect(offerInWindow({ startsAt: NOW, endsAt: null }, NOW)).toBe(true);
+    expect(offerInWindow({ startsAt: null, endsAt: NOW }, NOW)).toBe(false);
+    expect(offerInWindow({ startsAt: "2026-10-05T12:00:00.001Z", endsAt: null }, NOW)).toBe(false);
+    expect(offerInWindow({ startsAt: "tomorrow", endsAt: null }, NOW)).toBe(false);
+    expect(offerInWindow({ startsAt: null, endsAt: null }, "not a date")).toBe(false);
+  });
+});
+
+describe("visibleOffers (what /tools/:slug lists)", () => {
+  it("keeps active, in-window offers in input order and marks the default one", () => {
+    const out = visibleOffers({ merchant, rows: [row("o1", {}, PROGRAM, "try_it"), row("o2", {}, null, "learn_more")], flags: FLAGS_OFF, now: NOW });
+    expect(out).toEqual([
+      { id: "o1", label: "try_it", isDefault: true, programId: "p1" },
+      { id: "o2", label: "learn_more", isDefault: false, programId: null },
+    ]);
+  });
+
+  it("drops paused, archived, not-started and ended offers", () => {
+    const rows = [row("a", { status: "paused" }), row("b", { status: "archived" }), row("c", { startsAt: "2026-10-06T00:00:00.000Z" }), row("d", { endsAt: "2026-10-05T00:00:00.000Z" }), row("e")];
+    expect(ids(visibleOffers({ merchant, rows, flags: FLAGS_OFF, now: NOW }))).toEqual(["e"]);
+  });
+
+  it("drops an offer /go/ would answer 404 (host no longer allowed, foreign subject), but keeps one that falls back", () => {
+    const rows = [row("bad-host", { destinationUrl: "https://other.test/" }), row("foreign", { subjectId: "m2" }), row("fb", {}, PROGRAM)];
+    // The program offer is kept with the flag off (fallback to website_url): launch state.
+    expect(ids(visibleOffers({ merchant, rows, flags: FLAGS_OFF, now: NOW }))).toEqual(["fb"]);
+    expect(ids(visibleOffers({ merchant, rows: [row("draft", {}, { ...PROGRAM, status: "draft" })], flags: { affiliate: true, partner_referral: true }, now: NOW }))).toEqual(["draft"]);
+  });
+});
+
+describe("showsDisclosure and offerRel (Review Focus 4)", () => {
+  it("is true as soon as one rendered offer has a program, whatever the flag or program status", () => {
+    expect(showsDisclosure([])).toBe(false);
+    expect(showsDisclosure([{ programId: null }, { programId: null }])).toBe(false);
+    expect(showsDisclosure([{ programId: null }, { programId: "p1" }])).toBe(true);
+  });
+
+  it("marks program links sponsored, the rest noopener only", () => {
+    expect(offerRel({ programId: "p1" })).toBe("sponsored noopener");
+    expect(offerRel({ programId: null })).toBe("noopener");
+  });
+});
+
+describe("toolIndexable (Owner 2026-10-05: noindex at launch)", () => {
+  it("needs indexable = 1 AND the content_indexing flag", () => {
+    expect(toolIndexable({ indexable: true }, true)).toBe(true);
+    expect(toolIndexable({ indexable: true }, false)).toBe(false);
+    expect(toolIndexable({ indexable: false }, true)).toBe(false);
+    expect(toolIndexable({ indexable: false }, false)).toBe(false);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/domain/disclosure.test.ts
+```
+
+Expected: FAIL (exports chưa có). Trong `apps/web/src/domain/offer.ts`: đổi chữ ký `windowState(offer: RedirectOffer, now: string)` thành `windowState(offer: Pick<RedirectOffer, "startsAt" | "endsAt">, now: string)` (không đổi thân hàm), rồi thêm **ngay trước dòng `/** Plan header, Reviewer decisions 8–10.`** (tức ngay sau `windowState`):
+
+```ts
+/** True while `now` is inside [starts_at, ends_at) (an open end is always inside; a malformed instant is outside). Same rule as /go/. */
+export const offerInWindow = (o: Pick<RedirectOffer, "startsAt" | "endsAt">, now: string): boolean => windowState(o, now) === "inside";
+```
+
+và thêm vào **cuối file** `domain/offer.ts`:
+
+```ts
+// ---- Public tool page (/tools/:slug) ----
+
+/** A merchant offer as the database returns it for the public page. */
+export type ListedOffer = { offer: RedirectOffer; label: OfferLabel; program: RedirectProgram | null };
+export type VisibleOffer = { id: string; label: OfferLabel; isDefault: boolean; programId: string | null };
+
+/**
+ * The offers the page shows: active, inside their window, and answered by /go/ with tracked or fallback (never not_found), so no button
+ * leads to a 404 or an expired promotion. A flag that is off or a program that is not active does NOT hide an offer (it falls back to
+ * the merchant's website). Keeps the input order (the database puts the default offer first).
+ */
+export function visibleOffers(i: {
+  merchant: RedirectMerchant & { defaultOfferId: string | null };
+  rows: readonly ListedOffer[];
+  flags: RedirectInput["flags"];
+  now: string;
+}): VisibleOffer[] {
+  const out: VisibleOffer[] = [];
+  for (const { offer, label, program } of i.rows) {
+    if (offer.status !== "active" || !offerInWindow(offer, i.now)) continue;
+    const result = resolveOfferRedirect({
+      offer,
+      program,
+      merchant: i.merchant,
+      flags: i.flags,
+      now: i.now,
+      clickId: SAMPLE_VALUES.click_id,
+      locale: SAMPLE_VALUES.locale,
+      src: SAMPLE_VALUES.src,
+    });
+    if (result.kind === "not_found") continue;
+    out.push({ id: offer.id, label, isDefault: offer.id === i.merchant.defaultOfferId, programId: offer.programId });
+  }
+  return out;
+}
+
+/** Addendum §3.4: the disclosure shows when at least one rendered offer has a program, whatever the flag or the program status. */
+export const showsDisclosure = (offers: readonly { programId: string | null }[]): boolean => offers.some((o) => o.programId !== null);
+
+/** `sponsored` for links that can earn money (they have a program), plain `noopener` for the merchant's own link. */
+export const offerRel = (o: { programId: string | null }): "sponsored noopener" | "noopener" => (o.programId !== null ? "sponsored noopener" : "noopener");
+
+/** Owner 2026-10-05: a tool page is indexed (no noindex, in the sitemap) only when the merchant is `indexable` and the `content_indexing` flag is on. */
+export const toolIndexable = (m: { indexable: boolean }, contentIndexing: boolean): boolean => m.indexable && contentIndexing;
+```
+
+```bash
+npm test -w apps/web -- test/domain/disclosure.test.ts test/domain/offer.test.ts
+```
+
+Expected: PASS (cả `offer.test.ts` cũ vì `windowState` chỉ nới kiểu).
+
+- [ ] **Step 2: Test đọc db (fail trước)**
+
+`apps/web/test/db/partner-reads.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { findMerchantBySlug, listSitemapMerchants, setDefaultOffer } from "../../src/db/merchants.ts";
+import { listActiveMerchantOffers } from "../../src/db/offers.ts";
+import { ensureUser, makeMerchant, makeOffer, makeProgram } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+describe("findMerchantBySlug", () => {
+  it("finds a merchant in any status, and nothing for an unknown slug", async () => {
+    const paused = await makeMerchant({ status: "paused" });
+    expect(await findMerchantBySlug(testEnv.DB, paused.slug)).toMatchObject({ id: paused.id, status: "paused", name: paused.name });
+    expect(await findMerchantBySlug(testEnv.DB, "no-such-merchant")).toBeNull();
+  });
+});
+
+describe("listActiveMerchantOffers", () => {
+  it("returns this merchant's active offers only, default first, then oldest first, with label and program", async () => {
+    const admin = await ensureUser("reads-admin@vnx.si");
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const program = await makeProgram(m);
+    const plain = await makeOffer(m, null, { label: "learn_more" });
+    const tracked = await makeOffer(m, program, { label: "try_it" });
+    await makeOffer(m, null, { status: "paused" });
+    await makeOffer(m, null, { status: "archived" });
+    await makeOffer(other, null);
+
+    expect((await listActiveMerchantOffers(testEnv.DB, m.id)).map((r) => r.offer.id)).toEqual([plain.id, tracked.id]);
+
+    await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: tracked.id, actorUserId: admin.id, now: "2026-10-05T00:00:00.000Z" });
+    const rows = await listActiveMerchantOffers(testEnv.DB, m.id);
+    expect(rows.map((r) => r.offer.id)).toEqual([tracked.id, plain.id]);
+    expect(rows[0]).toMatchObject({ label: "try_it", program: { id: program.id, status: "active", type: "affiliate" }, offer: { programId: program.id } });
+    expect(rows[1]).toMatchObject({ label: "learn_more", program: null });
+    expect(await listActiveMerchantOffers(testEnv.DB, "01HZZZZZZZZZZZZZZZZZZZZZZZ")).toEqual([]);
+  });
+});
+
+describe("listSitemapMerchants", () => {
+  it("lists active and indexable merchants only", async () => {
+    const live = await makeMerchant({ indexable: true });
+    const hidden = await makeMerchant({ indexable: false });
+    const paused = await makeMerchant({ indexable: true, status: "paused" });
+    const slugs = (await listSitemapMerchants(testEnv.DB)).map((m) => m.slug);
+    expect(slugs).toContain(live.slug);
+    for (const m of [hidden, paused]) expect(slugs).not.toContain(m.slug);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/db/partner-reads.test.ts
+```
+
+Expected: FAIL (hàm chưa có). `apps/web/src/db/merchants.ts`, thêm sau `findMerchantById`:
+
+```ts
+/** For /tools/:slug: any status (the route turns anything but `active` into a 404). */
+export async function findMerchantBySlug(db: D1Database, slug: string): Promise<Merchant | null> {
+  const row = await db.prepare("SELECT * FROM merchants WHERE slug = ?1").bind(slug).first<Row>();
+  return row ? toMerchant(row) : null;
+}
+
+/** For the sitemap: tool pages that are active and marked indexable (the `content_indexing` flag is checked by the caller). */
+export async function listSitemapMerchants(db: D1Database, limit = 10000): Promise<{ slug: string; updatedAt: string }[]> {
+  const { results } = await db
+    .prepare("SELECT slug, updated_at FROM merchants WHERE status = 'active' AND indexable = 1 ORDER BY slug LIMIT ?1")
+    .bind(limit)
+    .all<{ slug: string; updated_at: string }>();
+  return results.map((r) => ({ slug: r.slug, updatedAt: r.updated_at }));
+}
+```
+
+`apps/web/src/db/offers.ts`: (a) import thêm `ListedOffer` từ `../domain/offer.ts`; (b) `ContextRow` thêm `o_label: OfferLabel;` sau `o_status`; (c) `CONTEXT_SQL`: đổi `o.status AS o_status,` thành `o.status AS o_status, o.label AS o_label,`; (d) thêm cuối file:
+
+```ts
+/**
+ * For /tools/:slug: the merchant's offers with status `active` (merchant subject only), the merchant's default offer first, then oldest first.
+ * Time window and resolvability are the domain's job (visibleOffers).
+ */
+export async function listActiveMerchantOffers(db: D1Database, merchantId: string): Promise<ListedOffer[]> {
+  const { results } = await db
+    .prepare(
+      `${CONTEXT_SQL} WHERE o.subject_type = 'merchant' AND o.subject_id = ?1 AND o.status = 'active'
+       ORDER BY COALESCE(m.default_offer_id = o.id, 0) DESC, o.created_at, o.id`,
+    )
+    .bind(merchantId)
+    .all<ContextRow>();
+  return results.map((r) => {
+    const { offer, program } = toRedirectRows(r);
+    return { offer, label: r.o_label, program };
+  });
+}
+```
+
+```bash
+npm test -w apps/web -- test/db/partner-reads.test.ts test/db/offer-context.test.ts test/db/offers.test.ts
+```
+
+Expected: PASS (test 2d vẫn xanh).
+
+- [ ] **Step 3: i18n (đủ 4 locale, chép vào cuối mỗi file locale, sau nhóm `offers.err.*`)**
+
+Chạy `npm test -w apps/web -- test/i18n/parity.test.ts` sau khi thêm; thiếu key ở locale nào thì FAIL.
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `offer.label.learn_more` | Learn more about {name} | Tìm hiểu thêm về {name} | 了解 {name} | 瞭解 {name} |
+| `offer.label.get_started` | Get started with {name} | Bắt đầu với {name} | 开始使用 {name} | 開始使用 {name} |
+| `offer.label.start_trial` | Start a trial with {name} | Bắt đầu dùng thử {name} | 开始试用 {name} | 開始試用 {name} |
+| `offer.label.visit_site` | Visit {name} | Truy cập {name} | 访问 {name} | 前往 {name} |
+| `offer.label.try_it` | Try {name} | Dùng thử {name} | 试用 {name} | 試用 {name} |
+| `disclosure.note` | VNX.SI may earn a commission when you sign up or buy through some links on this page. This never changes how products are ranked. | VNX.SI có thể nhận hoa hồng khi bạn đăng ký hoặc mua qua một số liên kết trên trang này. Điều này không bao giờ thay đổi cách xếp hạng sản phẩm. | 当您通过本页的部分链接注册或购买时，VNX.SI 可能获得佣金。这绝不会影响产品的排名方式。 | 當您透過本頁的部分連結註冊或購買時，VNX.SI 可能獲得佣金。這絕不會影響產品的排名方式。 |
+| `disclosure.learnMore` | Learn more | Tìm hiểu thêm | 了解更多 | 瞭解更多 |
+| `tools.offers` | Links to {name} | Liên kết tới {name} | 前往 {name} 的链接 | 前往 {name} 的連結 |
+
+Bảy dòng đầu và `disclosure.*` là câu chữ Owner đã duyệt (khối A); `tools.offers` là chuỗi giao diện của Planner (không có số liệu hay lời khẳng định về đối tác). Ví dụ dòng ở `en.ts`: `"offer.label.try_it": "Try {name}",`.
+
+- [ ] **Step 4: Test trang `/tools/:slug` (fail trước)**
+
+`apps/web/test/monetization/tools.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { setDefaultOffer } from "../../src/db/merchants.ts";
+import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
+import { t } from "../../src/i18n/t.ts";
+import { ensureUser, makeMerchant, makeOffer, makeProgram } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
+const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+/** The opening tag of the first <a> whose href starts with `prefix` (attributes as written by the view). */
+const anchor = (html: string, prefix: string) => new RegExp(`<a\\b[^>]*href="${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^>]*>`).exec(html)?.[0] ?? "";
+const setIndexing = async (enabled: boolean) => {
+  const admin = await ensureUser("tools-admin@vnx.si");
+  await setFlag(testEnv.DB, { key: "content_indexing", enabled, actorUserId: admin.id, now: new Date().toISOString() });
+  resetFlagCache();
+};
+const past = "2020-01-01T00:00:00.000Z";
+const future = "2099-01-01T00:00:00.000Z";
+
+beforeEach(() => resetFlagCache());
+
+describe("/tools/:slug availability", () => {
+  it("answers 404 in every locale for an unknown, paused or archived merchant, and for a malformed slug", async () => {
+    const paused = await makeMerchant({ status: "paused" });
+    const archived = await makeMerchant({ status: "archived" });
+    for (const locale of LOCALES) {
+      for (const slug of [paused.slug, archived.slug, "no-such-merchant", "bad_slug", "a"]) {
+        const res = await get(localizedPath(locale, `/tools/${slug}`));
+        expect(res.status, `${locale} ${slug}`).toBe(404);
+      }
+    }
+  });
+
+  it("redirects an upper-case slug to the lower-case one", async () => {
+    const m = await makeMerchant();
+    const res = await get(`/vi/tools/${m.slug.toUpperCase()}`);
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe(`/vi/tools/${m.slug}`);
+  });
+});
+
+describe("/tools/:slug with offers (Review Focus 4)", () => {
+  it("shows name, description, disclosure above the buttons, sponsored default link and plain other link, in 4 locales", async () => {
+    const m = await makeMerchant({ name: "Acme Tool", description: "First line.\n\n- one\n- two" });
+    const program = await makeProgram(m);
+    const def = await makeOffer(m, program, { label: "try_it" });
+    const other = await makeOffer(m, null, { label: "learn_more" });
+    const admin = await ensureUser("tools-admin@vnx.si");
+    await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: def.id, actorUserId: admin.id, now: "2026-10-05T00:00:00.000Z" });
+
+    for (const locale of LOCALES) {
+      const path = localizedPath(locale, `/tools/${m.slug}`);
+      const res = await get(path);
+      expect(res.status, path).toBe(200);
+      const html = await res.text();
+      const main = mainOf(html);
+      expect(main, path).toMatch(/<h1[^>]*>Acme Tool<\/h1>/);
+      const text = textOf(main);
+      expect(text, path).toContain("First line.");
+      expect(text, path).toContain(t(locale, "disclosure.note"));
+      expect(anchor(main, localizedPath(locale, "/disclosure")), path).not.toBe("");
+      expect(text, path).toContain(t(locale, "disclosure.learnMore"));
+
+      const first = anchor(main, `/go/${m.slug}?src=tools`);
+      expect(first, path).toContain('rel="sponsored noopener"');
+      expect(first, path).toContain('target="_blank"');
+      expect(main, path).toContain(`${t(locale, "offer.label.try_it", { name: "Acme Tool" })}</a>`);
+      const second = anchor(main, `/go/o/${other.id}?src=tools`);
+      expect(second, path).toContain('rel="noopener"');
+      expect(second, path).not.toContain("sponsored");
+      expect(main, path).toContain(`${t(locale, "offer.label.learn_more", { name: "Acme Tool" })}</a>`);
+
+      // The note sits above the buttons; every outbound link goes through /go/.
+      expect(main.indexOf("data-disclosure"), path).toBeGreaterThan(-1);
+      expect(main.indexOf("data-disclosure"), path).toBeLessThan(main.indexOf("/go/"));
+      expect(main, path).not.toContain("example.com");
+      expect(text, path).not.toMatch(/\b(buy|customize|hire)\b/i);
+    }
+  });
+
+  it("wraps the English description in lang=en on vi, zh-Hans and zh-Hant, not on en", async () => {
+    const m = await makeMerchant({ description: "Plain English text." });
+    expect(mainOf(await (await get(`/tools/${m.slug}`)).text())).not.toContain('lang="en"');
+    for (const locale of ["vi", "zh-Hans", "zh-Hant"] as const) {
+      const main = mainOf(await (await get(localizedPath(locale, `/tools/${m.slug}`))).text());
+      expect(main, locale).toContain('<div lang="en"><div class="prose"><p>Plain English text.</p></div></div>');
+    }
+  });
+
+  it("shows no disclosure and no sponsored link when only the merchant's own link is shown, and no offer block with no offers", async () => {
+    const own = await makeMerchant();
+    await makeOffer(own, null);
+    const html = mainOf(await (await get(`/tools/${own.slug}`)).text());
+    expect(html).toContain("/go/o/");
+    expect(html).not.toContain("data-disclosure");
+    expect(html).not.toContain("sponsored");
+    expect(html).not.toContain("/disclosure");
+
+    const bare = await makeMerchant();
+    const bareHtml = mainOf(await (await get(`/tools/${bare.slug}`)).text());
+    expect(bareHtml).not.toContain("/go/");
+    expect(bareHtml).not.toContain("data-disclosure");
+    expect(bareHtml).not.toContain('class="row-actions"');
+  });
+
+  it("lists neither paused, archived, not-started nor ended offers, nor an offer /go/ would answer 404", async () => {
+    const m = await makeMerchant();
+    const shown = await makeOffer(m, null);
+    const hidden = [
+      await makeOffer(m, null, { status: "paused" }),
+      await makeOffer(m, null, { status: "archived" }),
+      await makeOffer(m, null, { startsAt: future }),
+      await makeOffer(m, null, { endsAt: past }),
+      await makeOffer(m, null, { destinationUrl: "https://not-allowed.test/" }),
+    ];
+    const main = mainOf(await (await get(`/tools/${m.slug}`)).text());
+    expect(main).toContain(`/go/o/${shown.id}?src=tools`);
+    for (const o of hidden) expect(main, o.id).not.toContain(o.id);
+  });
+
+  it("shows the disclosure and sponsored rel even with the flag off and a program that is not active (launch state)", async () => {
+    const m = await makeMerchant();
+    const draft = await makeProgram(m, { status: "draft", termsUrl: null, termsVerifiedAt: null });
+    await makeOffer(m, draft, { label: "try_it" });
+    const main = mainOf(await (await get(`/tools/${m.slug}`)).text());
+    expect(main).toContain("data-disclosure");
+    expect(anchor(main, "/go/o/")).toContain('rel="sponsored noopener"');
+  });
+
+  it("escapes the merchant name and description", async () => {
+    const m = await makeMerchant({ name: "<script>alert(1)</script>", description: "<img src=x onerror=alert(1)>" });
+    const html = await (await get(`/tools/${m.slug}`)).text();
+    expect(html).not.toContain("<script>alert(1)");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  });
+});
+
+describe("/tools/:slug indexing (Owner 2026-10-05)", () => {
+  it("is noindex without canonical or hreflang unless indexable = 1 AND content_indexing is on", async () => {
+    const indexable = await makeMerchant({ indexable: true });
+    const notIndexable = await makeMerchant({ indexable: false });
+    const cases = [
+      { flag: false, m: indexable, open: false },
+      { flag: false, m: notIndexable, open: false },
+      { flag: true, m: notIndexable, open: false },
+      { flag: true, m: indexable, open: true },
+    ];
+    for (const { flag, m, open } of cases) {
+      await setIndexing(flag);
+      for (const locale of LOCALES) {
+        const path = localizedPath(locale, `/tools/${m.slug}`);
+        const html = await (await get(path)).text();
+        const label = `${path} flag=${flag} indexable=${m.indexable}`;
+        expect(html.includes('<meta name="robots" content="noindex"'), label).toBe(!open);
+        expect(html.includes('<link rel="canonical"'), label).toBe(open);
+        expect(html.includes('hreflang="x-default"'), label).toBe(open);
+        if (open) {
+          expect(html, label).toContain(`<link rel="canonical" href="https://vnx.si${path}"`);
+          for (const l of LOCALES) expect(html, label).toContain(`<link rel="alternate" hreflang="${l}" href="https://vnx.si${localizedPath(l, `/tools/${m.slug}`)}"`);
+        }
+      }
+    }
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/monetization/tools.test.ts
+```
+
+Expected: FAIL (route chưa có, mọi trang 404). Tạo `apps/web/src/views/Disclosure.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import { localizedPath, type Locale } from "../i18n/locales.ts";
+import { translator } from "../i18n/t.ts";
+
+/** Addendum §3.4: the sentence that must sit next to partner links, plus the link to /disclosure. Shared by every page that shows such links. */
+export const DisclosureNote: FC<{ locale: Locale }> = ({ locale }) => {
+  const tr = translator(locale);
+  return (
+    <p class="notice" data-disclosure="partner-links">
+      {tr("disclosure.note")} <a href={localizedPath(locale, "/disclosure")}>{tr("disclosure.learnMore")}</a>
+    </p>
+  );
+};
+```
+
+`apps/web/src/views/ToolPage.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import { offerRel, showsDisclosure, type VisibleOffer } from "../domain/offer.ts";
+import type { Locale } from "../i18n/locales.ts";
+import { translator } from "../i18n/t.ts";
+import { DisclosureNote } from "./Disclosure.tsx";
+import { Layout } from "./Layout.tsx";
+import { PlainText } from "./PlainText.tsx";
+
+type Props = {
+  locale: Locale;
+  origin: string;
+  merchant: { slug: string; name: string; description: string };
+  offers: readonly VisibleOffer[];
+  noindex: boolean;
+  signedIn: boolean;
+};
+
+/** Default offer through the merchant's own /go/ address, every other offer by id. Never a partner URL; never a locale prefix. */
+const goHref = (slug: string, o: VisibleOffer): string => (o.isDefault ? `/go/${slug}?src=tools` : `/go/o/${o.id}?src=tools`);
+
+export const ToolPage: FC<Props> = ({ locale, origin, merchant, offers, noindex, signedIn }) => {
+  const tr = translator(locale);
+  const description = merchant.description.replace(/\s+/g, " ").trim().slice(0, 160);
+  return (
+    <Layout locale={locale} title={`${merchant.name} · VNX.SI`} description={description || undefined} origin={origin} rest={`/tools/${merchant.slug}`} noindex={noindex} signedIn={signedIn}>
+      <article class="tool">
+        <h1>{merchant.name}</h1>
+        {merchant.description !== "" ? (
+          <div lang={locale === "en" ? undefined : "en"}>
+            <PlainText text={merchant.description} />
+          </div>
+        ) : null}
+        {offers.length > 0 ? (
+          <section class="offers" aria-labelledby="tool-offers">
+            <h2 id="tool-offers">{tr("tools.offers", { name: merchant.name })}</h2>
+            {showsDisclosure(offers) ? <DisclosureNote locale={locale} /> : null}
+            <p class="row-actions">
+              {offers.map((o) => (
+                <a class={o.isDefault ? "btn btn-primary" : "btn btn-secondary"} href={goHref(merchant.slug, o)} rel={offerRel(o)} target="_blank">
+                  {tr(`offer.label.${o.label}`, { name: merchant.name })}
+                </a>
+              ))}
+            </p>
+          </section>
+        ) : null}
+      </article>
+    </Layout>
+  );
+};
+```
+
+`apps/web/src/routes/tools.tsx`:
+
+```tsx
+import type { Hono } from "hono";
+import { isFlagEnabled } from "../db/flags.ts";
+import { findMerchantBySlug } from "../db/merchants.ts";
+import { listActiveMerchantOffers } from "../db/offers.ts";
+import { toolIndexable, visibleOffers } from "../domain/offer.ts";
+import { SLUG_RE } from "../domain/slug.ts";
+import type { AppEnv } from "../env.ts";
+import { onLocalized } from "../http/localized.ts";
+import { siteOrigin } from "../http/origin.ts";
+import { localizedPath } from "../i18n/locales.ts";
+import { errorResponse } from "../views/error-response.tsx";
+import { page } from "../views/render.ts";
+import { ToolPage } from "../views/ToolPage.tsx";
+
+/** /tools/:slug: a merchant's public page (VNX-2104a). Only `active` merchants; offers are the ones /go/ can follow right now. */
+export function registerToolsRoutes(app: Hono<AppEnv>) {
+  onLocalized(app, "get", "/tools/:slug", async (c) => {
+    const raw = c.req.param("slug") ?? "";
+    const slug = raw.toLowerCase();
+    if (!SLUG_RE.test(slug)) return errorResponse(c, "notFound", 404);
+    const locale = c.get("locale");
+    if (raw !== slug) return c.redirect(localizedPath(locale, `/tools/${slug}`), 301);
+    const merchant = await findMerchantBySlug(c.env.DB, slug);
+    if (!merchant || merchant.status !== "active") return errorResponse(c, "notFound", 404);
+    const rows = await listActiveMerchantOffers(c.env.DB, merchant.id);
+    // Sequential: the first read fills the 60 s cache, the others hit it.
+    const flags = { affiliate: await isFlagEnabled(c.env.DB, "affiliate"), partner_referral: await isFlagEnabled(c.env.DB, "partner_referral") };
+    const indexing = await isFlagEnabled(c.env.DB, "content_indexing");
+    const offers = visibleOffers({ merchant, rows, flags, now: new Date().toISOString() });
+    return page(
+      c,
+      <ToolPage locale={locale} origin={siteOrigin(c)} merchant={merchant} offers={offers} noindex={!toolIndexable(merchant, indexing)} signedIn={c.get("user") !== null} />,
+    );
+  });
+}
+```
+
+`apps/web/src/app.ts`: thêm `import { registerToolsRoutes } from "./routes/tools.tsx";` cạnh các import route và gọi `registerToolsRoutes(app);` ngay sau `registerProductPageRoutes(app);`.
+
+Test kiến trúc phải thấy file mới: sửa `MONEY_ALLOWED` ở Step 6 trước khi chạy toàn bộ; ở bước này chạy riêng:
+
+```bash
+npm test -w apps/web -- test/monetization/tools.test.ts test/db/partner-reads.test.ts test/domain/disclosure.test.ts test/i18n/parity.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Sitemap (test trước, rồi code)**
+
+Thêm vào `apps/web/test/seo/sitemap.test.ts` (import thêm `resetFlagCache`, `setFlag` từ `../../src/db/flags.ts`, `ensureUser`, `makeMerchant` từ `../fixtures.ts`, `LOCALES`, `localizedPath` từ `../../src/i18n/locales.ts`):
+
+```ts
+describe("/sitemap.xml tool pages (VNX-2104a, Owner 2026-10-05)", () => {
+  const setIndexing = async (enabled: boolean) => {
+    const admin = await ensureUser("sm-tools-admin@vnx.si");
+    await setFlag(testEnv.DB, { key: "content_indexing", enabled, actorUserId: admin.id, now: new Date().toISOString() });
+    resetFlagCache();
+  };
+  const html = async (path: string) => (await createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv)).text();
+
+  it("lists /tools/:slug only when the merchant is active AND indexable AND content_indexing is on, with 4 locales and hreflang", async () => {
+    const live = await makeMerchant({ indexable: true });
+    const notIndexable = await makeMerchant({ indexable: false });
+    const paused = await makeMerchant({ indexable: true, status: "paused" });
+    const archived = await makeMerchant({ indexable: true, status: "archived" });
+    const all = [live, notIndexable, paused, archived];
+
+    await setIndexing(false);
+    let xml = (await fetchSitemap()).xml;
+    for (const m of all) expect(xml, `flag off ${m.slug}`).not.toContain(`/tools/${m.slug}<`);
+
+    await setIndexing(true);
+    xml = (await fetchSitemap()).xml;
+    for (const m of [notIndexable, paused, archived]) expect(xml, `flag on ${m.slug}`).not.toContain(`/tools/${m.slug}<`);
+    const alternates = [
+      ...LOCALES.map((l) => `<xhtml:link rel="alternate" hreflang="${l}" href="https://vnx.si${localizedPath(l, `/tools/${live.slug}`)}"/>`),
+      `<xhtml:link rel="alternate" hreflang="x-default" href="https://vnx.si/tools/${live.slug}"/>`,
+    ].join("");
+    for (const l of LOCALES) {
+      const loc = `https://vnx.si${localizedPath(l, `/tools/${live.slug}`)}`;
+      expect(xml, loc).toContain(`<url><loc>${loc}</loc>`);
+      expect(xml.split(`<loc>${loc}</loc>`), loc).toHaveLength(2);
+      expect(xml, loc).toContain(alternates);
+    }
+
+    // The page and the sitemap agree on the boundary: in the sitemap exactly when the page has no noindex.
+    for (const m of all) {
+      const page = await html(`/tools/${m.slug}`);
+      const inSitemap = xml.includes(`/tools/${m.slug}<`);
+      if (m.status === "active") expect(page.includes('name="robots" content="noindex"'), m.slug).toBe(!inSitemap);
+    }
+    await setIndexing(false);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/seo/sitemap.test.ts
+```
+
+Expected: FAIL (không có `/tools/` trong sitemap). `apps/web/src/routes/seo.ts`: thêm `import { isFlagEnabled } from "../db/flags.ts";` và `import { listSitemapMerchants } from "../db/merchants.ts";`; thân `/sitemap.xml` thành:
+
+```ts
+  app.get("/sitemap.xml", async (c) => {
+    const [products, builders] = await Promise.all([listSitemapProducts(c.env.DB), listSitemapBuilders(c.env.DB)]);
+    // Tool pages: only with the content_indexing flag on (Owner 2026-10-05); the merchant query already needs active + indexable.
+    const tools = (await isFlagEnabled(c.env.DB, "content_indexing")) ? await listSitemapMerchants(c.env.DB) : [];
+    const entries: SitemapEntry[] = [
+      // ... các mục tĩnh giữ nguyên ...
+      ...products.map((p) => ({ rest: `/p/${p.slug}`, lastmod: p.updatedAt, localized: true })),
+      ...builders.map((b) => ({ rest: `/b/${b.handle}`, lastmod: b.updatedAt, localized: true })),
+      ...tools.map((m) => ({ rest: `/tools/${m.slug}`, lastmod: m.updatedAt, localized: true })),
+    ];
+```
+
+(Chỉ thêm hai dòng đầu và dòng `...tools.map`; không đổi mục tĩnh.)
+
+```bash
+npm test -w apps/web -- test/seo/sitemap.test.ts test/seo/robots.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Test kiến trúc**
+
+`apps/web/test/architecture.test.ts`: thêm `"../src/routes/tools.tsx"` và `"../src/routes/seo.ts"` vào `MONEY_ALLOWED`, và vào mảng đã sắp xếp của bài "danh sách đúng" (lấy mảng hiện có sau Task 4b, chèn hai mục, giữ thứ tự `sort()`). Sau Task 5 mảng phải là đúng: `db/audit.ts`, `db/clicks.ts`, `db/merchants.ts`, `db/offers.ts`, `db/programs.ts`, `jobs/daily.ts`, `routes/admin-merchants.tsx`, `routes/go.ts`, `routes/seo.ts`, `routes/tools.tsx` (10 file, tiền tố `../src/`); nếu mảng thực tế khác (Task 4 / 4b làm khác), giữ mục của chúng và chỉ thêm hai mục mới. Đổi tên bài cho khớp ("after Task 5 the allowlist is exactly …"). Cập nhật chú thích phía trên (Task 5: `routes/tools.tsx`, `routes/seo.ts`; views không vào danh sách).
+
+```bash
+npm test -w apps/web -- test/architecture.test.ts
+grep -rniE "elevenlabs|partnerstack" apps/web/src
+```
+
+Expected: PASS; `grep` không in dòng nào. Review Focus 5: `routes/tools.tsx` / `routes/seo.ts` không có trong `RANKING_FILES`, bài "ranking files import no monetization db module" vẫn xanh.
+
+- [ ] **Step 7: Kiểm toàn bộ và commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/routes/tools.tsx apps/web/src/views/ToolPage.tsx apps/web/src/views/Disclosure.tsx apps/web/src/domain/offer.ts apps/web/src/db/merchants.ts apps/web/src/db/offers.ts apps/web/src/routes/seo.ts apps/web/src/app.ts apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/architecture.test.ts apps/web/test/domain/disclosure.test.ts apps/web/test/db/partner-reads.test.ts apps/web/test/monetization/tools.test.ts apps/web/test/seo/sitemap.test.ts
+git commit -m "feat(web): /tools/:slug with offers, disclosure and sitemap rule (VNX-2104a)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+Expected: typecheck sạch, toàn bộ test xanh (gồm `test/design/*`).
+
+**Tiêu chí chấp nhận (mỗi mục có lệnh):**
+- Review Focus 4: có offer có `program_id` → câu A đúng 4 locale, link `/disclosure`, `rel="sponsored noopener"` trên link đó; chỉ offer không chương trình hoặc không offer → không câu, không `sponsored`, không khối offer. `npm test -w apps/web -- test/monetization/tools.test.ts test/domain/disclosure.test.ts`.
+- Offer `paused` / `archived` / chưa bắt đầu / hết hạn / host không còn hợp lệ không hiện; cờ tắt hoặc chương trình `draft` vẫn hiện nút và câu disclosure (cùng hai file test).
+- Merchant `paused` / `archived` / không tồn tại / slug sai dạng → 404 ở 4 locale; trang không có chữ Buy, Customize, Hire; HTML không chứa host đối tác (chỉ `/go/`).
+- `noindex` + không canonical + không hreflang khi `indexable = 0` hoặc cờ `content_indexing` tắt; canonical + 4 hreflang + `x-default` khi cả hai bật (bảng 4 trường hợp trong `tools.test.ts`).
+- Sitemap có `/tools/<slug>` 4 dòng kèm alternate chỉ khi `active` và `indexable = 1` và cờ bật; thiếu một điều kiện thì không có; trang và sitemap khớp nhau (`test/seo/sitemap.test.ts`).
+- Mô tả bọc `lang="en"` trên `vi`, `zh-Hans`, `zh-Hant`; tên và mô tả được escape; nhãn `try_it` đúng 4 locale.
+- `MONEY_ALLOWED` đúng 10 file (có `routes/tools.tsx`, `routes/seo.ts`); `grep -rniE "elevenlabs|partnerstack" apps/web/src` rỗng.
+- `npm run typecheck -w apps/web`, `npm test` xanh. Diff ước tính ≈ 560 dòng không tính locale (domain 55, db 35, route 35, view 60, seo 6, app 3, kiến trúc 6; test: `disclosure` 85, `partner-reads` 50, `tools` 175, `sitemap` 45); dưới 600, không tách.
+- Kiểm tay ElevenLabs (không thuộc CI, ghi trong báo cáo): nhập qua `/admin/merchants` theo `docs/partners/registry.md`, bật `affiliate`, `/tools/elevenlabs` → nút "Try ElevenLabs" → `/go/elevenlabs?src=tools`; trang `noindex` cho tới khi Owner bật `content_indexing` và `indexable`.
 
 ---
 
 ### Task 6: VNX-2104b — Trang `/disclosure`
 
-**Lưu ý:** `docs/legal/privacy.md` trên `main` đã có thêm các dòng của form liên hệ; chép khối C vào bản mới đó, và footer / layout theo `main` mới (giữ xanh `test/design/layout.test.ts`, `test/design/assets.test.ts`).
+**Lưu ý:** footer và layout theo `main` mới (PR #4); giữ xanh `test/design/layout.test.ts` (bài footer so danh sách link đúng từng phần tử, nên phải sửa cùng lúc) và `test/design/assets.test.ts`. `docs/legal/privacy.md` đã có khối C (Task 4); task này không đụng Privacy.
 
-**Phạm vi:** Reviewer đã tạo `docs/legal/disclosure.md` (mục B, sau khi Owner duyệt). `src/legal/content.ts` thêm `disclosure` vào `LegalPageId` / `LEGAL` (`rest: "/disclosure"`, `dated: true`) chép nguyên văn EN và VI; `routes/legal.tsx` render phần tĩnh bằng `LegalPage` và chèn khối động dưới mục 3: danh sách merchant có chương trình `active` (`listActiveProgramMerchants` của Task 2; tên → `/tools/:slug` chỉ khi merchant `active`; trống thì dòng `disclosure.noPartners`). Footer thêm link "Disclosure" (`footer.disclosure`, 4 locale) cạnh Terms / Privacy; câu disclosure ở `/tools` (Task 5) đã trỏ về đây. Sitemap thêm `/disclosure` (`localized: true`). `zh-Hans` / `zh-Hant` theo cơ chế hiện có.
+**Phạm vi:** trang `/disclosure` ở 4 locale từ `docs/legal/disclosure.md` (khối B, Owner đã duyệt, chép nguyên văn EN và VI vào `src/legal/content.ts`), khối động "công ty có chương trình `active`" dưới mục 3, link footer, sitemap. Cơ chế giống `/terms` và `/privacy`: cùng `LegalPage`, cùng `legal.englishOnly` cho `zh-Hans` / `zh-Hant`, cùng canonical + hreflang (không `noindex`), `localized: true` trong sitemap.
 
-**Files (dự kiến):** Modify `src/legal/content.ts`, `src/routes/legal.tsx`, `src/views/LegalPage.tsx` (nhận `children` cho khối động nếu cần), `src/views/Layout.tsx` (footer), `src/routes/seo.ts`, 4 file locale; Test mở rộng `test/legal/content.test.ts` (CASES thêm `disclosure`), `test/seo/sitemap.test.ts`, `test/monetization/disclosure-page.test.ts`.
+**Files:**
+- Create: `apps/web/test/monetization/disclosure-page.test.ts`
+- Modify: `apps/web/src/legal/content.ts` (`LegalPageId`, `disclosureEn`, `disclosureVi`, `LEGAL.disclosure`, `DISCLOSURE_PARTNERS_SECTION`), `apps/web/src/views/LegalPage.tsx` (`extras`, `META.disclosure`), `apps/web/src/views/Disclosure.tsx` (`ActivePartners`), `apps/web/src/routes/legal.tsx`, `apps/web/src/db/merchants.ts` (`listActiveProgramMerchants`), `apps/web/src/views/Layout.tsx` (link footer), `apps/web/src/routes/seo.ts`, 4 file locale
+- Modify: `apps/web/test/architecture.test.ts` (`MONEY_ALLOWED` thêm `routes/legal.tsx`)
+- Test (sửa): `apps/web/test/legal/content.test.ts`, `apps/web/test/legal/pages.test.ts`, `apps/web/test/legal/footer.test.ts`, `apps/web/test/design/layout.test.ts`, `apps/web/test/seo/sitemap.test.ts`, `apps/web/test/db/partner-reads.test.ts` (thêm một bài)
 
-**Tiêu chí chấp nhận:**
-- `npm test -w apps/web -- test/legal/content.test.ts` xanh: trang `/disclosure` EN và VI khớp từng dòng với `docs/legal/disclosure.md`; zh-* hiện bản EN kèm câu "chỉ có bản tiếng Anh".
-- Khối động: không có chương trình `active` → dòng "None at the moment." (4 locale); có chương trình `active` → tên merchant và link `/tools/<slug>`; chương trình `draft` / `paused` / merchant `paused` không xuất hiện (không liệt kê partner chưa `active`, ràng buộc của media-kit).
-- `/disclosure` có trong sitemap 4 locale; có canonical và hreflang; footer có link ở 4 locale.
-- `npm run typecheck -w apps/web`, `npm test` xanh. Diff ≲ 600 dòng không tính locale. Commit `feat(web): /disclosure page with active partner list (VNX-2104b)`.
+**Interfaces:**
+- Consumes: `LEGAL`, `LEGAL_UPDATED_AT`, `LegalPageId`, `Block`, `Section` (`legal/content.ts`); `LegalPage`, `InlineText` (`views/LegalPage.tsx`); `makeMerchant`, `makeProgram`, `makeOffer`; `localizedPath`, `translator`, `onLocalized`, `siteOrigin`, `page`; `DisclosureNote` (Task 5, cùng file `views/Disclosure.tsx`).
+- Produces: `LegalPageId` thêm `"disclosure"`; `LEGAL.disclosure = { rest: "/disclosure", dated: true, en, vi }`; `DISCLOSURE_PARTNERS_SECTION = 2` (chỉ số mục "3. …" nơi khối động chèn vào); `listActiveProgramMerchants(db): Promise<{ slug: string; name: string }[]>` (`db/merchants.ts`); `ActivePartners({ locale, partners })` (`views/Disclosure.tsx`); `LegalPage` nhận thêm `extras?: Partial<Record<number, Child>>` (nội dung chèn ngay sau mục có chỉ số đó).
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Khối động chèn qua `extras`, không đổi nguồn:** `LegalPage` vẽ `extras[i]` ngay sau các khối của mục `i`; trang chỉ chèn khi `id === "disclosure"` và chỉ số là `DISCLOSURE_PARTNERS_SECTION` (test ghim: `LEGAL.disclosure.en.sections[2].heading` bắt đầu `3.`, cả VI). `docs/legal/disclosure.md` không có dòng "None at the moment." (khối B: khóa `disclosure.noPartners`, không nằm trong file nguồn).
+2. **Ai được liệt kê:** merchant `status = 'active'` có **ít nhất một** chương trình `status = 'active'` (SQL join, `GROUP BY m.id` nên mỗi merchant một lần, theo tên không phân biệt hoa thường). Chương trình `draft` / `paused` / `ended`, merchant `paused` / `archived`, merchant không chương trình: không hiện (ràng buộc media-kit: không nêu partner chưa `active`). Cờ `affiliate` / `partner_referral` không ảnh hưởng danh sách (đề: "có chương trình `active`"); nếu Owner muốn ẩn khi cờ tắt thì đó là quyết định nghiệp vụ mới.
+3. **Tên → `/tools/:slug`** (có tiền tố locale). Merchant `active` luôn có trang `/tools/` 200, nên không có link chết. Tên không dịch, không bọc `lang`.
+4. **Danh sách trống:** đúng một `<p>` chứa `disclosure.noPartners` (khối B: "None at the moment." / "Hiện chưa có." và bản `zh-*`). Khối bọc `lang={locale}` để dòng này đúng ngôn ngữ ngay cả trong phần `lang="en"` của `zh-*`.
+5. **Không đọc DB cho `/terms`, `/privacy`, `/media-kit`:** handler chỉ gọi `listActiveProgramMerchants` khi `id === "disclosure"`. Lỗi D1 để lỗi chung (500); không vẽ danh sách rỗng khi đọc hỏng (rỗng sẽ nói sai là không có partner).
+6. **`LEGAL_UPDATED_AT` dùng chung** (`dated: true` cho `disclosure`, `{date}` của file nguồn thay bằng hằng này, test đã làm vậy). Không thêm ngày riêng: một hằng, không đổi kiểu `LegalPage`. Task này **không** đổi giá trị hằng (Task 4 đã tăng khi thêm Privacy EPIC 21); Owner chốt ngày khi deploy như đã ghi ở đầu `content.ts`. Hệ quả cần biết: ngày "Last updated" của cả ba trang luật đổi cùng nhau.
+7. **Tên partner không có trong `content.ts`** (test kiến trúc quét cả file này); trang chỉ nói "some companies"; tên đến từ DB.
+8. **Footer:** link `/disclosure` đặt cuối nhóm Company, sau Privacy; khóa `footer.disclosure` (cùng chữ với tiêu đề trang). Bài footer của `layout.test.ts` đổi danh sách mong đợi thêm đúng một phần tử.
+9. **`MONEY_ALLOWED` thêm đúng `routes/legal.tsx`** (import `db/merchants.ts`); `LegalPage.tsx`, `Disclosure.tsx` không import db (kiểu cấu trúc `{ slug; name }`).
+10. **`content.test.ts`:** ngưỡng "ít nhất 10 dòng" đổi thành `>= 8`: Disclosure ngắn (tiêu đề, ngày, 4 mục, mỗi mục một dòng nội dung = 10 dòng; ngưỡng 8 vẫn bắt trang rỗng). Khối động nằm giữa mục 3 và 4: test so thứ tự dùng `indexOf` tiến dần nên dòng ở giữa không làm hỏng.
+
+- [ ] **Step 0: Tiền điều kiện**
+
+```bash
+test -f docs/legal/disclosure.md && echo present
+git log --oneline -3 -- docs/legal/disclosure.md
+grep -c "^## EN$\|^## VI$" docs/legal/disclosure.md
+grep -n "{date}\|^\*\*[1-4]\. " docs/legal/disclosure.md
+git log --oneline -8
+grep -n "LEGAL_UPDATED_AT =" apps/web/src/legal/content.ts
+npm test -w apps/web -- test/legal test/design test/architecture.test.ts
+```
+
+Expected: `present`; Controller đã commit file (có SHA); đúng 2 dòng tiêu đề `## EN` / `## VI`; mỗi phần có `{date}` và bốn dòng `**1. …**` … `**4. …**`; Task 5 đã commit; test xanh. **File chưa có** thì dừng, báo Controller (không tự viết văn bản pháp lý). Nếu nội dung file khác khối B của header (từng chữ), dừng và báo: file nguồn thắng, nhưng khác biệt phải được Owner biết. Chép nguyên văn từ **file**, không từ plan, khi tạo `content.ts` ở Step 2.
+
+- [ ] **Step 1: Test trước (fail)**
+
+(a) `apps/web/test/legal/content.test.ts`: thêm vào `CASES`:
+
+```ts
+  { name: "disclosure", path: "/disclosure" },
+```
+
+đổi `it("reads the three approved source files"` thành `it("reads the four approved source files"`, và đổi `expect(lines.length, name).toBeGreaterThan(10);` thành `expect(lines.length, name).toBeGreaterThanOrEqual(8);`.
+
+(b) `apps/web/test/legal/pages.test.ts`: thêm vào `PAGES` `{ rest: "/disclosure", id: "disclosure", meta: "legal.disclosure" },` (dòng cuối, trước `] as const`); trong bài "AC1: EN and VI show their own title" nếu còn chữ `"2026-10-04"` cứng thì thay bằng `LEGAL_UPDATED_AT` (import từ `../../src/legal/content.ts`); điều kiện `id !== "mediaKit"` giữ nguyên (`disclosure` có ngày).
+
+(c) `apps/web/test/legal/footer.test.ts`: trong mảng ba link của bài đầu thêm `["/disclosure", "footer.disclosure"],`.
+
+(d) `apps/web/test/design/layout.test.ts`: trong bài footer, danh sách `footer.company` thêm phần tử cuối `localizedPath(locale, "/disclosure"),` (sau `/privacy`).
+
+(e) `apps/web/test/seo/sitemap.test.ts`: trong bài "lists /terms, /privacy, /media-kit and /contact …" đổi mảng `["/terms", "/privacy", "/media-kit", "/contact"]` thành `["/terms", "/privacy", "/media-kit", "/contact", "/disclosure"]` (tên bài thêm "/disclosure").
+
+(f) `apps/web/test/db/partner-reads.test.ts`: import thêm `listActiveProgramMerchants` từ `../../src/db/merchants.ts`, thêm:
+
+```ts
+describe("listActiveProgramMerchants", () => {
+  it("lists active merchants that have an active program, once each, by name; nobody else", async () => {
+    const twice = await makeMerchant({ name: "Zeta Active Twice" });
+    await makeProgram(twice);
+    await makeProgram(twice);
+    const first = await makeMerchant({ name: "alpha active once" });
+    await makeProgram(first);
+    const draft = await makeMerchant();
+    await makeProgram(draft, { status: "draft", termsUrl: null, termsVerifiedAt: null });
+    const ended = await makeMerchant();
+    await makeProgram(ended, { status: "ended" });
+    const pausedMerchant = await makeMerchant({ status: "paused" });
+    await makeProgram(pausedMerchant);
+    const archivedMerchant = await makeMerchant({ status: "archived" });
+    await makeProgram(archivedMerchant);
+    await makeMerchant(); // no program
+
+    const rows = await listActiveProgramMerchants(testEnv.DB);
+    const slugs = rows.map((r) => r.slug);
+    expect(slugs.filter((s) => s === twice.slug)).toHaveLength(1);
+    expect(slugs).toContain(first.slug);
+    for (const m of [draft, ended, pausedMerchant, archivedMerchant]) expect(slugs, m.slug).not.toContain(m.slug);
+    expect(rows.find((r) => r.slug === first.slug)).toEqual({ slug: first.slug, name: "alpha active once" });
+    expect(slugs.indexOf(first.slug)).toBeLessThan(slugs.indexOf(twice.slug));
+  });
+});
+```
+
+(g) `apps/web/test/monetization/disclosure-page.test.ts` (mới):
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { LEGAL } from "../../src/legal/content.ts";
+import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
+import { t } from "../../src/i18n/t.ts";
+import { makeMerchant, makeProgram } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
+const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+/** The dynamic block under section 3. */
+const partnersOf = (html: string) => /<div lang="[^"]*" data-partners="active">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? null;
+
+describe("/disclosure partner list (VNX-2104b)", () => {
+  it("shows exactly one 'none' line, in every locale, when no program is active", async () => {
+    // Other tests of this file may have created programs: put every one out of play first.
+    await testEnv.DB.prepare("UPDATE partner_programs SET status = 'paused' WHERE status = 'active'").run();
+    for (const locale of LOCALES) {
+      const path = localizedPath(locale, "/disclosure");
+      const res = await get(path);
+      expect(res.status, path).toBe(200);
+      const block = partnersOf(mainOf(await res.text()));
+      expect(block, path).not.toBeNull();
+      expect(block?.match(/<p[\s>]/g), path).toHaveLength(1);
+      expect(textOf(block ?? ""), path).toBe(t(locale, "disclosure.noPartners"));
+      expect(block, path).not.toContain("<a ");
+    }
+  });
+
+  it("lists active merchants with an active program by name, linked to /tools/:slug, and nobody else", async () => {
+    const listed = await makeMerchant({ name: "Listed Co" });
+    await makeProgram(listed);
+    const draft = await makeMerchant({ name: "Draft Co" });
+    await makeProgram(draft, { status: "draft", termsUrl: null, termsVerifiedAt: null });
+    const paused = await makeMerchant({ name: "Paused Co", status: "paused" });
+    await makeProgram(paused);
+    const bare = await makeMerchant({ name: "Bare Co" });
+
+    for (const locale of LOCALES) {
+      const path = localizedPath(locale, "/disclosure");
+      const main = mainOf(await (await get(path)).text());
+      const block = partnersOf(main) ?? "";
+      expect(block, path).toContain(`<a href="${localizedPath(locale, `/tools/${listed.slug}`)}">Listed Co</a>`);
+      expect(block, path).not.toContain(t(locale, "disclosure.noPartners"));
+      for (const m of [draft, paused, bare]) {
+        expect(main, `${path} ${m.slug}`).not.toContain(m.slug);
+        expect(main, `${path} ${m.name}`).not.toContain(m.name);
+      }
+    }
+  });
+
+  it("puts the list after section 3 and before section 4, and keeps the static text free of partner names", async () => {
+    for (const [locale, doc] of [["en", LEGAL.disclosure.en], ["vi", LEGAL.disclosure.vi]] as const) {
+      expect(doc.sections).toHaveLength(4);
+      expect(doc.sections[2]?.heading.startsWith("3."), locale).toBe(true);
+      expect(doc.sections[3]?.heading.startsWith("4."), locale).toBe(true);
+      const text = textOf(mainOf(await (await get(localizedPath(locale, "/disclosure"))).text()));
+      const at3 = text.indexOf(doc.sections[2]?.heading ?? "missing");
+      const atList = text.indexOf("Listed Co") >= 0 ? text.indexOf("Listed Co") : text.indexOf(t(locale, "disclosure.noPartners"));
+      const at4 = text.indexOf(doc.sections[3]?.heading ?? "missing");
+      expect(at3, locale).toBeGreaterThan(-1);
+      expect(atList, locale).toBeGreaterThan(at3);
+      expect(at4, locale).toBeGreaterThan(atList);
+    }
+  });
+
+  it("zh-Hans and zh-Hant show the English text with the English-only notice, and the list line in their own language", async () => {
+    for (const locale of ["zh-Hans", "zh-Hant"] as const) {
+      const main = mainOf(await (await get(localizedPath(locale, "/disclosure"))).text());
+      expect(textOf(main), locale).toContain(t(locale, "legal.englishOnly"));
+      expect(textOf(main), locale).toContain(LEGAL.disclosure.en.title);
+      expect(textOf(main), locale).not.toContain(LEGAL.disclosure.vi.title);
+      expect(partnersOf(main), locale).toContain(`<a href="${localizedPath(locale, "/tools")}/`);
+    }
+  });
+});
+```
+
+(Bài cuối chạy sau bài hai nên danh sách đã có `Listed Co`; bài ba cũng dựa vào đó: giữ thứ tự khai báo, ghi chú trong test nếu đổi.)
+
+```bash
+npm test -w apps/web -- test/legal test/monetization/disclosure-page.test.ts test/db/partner-reads.test.ts test/design/layout.test.ts test/seo/sitemap.test.ts
+```
+
+Expected: FAIL (`/disclosure` là 404, hàm và khóa chưa có, footer chưa có link).
+
+- [ ] **Step 2: `content.ts`**
+
+`apps/web/src/legal/content.ts`: cập nhật comment đầu ("Terms, Privacy, Media kit and Disclosure"; thêm `disclosure.md` vào danh sách file nguồn, "Disclosure approved by the Owner 2026-10-05"); đổi `export type LegalPageId = "terms" | "privacy" | "mediaKit";` thành `... | "mediaKit" | "disclosure";`; thêm trước `export const LEGAL`:
+
+```ts
+const disclosureEn: LegalDoc = {
+  title: "Disclosure",
+  sections: [
+    {
+      heading: "1. Partner links",
+      blocks: [
+        { p: "Some links on VNX.SI lead to products or services of other companies through a partner or affiliate program. If you sign up or buy through one of these links, VNX.SI may earn a commission from that company. Pages with such links say so next to the link, and the links are marked `rel=\"sponsored\"` for search engines. When you follow a link we record the click; our Privacy Policy says what the record contains." },
+      ],
+    },
+    {
+      heading: "2. Rankings are not for sale",
+      blocks: [
+        { p: "A commission never changes how products or builders are ranked: not in search, not in the directory, not in Trending or the Top lists, and not in which builders we suggest for a request. Nobody can pay for a higher position, and the code that ranks results does not read partner or commission data." },
+      ],
+    },
+    {
+      heading: "3. Companies with an active partner program",
+      blocks: [{ p: "The companies below have an active partner program with VNX.SI." }],
+    },
+    { heading: "4. Questions", blocks: [{ p: "Email contact@vnx.si." }] },
+  ],
+};
+
+const disclosureVi: LegalDoc = {
+  title: "Công khai quan hệ đối tác",
+  sections: [
+    {
+      heading: "1. Link partner",
+      blocks: [
+        { p: "Một số link trên VNX.SI dẫn tới sản phẩm hoặc dịch vụ của công ty khác thông qua chương trình partner hoặc affiliate. Nếu bạn đăng ký hoặc mua qua một link như vậy, VNX.SI có thể nhận hoa hồng từ công ty đó. Trang có link như vậy sẽ ghi rõ cạnh link, và các link được đánh dấu `rel=\"sponsored\"` cho công cụ tìm kiếm. Khi bạn bấm một link, chúng tôi ghi lại lượt bấm; Chính sách quyền riêng tư nói rõ bản ghi gồm những gì." },
+      ],
+    },
+    {
+      heading: "2. Thứ hạng không bán",
+      blocks: [
+        { p: "Hoa hồng không bao giờ thay đổi cách xếp hạng sản phẩm hay builder: không trong tìm kiếm, không trong danh bạ, không trong Trending hay các danh sách Top, và không trong việc chúng tôi gợi ý builder nào cho một nhu cầu. Không ai trả tiền để lên vị trí cao hơn, và đoạn mã xếp hạng kết quả không đọc dữ liệu partner hay hoa hồng." },
+      ],
+    },
+    {
+      heading: "3. Công ty có chương trình partner đang hoạt động",
+      blocks: [{ p: "Các công ty dưới đây có chương trình partner đang hoạt động với VNX.SI." }],
+    },
+    { heading: "4. Câu hỏi", blocks: [{ p: "Gửi email tới contact@vnx.si." }] },
+  ],
+};
+
+/** Index of the section "3. …" in disclosureEn / disclosureVi: the active-partner list from the database goes right after it. */
+export const DISCLOSURE_PARTNERS_SECTION = 2;
+```
+
+và dòng cuối `LEGAL`: `disclosure: { rest: "/disclosure", dated: true, en: disclosureEn, vi: disclosureVi },` (sau `mediaKit`). (Các chuỗi trên chép từ khối B; khi có khác biệt với `docs/legal/disclosure.md`, file thắng.)
+
+- [ ] **Step 3: `LegalPage`, `ActivePartners`, db, route, i18n**
+
+`apps/web/src/views/LegalPage.tsx`: import `Child` (`import type { Child, FC } from "hono/jsx";`; nếu phiên bản `hono/jsx` không xuất `Child`, dùng `JSX.Element`); `META` thêm `disclosure: { title: "legal.disclosure.title", description: "legal.disclosure.description" },`; `Props` thêm `extras?: Partial<Record<number, Child>>`; hàm nhận `extras`; vòng mục đổi thành:
+
+```tsx
+          {doc.sections.map((section, i) => (
+            <>
+              <h2>{section.heading}</h2>
+              {section.blocks.map((block) => (
+                <BlockView block={block} />
+              ))}
+              {extras?.[i] ?? null}
+            </>
+          ))}
+```
+
+`apps/web/src/views/Disclosure.tsx`: thêm
+
+```tsx
+import { localizedPath } from "../i18n/locales.ts"; // (đã import ở Task 5)
+
+/** /disclosure §3: the companies with an active partner program, from the database. The `lang` keeps the "none" line in the page's language inside the English-only text of zh-*. */
+export const ActivePartners: FC<{ locale: Locale; partners: readonly { slug: string; name: string }[] }> = ({ locale, partners }) => {
+  const tr = translator(locale);
+  return (
+    <div lang={locale} data-partners="active">
+      {partners.length === 0 ? (
+        <p>{tr("disclosure.noPartners")}</p>
+      ) : (
+        <ul>
+          {partners.map((p) => (
+            <li>
+              <a href={localizedPath(locale, `/tools/${p.slug}`)}>{p.name}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+```
+
+`apps/web/src/db/merchants.ts` (sau `listSitemapMerchants`):
+
+```ts
+/** For /disclosure §3: active merchants with at least one active program, by name. Nothing else is listed (draft, paused, ended programs, paused or archived merchants). */
+export async function listActiveProgramMerchants(db: D1Database): Promise<{ slug: string; name: string }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT m.slug, m.name FROM merchants m JOIN partner_programs p ON p.merchant_id = m.id
+       WHERE m.status = 'active' AND p.status = 'active' GROUP BY m.id ORDER BY m.name COLLATE NOCASE, m.id`,
+    )
+    .all<{ slug: string; name: string }>();
+  return results;
+}
+```
+
+`apps/web/src/routes/legal.tsx` thành:
+
+```tsx
+import type { Hono } from "hono";
+import { listActiveProgramMerchants } from "../db/merchants.ts";
+import type { AppEnv } from "../env.ts";
+import { onLocalized } from "../http/localized.ts";
+import { siteOrigin } from "../http/origin.ts";
+import { DISCLOSURE_PARTNERS_SECTION, LEGAL, type LegalPageId } from "../legal/content.ts";
+import { ActivePartners } from "../views/Disclosure.tsx";
+import { LegalPage } from "../views/LegalPage.tsx";
+import { page } from "../views/render.ts";
+
+/** /terms, /privacy, /media-kit (VNX-0705a) and /disclosure (VNX-2104b) in every locale. Only /disclosure reads the database. */
+export function registerLegalRoutes(app: Hono<AppEnv>) {
+  for (const id of Object.keys(LEGAL) as LegalPageId[]) {
+    onLocalized(app, "get", LEGAL[id].rest, async (c) => {
+      const locale = c.get("locale");
+      const extras =
+        id === "disclosure"
+          ? { [DISCLOSURE_PARTNERS_SECTION]: <ActivePartners locale={locale} partners={await listActiveProgramMerchants(c.env.DB)} /> }
+          : undefined;
+      return page(c, <LegalPage locale={locale} origin={siteOrigin(c)} signedIn={c.get("user") !== null} id={id} extras={extras} />);
+    });
+  }
+}
+```
+
+i18n (đủ 4 locale, thêm cuối mỗi file locale; `test/i18n/parity.test.ts` bắt thiếu):
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `legal.disclosure.title` | Disclosure | Công khai quan hệ đối tác | 披露声明 | 揭露聲明 |
+| `legal.disclosure.description` | How VNX.SI earns from partner links, and why rankings are never for sale. | VNX.SI có thể nhận hoa hồng từ link partner ra sao, và vì sao thứ hạng không bán. | VNX.SI 如何通过合作链接获得佣金，以及为什么排名绝不出售。 | VNX.SI 如何透過合作連結獲得佣金，以及為什麼排名絕不出售。 |
+| `footer.disclosure` | Disclosure | Công khai quan hệ đối tác | 披露声明 | 揭露聲明 |
+| `disclosure.noPartners` | None at the moment. | Hiện chưa có. | 目前没有。 | 目前沒有。 |
+
+`disclosure.noPartners` là câu chữ Owner đã duyệt (khối B); ba khóa còn lại là chuỗi giao diện của Planner (không có khẳng định về đối tác).
+
+```bash
+npm test -w apps/web -- test/legal test/monetization/disclosure-page.test.ts test/db/partner-reads.test.ts test/i18n/parity.test.ts
+```
+
+Expected: PASS (trừ footer, sitemap, layout: Step 4 và 5).
+
+- [ ] **Step 4: Footer**
+
+`apps/web/src/views/Layout.tsx`, nhóm Company, ngay sau dòng link Privacy thêm:
+
+```tsx
+              <a href={localizedPath(locale, "/disclosure")}>{tr("footer.disclosure")}</a>
+```
+
+```bash
+npm test -w apps/web -- test/legal/footer.test.ts test/design
+```
+
+Expected: PASS (`layout.test.ts` đã mong đợi link mới; `assets.test.ts` không đổi vì không có tài nguyên mới).
+
+- [ ] **Step 5: Sitemap**
+
+`apps/web/src/routes/seo.ts`: thêm `{ rest: "/disclosure", localized: true },` ngay sau `{ rest: "/privacy", localized: true },` (hoặc cuối nhóm trang luật; thứ tự không ảnh hưởng test).
+
+```bash
+npm test -w apps/web -- test/seo
+```
+
+Expected: PASS (`/disclosure` 4 dòng kèm alternate; canonical + hreflang do `LegalPage` / `Layout` như `/terms`, test AC1 của `pages.test.ts` đã bao phủ `/disclosure` nhờ `PAGES`).
+
+- [ ] **Step 6: Test kiến trúc**
+
+`apps/web/test/architecture.test.ts`: `MONEY_ALLOWED` thêm `"../src/routes/legal.tsx"` (và vào mảng sắp xếp của bài "danh sách đúng", giữ nguyên các mục Task 5): sau Task 6 mảng đúng 11 file: `db/audit.ts`, `db/clicks.ts`, `db/merchants.ts`, `db/offers.ts`, `db/programs.ts`, `jobs/daily.ts`, `routes/admin-merchants.tsx`, `routes/go.ts`, `routes/legal.tsx`, `routes/seo.ts`, `routes/tools.tsx`. Đổi tên bài thành "after Task 6 …" và chú thích (Task 6: `routes/legal.tsx`).
+
+```bash
+npm test -w apps/web -- test/architecture.test.ts
+grep -rniE "elevenlabs|partnerstack" apps/web/src
+```
+
+Expected: PASS; `grep` rỗng (kể cả `legal/content.ts`).
+
+- [ ] **Step 7: Kiểm toàn bộ và commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/legal/content.ts apps/web/src/views/LegalPage.tsx apps/web/src/views/Disclosure.tsx apps/web/src/views/Layout.tsx apps/web/src/routes/legal.tsx apps/web/src/routes/seo.ts apps/web/src/db/merchants.ts apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/architecture.test.ts apps/web/test/legal/content.test.ts apps/web/test/legal/pages.test.ts apps/web/test/legal/footer.test.ts apps/web/test/design/layout.test.ts apps/web/test/seo/sitemap.test.ts apps/web/test/db/partner-reads.test.ts apps/web/test/monetization/disclosure-page.test.ts
+git commit -m "feat(web): /disclosure page with active partner list (VNX-2104b)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+Expected: typecheck sạch, toàn bộ test xanh. Không `git add docs/legal/disclosure.md` (Controller đã commit riêng).
+
+**Tiêu chí chấp nhận (mỗi mục có lệnh):**
+- `npm test -w apps/web -- test/legal/content.test.ts`: `/disclosure` EN và VI khớp từng dòng với `docs/legal/disclosure.md`; không còn `{date}`, `**`, dấu backtick trong văn bản vẽ ra.
+- `npm test -w apps/web -- test/legal/pages.test.ts`: `/disclosure` 200 ở 4 locale, một `h1`, canonical, hreflang 4 locale + `x-default`, không `robots`, meta description; ngày cập nhật hiện (`dated`); `zh-*` hiện bản EN kèm câu "chỉ có bản tiếng Anh" trong `lang="en"`.
+- `npm test -w apps/web -- test/monetization/disclosure-page.test.ts`: không chương trình `active` → đúng một dòng `disclosure.noPartners` ở 4 locale, không link; có → tên merchant link `/tools/<slug>` (tiền tố locale); chương trình `draft` / `paused` / `ended`, merchant `paused` / `archived`, merchant không chương trình không xuất hiện; khối nằm sau mục 3, trước mục 4.
+- `npm test -w apps/web -- test/db/partner-reads.test.ts`: `listActiveProgramMerchants` đúng tập, mỗi merchant một lần, xếp theo tên.
+- Footer có link `/disclosure` ở 4 locale (`test/legal/footer.test.ts`, `test/design/layout.test.ts`); `/disclosure` có trong sitemap 4 locale kèm alternate (`test/seo/sitemap.test.ts`).
+- `MONEY_ALLOWED` đúng 11 file; `grep -rniE "elevenlabs|partnerstack" apps/web/src` rỗng.
+- `npm run typecheck -w apps/web`, `npm test` xanh. Diff ước tính ≈ 430 dòng không tính locale (`content.ts` 50, `LegalPage` 8, `Disclosure` 20, db 12, route 20, footer 1, seo 1, kiến trúc 4; test: `disclosure-page` 85, `partner-reads` 30, sửa test cũ 15, bài danh sách) nên không tách.
 
 Sau Task 6, nghĩa vụ để lại cho M7: (1) VNX-0707 dùng lại bảng `outbound_clicks`, `db/clicks.ts` và `routes/go.ts` của epic này, **không tạo migration thứ hai** cho bảng này (chỉ thêm `/go/p/:slug/{demo,site}`, `product_daily_stats.outbound_clicks` và `visitor_hash`); (2) migration của M7 đánh số sau số cuối của epic này (0012 nếu không đổi); (3) M7 thêm các file Trending / Top vào `RANKING_FILES` của test kiến trúc và hợp nhất `isBotRequest` với luật bot của spec 8.11; (4) giữ 13 tháng đã chốt, M7 không đặt lại; (5) M7 cập nhật câu Privacy "hiện chưa gắn mã nhận diện người xem" khi thêm `visitor_hash`. Reviewer cập nhật `.ai/context/CURRENT-STATUS.md` (trạng thái VNX-2101–2104, SHA, nghĩa vụ còn treo: Owner điền `terms_url` / `terms_verified_at`, tham số sub-id, bật cờ trên production, thứ tự deploy `0009` → `0010` → `0011`) và ghi VNX-2105–2109 vẫn để sau.
