@@ -47,6 +47,7 @@ const WRITERS: Record<string, string> = {
   offers: "../src/db/offers.ts",
   outbound_clicks: "../src/db/clicks.ts",
   product_daily_stats: "../src/db/stats.ts",
+  public_stats: "../src/db/public-stats.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {
@@ -103,8 +104,9 @@ const RANKING_FILES = [
   "../src/views/DirectoryPage.tsx",
   "../src/routes/admin-requests.tsx",
   "../src/views/admin/RequestDetailPage.tsx",
-  // VNX-0702a (public statistics): Trending, Top builders/products, Live. The db file joins in 5b.
+  // VNX-0702a (public statistics): Trending, Top builders/products, Live.
   "../src/domain/public-stats.ts",
+  "../src/db/public-stats.ts",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
@@ -196,9 +198,16 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   });
 
   it("the public statistics files are ranking files and mention no money (ADR-004, review L3)", () => {
-    for (const file of ["../src/domain/public-stats.ts"]) {
+    for (const file of ["../src/domain/public-stats.ts", "../src/db/public-stats.ts"]) {
       expect(RANKING_FILES, file).toContain(file);
       expect(sources[file] ?? "", file).not.toMatch(/sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|price|outbound_clicks/i);
+    }
+  });
+
+  it("the public statistics files read only allowed tables (no money table, no outbound_clicks)", () => {
+    for (const file of ["../src/domain/public-stats.ts", "../src/db/public-stats.ts"]) {
+      for (const table of MONEY_TABLES) expect(touchesMoneyTable(sources[file] ?? "", table), `${file} reads ${table}`).toBe(false);
+      expect(MONEY_ALLOWED.has(file), file).toBe(false);
     }
   });
 

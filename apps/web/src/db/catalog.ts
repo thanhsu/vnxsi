@@ -30,7 +30,7 @@ const toItem = (r: ItemRow): CatalogItem => ({
 
 // SQL is assembled only from these constants; user input is always bound.
 const JOINS = "JOIN builders b ON b.user_id = p.builder_id JOIN users u ON u.id = p.builder_id";
-const BADGE_SCORE_SQL = `COALESCE((SELECT MAX(CASE v.kind ${Object.entries(BADGE_SCORE)
+export const BADGE_SCORE_SQL = `COALESCE((SELECT MAX(CASE v.kind ${Object.entries(BADGE_SCORE)
   .map(([kind, score]) => `WHEN '${kind}' THEN ${score}`)
   .join(" ")} END) FROM product_verifications v WHERE v.product_id = p.id AND v.revoked_at IS NULL), 0)`;
 const MIN_PRICE_SQL = "(SELECT MIN(t.price_cents) FROM pricing_tiers t WHERE t.product_id = p.id AND t.price_cents IS NOT NULL)";
