@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import type { AppEnv } from "../../src/env.ts";
 import { CONTENT_SECURITY_POLICY, securityHeaders } from "../../src/http/security-headers.ts";
+import { signIn } from "../fixtures.ts";
 import { getReq, testEnv } from "../helpers.ts";
 
 describe("securityHeaders middleware (VNX-0803 F2)", () => {
@@ -77,6 +78,20 @@ describe("security headers on the real app (VNX-0803 F2)", () => {
       for (const m of html.matchAll(/<script\b[^>]*>/g)) {
         expect(m[0], `${path}: ${m[0]}`).toMatch(/^<script (src="\/assets\/[^"]+"|src="https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js"|type="application\/ld\+json")/);
       }
+    }
+  });
+
+  it("CSP needs nothing inline on the Ops console either (VNX-2503): /ops signed in as the root Owner", async () => {
+    const { cookie } = await signIn("owner@vnx.si");
+    const res = await createApp().request(getReq("/ops", cookie), undefined, testEnv);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-security-policy")).toBe(CONTENT_SECURITY_POLICY);
+    const html = await res.text();
+    expect(html).not.toMatch(/\sstyle="/);
+    expect(html).not.toMatch(/<style\b/);
+    expect(html).not.toMatch(/\son[a-z]+="/);
+    for (const m of html.matchAll(/<script\b[^>]*>/g)) {
+      expect(m[0], `/ops: ${m[0]}`).toMatch(/^<script src="\/assets\/[^"]+"/);
     }
   });
 });

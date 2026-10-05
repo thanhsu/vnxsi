@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { en } from "../../src/i18n/messages/en.ts";
+import { LOCALES } from "../../src/i18n/locales.ts";
+import { en, type Messages } from "../../src/i18n/messages/en.ts";
+import { t } from "../../src/i18n/t.ts";
 import { vi } from "../../src/i18n/messages/vi.ts";
 import { zhHans } from "../../src/i18n/messages/zh-hans.ts";
 import { zhHant } from "../../src/i18n/messages/zh-hant.ts";
@@ -33,6 +35,24 @@ describe("locale parity (ADR-003, ADR-010 §1)", () => {
       expect(parityProblems(en, messages)).toEqual([]);
     });
   }
+});
+
+describe("ops.* keys live in EN only (review VNX-2502 F1, ADR-010 §1)", () => {
+  it("en.ts has ops.* keys, and the other locales type-check without them", () => {
+    const opsKeys = Object.keys(en).filter(isOpsKey);
+    expect(opsKeys.length).toBeGreaterThan(0);
+    // The non-EN catalogue type leaves ops.* out, so adding one there is a type error.
+    // @ts-expect-error ops.* is not part of a non-EN catalogue
+    const bad: Messages = { ...vi, "ops.nav.overview": "Tổng quan" };
+    expect(bad).toBeDefined();
+  });
+
+  it("t() reads an ops.* key from EN whatever the locale", () => {
+    for (const locale of LOCALES) {
+      expect(t(locale, "ops.nav.overview"), locale).toBe(en["ops.nav.overview"]);
+      expect(t(locale, "ops.layout.title", { page: "Overview" }), locale).toBe("Overview · VNX.SI Ops");
+    }
+  });
 });
 
 describe("parity rule itself", () => {

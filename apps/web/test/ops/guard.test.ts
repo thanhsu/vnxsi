@@ -269,7 +269,9 @@ describe("no-store and noindex on every /ops response (AC3, spec §5)", () => {
       for (const opts of [{}, { cookie: root.cookie }, { cookie: root.cookie, method: "POST" as const }]) {
         const { res } = await send(app, path, opts);
         const name = `${opts.method ?? "GET"} ${path} ${opts.cookie ? "signed in" : "anonymous"}`;
-        expect(res.status, name).toBe(404);
+        // VNX-2503: GET /ops is the Overview page for a signed-in Owner; everything else here is still the sealed 404.
+        const overview = path === "/ops" && opts.cookie !== undefined && !("method" in opts);
+        expect(res.status, name).toBe(overview ? 200 : 404);
         expect(res.headers.get("cache-control"), name).toBe("no-store");
         expect(res.headers.get("x-robots-tag"), name).toBe("noindex, nofollow");
       }
