@@ -19,3 +19,4 @@ Mỗi dòng một quyết định; chi tiết trong ADR hoặc spec.
 | 2026-10-04 | Quảng cáo chỉ thiết kế, chưa code | ADR-009 (Accepted) |
 | 2026-10-04 | `/go/p/:slug/{demo,site}` + `outbound_clicks` làm ở M7, thay `/p/:slug/demo` | Phụ lục monetization mục 2 |
 | 2026-10-04 | Owner cá nhân nhận hoa hồng partner; lead dùng lại M6 không phí; nội dung markdown giới hạn chỉ admin viết; ngưỡng index 5/5/3/2 | Audit monetization Q4, Q7–Q9 |
+| 2026-10-05 | Ops console `/ops` (tiếng Anh), 4 vai trò trong DB, `ADMIN_EMAILS` = Owner gốc, 404 kín, audit luôn ghi khi chặn thao tác lên Owner gốc | ADR-010, spec Ops console |
