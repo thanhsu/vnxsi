@@ -18,4 +18,15 @@ describe("Cache-Control: no-store on private pages", () => {
     expect((await app.request(getReq("/products"), undefined, testEnv)).headers.get("cache-control")).toBeNull();
     expect((await app.request(getReq("/hubris"), undefined, testEnv)).headers.get("cache-control")).toBeNull();
   });
+
+  it("marks every HTML page for a signed-in person, but not their assets (VNX-0803 F8)", async () => {
+    const user = await signIn("ns-u@vnx.si");
+    const app = createApp();
+    for (const path of ["/contact", "/request", "/vi", "/products", "/login"]) {
+      expect((await app.request(getReq(path, user.cookie), undefined, testEnv)).headers.get("cache-control"), path).toBe("no-store");
+    }
+    expect((await app.request(getReq("/assets/app.css", user.cookie), undefined, testEnv)).headers.get("cache-control")).not.toBe("no-store");
+    expect((await app.request(getReq("/robots.txt", user.cookie), undefined, testEnv)).headers.get("cache-control")).toBe("public, max-age=3600");
+    expect((await app.request(getReq("/contact"), undefined, testEnv)).headers.get("cache-control")).toBeNull();
+  });
 });
