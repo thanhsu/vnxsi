@@ -22,7 +22,7 @@ import { page } from "../views/render.ts";
 
 export type BadgeError = "kind" | "evidence" | "reason";
 
-type AdminProductAction = Extract<ProductAction, "approve" | "request_changes" | "suspend" | "unsuspend">;
+export type AdminProductAction = Extract<ProductAction, "approve" | "request_changes" | "suspend" | "unsuspend">;
 
 /** request_changes must say why (spec §5.5: review_note bắt buộc). Stored in products.review_note. */
 const NOTE: Record<AdminProductAction, "required" | "optional" | "none"> = { approve: "none", request_changes: "required", suspend: "optional", unsuspend: "none" };
@@ -59,23 +59,42 @@ async function notify(c: Context<AppEnv>, item: ProductWithBuilder, action: "app
   }
 }
 
-async function decideProduct(c: Context<AppEnv>, action: AdminProductAction) {
+export type ProductDecision =
+  | { kind: "not_found" }
+  | { kind: "invalid_note"; item: ProductWithBuilder }
+  | { kind: "conflict" }
+  | { kind: "done"; productId: string; mailed: boolean };
+
+/** /admin's answer to each outcome of decideProduct (unchanged behaviour). */
+async function decide(c: Context<AppEnv>, action: AdminProductAction) {
+  const r = await decideProduct(c, action);
+  if (r.kind === "not_found") return errorResponse(c, "notFound", 404);
+  if (r.kind === "invalid_note") return productDetail(c, r.item, null, 400, action);
+  if (r.kind === "conflict") return errorResponse(c, "conflict", 409);
+  return c.redirect(localizedPath(c.get("locale"), `/admin/products/${r.productId}?done=${r.mailed ? "1" : "mail_failed"}`), 303);
+}
+
+/**
+ * Shared by every status action on a product, from /admin and /ops (VNX-2504a2): validate, compare-and-set in one
+ * batch with the listed badge and the audit row, notify. The caller renders the outcome. Reads `:id` from the route.
+ */
+export async function decideProduct(c: Context<AppEnv>, action: AdminProductAction): Promise<ProductDecision> {
   const admin = c.get("user")!;
   const item = await findProductWithBuilder(c.env.DB, c.req.param("id") ?? "");
-  if (!item) return errorResponse(c, "notFound", 404);
+  if (!item) return { kind: "not_found" };
 
   let note: string | null = null;
   const policy = NOTE[action];
   if (policy !== "none") {
     const body = await c.req.parseBody();
     const parsed = NoteSchema[policy].safeParse(normalizeNewlines(typeof body.note === "string" ? body.note : ""));
-    if (!parsed.success) return productDetail(c, item, null, 400, action);
+    if (!parsed.success) return { kind: "invalid_note", item };
     note = parsed.data || null;
   }
 
   const p = item.product;
   const next = transition(p.status, action, "admin");
-  if (!next.ok) return errorResponse(c, "conflict", 409);
+  if (!next.ok) return { kind: "conflict" };
   const now = new Date().toISOString();
   // One transaction: status, the system "listed" badge and the audit row commit together. Everything after the
   // compare-and-set is guarded on it, so a lost race (0 rows changed) writes nothing.
@@ -87,9 +106,9 @@ async function decideProduct(c: Context<AppEnv>, action: AdminProductAction) {
   }
   statements.push(auditStatement(c.env.DB, { actorUserId: admin.id, action: `product.${action}`, entity: "product", entityId: p.id, data: { from: p.status, to: next.status, note }, now }, guard));
   const updated = returnedProduct((await c.env.DB.batch(statements))[0]);
-  if (!updated) return errorResponse(c, "conflict", 409);
+  if (!updated) return { kind: "conflict" };
   const mailed = action === "approve" || action === "request_changes" ? await notify(c, { ...item, product: updated }, action, note) : true;
-  return c.redirect(localizedPath(c.get("locale"), `/admin/products/${p.id}?done=${mailed ? "1" : "mail_failed"}`), 303);
+  return { kind: "done", productId: p.id, mailed };
 }
 
 const GRANTABLE = new Set<BadgeKind>(["demo_verified", "in_production"]);
@@ -116,34 +135,49 @@ export function registerAdminProductRoutes(app: Hono<AppEnv>) {
   });
 
   for (const action of ["approve", "request_changes", "suspend", "unsuspend"] as const) {
-    onLocalized(app, "post", `/admin/products/:id/${action}`, requireAdmin, (c) => decideProduct(c, action));
+    onLocalized(app, "post", `/admin/products/:id/${action}`, requireAdmin, (c) => decide(c, action));
   }
 
-  onLocalized(app, "post", "/admin/products/:id/badges", requireAdmin, async (c) => {
-    const item = await findProductWithBuilder(c.env.DB, c.req.param("id") ?? "");
-    if (!item || item.product.status === "archived") return errorResponse(c, "notFound", 404);
-    const body = await c.req.parseBody();
-    const kind = body.kind as BadgeKind;
-    if (!GRANTABLE.has(kind)) return productDetail(c, item, null, 400, undefined, "kind");
-    const evidence = Evidence.safeParse(normalizeNewlines(typeof body.evidence === "string" ? body.evidence : ""));
-    if (!evidence.success) return productDetail(c, item, null, 400, undefined, "evidence");
-    const now = new Date().toISOString();
-    const admin = c.get("user")!;
-    if (!(await grantBadge(c.env.DB, { productId: item.product.id, kind, verifiedBy: admin.id, evidence: evidence.data, now }))) return errorResponse(c, "conflict", 409);
-    await writeAudit(c.env.DB, { actorUserId: admin.id, action: "badge.grant", entity: "product", entityId: item.product.id, data: { kind, evidence: evidence.data }, now });
-    return c.redirect(localizedPath(c.get("locale"), `/admin/products/${item.product.id}?done=1`), 303);
-  });
+  onLocalized(app, "post", "/admin/products/:id/badges", requireAdmin, async (c) => adminBadgeAnswer(c, await grantProductBadge(c)));
+  onLocalized(app, "post", "/admin/products/:id/badges/:kind/revoke", requireAdmin, async (c) => adminBadgeAnswer(c, await revokeProductBadge(c)));
+}
 
-  onLocalized(app, "post", "/admin/products/:id/badges/:kind/revoke", requireAdmin, async (c) => {
-    const item = await findProductWithBuilder(c.env.DB, c.req.param("id") ?? "");
-    const kind = c.req.param("kind") as BadgeKind;
-    if (!item || !GRANTABLE.has(kind)) return errorResponse(c, "notFound", 404);
-    const body = await c.req.parseBody();
-    const reason = Reason.safeParse(normalizeNewlines(typeof body.reason === "string" ? body.reason : ""));
-    if (!reason.success) return productDetail(c, item, null, 400, undefined, "reason");
-    const now = new Date().toISOString();
-    if (!(await revokeBadge(c.env.DB, { productId: item.product.id, kind, reason: reason.data, now }))) return errorResponse(c, "conflict", 409);
-    await writeAudit(c.env.DB, { actorUserId: c.get("user")!.id, action: "badge.revoke", entity: "product", entityId: item.product.id, data: { kind, reason: reason.data }, now });
-    return c.redirect(localizedPath(c.get("locale"), `/admin/products/${item.product.id}?done=1`), 303);
-  });
+export type BadgeDecision = { kind: "not_found" } | { kind: "invalid"; item: ProductWithBuilder; error: BadgeError } | { kind: "conflict" } | { kind: "done"; productId: string };
+
+/** /admin's answer to each outcome of grantProductBadge and revokeProductBadge (unchanged behaviour). */
+function adminBadgeAnswer(c: Context<AppEnv>, r: BadgeDecision) {
+  if (r.kind === "not_found") return errorResponse(c, "notFound", 404);
+  if (r.kind === "invalid") return productDetail(c, r.item, null, 400, undefined, r.error);
+  if (r.kind === "conflict") return errorResponse(c, "conflict", 409);
+  return c.redirect(localizedPath(c.get("locale"), `/admin/products/${r.productId}?done=1`), 303);
+}
+
+/** Grants Demo verified or In production with evidence, then audits it (spec §7.2). Shared by /admin and /ops. Reads `:id`. */
+export async function grantProductBadge(c: Context<AppEnv>): Promise<BadgeDecision> {
+  const item = await findProductWithBuilder(c.env.DB, c.req.param("id") ?? "");
+  if (!item || item.product.status === "archived") return { kind: "not_found" };
+  const body = await c.req.parseBody();
+  const kind = body.kind as BadgeKind;
+  if (!GRANTABLE.has(kind)) return { kind: "invalid", item, error: "kind" };
+  const evidence = Evidence.safeParse(normalizeNewlines(typeof body.evidence === "string" ? body.evidence : ""));
+  if (!evidence.success) return { kind: "invalid", item, error: "evidence" };
+  const now = new Date().toISOString();
+  const admin = c.get("user")!;
+  if (!(await grantBadge(c.env.DB, { productId: item.product.id, kind, verifiedBy: admin.id, evidence: evidence.data, now }))) return { kind: "conflict" };
+  await writeAudit(c.env.DB, { actorUserId: admin.id, action: "badge.grant", entity: "product", entityId: item.product.id, data: { kind, evidence: evidence.data }, now });
+  return { kind: "done", productId: item.product.id };
+}
+
+/** Revokes a granted badge with a reason, then audits it. Shared by /admin and /ops. Reads `:id` and `:kind`. */
+export async function revokeProductBadge(c: Context<AppEnv>): Promise<BadgeDecision> {
+  const item = await findProductWithBuilder(c.env.DB, c.req.param("id") ?? "");
+  const kind = c.req.param("kind") as BadgeKind;
+  if (!item || !GRANTABLE.has(kind)) return { kind: "not_found" };
+  const body = await c.req.parseBody();
+  const reason = Reason.safeParse(normalizeNewlines(typeof body.reason === "string" ? body.reason : ""));
+  if (!reason.success) return { kind: "invalid", item, error: "reason" };
+  const now = new Date().toISOString();
+  if (!(await revokeBadge(c.env.DB, { productId: item.product.id, kind, reason: reason.data, now }))) return { kind: "conflict" };
+  await writeAudit(c.env.DB, { actorUserId: c.get("user")!.id, action: "badge.revoke", entity: "product", entityId: item.product.id, data: { kind, reason: reason.data }, now });
+  return { kind: "done", productId: item.product.id };
 }

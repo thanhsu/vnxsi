@@ -698,6 +698,13 @@ textarea.ops-in { width: 100%; min-height: 76px; padding: 8px 10px; resize: vert
 .ops-history { overflow: hidden; }
 .ops-tl { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0 16px 16px; }
 .ops-tl li { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+/* Ops product detail (VNX-2504a2): plain lists, the badge list with its revoke confirmation, the grant form. */
+.ops-list { margin: 0; padding-left: 18px; }
+.ops-list li + li { margin-top: 4px; }
+.ops-p { margin: 0; }
+.ops-badges { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; }
+.ops-badges > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ops-badge-sec > form { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 0; padding-top: 12px; border-top: 1px solid var(--border); }
 @media (max-width: 1023px) {
   .ops-split { grid-template-columns: minmax(0, 1fr); }
 }

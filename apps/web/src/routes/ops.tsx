@@ -38,7 +38,7 @@ export function registeredPaths(app: Hono<AppEnv>): IsRegistered {
   };
 }
 
-const MENU_COUNTS: Record<OpsMenuCount, (db: D1Database) => Promise<{ count: number }>> = { builders: countBuilderReviewQueue };
+const MENU_COUNTS: Record<OpsMenuCount, (db: D1Database) => Promise<{ count: number }>> = { builders: countBuilderReviewQueue, products: countProductReviewQueue };
 
 /**
  * What OpsLayout needs for the signed-in member on `currentPath`. Only after requireOps (opsRole and user are set).

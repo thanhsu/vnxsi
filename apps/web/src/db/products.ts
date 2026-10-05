@@ -268,6 +268,34 @@ export async function listRecentlyEdited(db: D1Database, since: string, limit = 
   return results.map(toWithBuilder);
 }
 
+/** Which Ops Products list (VNX-2504a2): one status, or the "recently edited" view of listRecentlyEdited. */
+export type ProductListing = { status: ProductStatus } | { editedSince: string };
+
+/**
+ * Ops Products list (VNX-2504a2): the listing, optionally narrowed to a case-insensitive substring of the name or slug.
+ * `instr` takes the text literally (no LIKE wildcards). Same order and cap as listProductsByStatus / listRecentlyEdited.
+ */
+export async function searchProducts(db: D1Database, listing: ProductListing, q: string | null, limit = 200): Promise<ProductWithBuilder[]> {
+  const edited = "editedSince" in listing;
+  if (!q) return edited ? listRecentlyEdited(db, listing.editedSince, limit) : listProductsByStatus(db, listing.status, limit);
+  const where = edited ? "p.status = 'published' AND p.edited_after_publish_at >= ?1" : "p.status = ?1";
+  const order = edited ? "p.edited_after_publish_at DESC, p.id" : "p.updated_at, p.id";
+  const { results } = await db
+    .prepare(`${WITH_BUILDER} WHERE ${where} AND (instr(lower(p.name), ?2) > 0 OR instr(lower(p.slug), ?2) > 0) ORDER BY ${order} LIMIT ?3`)
+    .bind(edited ? listing.editedSince : listing.status, q.toLowerCase(), limit)
+    .all<WithBuilderRow>();
+  return results.map(toWithBuilder);
+}
+
+/** Ops Products tabs (VNX-2504a2): products in each status, and published products edited since `editedSince`. */
+export async function countProductsByStatus(db: D1Database, editedSince: string): Promise<{ byStatus: Partial<Record<ProductStatus, number>>; edited: number }> {
+  const [byStatus, edited] = await Promise.all([
+    db.prepare("SELECT status, COUNT(*) AS n FROM products GROUP BY status").all<{ status: ProductStatus; n: number }>(),
+    db.prepare("SELECT COUNT(*) AS n FROM products WHERE status = 'published' AND edited_after_publish_at >= ?1").bind(editedSince).first<{ n: number }>(),
+  ]);
+  return { byStatus: Object.fromEntries(byStatus.results.map((r) => [r.status, r.n])), edited: edited?.n ?? 0 };
+}
+
 /** Spec §7.2: only published products of approved builders on active accounts are public. Aliases: p, b, u. */
 export const PUBLIC_PRODUCT = "p.status = 'published' AND b.status = 'approved' AND u.status = 'active'";
 
