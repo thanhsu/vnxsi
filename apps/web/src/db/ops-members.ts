@@ -1,4 +1,5 @@
 import { opsInviteExpiresAt, type GrantableRole, type OpsInvite, type OpsInviteStatus, type OpsMember, type OpsMemberListing } from "../domain/ops.ts";
+import type { UserStatus } from "../domain/user.ts";
 import { ulid } from "../lib/ulid.ts";
 
 /**
@@ -39,6 +40,25 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 export async function findOpsMember(db: D1Database, userId: string): Promise<OpsMember | null> {
   const row = await db.prepare("SELECT * FROM ops_members WHERE user_id = ?1").bind(userId).first<MemberRow>();
   return row ? toMember(row) : null;
+}
+
+/** What the Ops guard needs to resolve a role (spec §3.2): the user's status and e-mail, and their member role if any. */
+export interface OpsAccess {
+  userStatus: UserStatus;
+  email: string;
+  memberRole: GrantableRole | null;
+}
+
+/**
+ * One query per request, never cached (VNX-2502): reads `users` and `ops_members` together so the guard sees a
+ * suspension, an e-mail change or a removed member on the very next request. Null when the user does not exist.
+ */
+export async function findOpsAccess(db: D1Database, userId: string): Promise<OpsAccess | null> {
+  const row = await db
+    .prepare("SELECT u.status, u.email, m.role FROM users u LEFT JOIN ops_members m ON m.user_id = u.id WHERE u.id = ?1")
+    .bind(userId)
+    .first<{ status: UserStatus; email: string; role: GrantableRole | null }>();
+  return row ? { userStatus: row.status, email: row.email, memberRole: row.role } : null;
 }
 
 /** Every member with their e-mail, earliest grant first. */

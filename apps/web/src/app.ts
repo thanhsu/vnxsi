@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { sessionMiddleware } from "./auth/middleware.ts";
+import { opsHeaders, opsNotFound } from "./auth/ops.ts";
 import type { AppEnv } from "./env.ts";
 import { noStorePrivate } from "./http/no-store.ts";
 import { requestBodyLimit } from "./http/body-limit.ts";
@@ -52,6 +53,9 @@ export function createApp() {
   app.use("*", requestBodyLimit);
   app.use("*", sessionMiddleware);
   app.use("*", noStorePrivate);
+  // Ops console (VNX-2502, spec §5): before any /ops route, so every /ops response is no-store + noindex.
+  app.use("/ops", opsHeaders);
+  app.use("/ops/*", opsHeaders);
 
   registerLandingRoutes(app);
   registerLegalRoutes(app);
@@ -86,6 +90,9 @@ export function createApp() {
   registerUserAdminRoutes(app);
   registerAdminFlagRoutes(app);
   registerAdminMerchantRoutes(app);
+  // Last in the Ops group: an unknown /ops path gets the same sealed 404 as a refused one (plan O1).
+  app.all("/ops", opsNotFound);
+  app.all("/ops/*", opsNotFound);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/*", (c) => c.json({ ok: false, error: "Not found" }, 404));
