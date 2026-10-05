@@ -59,10 +59,10 @@ describe("security headers on the real app (VNX-0803 F2)", () => {
     }
   });
 
-  it("sends no referrer from the magic-link and invite pages, the default elsewhere", async () => {
+  it("keeps referrers same-origin on the magic-link page, none on the invite redirect, the default elsewhere", async () => {
     const app = createApp();
     const get = (path: string) => app.request(getReq(path), undefined, testEnv);
-    expect((await get("/auth/verify?t=nope")).headers.get("referrer-policy")).toBe("no-referrer");
+    expect((await get("/auth/verify?t=nope")).headers.get("referrer-policy")).toBe("same-origin");
     expect((await get(`/join/${"a".repeat(22)}`)).headers.get("referrer-policy")).toBe("no-referrer");
     expect((await get("/login")).headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
   });

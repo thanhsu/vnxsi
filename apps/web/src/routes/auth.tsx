@@ -117,8 +117,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
   // VNX-0506: link scanners in corporate mail open links with GET; only the button (POST) spends the token.
   app.get("/auth/verify", async (c) => {
     c.header("Cache-Control", "no-store");
-    // The token is in the URL (GET) and in the form (POST): never leak the page's address (VNX-0803 F2).
-    c.header("Referrer-Policy", "no-referrer");
+    // The token is in the URL (GET) and in the form (POST): never leak the page's address cross-site (VNX-0803 F2).
+    // Not "no-referrer": that makes the browser send "Origin: null" on the form POST and originCheck refuses it (review F1).
+    c.header("Referrer-Policy", "same-origin");
     const raw = c.req.query("t") ?? "";
     const peek = await peekLoginToken(c.env.DB, raw, new Date(), VERIFY_PURPOSES);
     if (!peek.ok) return invalidLink(c, raw);
@@ -128,8 +129,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
 
   app.post("/auth/verify", async (c) => {
     c.header("Cache-Control", "no-store");
-    // The token is in the URL (GET) and in the form (POST): never leak the page's address (VNX-0803 F2).
-    c.header("Referrer-Policy", "no-referrer");
+    // The token is in the URL (GET) and in the form (POST): never leak the page's address cross-site (VNX-0803 F2).
+    // Not "no-referrer": that makes the browser send "Origin: null" on the form POST and originCheck refuses it (review F1).
+    c.header("Referrer-Policy", "same-origin");
     const form = await c.req.parseBody();
     const now = new Date();
     const result = await consumeLoginToken(c.env.DB, typeof form.t === "string" ? form.t : "", now, VERIFY_PURPOSES);
