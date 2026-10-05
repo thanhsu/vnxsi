@@ -1,10 +1,10 @@
 # CURRENT STATUS — VNX.SI
 
-_Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
+_Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude), phiên Ops._
 
 ## Tóm tắt
 - **EPIC 21 lát mỏng partner (2026-10-05):** **xong** trên nhánh `feat/epic21-partner-slice`: 11 task (VNX-2101, 2102a-1…4, 2102b-1/2, 2103-1/2, 2104a/b), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md`. Đã gộp `main` hai lần (`e77c769`, `9760016`). 1194 test, typecheck sạch; chạy cả bộ dưới tải máy có vài test 5 s timeout ở file có sẵn từ trước, chạy riêng thì xanh. Review: `.ai/reviews/EPIC21-partner-slice-review.md`, APPROVE WITH CHANGES. Đã merge vào `main` (`7622105`, đã push); chưa deploy (cần `db:migrate:remote` áp `0010`–`0012` trước). Chưa deploy; ElevenLabs chưa bật (xem "Điều kiện trước khi deploy").
-- **Ops console (2026-10-05):** Owner yêu cầu trang Ops riêng gồm 4 nhóm (gộp admin, tổng quan + sức khỏe, nội dung & marketing, cài đặt), chia O1 (khung, vai trò, audit, chuyển `/admin`) → O2 → O3 → O4. Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md` và ADR-010 **Accepted** (review `.ai/reviews/OPS-DESIGN-review.md`). Mockup O1 duyệt (canvas, `docs/design/mockups/ops/`); plan O1 `docs/superpowers/plans/2026-10-05-vnxsi-ops-o1.md` **APPROVED** (EPIC 25, VNX-2501…2509; lời mời Ops hết hạn 7 ngày). Bắt đầu sau khi EPIC 21 và VNX-0803 merge.
+- **Ops console (2026-10-05):** Owner yêu cầu trang Ops riêng gồm 4 nhóm (gộp admin, tổng quan + sức khỏe, nội dung & marketing, cài đặt), chia O1 (khung, vai trò, audit, chuyển `/admin`) → O2 → O3 → O4. Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md` và ADR-010 **Accepted** (review `.ai/reviews/OPS-DESIGN-review.md`). Mockup O1 duyệt (canvas, `docs/design/mockups/ops/`); plan O1 `docs/superpowers/plans/2026-10-05-vnxsi-ops-o1.md` **APPROVED** (EPIC 25, VNX-2501…2509; lời mời Ops hết hạn 7 ngày). **Phần đầu O1 đã merge vào `main`** (Owner 2026-10-05: "push merge và deploy"): VNX-2501 (migration `0013_ops_members`, quyền), 2502 (`requireOps`, 404 kín, header Ops), 2503 (khung + Overview), 2504a Builders, 2504a2 Products, 2504b Requests; tất cả review APPROVE. Lúc này chỉ Owner gốc (`ADMIN_EMAILS`) vào được `/ops`; `/admin` giữ nguyên. Còn lại trên nhánh `feat/ops-o1`: 2504c (Inquiries + Invites, đang làm), 2505, 2506 (Team & roles), 2507 (Audit log), 2508 (chuyển `/admin`), 2509.
 - **Production (2026-10-05, lần 2):** `main` `3c77ac5` (M6 + PR #6 bật lại R2) **đã deploy** (version `74b85569`, binding `MEDIA` = `vnxsi-media`, cron `0 1 * * *`). D1 production đã áp `0001`–`0009`. Smoke: 15 route OK (gồm `/request`), R2 đọc qua `/media` đã kiểm bằng object tạm (đã xóa). Upload ảnh và submit product giờ dùng được.
 - **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Đã merge vào `main` (`e9f53a2`, đã push).
 - **Cách làm từ M6 (Owner, 2026-10-04):** phiên Opus điều phối các subagent Sonnet (viết plan và code); Opus review và duyệt thay Owner (plan, khắc phục); sau mỗi milestone được APPROVE thì merge và push.
@@ -111,6 +111,13 @@ _Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 | Gộp `main` vào EPIC 21 | ✅ | e77c769 | `origin/main` `b60d8ed` (PR #6 bật R2, PR #7 tài liệu deploy); giữ `r2_buckets` MEDIA |
 | Gộp `main` vào EPIC 21 (lần 2) | ✅ | 9760016 | `origin/main` `2ed46f4` (PR #8 Ops console); lấy bản của `main` cho file Ops; nhánh vẫn có `703f5b3` (Owner giữ) |
 | Merge EPIC 21 vào `main` | ✅ | 7622105 | merge commit, Opus duyệt theo ủy quyền Owner; đã push. Chưa deploy |
+| VNX-2501 `ops_members`, `ops_member_invites`, domain quyền | ✅ | 14e1d2d, 3dd0c96 | migration `0013_ops_members`; review `.ai/reviews/VNX-2501-review.md` APPROVE (F1 lời mời hết hạn chưa quét → xử lý ở 2506) |
+| VNX-2502 `requireOps`, 404 kín, header Ops, robots | ✅ | 001a733 | review `.ai/reviews/VNX-2502-review.md` APPROVE; F3 `/{locale}/ops*` → 2508 |
+| VNX-2503 Khung Ops + Overview | ✅ | 114abab, 750b494, 113637a | `ops.*` chỉ ở `en.ts`; review `.ai/reviews/VNX-2503-review.md` APPROVE |
+| VNX-2504a Ops Builders | ✅ | bb31d3b, 330dd0b | `decideBuilder` dùng chung với `/admin`; review `.ai/reviews/VNX-2504a-review.md` APPROVE (9e3f55d) |
+| VNX-2504a2 Ops Products | ✅ | 3c5b05c, a6105bb, 8b3f806 | review `.ai/reviews/VNX-2504a2-review.md` APPROVE (c0cd765) |
+| VNX-2504b Ops Requests | ✅ | 659ce10, a327a6c | review `.ai/reviews/VNX-2504b-review.md` APPROVE (d1a0289) |
+| Merge phần đầu Ops O1 vào `main` | ✅ | (PR) | nhánh `release/ops-o1-a` tại `1eb9ef7` + commit này; 2504c ở lại `feat/ops-o1` |
 
 ## Điều kiện trước khi deploy `main`
 
@@ -207,9 +214,11 @@ Owner, trước khi ElevenLabs chạy thật (sau deploy):
   - Thêm `visitor_hash` (HMAC, `ANALYTICS_SALT`) thì sửa câu Privacy "for now we do not link it to any visitor identifier" (Owner duyệt câu chữ).
   - Thay `isBotRequest` (`domain/outbound.ts`) bằng luật bot chung của spec 8.11.
   - File Trending / Top mới vào `RANKING_FILES` của test kiến trúc (và `MONEY_ALLOWED` nếu cần); làm review F6 (đối chứng dương, regex SQL không phân biệt hoa thường) trước.
-  - Migration mới bắt đầu sau `0012`.
+  - Migration mới bắt đầu sau `0012`: `0013` đã dùng cho Ops O1; `0014`–`0016` để dành cho M7; O2 bắt đầu từ `0017`.
 - **VNX-2105+ (phần còn lại của EPIC 21):** HEAD trên offer có tracking trả `click_id` mà không có dòng `outbound_clicks`: khi ghép conversion coi `click_id` lạ là "không ghép được" hoặc ghi dòng cho HEAD (Owner chọn khi lập plan). `test/monetization/conversions.test.ts` theo ADR-007; `conversions`, `revenue_entries` vào `WRITERS`. Tham số sub-id PartnerStack cho `{click_id}`; offer của product, Hub "Quản lý offer", logo merchant.
 - **ADR-010 (Ops O1):** chuyển `/admin/flags`, `/admin/merchants` vào `/ops/monetization/*`, chỉ Owner dùng.
+- **Ops O1 (còn lại, nhánh `feat/ops-o1`):** 2504c Inquiries + Invites (tab Overdue dùng đúng luật của thẻ Overview; link mời chỉ hiện một lần); 2505 Users + Feedback (Operator không khóa được Owner gốc, luôn audit); 2506 Team & roles (lời mời 7 ngày, kích hoạt khi verify magic link; F1 của 2501: lời mời `pending` đã quá hạn được đánh dấu `expired` + audit + tạo lời mời mới trong một batch; guard audit cho bảng mới trong `db/audit.ts`); 2507 Audit log; 2508 chuyển hướng `/admin` (allowlist query, link email/cron sang `/ops`, `/{locale}/ops*` → 404 kín, `/admin/flags` → `/ops/settings/feature-flags`, `/admin/merchants` → `/ops/monetization/merchants` chỉ Owner); 2509 rà giao diện/a11y.
+- **Hợp đồng `isStaff` với M7 (vnxsi-c9):** nhánh nào vào `main` sau thì đặt `isStaff = isAdminUser(user, env) || (await resolveOpsRole(env, user)) !== null`, thêm test thành viên Viewer không bị đếm, không nới `requireAdmin` qua `isStaff`.
 - **EPIC 22 / 23 / VNX-0801:** quyền sở hữu bảng `content` trong test kiến trúc; mô tả merchant dạng markdown; ô sponsored và cờ `sponsored_listings` (ADR-008); bản dịch zh của `/disclosure` và Privacy.
 - **Lần đầu bật `content_indexing`:** chờ 1 giờ hoặc purge cache `/sitemap.xml` trước khi gửi sitemap cho Search Console (review F7).
 - **M7 (số liệu, Live, test kiến trúc tiền):**
@@ -246,6 +255,13 @@ Owner, trước khi ElevenLabs chạy thật (sau deploy):
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
 ## Ghi nhận (minor, chưa làm)
+
+- Ops O1: tìm kiếm không phân biệt hoa thường chỉ với ASCII (SQLite `lower()`); Overview/menu đọc mỗi bộ đếm hai lần mỗi request (thẻ + số trên menu).
+- Ops O1: khối ảnh product hiện alt hai lần khi ảnh lỗi; thẻ Invitations của request có khoảng trống thừa khi chưa mời ai; 9 tab Requests cuộn ngang ở 390 px (xem ở 2509).
+- Ops O1: invite không mời được ai (trùng, chính client, builder không đủ điều kiện) hiện 409 chung vì `inviteBuildersBatch` không trả lý do.
+- Ops O1: nhãn cũ của admin "Reason (optional, admins only)" khi suspend product/builder là sai (Hub hiện ghi chú cho builder); Ops đã dùng nhãn đúng, `/admin` chưa sửa.
+- Ops O1: nhãn môi trường là PRODUCTION ở máy local trừ khi `.dev.vars` đổi `APP_ORIGIN`.
+- Máy dev Windows dùng chung: `npm test` một lượt có thể hết bộ nhớ (chạy theo thư mục `--maxWorkers=2`); dừng task nền không giết tiến trình con `wrangler dev`/`workerd` (dùng `taskkill /T`).
 
 - EPIC 21: test dưới tải máy: test HTTP nặng có sẵn từ trước timeout 5 s khi chạy cả bộ (`test/legal/footer.test.ts`, `test/admin/feedback.test.ts`, `test/hub/invitations.test.ts`, `test/public/request-form.test.ts`), chạy riêng thì xanh; test race cờ dùng chờ cố định 20 ms; chú thích `vitest.config.ts` ("no R2 binding") đã cũ từ PR #6.
 - EPIC 21: test kiến trúc còn điểm mù regex (join bằng dấu phẩy, SQL chữ thường, import side-effect / động; review F6); `audit.ts` trong `MONEY_ALLOWED`, file xếp hạng import được (đã chấp nhận).
