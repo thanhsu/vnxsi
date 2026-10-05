@@ -33,7 +33,7 @@ async function asRole(role: OpsRole) {
   return member(`ops-rq-${role}-${tag()}@vnx.si`, role);
 }
 
-function req(path: string, opts: { cookie?: string; form?: Record<string, string | string[]>; ray?: string } = {}) {
+function req(path: string, opts: { cookie?: string; form?: Record<string, string | readonly string[]>; ray?: string } = {}) {
   const headers: Record<string, string> = { "cf-ray": opts.ray ?? `ray-${tag()}` };
   if (opts.cookie) headers.cookie = opts.cookie;
   if (opts.form) {
@@ -51,7 +51,7 @@ const get = async (path: string, cookie: string) => {
   const res = await send(path, { cookie });
   return { res, html: await res.text() };
 };
-const post = (path: string, cookie: string, form: Record<string, string | string[]> = {}, bindings: Bindings = env) => send(path, { cookie, form }, bindings);
+const post = (path: string, cookie: string, form: Record<string, string | readonly string[]> = {}, bindings: Bindings = env) => send(path, { cookie, form }, bindings);
 
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
 /** Every POST form in the page's <main> (the shell's sign-out form sits outside it). */

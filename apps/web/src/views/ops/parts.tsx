@@ -75,8 +75,8 @@ export const Confirm: FC<PropsWithChildren<{ summary: string; open?: boolean }>>
   </details>
 );
 
-/** A textarea for a reason or note, with its error message when the server refused the value. */
-export const ReasonField: FC<{ id: string; name: string; label: string; max: number; required: boolean; error: string | null }> = (p) => (
+/** A textarea for a reason or note, with its error message when the server refused the value (`value`: what was sent). */
+export const ReasonField: FC<{ id: string; name: string; label: string; max: number; required: boolean; error: string | null; value?: string }> = (p) => (
   <div class="ops-field">
     <label for={p.id}>{p.label}</label>
     <textarea
@@ -88,7 +88,9 @@ export const ReasonField: FC<{ id: string; name: string; label: string; max: num
       required={p.required}
       aria-invalid={p.error ? "true" : undefined}
       aria-describedby={p.error ? `${p.id}-error` : undefined}
-    ></textarea>
+    >
+      {p.value ?? ""}
+    </textarea>
     {p.error ? (
       <p id={`${p.id}-error`} class="ops-field-error">
         {p.error}

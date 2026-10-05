@@ -705,6 +705,10 @@ textarea.ops-in { width: 100%; min-height: 76px; padding: 8px 10px; resize: vert
 .ops-badges { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; }
 .ops-badges > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .ops-badge-sec > form { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 0; padding-top: 12px; border-top: 1px solid var(--border); }
+/* Ops request detail (VNX-2504b): tables framed inside a card, the invite form with a checkbox per suggestion. */
+.ops-sec .ops-table-wrap { align-self: stretch; border: 1px solid var(--border); border-radius: 8px; }
+.ops-invite-sec > form { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 0; }
+.ops-check { width: 20px; height: 20px; margin: 0; accent-color: var(--primary); vertical-align: middle; }
 @media (max-width: 1023px) {
   .ops-split { grid-template-columns: minmax(0, 1fr); }
 }

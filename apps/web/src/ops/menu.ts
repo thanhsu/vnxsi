@@ -21,10 +21,10 @@ export const OPS_GROUPS = [
 export type OpsGroup = (typeof OPS_GROUPS)[number]["group"];
 
 /** The icon names OpsLayout knows how to draw. */
-export type OpsIcon = "overview" | "builders" | "products";
+export type OpsIcon = "overview" | "builders" | "products" | "requests";
 
 /** Menu items that show how many items wait in their queue (the Overview counts). */
-export type OpsMenuCount = "builders" | "products";
+export type OpsMenuCount = "builders" | "products" | "requests";
 
 export interface OpsMenuItem {
   group: OpsGroup;
@@ -39,6 +39,7 @@ export const OPS_MENU: readonly OpsMenuItem[] = [
   { group: "main", labelKey: "ops.nav.overview", path: "/ops", capability: "overview.view", icon: "overview" },
   { group: "marketplace", labelKey: "ops.nav.builders", path: "/ops/marketplace/builders", capability: "marketplace.view", icon: "builders", count: "builders" },
   { group: "marketplace", labelKey: "ops.nav.products", path: "/ops/marketplace/products", capability: "marketplace.view", icon: "products", count: "products" },
+  { group: "marketplace", labelKey: "ops.nav.requests", path: "/ops/marketplace/requests", capability: "marketplace.view", icon: "requests", count: "requests" },
 ];
 
 /** Whether a GET route with exactly this path is registered in the app. */

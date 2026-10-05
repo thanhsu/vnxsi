@@ -6,25 +6,30 @@ import { countBuildersByStatus, findBuilderAccount, searchBuilders } from "../db
 import { listMedia } from "../db/media.ts";
 import { listTiers } from "../db/pricing.ts";
 import { countProductsByStatus, findProductWithBuilder, searchProducts } from "../db/products.ts";
+import { countRequestsByStatus, findAdminRequest, searchRequestsForAdmin } from "../db/requests.ts";
 import { listActiveBadges } from "../db/verifications.ts";
 import { isBuilderStatus, type BuilderAccount, type BuilderAction } from "../domain/builder.ts";
 import { isProductStatus, RECENTLY_EDITED_DAYS, type BadgeKind, type ProductWithBuilder } from "../domain/product.ts";
+import { REQUEST_STATUSES, type AdminRequest, type RequestStatus } from "../domain/request.ts";
 import { can } from "../domain/ops.ts";
 import type { AppEnv } from "../env.ts";
 import type { IsRegistered } from "../ops/menu.ts";
 import { BUILDERS_PATH, BuilderDetailPage, BuildersListPage, type BuilderFilter } from "../views/ops/BuildersPages.tsx";
 import { qs, type HistoryView, type OpsNotice } from "../views/ops/parts.tsx";
 import { PRODUCTS_PATH, ProductDetailPage, ProductsListPage, type ProductFilter } from "../views/ops/ProductsPages.tsx";
+import { RequestDetailPage, REQUESTS_PATH, RequestsListPage, type RequestFilter } from "../views/ops/RequestsPages.tsx";
+import type { InviteError } from "../views/admin/RequestDetailPage.tsx";
 import { page } from "../views/render.ts";
 import { decideBuilder } from "./admin.tsx";
 import { decideProduct, grantProductBadge, revokeProductBadge, type AdminProductAction, type BadgeDecision, type BadgeError } from "./admin-products.tsx";
+import { inviteToRequest, rejectRequest, removeRequest, requestMatching, type RequestDecision } from "./admin-requests.tsx";
 import { actorOf, opsShell, registeredPaths } from "./ops.tsx";
 
 /**
- * Ops Marketplace queues (VNX-2504a Builders, VNX-2504a2 Products; spec §2.2, §3.1, §7.3). Pages need
- * marketplace.view, every POST marketplace.act; anyone else gets the sealed 404 of requireOps. The decisions are the
- * /admin ones (decideBuilder, decideProduct and the badge functions): same state machine, compare-and-set, badges,
- * audit and e-mail. Filters come from the URL and only allowlisted values are kept.
+ * Ops Marketplace queues (VNX-2504a Builders, VNX-2504a2 Products, VNX-2504b Requests; spec §2.2, §3.1, §7.3). Pages
+ * need marketplace.view, every POST marketplace.act; anyone else gets the sealed 404 of requireOps. The decisions are
+ * the /admin ones (decideBuilder, decideProduct, the badge and the request functions): same state machine,
+ * compare-and-set, badges, invitations, audit and e-mail. Filters come from the URL and only allowlisted values are kept.
  */
 
 const SEARCH_MAX = 100;
@@ -53,6 +58,15 @@ function productFilter(c: Context<AppEnv>): ProductFilter {
   const q = searchOf(c.req.query("q"));
   const tab: ProductFilter = c.req.query("view") === "edited" ? { view: "edited" } : isProductStatus(status) ? { status } : {};
   return { ...tab, ...(q ? { q } : {}) };
+}
+
+const isRequestStatus = (value: string | undefined): value is RequestStatus => (REQUEST_STATUSES as readonly string[]).includes(value ?? "");
+
+/** The request filter as given in the URL: a known status or "all", and a usable search, nothing else. */
+function requestFilter(c: Context<AppEnv>): RequestFilter {
+  const status = c.req.query("status");
+  const q = searchOf(c.req.query("q"));
+  return { ...(status === "all" || isRequestStatus(status) ? { status } : {}), ...(q ? { q } : {}) };
 }
 
 /** The object's History: audit rows in the safe projection; a failed read is an error state, never an empty list. */
@@ -129,6 +143,29 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
     return productDone(c, r.productId, true);
   }
 
+  type RequestErrors = { inviteError?: InviteError; noteError?: boolean; values?: { note?: string; handle?: string } };
+
+  async function requestDetail(c: Context<AppEnv>, item: AdminRequest, notice: OpsNotice, status: 200 | 400 | 409 = 200, errors: RequestErrors = {}) {
+    const [shell, history, matching] = await Promise.all([opsShell(c, isRegistered, REQUESTS_PATH), historyOf(c, "request", item.request.id), requestMatching(c.env.DB, item)]);
+    const canAct = can(c.get("opsRole"), "marketplace.act");
+    return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} {...errors} />, status);
+  }
+
+  /** Ops's answer to each outcome of the shared request functions; `doneTo` is where a success goes. */
+  async function requestAnswer(c: Context<AppEnv>, r: RequestDecision, doneTo: (r: { requestId: string; mailed: boolean }) => string) {
+    if (r.kind === "not_found") return opsNotFound(c);
+    if (r.kind === "invalid_invite") return requestDetail(c, r.item, null, 400, { inviteError: r.error, values: { handle: r.handle } });
+    if (r.kind === "invalid_note") return requestDetail(c, r.item, null, 400, { noteError: true, values: { note: r.note } });
+    if (r.kind === "conflict") {
+      // Nothing was written. Show the current state with the reason, as a 409.
+      const current = await findAdminRequest(c.env.DB, c.req.param("id") ?? "");
+      return current ? requestDetail(c, current, "conflict", 409) : opsNotFound(c);
+    }
+    return c.redirect(doneTo(r), 303);
+  }
+
+  const requestDone = (c: Context<AppEnv>) => (r: { requestId: string; mailed: boolean }) => `${REQUESTS_PATH}/${r.requestId}${qs({ ...requestFilter(c), done: r.mailed ? "1" : "mail_failed" })}`;
+
   app.get(BUILDERS_PATH, requireOps("marketplace.view"), async (c) => {
     const given = c.req.query("status");
     const status = isBuilderStatus(given) ? given : "pending";
@@ -188,4 +225,25 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
 
   app.post(`${PRODUCTS_PATH}/:id/badges`, requireOps("marketplace.act"), async (c) => badgeAnswer(c, await grantProductBadge(c)));
   app.post(`${PRODUCTS_PATH}/:id/badges/:kind/revoke`, requireOps("marketplace.act"), async (c) => badgeAnswer(c, await revokeProductBadge(c)));
+
+  app.get(REQUESTS_PATH, requireOps("marketplace.view"), async (c) => {
+    const given = c.req.query("status");
+    const status = given === "all" ? null : isRequestStatus(given) ? given : "submitted";
+    const q = searchOf(c.req.query("q"));
+    const [shell, counts, items] = await Promise.all([opsShell(c, isRegistered, REQUESTS_PATH), countRequestsByStatus(c.env.DB), searchRequestsForAdmin(c.env.DB, status, q)]);
+    return page(c, <RequestsListPage shell={shell} status={status} q={q} counts={counts} items={items} notice={noticeOf(c.req.query("done"))} />);
+  });
+
+  app.get(`${REQUESTS_PATH}/:id`, requireOps("marketplace.view"), async (c) => {
+    const item = await findAdminRequest(c.env.DB, c.req.param("id"));
+    if (!item) return opsNotFound(c);
+    return requestDetail(c, item, noticeOf(c.req.query("done")));
+  });
+
+  app.post(`${REQUESTS_PATH}/:id/invite`, requireOps("marketplace.act"), async (c) => requestAnswer(c, await inviteToRequest(c), requestDone(c)));
+  app.post(`${REQUESTS_PATH}/:id/reject`, requireOps("marketplace.act"), async (c) => requestAnswer(c, await rejectRequest(c), requestDone(c)));
+  // After a removal the request leaves most tabs: back to the list, with the filter and the outcome.
+  app.post(`${REQUESTS_PATH}/:id/remove`, requireOps("marketplace.act"), async (c) =>
+    requestAnswer(c, await removeRequest(c), (r) => REQUESTS_PATH + qs({ ...requestFilter(c), done: r.mailed ? "1" : "mail_failed" })),
+  );
 }
