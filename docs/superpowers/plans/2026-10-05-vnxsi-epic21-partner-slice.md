@@ -7652,7 +7652,7 @@ Chạy `npm test -w apps/web -- test/i18n/parity.test.ts` sau khi thêm; thiếu
 | `disclosure.learnMore` | Learn more | Tìm hiểu thêm | 了解更多 | 瞭解更多 |
 | `tools.offers` | Links to {name} | Liên kết tới {name} | 前往 {name} 的链接 | 前往 {name} 的連結 |
 
-Bảy dòng đầu và `disclosure.*` là câu chữ Owner đã duyệt (khối A); `tools.offers` là chuỗi giao diện của Planner (không có số liệu hay lời khẳng định về đối tác). Ví dụ dòng ở `en.ts`: `"offer.label.try_it": "Try {name}",`.
+Chỉ hai khóa `disclosure.*` là câu chữ Owner đã duyệt (khối A). Trong `offer.label.*` chỉ bản EN `Try {name}` được Owner duyệt (2026-10-05); các nhãn EN còn lại và mọi nhãn vi / zh, cùng `tools.offers`, là chuỗi giao diện của Planner (không có số liệu hay lời khẳng định về đối tác). Ví dụ dòng ở `en.ts`: `"offer.label.try_it": "Try {name}",`.
 
 - [ ] **Step 4: Test trang `/tools/:slug` (fail trước)**
 
@@ -7739,7 +7739,10 @@ describe("/tools/:slug with offers (Review Focus 4)", () => {
       expect(main.indexOf("data-disclosure"), path).toBeGreaterThan(-1);
       expect(main.indexOf("data-disclosure"), path).toBeLessThan(main.indexOf("/go/"));
       expect(main, path).not.toContain("example.com");
-      expect(text, path).not.toMatch(/\b(buy|customize|hire)\b/i);
+      // Only the controls: block A itself says "or buy", so the whole <main> text must not be tested.
+      const controls = [...main.matchAll(/<(?:a\b[^>]*class="btn[^"]*"[^>]*|button\b[^>]*)>([\s\S]*?)<\/(?:a|button)>/g)].map((m) => textOf(m[1] ?? "")).join(" ");
+      expect(controls, path).toContain("Acme Tool");
+      expect(controls, path).not.toMatch(/\b(buy|customize|hire)\b/i);
     }
   });
 
@@ -7826,6 +7829,7 @@ describe("/tools/:slug indexing (Owner 2026-10-05)", () => {
         }
       }
     }
+    await setIndexing(false);
   });
 });
 ```
@@ -8063,6 +8067,7 @@ Expected: typecheck sạch, toàn bộ test xanh (gồm `test/design/*`).
 - Mô tả bọc `lang="en"` trên `vi`, `zh-Hans`, `zh-Hant`; tên và mô tả được escape; nhãn `try_it` đúng 4 locale.
 - `MONEY_ALLOWED` đúng 10 file (có `routes/tools.tsx`, `routes/seo.ts`); `grep -rniE "elevenlabs|partnerstack" apps/web/src` rỗng.
 - `npm run typecheck -w apps/web`, `npm test` xanh. Diff ước tính ≈ 560 dòng không tính locale (domain 55, db 35, route 35, view 60, seo 6, app 3, kiến trúc 6; test: `disclosure` 85, `partner-reads` 50, `tools` 175, `sitemap` 45); dưới 600, không tách.
+- Ghi trong báo cáo: link "Learn more" tới `/disclosure` trả 404 cho tới khi Task 6 xong (trang chưa tồn tại); không sửa ở task này.
 - Kiểm tay ElevenLabs (không thuộc CI, ghi trong báo cáo): nhập qua `/admin/merchants` theo `docs/partners/registry.md`, bật `affiliate`, `/tools/elevenlabs` → nút "Try ElevenLabs" → `/go/elevenlabs?src=tools`; trang `noindex` cho tới khi Owner bật `content_indexing` và `indexable`.
 
 ---
@@ -8087,13 +8092,13 @@ Expected: typecheck sạch, toàn bộ test xanh (gồm `test/design/*`).
 1. **Khối động chèn qua `extras`, không đổi nguồn:** `LegalPage` vẽ `extras[i]` ngay sau các khối của mục `i`; trang chỉ chèn khi `id === "disclosure"` và chỉ số là `DISCLOSURE_PARTNERS_SECTION` (test ghim: `LEGAL.disclosure.en.sections[2].heading` bắt đầu `3.`, cả VI). `docs/legal/disclosure.md` không có dòng "None at the moment." (khối B: khóa `disclosure.noPartners`, không nằm trong file nguồn).
 2. **Ai được liệt kê:** merchant `status = 'active'` có **ít nhất một** chương trình `status = 'active'` (SQL join, `GROUP BY m.id` nên mỗi merchant một lần, theo tên không phân biệt hoa thường). Chương trình `draft` / `paused` / `ended`, merchant `paused` / `archived`, merchant không chương trình: không hiện (ràng buộc media-kit: không nêu partner chưa `active`). Cờ `affiliate` / `partner_referral` không ảnh hưởng danh sách (đề: "có chương trình `active`"); nếu Owner muốn ẩn khi cờ tắt thì đó là quyết định nghiệp vụ mới.
 3. **Tên → `/tools/:slug`** (có tiền tố locale). Merchant `active` luôn có trang `/tools/` 200, nên không có link chết. Tên không dịch, không bọc `lang`.
-4. **Danh sách trống:** đúng một `<p>` chứa `disclosure.noPartners` (khối B: "None at the moment." / "Hiện chưa có." và bản `zh-*`). Khối bọc `lang={locale}` để dòng này đúng ngôn ngữ ngay cả trong phần `lang="en"` của `zh-*`.
+4. **Danh sách trống:** đúng một `<p>` chứa `disclosure.noPartners` (khối B: "None at the moment." / "Hiện chưa có." và bản `zh-*`). Chỉ `<p>` của dòng này mang `lang={locale}` (không bọc quanh tên merchant) để dòng này đúng ngôn ngữ ngay cả trong phần `lang="en"` của `zh-*`.
 5. **Không đọc DB cho `/terms`, `/privacy`, `/media-kit`:** handler chỉ gọi `listActiveProgramMerchants` khi `id === "disclosure"`. Lỗi D1 để lỗi chung (500); không vẽ danh sách rỗng khi đọc hỏng (rỗng sẽ nói sai là không có partner).
 6. **`LEGAL_UPDATED_AT` dùng chung** (`dated: true` cho `disclosure`, `{date}` của file nguồn thay bằng hằng này, test đã làm vậy). Không thêm ngày riêng: một hằng, không đổi kiểu `LegalPage`. Task này **không** đổi giá trị hằng (Task 4 đã tăng khi thêm Privacy EPIC 21); Owner chốt ngày khi deploy như đã ghi ở đầu `content.ts`. Hệ quả cần biết: ngày "Last updated" của cả ba trang luật đổi cùng nhau.
 7. **Tên partner không có trong `content.ts`** (test kiến trúc quét cả file này); trang chỉ nói "some companies"; tên đến từ DB.
 8. **Footer:** link `/disclosure` đặt cuối nhóm Company, sau Privacy; khóa `footer.disclosure` (cùng chữ với tiêu đề trang). Bài footer của `layout.test.ts` đổi danh sách mong đợi thêm đúng một phần tử.
 9. **`MONEY_ALLOWED` thêm đúng `routes/legal.tsx`** (import `db/merchants.ts`); `LegalPage.tsx`, `Disclosure.tsx` không import db (kiểu cấu trúc `{ slug; name }`).
-10. **`content.test.ts`:** ngưỡng "ít nhất 10 dòng" đổi thành `>= 8`: Disclosure ngắn (tiêu đề, ngày, 4 mục, mỗi mục một dòng nội dung = 10 dòng; ngưỡng 8 vẫn bắt trang rỗng). Khối động nằm giữa mục 3 và 4: test so thứ tự dùng `indexOf` tiến dần nên dòng ở giữa không làm hỏng.
+10. **`content.test.ts`:** ngưỡng theo từng mục `CASES`: ba trang cũ giữ `> 10` (`min: 11`), Disclosure `>= 10` (tiêu đề, ngày, 4 mục, mỗi mục một dòng nội dung = đúng 10 dòng). Không nới ngưỡng chung. Khối động nằm giữa mục 3 và 4: test so thứ tự dùng `indexOf` tiến dần nên dòng ở giữa không làm hỏng.
 
 - [ ] **Step 0: Tiền điều kiện**
 
@@ -8114,12 +8119,21 @@ Expected: `present`; Controller đã commit file (có SHA); đúng 2 dòng tiêu
 (a) `apps/web/test/legal/content.test.ts`: thêm vào `CASES`:
 
 ```ts
-  { name: "disclosure", path: "/disclosure" },
+  { name: "disclosure", path: "/disclosure", min: 10 },
 ```
 
-đổi `it("reads the three approved source files"` thành `it("reads the four approved source files"`, và đổi `expect(lines.length, name).toBeGreaterThan(10);` thành `expect(lines.length, name).toBeGreaterThanOrEqual(8);`.
+thêm `min: 11` vào ba mục cũ, đổi `it("reads the three approved source files"` thành `it("reads the four approved source files"`, và đổi `expect(lines.length, name).toBeGreaterThan(10);` thành `expect(lines.length, name).toBeGreaterThanOrEqual(min);` (lấy `min` từ từng mục của `CASES`; ngưỡng của ba trang cũ giữ nguyên `> 10`, không nới).
 
 (b) `apps/web/test/legal/pages.test.ts`: thêm vào `PAGES` `{ rest: "/disclosure", id: "disclosure", meta: "legal.disclosure" },` (dòng cuối, trước `] as const`); trong bài "AC1: EN and VI show their own title" nếu còn chữ `"2026-10-04"` cứng thì thay bằng `LEGAL_UPDATED_AT` (import từ `../../src/legal/content.ts`); điều kiện `id !== "mediaKit"` giữ nguyên (`disclosure` có ngày).
+
+(b2) `apps/web/test/legal/pages.test.ts`, bài "AC4: content brings no tags of its own": D1 dùng chung giữa các file test nên `/disclosure` có thể chứa link `/tools/…` do test khác tạo. Trước khi kiểm thẻ và `href`, cắt khối động khỏi `main`:
+
+```ts
+const PARTNERS_BLOCK = /<div data-partners="active">[\s\S]*?<\/div>/;
+// ... trong vòng lặp: const main = mainOf(...).replace(PARTNERS_BLOCK, "");
+```
+
+và thêm một bài riêng: với mọi locale, mọi `href` trong khối `data-partners="active"` của `/disclosure` khớp `^<localizedPath(locale, "/tools")>/[a-z0-9-]+$` (không link nào khác, không URL ngoài).
 
 (c) `apps/web/test/legal/footer.test.ts`: trong mảng ba link của bài đầu thêm `["/disclosure", "footer.disclosure"],`.
 
@@ -8158,35 +8172,55 @@ describe("listActiveProgramMerchants", () => {
 });
 ```
 
-(g) `apps/web/test/monetization/disclosure-page.test.ts` (mới):
+(g) `apps/web/test/monetization/disclosure-page.test.ts` (mới). Không dùng `UPDATE partner_programs` toàn cục (D1 dùng chung giữa các file test): trường hợp "trống" dùng DB giả, trường hợp lỗi dùng DB ném lỗi (cùng kiểu `Proxy` của `test/notify/request.test.ts`); mỗi bài còn lại tự tạo merchant + chương trình của mình.
 
 ```ts
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
+import type { Bindings } from "../../src/env.ts";
 import { LEGAL } from "../../src/legal/content.ts";
 import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
 import { t } from "../../src/i18n/t.ts";
 import { makeMerchant, makeProgram } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
-const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
+const getWith = (env: Bindings, path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, env);
+const get = (path: string) => getWith(testEnv, path);
 const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
 const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
 /** The dynamic block under section 3. */
-const partnersOf = (html: string) => /<div lang="[^"]*" data-partners="active">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? null;
+const partnersOf = (html: string) => /<div data-partners="active">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? null;
+
+/** A DB whose partner-list query answers with no rows, or throws; every other query reaches the real D1. */
+const dbWith = (answer: "empty" | "throw"): Bindings => {
+  const db = new Proxy(testEnv.DB, {
+    get: (target, prop) => {
+      if (prop !== "prepare") {
+        const v = Reflect.get(target, prop) as unknown;
+        return typeof v === "function" ? v.bind(target) : v;
+      }
+      return (sql: string) => {
+        if (!/partner_programs/.test(sql)) return target.prepare(sql);
+        if (answer === "throw") throw new Error("d1 down");
+        return { all: async () => ({ results: [] }) };
+      };
+    },
+  });
+  return { ...testEnv, DB: db } as Bindings;
+};
 
 describe("/disclosure partner list (VNX-2104b)", () => {
-  it("shows exactly one 'none' line, in every locale, when no program is active", async () => {
-    // Other tests of this file may have created programs: put every one out of play first.
-    await testEnv.DB.prepare("UPDATE partner_programs SET status = 'paused' WHERE status = 'active'").run();
+  it("shows exactly one 'none' line, in every locale, when the list is empty", async () => {
+    const env = dbWith("empty");
     for (const locale of LOCALES) {
       const path = localizedPath(locale, "/disclosure");
-      const res = await get(path);
+      const res = await getWith(env, path);
       expect(res.status, path).toBe(200);
       const block = partnersOf(mainOf(await res.text()));
       expect(block, path).not.toBeNull();
       expect(block?.match(/<p[\s>]/g), path).toHaveLength(1);
+      expect(block, path).toContain(`<p lang="${locale}">`);
       expect(textOf(block ?? ""), path).toBe(t(locale, "disclosure.noPartners"));
       expect(block, path).not.toContain("<a ");
     }
@@ -8214,14 +8248,16 @@ describe("/disclosure partner list (VNX-2104b)", () => {
     }
   });
 
-  it("puts the list after section 3 and before section 4, and keeps the static text free of partner names", async () => {
+  it("puts the list after section 3 and before section 4", async () => {
+    const own = await makeMerchant({ name: "Order Check Co" });
+    await makeProgram(own);
     for (const [locale, doc] of [["en", LEGAL.disclosure.en], ["vi", LEGAL.disclosure.vi]] as const) {
       expect(doc.sections).toHaveLength(4);
       expect(doc.sections[2]?.heading.startsWith("3."), locale).toBe(true);
       expect(doc.sections[3]?.heading.startsWith("4."), locale).toBe(true);
       const text = textOf(mainOf(await (await get(localizedPath(locale, "/disclosure"))).text()));
       const at3 = text.indexOf(doc.sections[2]?.heading ?? "missing");
-      const atList = text.indexOf("Listed Co") >= 0 ? text.indexOf("Listed Co") : text.indexOf(t(locale, "disclosure.noPartners"));
+      const atList = text.indexOf("Order Check Co");
       const at4 = text.indexOf(doc.sections[3]?.heading ?? "missing");
       expect(at3, locale).toBeGreaterThan(-1);
       expect(atList, locale).toBeGreaterThan(at3);
@@ -8229,19 +8265,33 @@ describe("/disclosure partner list (VNX-2104b)", () => {
     }
   });
 
-  it("zh-Hans and zh-Hant show the English text with the English-only notice, and the list line in their own language", async () => {
+  it("zh-Hans and zh-Hant show the English text with the English-only notice, and the 'none' line in their own language", async () => {
+    const own = await makeMerchant({ name: "Zh Check Co" });
+    await makeProgram(own);
     for (const locale of ["zh-Hans", "zh-Hant"] as const) {
       const main = mainOf(await (await get(localizedPath(locale, "/disclosure"))).text());
       expect(textOf(main), locale).toContain(t(locale, "legal.englishOnly"));
       expect(textOf(main), locale).toContain(LEGAL.disclosure.en.title);
       expect(textOf(main), locale).not.toContain(LEGAL.disclosure.vi.title);
-      expect(partnersOf(main), locale).toContain(`<a href="${localizedPath(locale, "/tools")}/`);
+      expect(partnersOf(main), locale).toContain(`<a href="${localizedPath(locale, `/tools/${own.slug}`)}">Zh Check Co</a>`);
+      const empty = mainOf(await (await getWith(dbWith("empty"), localizedPath(locale, "/disclosure"))).text());
+      expect(partnersOf(empty), locale).toContain(`<p lang="${locale}">${t(locale, "disclosure.noPartners")}</p>`);
     }
+  });
+
+  it("when D1 cannot answer the partner query, /disclosure is a 500 without a 'none' line, and /terms still works", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = dbWith("throw");
+    for (const locale of LOCALES) {
+      const bad = await getWith(env, localizedPath(locale, "/disclosure"));
+      expect(bad.status, locale).toBe(500);
+      expect(textOf(await bad.text()), locale).not.toContain(t(locale, "disclosure.noPartners"));
+      expect((await getWith(env, localizedPath(locale, "/terms"))).status, locale).toBe(200);
+    }
+    spy.mockRestore();
   });
 });
 ```
-
-(Bài cuối chạy sau bài hai nên danh sách đã có `Listed Co`; bài ba cũng dựa vào đó: giữ thứ tự khai báo, ghi chú trong test nếu đổi.)
 
 ```bash
 npm test -w apps/web -- test/legal test/monetization/disclosure-page.test.ts test/db/partner-reads.test.ts test/design/layout.test.ts test/seo/sitemap.test.ts
@@ -8327,13 +8377,13 @@ và dòng cuối `LEGAL`: `disclosure: { rest: "/disclosure", dated: true, en: d
 ```tsx
 import { localizedPath } from "../i18n/locales.ts"; // (đã import ở Task 5)
 
-/** /disclosure §3: the companies with an active partner program, from the database. The `lang` keeps the "none" line in the page's language inside the English-only text of zh-*. */
+/** /disclosure §3: the companies with an active partner program, from the database. The `lang` on the "none" line keeps it in the page's language inside the English-only text of zh-*; merchant names carry no `lang`. */
 export const ActivePartners: FC<{ locale: Locale; partners: readonly { slug: string; name: string }[] }> = ({ locale, partners }) => {
   const tr = translator(locale);
   return (
-    <div lang={locale} data-partners="active">
+    <div data-partners="active">
       {partners.length === 0 ? (
-        <p>{tr("disclosure.noPartners")}</p>
+        <p lang={locale}>{tr("disclosure.noPartners")}</p>
       ) : (
         <ul>
           {partners.map((p) => (
@@ -8396,11 +8446,11 @@ i18n (đủ 4 locale, thêm cuối mỗi file locale; `test/i18n/parity.test.ts`
 | Khóa | en | vi | zh-Hans | zh-Hant |
 |---|---|---|---|---|
 | `legal.disclosure.title` | Disclosure | Công khai quan hệ đối tác | 披露声明 | 揭露聲明 |
-| `legal.disclosure.description` | How VNX.SI earns from partner links, and why rankings are never for sale. | VNX.SI có thể nhận hoa hồng từ link partner ra sao, và vì sao thứ hạng không bán. | VNX.SI 如何通过合作链接获得佣金，以及为什么排名绝不出售。 | VNX.SI 如何透過合作連結獲得佣金，以及為什麼排名絕不出售。 |
+| `legal.disclosure.description` | How VNX.SI may earn from partner links, and why rankings are never for sale. | Cách VNX.SI có thể nhận hoa hồng từ link partner, và vì sao thứ hạng không bao giờ được bán. | 说明 VNX.SI 可能如何通过合作链接获得佣金，以及为什么排名绝不出售。 | 說明 VNX.SI 可能如何透過合作連結獲得佣金，以及為什麼排名絕不出售。 |
 | `footer.disclosure` | Disclosure | Công khai quan hệ đối tác | 披露声明 | 揭露聲明 |
-| `disclosure.noPartners` | None at the moment. | Hiện chưa có. | 目前没有。 | 目前沒有。 |
+| `disclosure.noPartners` | None at the moment. | Hiện chưa có. | 目前暂无。 | 目前暫無。 |
 
-`disclosure.noPartners` là câu chữ Owner đã duyệt (khối B); ba khóa còn lại là chuỗi giao diện của Planner (không có khẳng định về đối tác).
+Chỉ bản EN và VI của `disclosure.noPartners` là câu chữ Owner đã duyệt (khối B); bản zh của nó và ba khóa còn lại là chuỗi giao diện của Planner (không có khẳng định về đối tác).
 
 ```bash
 npm test -w apps/web -- test/legal test/monetization/disclosure-page.test.ts test/db/partner-reads.test.ts test/i18n/parity.test.ts
