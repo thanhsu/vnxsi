@@ -13,6 +13,9 @@ describe("/robots.txt (spec §8.8)", () => {
       expect(lines, path).toContain(`Disallow: ${path}`);
     }
     expect(lines).toContain("Disallow: /go/");
+    // Ops console (spec §5, ADR-010 §4): canonical English only, so no locale prefix. "/ops" also covers "/ops/".
+    expect(lines).toContain("Disallow: /ops");
+    expect(lines.filter((l) => /^Disallow: \/(vi|zh-hans|zh-hant)\/ops/.test(l))).toEqual([]);
     expect(lines).toContain("Allow: /media/products/");
     expect(lines).toContain("Sitemap: https://vnx.si/sitemap.xml");
     expect(lines.filter((l) => l.startsWith("Disallow: /products") || l.startsWith("Disallow: /builders") || l.startsWith("Disallow: /p/"))).toEqual([]);

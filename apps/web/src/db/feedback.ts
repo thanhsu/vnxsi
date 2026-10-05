@@ -85,6 +85,15 @@ export async function countFeedback(db: D1Database, status: FeedbackStatus): Pro
   return row?.n ?? 0;
 }
 
+/** Ops Overview queue (VNX-2503): new feedback, the oldest one, and how many of them were never e-mailed to the team. Read only. */
+export async function countNewFeedback(db: D1Database): Promise<{ count: number; oldest: string | null; unsent: number }> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n, MIN(created_at) AS oldest, COALESCE(SUM(CASE WHEN notified_at IS NULL THEN 1 ELSE 0 END), 0) AS unsent FROM feedback WHERE status = 'new'")
+    .first<{ n: number; oldest: string | null; unsent: number }>();
+  if (!row) throw new Error("feedback queue count returned no row");
+  return { count: row.n, oldest: row.oldest, unsent: row.unsent };
+}
+
 /** "This request's compare-and-set on the feedback row went through": audit rows batched after it check this. */
 export type FeedbackGuard = { feedbackId: string; status: FeedbackStatus; updatedAt: string };
 

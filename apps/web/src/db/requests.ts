@@ -340,18 +340,47 @@ const ADMIN_SELECT = `SELECT r.*, u.email AS client_email,
   FROM requests r JOIN users u ON u.id = r.client_user_id`;
 type AdminRow = Row & { client_email: string; active_invites: number; total_invites: number; proposals: number };
 const toAdmin = (r: AdminRow): AdminRequest => ({ request: toRequest(r), clientEmail: r.client_email, activeInvites: r.active_invites, totalInvites: r.total_invites, proposals: r.proposals });
+const adminOrder = (status: RequestStatus | null) =>
+  status === "submitted" || status === "matching" ? "ORDER BY COALESCE(r.submitted_at, r.created_at), r.id" : "ORDER BY r.updated_at DESC, r.id DESC";
 
 /**
  * Spec §5.5 queue: `submitted` and `matching` oldest first (first come, first served); any other filter, and `null`
  * (every status), most recently changed first. Admin only: carries the client's e-mail.
  */
 export async function listRequestsForAdmin(db: D1Database, status: RequestStatus | null, limit = 200): Promise<AdminRequest[]> {
-  const order = status === "submitted" || status === "matching" ? "ORDER BY COALESCE(r.submitted_at, r.created_at), r.id" : "ORDER BY r.updated_at DESC, r.id DESC";
   const { results } = await db
-    .prepare(`${ADMIN_SELECT} WHERE (?1 IS NULL OR r.status = ?1) ${order} LIMIT ?2`)
+    .prepare(`${ADMIN_SELECT} WHERE (?1 IS NULL OR r.status = ?1) ${adminOrder(status)} LIMIT ?2`)
     .bind(status, limit)
     .all<AdminRow>();
   return results.map(toAdmin);
+}
+
+/**
+ * Ops Requests list (VNX-2504b): listRequestsForAdmin narrowed to titles containing `q` (case-insensitive; `instr`, so
+ * `%` and `_` are plain text), in the same order and cap. Admin only: carries the client's e-mail.
+ */
+export async function searchRequestsForAdmin(db: D1Database, status: RequestStatus | null, q: string | null, limit = 200): Promise<AdminRequest[]> {
+  if (!q) return listRequestsForAdmin(db, status, limit);
+  const { results } = await db
+    .prepare(`${ADMIN_SELECT} WHERE (?1 IS NULL OR r.status = ?1) AND instr(lower(r.title), ?2) > 0 ${adminOrder(status)} LIMIT ?3`)
+    .bind(status, q.toLowerCase(), limit)
+    .all<AdminRow>();
+  return results.map(toAdmin);
+}
+
+/** Ops Requests tabs (VNX-2504b): how many requests are in each status. Read only. */
+export async function countRequestsByStatus(db: D1Database): Promise<Partial<Record<RequestStatus, number>>> {
+  const { results } = await db.prepare("SELECT status, COUNT(*) AS n FROM requests GROUP BY status").all<{ status: RequestStatus; n: number }>();
+  return Object.fromEntries(results.map((r) => [r.status, r.n]));
+}
+
+/** Ops Overview queue (VNX-2503): submitted requests waiting to be matched, and the oldest submission (same order as the queue). Read only. */
+export async function countRequestsToMatch(db: D1Database): Promise<{ count: number; oldest: string | null }> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n, MIN(COALESCE(submitted_at, created_at)) AS oldest FROM requests WHERE status = 'submitted'")
+    .first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("request queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
 }
 
 export async function findAdminRequest(db: D1Database, id: string): Promise<AdminRequest | null> {

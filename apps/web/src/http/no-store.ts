@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import type { AppEnv } from "../env.ts";
 import { localeFromPath } from "../i18n/locales.ts";
 
-const PRIVATE = /^\/(hub|me|admin)(\/|$)/;
+const PRIVATE = /^\/(hub|me|admin|ops)(\/|$)/;
 const isHtml = (res: Response) => (res.headers.get("content-type") ?? "").startsWith("text/html");
 
 /**

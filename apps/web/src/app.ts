@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { sessionMiddleware } from "./auth/middleware.ts";
+import { opsHeaders, opsNotFound } from "./auth/ops.ts";
 import type { AppEnv } from "./env.ts";
 import { noStorePrivate } from "./http/no-store.ts";
 import { requestBodyLimit } from "./http/body-limit.ts";
@@ -41,12 +42,18 @@ import { registerJoinRoutes } from "./routes/join.ts";
 import { registerLandingRoutes } from "./routes/landing.tsx";
 import { registerLegalRoutes } from "./routes/legal.tsx";
 import { registerContactRoutes } from "./routes/contact.tsx";
+import { registerOpsRoutes } from "./routes/ops.tsx";
+import { registerOpsMarketplaceRoutes } from "./routes/ops-marketplace.tsx";
 import { errorResponse } from "./views/error-response.tsx";
 
 export function createApp() {
   const app = new Hono<AppEnv>();
   app.use("*", requestId);
   app.use("*", securityHeaders);
+  // Ops console (VNX-2502, spec §5): wraps everything after it, so every /ops response, the Origin and body-size
+  // refusals included, is no-store + noindex. Only /ops paths; the order of the site-wide middleware is unchanged.
+  app.use("/ops", opsHeaders);
+  app.use("/ops/*", opsHeaders);
   app.use("*", localeMiddleware);
   app.use("*", originCheck);
   app.use("*", requestBodyLimit);
@@ -86,6 +93,12 @@ export function createApp() {
   registerUserAdminRoutes(app);
   registerAdminFlagRoutes(app);
   registerAdminMerchantRoutes(app);
+  // Ops console pages (VNX-2503), each behind requireOps(capability); before the /ops catch-all below.
+  registerOpsRoutes(app);
+  registerOpsMarketplaceRoutes(app);
+  // Last in the Ops group: an unknown /ops path gets the same sealed 404 as a refused one (plan O1).
+  app.all("/ops", opsNotFound);
+  app.all("/ops/*", opsNotFound);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.all("/api/*", (c) => c.json({ ok: false, error: "Not found" }, 404));

@@ -207,6 +207,32 @@ export async function listBuildersByStatus(db: D1Database, status: BuilderStatus
   return results.map(toAccount);
 }
 
+/**
+ * Ops Builders list (VNX-2504a): one status, optionally narrowed to a case-insensitive substring of the name, handle
+ * or e-mail. `instr` takes the text literally (no LIKE wildcards). Same order and cap as listBuildersByStatus. Read only.
+ */
+export async function searchBuilders(db: D1Database, status: BuilderStatus, q: string | null, limit = 200): Promise<BuilderAccount[]> {
+  if (!q) return listBuildersByStatus(db, status, limit);
+  const { results } = await db
+    .prepare(`${ACCOUNT_SELECT} WHERE b.status = ?1 AND (instr(lower(b.name), ?2) > 0 OR instr(lower(b.handle), ?2) > 0 OR instr(lower(u.email), ?2) > 0) ORDER BY b.created_at, b.user_id LIMIT ?3`)
+    .bind(status, q.toLowerCase(), limit)
+    .all<AccountRow>();
+  return results.map(toAccount);
+}
+
+/** Ops Builders tabs (VNX-2504a): how many builders are in each status. Read only. */
+export async function countBuildersByStatus(db: D1Database): Promise<Partial<Record<BuilderStatus, number>>> {
+  const { results } = await db.prepare("SELECT status, COUNT(*) AS n FROM builders GROUP BY status").all<{ status: BuilderStatus; n: number }>();
+  return Object.fromEntries(results.map((r) => [r.status, r.n]));
+}
+
+/** Ops Overview queue (VNX-2503): pending builders and when the oldest applied (same order as the review queue). Read only. */
+export async function countBuilderReviewQueue(db: D1Database): Promise<{ count: number; oldest: string | null }> {
+  const row = await db.prepare("SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM builders WHERE status = 'pending'").first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("builder queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
 /** Public builders for the sitemap. The cap keeps the sitemap under 50,000 URLs (× 4 locales). */
 export async function listSitemapBuilders(db: D1Database, limit = 2000): Promise<{ handle: string; updatedAt: string }[]> {
   const { results } = await db
