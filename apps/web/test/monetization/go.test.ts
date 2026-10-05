@@ -188,7 +188,7 @@ describe("/go/o/:offerId and /go/:merchantSlug: the redirect truth table over HT
     expect(res.status).toBe(404);
     expect(await clicksOf(s.offer.id)).toHaveLength(0);
     expect(goLogs(error)).toEqual([{ event: "go.corrupt_data", reason, offerId: s.offer.id, merchantId: s.merchant.id, requestId: expect.any(String) }]);
-    const line = String(error.mock.calls[0]?.[0]);
+    const line = JSON.stringify(goLogs(error)[0]);
     for (const secret of [EVIL, "203.0.113.9", CHROME, "news.example.org"]) expect(line).not.toContain(secret);
   });
 
@@ -339,6 +339,8 @@ describe("methods", () => {
       const res = await call(path, { method, headers: { origin: "https://vnx.si" } });
       expect(res.status, `${method} ${path}`).toBe(405);
       expect(res.headers.get("allow")).toBe("GET, HEAD");
+      expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(res.headers.get("cache-control")).toBe("no-store");
       expect(res.headers.get("location")).toBeNull();
     }
     expect(await totalClicks()).toBe(before);

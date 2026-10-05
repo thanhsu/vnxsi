@@ -1,4 +1,5 @@
 import { DEFAULT_LOCALE, localeFromPath, type Locale } from "../i18n/locales.ts";
+import { isPublicHostname } from "./offer-url.ts";
 import type { NotFoundReason } from "./offer.ts";
 
 /** Pure helpers for /go/ and the outbound click log (addendum §2.1–2.2). No I/O. */
@@ -39,12 +40,15 @@ export function isBotRequest(userAgent: string | null | undefined, cf: CfLike): 
   return BOT_UA.test(userAgent) || cf?.botManagement?.verifiedBot === true;
 }
 
-/** Host only (lower case, no port, path, query or credentials); null for anything that is not an http(s) URL. */
+/**
+ * Host name only (lower case, no port, path, query or credentials); null for anything that is not an http(s) URL, and null when the host
+ * is an IP literal (v4 or v6), localhost or another non-public name: Privacy promises "domain only" and no IP address.
+ */
 export function referrerHost(referer: string | null | undefined): string | null {
   if (!referer) return null;
   try {
     const u = new URL(referer);
-    return u.protocol === "https:" || u.protocol === "http:" ? u.hostname.slice(0, 253) : null;
+    return (u.protocol === "https:" || u.protocol === "http:") && isPublicHostname(u.hostname) ? u.hostname : null;
   } catch {
     return null;
   }

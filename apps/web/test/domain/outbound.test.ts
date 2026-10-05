@@ -47,6 +47,10 @@ describe("referrerHost keeps the host only", () => {
     ["https://news.example.org/a/b?q=1#frag", "news.example.org"],
     ["http://Example.COM:8080/x", "example.com"],
     ["https://user:pw@example.org/", "example.org"],
+    // IP literals and localhost are not "a website we know by domain": null, so no IP address is ever stored (Privacy).
+    ["http://203.0.113.9:3000/", null],
+    ["http://[::1]/", null],
+    ["http://localhost:5173/", null],
     ["javascript:alert(1)", null],
     ["not a url", null],
     ["", null],
