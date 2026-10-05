@@ -17,10 +17,9 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Product images (spec §8.5) need R2. VNX-0711: no R2 binding until the Owner enables R2 on the account (a binding to
-  // a missing bucket blocks the deploy). Without MEDIA, /media/* is 404 and image upload/delete answer 503 with a
-  // notice. To turn images on: wrangler r2 bucket create vnxsi-media, then put this back here:
-  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "vnxsi-media" }],
+  // Product images (spec §8.5) live in R2. VNX-0711: the Owner created the bucket vnxsi-media, so the binding is on.
+  // The code still treats MEDIA as optional: without it, /media/* is 404 and image upload/delete answer 503 with a notice.
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "vnxsi-media" }],
   "vars": {
     // Used to build absolute links in emails.
     "APP_ORIGIN": "https://vnx.si",

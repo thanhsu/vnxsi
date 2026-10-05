@@ -21,16 +21,13 @@ function upload(productId: string, cookie: string, path = `/hub/products/${produ
 const WRANGLER = import.meta.glob("../../wrangler.jsonc", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 describe("running without R2 (VNX-0711)", () => {
-  it("AC1: wrangler.jsonc binds no R2 bucket, and explains how to add MEDIA back", () => {
+  it("AC1: wrangler.jsonc binds the vnxsi-media bucket as MEDIA", () => {
     const source = Object.values(WRANGLER)[0]!;
     const code = source
       .split("\n")
       .map((line) => line.replace(/\/\/.*$/, ""))
       .join("\n");
-    expect(code).not.toContain("r2_buckets");
-    expect(source).toMatch(/\/\/.*"r2_buckets"/);
-    expect(source).toMatch(/\/\/.*\{ "binding": "MEDIA", "bucket_name": "vnxsi-media" \}/);
-    expect(source).toContain("wrangler r2 bucket create vnxsi-media");
+    expect(code).toMatch(/"r2_buckets"\s*:\s*\[\s*\{\s*"binding"\s*:\s*"MEDIA"\s*,\s*"bucket_name"\s*:\s*"vnxsi-media"\s*\}\s*\]/);
   });
 
   it("AC2: GET /media/* is 404", async () => {
