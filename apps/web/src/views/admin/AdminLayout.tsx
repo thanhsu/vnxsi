@@ -4,7 +4,7 @@ import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { Layout } from "../Layout.tsx";
 
-export type AdminSection = "builders" | "products" | "inquiries" | "requests" | "feedback" | "invites" | "users";
+export type AdminSection = "builders" | "products" | "inquiries" | "requests" | "feedback" | "invites" | "users" | "flags" | "merchants";
 
 const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [
   { key: "builders", path: "/admin/builders", label: "admin.nav.builders" },
@@ -14,6 +14,8 @@ const NAV: { key: AdminSection; path: string; label: MessageKey }[] = [
   { key: "feedback", path: "/admin/feedback", label: "admin.nav.feedback" },
   { key: "invites", path: "/admin/invites", label: "admin.nav.invites" },
   { key: "users", path: "/admin/users", label: "admin.nav.users" },
+  { key: "flags", path: "/admin/flags", label: "admin.nav.flags" },
+  { key: "merchants", path: "/admin/merchants", label: "admin.nav.merchants" },
 ];
 
 type Props = {

@@ -15,6 +15,7 @@ import { notifyInviteExpired, notifyInviteReminder, notifyNotSelected, notifyReq
 import { deleteExpiredSessions } from "../auth/sessions.ts";
 import { deleteExpiredLoginTokens } from "../auth/tokens.ts";
 import { deleteExpiredPendingInquiries, listInquiriesToAlert, listInquiriesToRemind, listUnnotifiedMessages, markAlerted, markReminded } from "../db/inquiries.ts";
+import { purgeOldClicks } from "../db/clicks.ts";
 import { deleteGhostUsers, findUserById } from "../db/users.ts";
 import { ALERT_AFTER_MS, builderFacingName, PENDING_TTL_MS, REMIND_AFTER_MS } from "../domain/inquiry.ts";
 import { getMailer } from "../email/index.ts";
@@ -28,6 +29,7 @@ import { inquiryUrl, notifyInquiryMessage } from "../notify/inquiry.ts";
  * Daily job, cron `0 1 * * *` (spec §8.4, ARCHITECTURE §5). VNX-0505 (M5): reminders, the admin alert, notification
  * retries and the inquiry clean-up. VNX-0705a: deletes expired data so the Privacy page stays true.
  * VNX-0606 (M6): invitation reminders and expiry, request expiry, clean-up of unconfirmed requests.
+ * VNX-2103 (EPIC 21): deletes outbound clicks older than 13 months (OUTBOUND_CLICK_RETENTION_DAYS).
  * Idempotent: every e-mail is marked sent right after it goes out, so a second run the same day sends nothing again.
  */
 export type DailyResult =
@@ -171,6 +173,8 @@ const STEPS: Step[] = [
   { step: "rate_limits", counts: "deleted", run: (env, now) => deleteOldRateLimitWindows(env.DB, now.getTime()) },
   { step: "login_tokens", counts: "deleted", run: (env, now) => deleteExpiredLoginTokens(env.DB, now) },
   { step: "sessions", counts: "deleted", run: (env, now) => deleteExpiredSessions(env.DB, now) },
+  // Owner 2026-10-05: outbound clicks are kept 13 months (Privacy says so). Bounded per run, see purgeOldClicks.
+  { step: "outbound_clicks", counts: "deleted", run: (env, now) => purgeOldClicks(env.DB, now) },
 ];
 
 /** Runs every step in order; a failing step is logged and does not stop the next one. Running twice is harmless. */

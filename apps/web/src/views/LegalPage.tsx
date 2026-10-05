@@ -1,4 +1,4 @@
-import type { FC } from "hono/jsx";
+import type { Child, FC } from "hono/jsx";
 import type { Locale } from "../i18n/locales.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { translator } from "../i18n/t.ts";
@@ -69,11 +69,12 @@ const META: Record<LegalPageId, { title: MessageKey; description: MessageKey }> 
   terms: { title: "legal.terms.title", description: "legal.terms.description" },
   privacy: { title: "legal.privacy.title", description: "legal.privacy.description" },
   mediaKit: { title: "legal.mediaKit.title", description: "legal.mediaKit.description" },
+  disclosure: { title: "legal.disclosure.title", description: "legal.disclosure.description" },
 };
 
-type Props = { locale: Locale; origin: string; signedIn: boolean; id: LegalPageId };
+type Props = { locale: Locale; origin: string; signedIn: boolean; id: LegalPageId; /** Inserted right after the section with that index (the disclosure partner list). */ extras?: Partial<Record<number, Child>> };
 
-export const LegalPage: FC<Props> = ({ locale, origin, signedIn, id }) => {
+export const LegalPage: FC<Props> = ({ locale, origin, signedIn, id, extras }) => {
   const tr = translator(locale);
   const page = LEGAL[id];
   // EN and VI have their own text; zh-Hans and zh-Hant show the EN text until VNX-0801 translates it.
@@ -97,12 +98,13 @@ export const LegalPage: FC<Props> = ({ locale, origin, signedIn, id }) => {
               {tr("legal.updated", { date: LEGAL_UPDATED_AT })}
             </p>
           ) : null}
-          {doc.sections.map((section) => (
+          {doc.sections.map((section, i) => (
             <>
               <h2>{section.heading}</h2>
               {section.blocks.map((block) => (
                 <BlockView block={block} />
               ))}
+              {extras?.[i] ?? null}
             </>
           ))}
         </div>

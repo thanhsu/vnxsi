@@ -41,6 +41,11 @@ const WRITERS: Record<string, string> = {
   requests: "../src/db/requests.ts",
   request_invites: "../src/db/requests.ts",
   feedback: "../src/db/feedback.ts",
+  feature_flags: "../src/db/flags.ts",
+  merchants: "../src/db/merchants.ts",
+  partner_programs: "../src/db/programs.ts",
+  offers: "../src/db/offers.ts",
+  outbound_clicks: "../src/db/clicks.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {
@@ -77,5 +82,72 @@ describe("builder-facing client name", () => {
         expect(line.replace(/builderFacingName\([\w.]*clientName\)/g, ""), file).not.toMatch(/\.clientName\b/);
       }
     }
+  });
+});
+
+// ADR-007 rule 2: ranking and suggestion code never reads money. Tables and modules of the monetization module.
+const MONEY_TABLES = ["merchants", "partner_programs", "offers", "conversions", "revenue_entries", "outbound_clicks"];
+const MONEY_DB = ["merchants", "programs", "offers", "conversions", "revenue", "clicks"];
+// Every file that ranks, searches or suggests. Add a file here when it starts to order results.
+const RANKING_FILES = [
+  "../src/domain/catalog.ts",
+  "../src/domain/directory.ts",
+  "../src/domain/request.ts",
+  "../src/db/catalog.ts",
+  "../src/db/directory.ts",
+  "../src/db/requests.ts",
+  "../src/routes/catalog.tsx",
+  "../src/routes/directory.tsx",
+  "../src/views/CatalogPage.tsx",
+  "../src/views/DirectoryPage.tsx",
+  "../src/routes/admin-requests.tsx",
+  "../src/views/admin/RequestDetailPage.tsx",
+];
+
+// Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
+// the files it creates (Task 2c: db/{merchants,programs}.ts, and db/audit.ts, which only reads `write_id` of those rows to guard audit rows; Task 2d: db/offers.ts (setDefaultOffer stays in db/merchants.ts, which owns `merchants`); Task 3: routes/admin-merchants.tsx only (views take structural prop types and may not import db); Task 4: db/clicks.ts,
+// routes/go.ts, jobs/daily.ts; Task 5: routes/tools.tsx, routes/seo.ts; Task 6: routes/legal.tsx).
+const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/offers.ts", "../src/db/audit.ts", "../src/routes/admin-merchants.tsx", "../src/db/clicks.ts", "../src/jobs/daily.ts", "../src/routes/go.ts", "../src/routes/tools.tsx", "../src/routes/seo.ts", "../src/routes/legal.tsx"]);
+
+describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
+  it("lists only files that exist", () => {
+    for (const file of RANKING_FILES) expect(sources[file], file).toBeDefined();
+  });
+
+  it("after Task 6 the allowlist is exactly the files of Tasks 2c-6", () => {
+    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/clicks.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts", "../src/jobs/daily.ts", "../src/routes/admin-merchants.tsx", "../src/routes/go.ts", "../src/routes/legal.tsx", "../src/routes/seo.ts", "../src/routes/tools.tsx"]);
+  });
+
+  it("the allowlist holds only files that exist, and no ranking file is on it", () => {
+    for (const file of MONEY_ALLOWED) expect(sources[file], file).toBeDefined();
+    for (const file of RANKING_FILES) expect(MONEY_ALLOWED.has(file), file).toBe(false);
+  });
+
+  it("ranking files import no monetization db module", () => {
+    for (const file of RANKING_FILES) {
+      for (const name of MONEY_DB) {
+        expect(sources[file], `${file} imports db/${name}`).not.toMatch(new RegExp(`from\\s+["'][^"']*/db/${name}\\.ts["']`));
+      }
+    }
+  });
+
+  it("ranking files have no SQL on a money table", () => {
+    for (const file of RANKING_FILES) {
+      for (const table of MONEY_TABLES) {
+        expect(sources[file], `${file} reads ${table}`).not.toMatch(new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${table}\\b`));
+      }
+    }
+  });
+
+  it("only allowlisted files import a money db module or touch a money table", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (MONEY_ALLOWED.has(file)) continue;
+      for (const name of MONEY_DB) expect(src, `${file} imports db/${name}`).not.toMatch(new RegExp(`from\\s+["'][^"']*/db/${name}\\.ts["']`));
+      for (const table of MONEY_TABLES) expect(src, `${file} touches ${table}`).not.toMatch(new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${table}\\b`));
+    }
+  });
+
+  it("has no partner name in src (ADR-007 rule 4)", () => {
+    for (const [file, src] of Object.entries(sources)) expect(src, file).not.toMatch(/elevenlabs|partnerstack/i);
   });
 });

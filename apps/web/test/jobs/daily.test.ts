@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSession, getSessionUser } from "../../src/auth/sessions.ts";
 import { consumeLoginToken, createLoginToken, LOGIN_TOKEN_TTL_MS } from "../../src/auth/tokens.ts";
+import { recordClick } from "../../src/db/clicks.ts";
 import { createUser } from "../../src/db/users.ts";
+import { purgeCutoff } from "../../src/domain/outbound.ts";
+import { ulid } from "../../src/lib/ulid.ts";
 import { hitRateLimit } from "../../src/http/rate-limit.ts";
 import worker from "../../src/index.ts";
 import { runDaily } from "../../src/jobs/daily.ts";
@@ -29,6 +32,7 @@ const IDLE_ACTIVITY_STEPS = [
   { job: "daily", step: "pending_requests", deleted: 0 },
   { job: "daily", step: "ghost_users", deleted: 0 },
 ];
+const CLICK_STEP = { job: "daily", step: "outbound_clicks", deleted: 0 };
 
 /** A DB whose statements on one table throw, to show one failing step does not stop the others. */
 function brokenOn(table: string): D1Database {
@@ -81,6 +85,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
       { job: "daily", step: "rate_limits", deleted: expected.rate_limits },
       { job: "daily", step: "login_tokens", deleted: expected.login_tokens },
       { job: "daily", step: "sessions", deleted: expected.sessions },
+      CLICK_STEP,
     ]);
 
     expect(await rateWindow("daily:old")).toBe(0);
@@ -106,6 +111,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
       { job: "daily", step: "rate_limits", deleted: 0 },
       { job: "daily", step: "login_tokens", deleted: 0 },
       { job: "daily", step: "sessions", deleted: 0 },
+      CLICK_STEP,
     ]);
   });
 
@@ -113,12 +119,13 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     await runDaily(testEnv, NOW);
     const lines = log.mock.calls.map((call) => call[0] as string);
-    expect(lines).toHaveLength(IDLE_ACTIVITY_STEPS.length + 3);
+    expect(lines).toHaveLength(IDLE_ACTIVITY_STEPS.length + 4);
     expect(lines.map((l) => JSON.parse(l))).toEqual([
       ...IDLE_ACTIVITY_STEPS,
       { job: "daily", step: "rate_limits", deleted: 0 },
       { job: "daily", step: "login_tokens", deleted: 0 },
       { job: "daily", step: "sessions", deleted: 0 },
+      CLICK_STEP,
     ]);
     for (const line of lines) expect(line).not.toContain("\n");
   });
@@ -134,6 +141,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     expect(results[at]).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
     expect(results[at + 1]).toEqual({ job: "daily", step: "login_tokens", deleted: 1 });
     expect(results[at + 2]).toEqual({ job: "daily", step: "sessions", deleted: 0 });
+    expect(results[at + 3]).toEqual(CLICK_STEP);
     expect(error).toHaveBeenCalledTimes(1);
     expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
   });
@@ -151,6 +159,33 @@ describe("scheduled handler (VNX-0705a AC9)", () => {
     expect(pending).toHaveLength(1);
     await Promise.all(pending);
     expect(await rateWindow("daily:scheduled")).toBe(0);
-    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual([...IDLE_ACTIVITY_STEPS.map((r) => r.step), "rate_limits", "login_tokens", "sessions"]);
+    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual([...IDLE_ACTIVITY_STEPS.map((r) => r.step), "rate_limits", "login_tokens", "sessions", "outbound_clicks"]);
+  });
+});
+
+describe("outbound clicks step (VNX-2103, Owner 2026-10-05: keep 13 months)", () => {
+  const clickAt = (offerId: string, createdAt: string) =>
+    recordClick(testEnv.DB, { id: ulid(), productId: null, offerId, linkKind: "offer", src: "tools", locale: "en", visitorHash: null, country: null, referrerHost: null, isBot: false, createdAt });
+  const clicksFor = (offerId: string) => count("SELECT COUNT(*) AS n FROM outbound_clicks WHERE offer_id = ?1", offerId);
+  const clickStep = (results: Awaited<ReturnType<typeof runDaily>>) => results.find((r) => r.step === "outbound_clicks");
+
+  it("deletes clicks older than 395 days, keeps the rest, and a second run deletes nothing", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const cutoff = purgeCutoff(NOW);
+    await clickAt("daily-old", new Date(Date.parse(cutoff) - 1).toISOString());
+    await clickAt("daily-edge", cutoff);
+    await clickAt("daily-new", NOW.toISOString());
+    expect(clickStep(await runDaily(testEnv, NOW))).toEqual({ job: "daily", step: "outbound_clicks", deleted: 1 });
+    expect([await clicksFor("daily-old"), await clicksFor("daily-edge"), await clicksFor("daily-new")]).toEqual([0, 1, 1]);
+    expect(clickStep(await runDaily(testEnv, NOW))).toEqual(CLICK_STEP);
+  });
+
+  it("a failing clicks step is logged and the other steps are unaffected", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const results = await runDaily({ ...testEnv, DB: brokenOn("outbound_clicks") } as Bindings, NOW);
+    expect(clickStep(results)).toEqual({ job: "daily", step: "outbound_clicks", error: "Error: boom on outbound_clicks" });
+    expect(results.filter((r) => "error" in r)).toHaveLength(1);
+    expect(error).toHaveBeenCalledTimes(1);
   });
 });
