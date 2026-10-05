@@ -178,6 +178,7 @@ describe("footer (VNX-0709 AC5)", () => {
         "mailto:contact@vnx.si",
         localizedPath(locale, "/terms"),
         localizedPath(locale, "/privacy"),
+        localizedPath(locale, "/disclosure"),
       ]);
       const langs = inner(footer, "nav", ` aria-label="${t(locale, "nav.language")}"`);
       expect(hrefs(langs)).toEqual(LOCALES.map((l) => localizedPath(l, "/builders")));

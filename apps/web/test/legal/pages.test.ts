@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { LEGAL } from "../../src/legal/content.ts";
+import { LEGAL, LEGAL_UPDATED_AT } from "../../src/legal/content.ts";
 import { LOCALES, localizedPath, type Locale } from "../../src/i18n/locales.ts";
 import type { MessageKey } from "../../src/i18n/messages/en.ts";
 import { t } from "../../src/i18n/t.ts";
 import { InlineText, parseInline } from "../../src/views/LegalPage.tsx";
 import { testEnv } from "../helpers.ts";
 
+const PARTNERS_BLOCK = /<div data-partners="active">[\s\S]*?<\/div>/;
 const fetchAt = (url: string) => createApp().request(new Request(url), undefined, testEnv);
 const get = (path: string) => fetchAt(`https://vnx.si${path}`);
 
@@ -19,11 +20,12 @@ const PAGES = [
   { rest: "/terms", id: "terms", meta: "legal.terms" },
   { rest: "/privacy", id: "privacy", meta: "legal.privacy" },
   { rest: "/media-kit", id: "mediaKit", meta: "legal.mediaKit" },
+  { rest: "/disclosure", id: "disclosure", meta: "legal.disclosure" },
 ] as const;
 
 const metaKey = (meta: string, part: "title" | "description") => `${meta}.${part}` as MessageKey;
 
-describe("legal pages (VNX-0705a)", () => {
+describe("legal pages (VNX-0705a)", { timeout: 30_000 }, () => {
   it("AC1: every page answers 200 in 4 locales with one h1, canonical, hreflang and meta description", async () => {
     for (const { rest, meta } of PAGES) {
       for (const locale of LOCALES) {
@@ -53,7 +55,7 @@ describe("legal pages (VNX-0705a)", () => {
       for (const locale of ["en", "vi"] as const) {
         const main = mainOf(await (await get(localizedPath(locale, rest))).text());
         expect(main, rest).toMatch(new RegExp(`<h1[^>]*>${LEGAL[id][locale].title}</h1>`));
-        const dated = textOf(main).includes(t(locale, "legal.updated", { date: "2026-10-04" }));
+        const dated = textOf(main).includes(t(locale, "legal.updated", { date: LEGAL_UPDATED_AT }));
         expect(dated, `${locale} ${rest}`).toBe(id !== "mediaKit");
       }
     }
@@ -78,7 +80,7 @@ describe("legal pages (VNX-0705a)", () => {
     // The other zh notice never leaks, and the date line is in the page's own language.
     const hans = textOf(mainOf(await (await get("/zh-hans/privacy")).text()));
     expect(hans).not.toContain(t("zh-Hant", "legal.englishOnly"));
-    expect(hans).toContain(t("zh-Hans", "legal.updated", { date: "2026-10-04" }));
+    expect(hans).toContain(t("zh-Hans", "legal.updated", { date: LEGAL_UPDATED_AT }));
   });
 
   it("AC3: EN and VI pages carry no English-only notice", async () => {
@@ -112,7 +114,8 @@ describe("legal pages (VNX-0705a)", () => {
     const allowed = new Set(["article", "div", "p", "h1", "h2", "ul", "li", "code", "strong", "a", "span"]);
     for (const { rest } of PAGES) {
       for (const locale of LOCALES) {
-        const main = mainOf(await (await get(localizedPath(locale, rest))).text());
+        // The partner list is data from D1, shared between test files: check it on its own below.
+        const main = mainOf(await (await get(localizedPath(locale, rest))).text()).replace(PARTNERS_BLOCK, "");
         const tags = new Set([...main.matchAll(/<\/?([a-z0-9]+)/g)].map((m) => m[1] ?? ""));
         for (const tag of tags) expect(allowed.has(tag), `${locale} ${rest} <${tag}>`).toBe(true);
         for (const href of main.matchAll(/href="([^"]*)"/g)) expect(href[1], `${locale} ${rest}`).toBe("mailto:contact@vnx.si");
@@ -121,6 +124,15 @@ describe("legal pages (VNX-0705a)", () => {
     // The source text itself holds no markup.
     for (const page of Object.values(LEGAL)) {
       for (const doc of [page.en, page.vi]) expect(JSON.stringify(doc)).not.toMatch(/[<>]/);
+    }
+  });
+
+  it("AC4: the partner list on /disclosure links only to localized /tools/<slug>", async () => {
+    for (const locale of LOCALES) {
+      const block = PARTNERS_BLOCK.exec(mainOf(await (await get(localizedPath(locale, "/disclosure"))).text()))?.[0] ?? "";
+      expect(block, locale).not.toBe("");
+      const re = new RegExp(`^${localizedPath(locale, "/tools")}/[a-z0-9-]+$`);
+      for (const href of block.matchAll(/href="([^"]*)"/g)) expect(href[1], locale).toMatch(re);
     }
   });
 

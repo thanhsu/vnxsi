@@ -88,7 +88,7 @@ Bảng `feature_flags` (`key` PK, `enabled` 0/1, `updated_by`, `updated_at`). Ke
 
 **`partner_programs`**: `id`, `merchant_id`, `name`, `type` (`affiliate`/`referral`/`revenue_share`/`direct`), `network` (văn bản tự do), `provider` (`generic_template`/`manual`), `commission_model` (`percent`/`flat`/`tiered`/`custom`, nullable), `commission_rate_bps`, `commission_flat_minor`, `currency`, `cookie_days` (đều nullable, **không có mặc định**), `attribution_notes`, `terms_url`, `terms_verified_at`, `status` (`draft`/`active`/`paused`/`ended`). Chỉ chuyển `active` khi có `terms_url` và `terms_verified_at`.
 
-**`offers`**: `id`, `program_id` (nullable: null = offer không kiếm tiền, ví dụ link chính thức của merchant), `subject_type` (`product`/`merchant`/`article`), `subject_id`, `kind` (`official`/`trial`/`affiliate`/`referral`/`sponsored`), `label` (enum key i18n: `learn_more`, `get_started`, `start_trial`, `visit_site`), `destination_url`, `tracking_template` (nullable), `status` (`active`/`paused`/`archived`), `starts_at`, `ends_at`. Một subject có nhiều offer.
+**`offers`**: `id`, `program_id` (nullable: null = offer không kiếm tiền, ví dụ link chính thức của merchant), `subject_type` (`product`/`merchant`/`article`), `subject_id`, `kind` (`official`/`trial`/`affiliate`/`referral`/`sponsored`), `label` (enum key i18n: `learn_more`, `get_started`, `start_trial`, `visit_site`, `try_it` — "Try {name}", Owner 2026-10-05), `destination_url`, `tracking_template` (nullable), `status` (`active`/`paused`/`archived`), `starts_at`, `ends_at`. Một subject có nhiều offer.
 
 **`conversions`**: `id`, `program_id`, `click_id` (nullable, FK `outbound_clicks`), `external_ref`, `order_amount_minor` (nullable), `commission_minor`, `currency`, `status`, `source` (`manual`/`csv`/`postback`), `occurred_on`, `confirmed_at`. `UNIQUE(program_id, external_ref)`.
 
@@ -100,6 +100,7 @@ Bảng `feature_flags` (`key` PK, `enabled` 0/1, `updated_by`, `updated_at`). Ke
 - Khi lưu (admin) và khi redirect: URL cuối (sau khi điền template, hoặc `destination_url` nếu không có template) phải là `https:`, không có userinfo, không phải IP literal hay `localhost`, và host thuộc `merchants.allowed_hosts` của merchant tương ứng. Với offer của product mà không có chương trình, host phải khớp host `website_url`/`demo_url` của product.
 - Redirect chỉ khi: offer `active`, trong khoảng `starts_at`/`ends_at`, chương trình (nếu có) `active`, merchant `active`, và cờ của loại tương ứng đang bật (`affiliate` cho `type = affiliate`, `partner_referral` cho `referral`/`revenue_share`). Thiếu điều kiện nào → chuyển tới `destination_url` không có tracking nếu host hợp lệ; không thì 404.
 - Header và ghi click như mục 2.1–2.2, `link_kind = 'offer'`.
+- **Sửa đổi (Owner 2026-10-05, thay câu fallback ở trên):** khi không được tracking (cờ tắt, chương trình chưa `active`, offer ngoài khoảng thời gian), `/go/` chuyển tới `merchants.website_url` của merchant (theo 3.8), không tới `destination_url`; đích vẫn phải qua luật URL và `allowed_hosts`. Lượt fallback vẫn ghi một dòng `outbound_clicks` (không gửi `click_id`). Offer/merchant `archived` → 404.
 - **`GET /go/:merchantSlug`** (Owner 2026-10-04): tra merchant theo slug, dùng `default_offer_id`, rồi xử lý y như `/go/o/:offerId`. Merchant không `active`, không có offer mặc định, hoặc slug không tồn tại → 404. Đây là URL dùng cho nút trên `/tools/:merchant` và để chia sẻ.
 
 ### 3.4 Hiển thị
@@ -211,8 +212,8 @@ Dùng lại luồng Post a request (spec Wave 1 mục 5.7, M6). Không bảng m�
 
 | Câu hỏi | Chốt khi |
 |---|---|
-| Thời gian giữ `outbound_clicks` (đề xuất 13 tháng, cron xóa) | Plan M7 |
-| Câu chữ disclosure ở 4 locale | Plan EPIC 21 |
+| ~~Thời gian giữ `outbound_clicks`~~ **Chốt 13 tháng, cron xóa (Owner 2026-10-05, plan EPIC 21)** | — |
+| ~~Câu chữ disclosure ở 4 locale~~ **Owner duyệt 2026-10-05** (plan EPIC 21, khối A) | — |
 | Builder tự gắn chương trình affiliate của chính họ: ai nhận hoa hồng | Plan EPIC 21 |
 | Số ô sponsored, giá, thời hạn | Plan EPIC 23 |
 | Ngưỡng traffic để bắt đầu quảng cáo | Lên lịch EPIC 24 |
