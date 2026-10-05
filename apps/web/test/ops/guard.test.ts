@@ -276,6 +276,28 @@ describe("no-store and noindex on every /ops response (AC3, spec §5)", () => {
     }
   });
 
+  it("marks the refusals of the site-wide checks that run before any /ops route: Origin (403) and body size (413)", async () => {
+    const app = createApp();
+    const crossOrigin = (path: string) =>
+      app.request(new Request(`https://vnx.si${path}`, { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/x-www-form-urlencoded" }, body: "x=1" }), undefined, env);
+    const ops = await crossOrigin("/ops/marketplace/builders");
+    const elsewhere = await crossOrigin("/khong-ton-tai");
+    // The Origin check is unchanged (spec §5) and answers every path alike, so it says nothing about /ops.
+    expect(ops.status).toBe(elsewhere.status);
+    expect(await ops.text()).toBe(await elsewhere.text());
+    expect(ops.headers.get("cache-control")).toBe("no-store");
+    expect(ops.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+
+    const big = await app.request(
+      new Request("https://vnx.si/ops/x", { method: "POST", headers: { origin: "https://vnx.si", "content-type": "application/x-www-form-urlencoded" }, body: "x=" + "a".repeat(70 * 1024) }),
+      undefined,
+      env,
+    );
+    expect(big.status).toBe(413);
+    expect(big.headers.get("cache-control")).toBe("no-store");
+    expect(big.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+
   it("leaves paths that only start with the letters ops alone", async () => {
     const { res } = await send(createApp(), "/opsx");
     expect(res.headers.get("x-robots-tag")).toBeNull();
