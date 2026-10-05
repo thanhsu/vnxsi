@@ -3307,13 +3307,747 @@ git commit -m "feat(web): partner schema, merchant and program db modules (VNX-2
 
 ### Task 2d: VNX-2102a-4 — `db/offers.ts`, offer mặc định và đọc cho `/go/`
 
-**Phạm vi (chỉ mô tả; Planner viết chi tiết ngay trước khi làm, sau khi Task 2c xong):** `apps/web/src/db/offers.ts` (duy nhất ghi `offers`; `type Offer`; `createOffer(db, { offer: OfferInput, actorUserId, now })` và `updateOffer(db, { id, offer, expectedStatus, actorUserId, now })` theo mẫu `runAudited` / `AuditPartnerGuard` của 2c (thêm `"offers"` vào kiểu guard và một nhánh SQL literal `FROM offers` trong `db/audit.ts`), trả `Offer | null`; câu `INSERT … SELECT … WHERE` chỉ ghi khi merchant (`subject_id`) tồn tại và `program.merchant_id = subject_id`, `updateOffer` thêm `AND subject_id = ?` và cùng điều kiện chương trình; `findOfferById`, `listOffersByMerchant(db, merchantId)`; `findOfferWithContext(db, offerId)` → `{ offer: RedirectOffer | null; program: RedirectProgram | null; merchant: RedirectMerchant | null }` bằng một truy vấn `offers LEFT JOIN partner_programs LEFT JOIN merchants` (merchant nạp theo `offers.subject_id` khi `subject_type = 'merchant'`, không theo chương trình; `allowed_hosts` qua `parseStoredHosts` của 2c; kiểu trả đúng `RedirectOffer` / `RedirectProgram` / `RedirectMerchant` của Task 2b, có `subjectType`, `subjectId`); `findDefaultOfferContext(db, merchantSlug)` → cùng kiểu hoặc `null` khi slug lạ, merchant không có `default_offer_id`, hoặc offer mặc định không có `subject_type = 'merchant'` và `subject_id` đúng merchant của slug; việc "merchant không `active` → 404" của `GET /go/:merchantSlug` do route Task 4 làm từ `merchant.status`). `db/merchants.ts` thêm `setDefaultOffer(db, { merchantId, offerId | null, actorUserId, now })`: một `UPDATE … WHERE id = merchant AND (offerId IS NULL OR EXISTS (SELECT 1 FROM offers WHERE id = offerId AND subject_type = 'merchant' AND subject_id = merchant AND status != 'archived')) RETURNING *`, audit `merchant.update` với `data.defaultOfferId`; offer của merchant khác hoặc đã `archived` → `null`, không ghi. Fixture `makeOffer(merchant, program | null, overrides)`. Test kiến trúc: `offers: "../src/db/offers.ts"` vào `WRITERS`, `db/offers.ts` vào `MONEY_ALLOWED`. Test `test/db/offers.test.ts`: chương trình của merchant khác bị từ chối, `createOffer` thiếu merchant → `null`, CAS `expectedStatus`, audit `offer.create|update|status`, `findOfferWithContext` cho offer có / không chương trình và cho `allowed_hosts` hỏng (rỗng, không throw), `findDefaultOfferContext` với offer mặc định trỏ sang merchant khác → `null`, `setDefaultOffer` với offer của merchant khác / `archived` → `null` và không ghi. Commit `feat(web): offer db module and redirect reads (VNX-2102a-4)`. Diff ước ≈ 420 dòng.
+**Files:**
+- Create: `apps/web/src/db/offers.ts`
+- Modify: `apps/web/src/db/audit.ts` (guard cho `"offers"`), `apps/web/src/db/merchants.ts` (`setDefaultOffer`), `apps/web/src/domain/offer.ts` (`offerTransitionAllowed`)
+- Modify: `apps/web/test/fixtures.ts` (`makeOffer`), `apps/web/test/architecture.test.ts`
+- Test: `apps/web/test/domain/offer.test.ts` (thêm), `apps/web/test/db/offers.test.ts`, `apps/web/test/db/offer-context.test.ts`
+- Không có chuỗi giao diện, không sửa route, không migration (bảng `offers` đã có ở `0011`; ghi chú deploy của `0011` đã có, không cần thêm).
+
+**Interfaces:**
+- Consumes (đã commit): `OfferInput`, `OfferKind`, `OfferLabel`, `OfferStatus`, `RedirectInput`, `RedirectOffer`, `RedirectProgram`, `RedirectMerchant`, `resolveOfferRedirect`, `ProgramType`, `ProgramStatus` (`domain/offer.ts`); `MerchantStatus` (`domain/merchant.ts`); `runAudited`, `auditStatement`, `AuditPartnerGuard` (`db/audit.ts`); `parseStoredHosts`, `Merchant` (`db/merchants.ts`); `ulid`.
+- Produces (domain): `offerTransitionAllowed(from: OfferStatus, to: OfferStatus): boolean`.
+- Produces (`db/audit.ts`): `AuditPartnerGuard.partnerTable` thêm `"offers"`.
+- Produces (`db/offers.ts`): `type Offer`; `type RedirectRows = Pick<RedirectInput, "offer" | "program" | "merchant">`; `createOffer(db, { offer, actorUserId, now })` → `Offer | null`; `updateOffer(db, { id, offer, expectedStatus, actorUserId, now })` → `Offer | null`; `findOfferById(db, id)`; `listOffersByMerchant(db, merchantId)`; `findOfferWithContext(db, offerId)` → `RedirectRows` (ba trường `null` khi không có offer); `findDefaultOfferContext(db, merchantSlug)` → `(RedirectRows & { offer: RedirectOffer; merchant: RedirectMerchant }) | null`.
+- Produces (`db/merchants.ts`): `setDefaultOffer(db, { merchantId, offerId, actorUserId, now })` → `Merchant | null`.
+- Produces (`test/fixtures.ts`): `makeOffer(merchant, program | null, overrides?)`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **`setDefaultOffer` nằm trong `db/merchants.ts`, không phải `db/offers.ts`:** nó ghi `merchants.default_offer_id`, mà test sở hữu bảng chỉ cho `db/merchants.ts` ghi `merchants`. `db/merchants.ts` đã thuộc `MONEY_ALLOWED` nên subselect `FROM offers` trong đó hợp lệ. Chữ ký dùng object (khớp 2c) và có `actorUserId`, `now` cho audit; `offerId: null` là xóa offer mặc định.
+2. **Quyền sở hữu nằm trong chính câu UPDATE:** `WHERE id = merchant AND (offerId IS NULL OR EXISTS (SELECT 1 FROM offers WHERE id = offerId AND subject_type = 'merchant' AND subject_id = merchant AND status <> 'archived'))`. Không có bước "đọc rồi ghi". Guard `write_id` như 2c: audit `merchant.update` (`data.defaultOfferId`) chỉ ghi khi câu UPDATE thật sự ghi. Offer `archived` sau khi đã là mặc định không bị gỡ tự động: `resolveOfferRedirect` trả `offer_archived` (404); Task 3 nên hiện cảnh báo (ghi nhận cho Task 3, ngoài phạm vi 2d).
+3. **`write_id` cho `offers`** như ba bảng của 2c: `AuditPartnerGuard` thêm `"offers"`, nhánh SQL literal `FROM offers` trong `db/audit.ts` (không nội suy tên bảng). `MONEY_ALLOWED` sau 2d đúng **bốn** file: `db/merchants.ts`, `db/programs.ts`, `db/offers.ts`, `db/audit.ts`.
+4. **`createOffer`:** `INSERT … SELECT … WHERE` chỉ ghi khi merchant `subject_id` tồn tại **và** (không có chương trình hoặc chương trình đó thuộc đúng merchant). Domain `parseOfferForm` đã kiểm `program_merchant`; đây là chốt chặn thứ hai, nên `null` gộp "merchant không có" và "chương trình của merchant khác" (Task 3 đã kiểm trước, nên `null` là lỗi lập trình hoặc đua dữ liệu). Không có DEFAULT: `status`, nhãn… do input truyền. CHECK của `0011` (template rỗng khi có chương trình, `label` ngoài enum, `kind`) là chốt chặn cuối và **ném lỗi** (cùng quy ước 2c mục 2), không trả `null`.
+5. **`updateOffer`** là compare-and-set theo `status = expectedStatus`, thêm `AND subject_type = 'merchant' AND subject_id = input.offer.subjectId` (offer không đổi chủ; id của merchant khác thì không khớp), cùng điều kiện chương trình như `createOffer`, và **`archived` là cuối cùng**: `AND (status <> 'archived' OR ?10 = 'archived')` (cùng mẫu `updateProgram`; offer `archived` vẫn sửa được trường khác, như chương trình `ended`). Domain: `offerTransitionAllowed(from, to)` = `from === to || from !== "archived"` (chưa có trong code, thêm kèm test), Task 3 dùng để ẩn nút. Audit: `offer.status` (`data` from, to) khi `status` đổi, `offer.update` khi không; `offer.create` có `data { merchantId, programId }`. `updateOffer` không đụng `merchants.default_offer_id`.
+6. **Hàm đọc cho `/go/`** trả đúng kiểu `RedirectOffer` / `RedirectProgram` / `RedirectMerchant` của Task 2b (đã đọc từ code): **một** truy vấn `offers o LEFT JOIN partner_programs p ON p.id = o.program_id LEFT JOIN merchants m ON m.id = o.subject_id AND o.subject_type = 'merchant'`. Merchant nạp theo `subject_id` của offer (không theo chương trình); chương trình nạp theo `program_id`, còn việc `program.merchantId` khớp merchant là của domain (`program_merchant`). `allowed_hosts` qua `parseStoredHosts` (JSON hỏng thì `[]`, không ném). `findOfferWithContext` trả đối tượng ba trường để đưa thẳng vào `resolveOfferRedirect` (offer không tồn tại: ba `null`, domain trả `offer_missing`). `findDefaultOfferContext` dùng cùng SELECT với `WHERE m.slug = ?1 AND m.default_offer_id = o.id AND o.subject_type = 'merchant'`; vì `m` nối theo `o.subject_id`, offer mặc định của merchant khác không bao giờ khớp: trả `null`. Trạng thái merchant (`paused` → 404 của `/go/:slug`) là việc của route Task 4, đọc từ `merchant.status` (merchant `paused` vẫn được trả về).
+7. `makeOffer` dùng `fixtureNow` chung và host chung (`example.com`); mặc định `active`, nhãn `visit_site`, `destination_url = https://example.com/`; có chương trình thì `kind = affiliate` và template `https://example.com/r?c={click_id}`. Hàm không kiểm host (db không kiểm URL; domain kiểm).
+8. Lưu ý chuỗi SQL: không viết `INSERT INTO|UPDATE|DELETE FROM` viết hoa trong comment (test sở hữu bảng quét chúng).
+
+- [ ] **Step 1: Chuyển trạng thái offer ở domain (test trước)**
+
+Thêm vào `apps/web/test/domain/offer.test.ts` (import `offerTransitionAllowed`, `OFFER_STATUSES`; nếu đã import `OFFER_STATUSES` thì không thêm lần nữa):
+
+```ts
+describe("offerTransitionAllowed", () => {
+  it("archived is terminal; everything else moves freely; no change is always fine", () => {
+    for (const from of OFFER_STATUSES) {
+      for (const to of OFFER_STATUSES) expect(offerTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "archived");
+    }
+  });
+
+  it("lists the forbidden and the allowed pairs explicitly", () => {
+    expect(offerTransitionAllowed("archived", "active")).toBe(false);
+    expect(offerTransitionAllowed("archived", "paused")).toBe(false);
+    expect(offerTransitionAllowed("archived", "archived")).toBe(true);
+    expect(offerTransitionAllowed("active", "archived")).toBe(true);
+    expect(offerTransitionAllowed("paused", "active")).toBe(true);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/domain/offer.test.ts
+```
+
+Expected: FAIL (hàm chưa có). Thêm vào `domain/offer.ts` (ngay sau `programTransitionAllowed`):
+
+```ts
+/** `archived` is terminal for offers too (Controller 2026-10-05); staying where it is is not a transition. Also enforced in db/offers.ts#updateOffer. */
+export function offerTransitionAllowed(from: OfferStatus, to: OfferStatus): boolean {
+  return from === to || from !== "archived";
+}
+```
+
+Expected: PASS.
+
+- [ ] **Step 2: Guard audit, `db/offers.ts` (ghi), fixture `makeOffer` (test trước)**
+
+`apps/web/test/db/offers.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { auditStatement } from "../../src/db/audit.ts";
+import { createOffer, findOfferById, listOffersByMerchant, updateOffer } from "../../src/db/offers.ts";
+import type { OfferInput } from "../../src/domain/offer.ts";
+import { ensureUser, makeMerchant, makeOffer, makeProgram } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = "2026-10-05T00:00:00.000Z";
+const at = (n: number) => new Date(Date.parse(NOW) + n * 1000).toISOString();
+const input = (merchant: { id: string }, program: { id: string } | null, o: Partial<OfferInput> = {}): OfferInput => ({
+  programId: program?.id ?? null,
+  subjectType: "merchant",
+  subjectId: merchant.id,
+  kind: program ? "affiliate" : "official",
+  label: "visit_site",
+  destinationUrl: "https://example.com/",
+  trackingTemplate: program ? "https://example.com/r?c={click_id}" : null,
+  startsAt: null,
+  endsAt: null,
+  status: "active",
+  ...o,
+});
+const audits = async (entityId: string) =>
+  (await testEnv.DB.prepare("SELECT action, data FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string; data: string }>()).results;
+const actionsOf = async (entityId: string) => (await audits(entityId)).map((a) => a.action);
+const countFor = async (merchantId: string) => {
+  const n = async (sql: string) => (await testEnv.DB.prepare(sql).bind(merchantId).first<{ n: number }>())?.n;
+  return {
+    offers: await n("SELECT COUNT(*) AS n FROM offers WHERE subject_id = ?1"),
+    audits: await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'offer.create' AND json_extract(data, '$.merchantId') = ?1"),
+  };
+};
+
+describe("db/offers writes (addendum §3.2)", () => {
+  it("creates an offer with and without a program, one offer.create audit row each", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    const tracked = await createOffer(testEnv.DB, { offer: input(m, p, { label: "try_it", startsAt: "2026-10-01T00:00:00.000Z" }), actorUserId: admin.id, now: at(1) });
+    expect(tracked).toMatchObject({ programId: p.id, subjectType: "merchant", subjectId: m.id, kind: "affiliate", label: "try_it", destinationUrl: "https://example.com/", trackingTemplate: "https://example.com/r?c={click_id}", startsAt: "2026-10-01T00:00:00.000Z", endsAt: null, status: "active", createdAt: at(1), updatedAt: at(1) });
+    const plain = await createOffer(testEnv.DB, { offer: input(m, null), actorUserId: admin.id, now: at(2) });
+    expect(plain).toMatchObject({ programId: null, trackingTemplate: null });
+    const rows = await audits(tracked?.id ?? "");
+    expect(rows.map((r) => r.action)).toEqual(["offer.create"]);
+    expect(JSON.parse(rows[0]?.data ?? "{}")).toEqual({ merchantId: m.id, programId: p.id });
+    expect(await actionsOf(plain?.id ?? "")).toEqual(["offer.create"]);
+  });
+
+  it("a merchant that does not exist, or a program of another merchant, gets no offer and no audit row", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const foreign = await makeProgram(other);
+    expect(await createOffer(testEnv.DB, { offer: input({ id: "missing" }, null), actorUserId: admin.id, now: at(1) })).toBeNull();
+    expect(await countFor("missing")).toEqual({ offers: 0, audits: 0 });
+    expect(await createOffer(testEnv.DB, { offer: input(m, foreign), actorUserId: admin.id, now: at(2) })).toBeNull();
+    expect(await countFor(m.id)).toEqual({ offers: 0, audits: 0 });
+  });
+
+  it("the database is the last barrier: an empty template with a program, or an unknown label, throws and leaves nothing", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    await expect(createOffer(testEnv.DB, { offer: input(m, p, { trackingTemplate: "" }), actorUserId: admin.id, now: at(1) })).rejects.toThrow();
+    await expect(createOffer(testEnv.DB, { offer: input(m, p, { trackingTemplate: null }), actorUserId: admin.id, now: at(1) })).rejects.toThrow();
+    await expect(createOffer(testEnv.DB, { offer: input(m, null, { label: "buy_now" as never }), actorUserId: admin.id, now: at(1) })).rejects.toThrow();
+    expect(await countFor(m.id)).toEqual({ offers: 0, audits: 0 });
+  });
+
+  it("updateOffer: a field edit audits offer.update, a status change audits offer.status with from and to", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    const o = await makeOffer(m, p);
+    const edited = await updateOffer(testEnv.DB, { id: o.id, offer: input(m, p, { label: "try_it", endsAt: "2027-01-01T00:00:00.000Z" }), expectedStatus: "active", actorUserId: admin.id, now: at(2) });
+    expect(edited).toMatchObject({ label: "try_it", endsAt: "2027-01-01T00:00:00.000Z", status: "active", subjectId: m.id, updatedAt: at(2), createdAt: o.createdAt });
+    const paused = await updateOffer(testEnv.DB, { id: o.id, offer: input(m, p, { status: "paused" }), expectedStatus: "active", actorUserId: admin.id, now: at(3) });
+    expect(paused?.status).toBe("paused");
+    const rows = await audits(o.id);
+    expect(rows.map((r) => r.action)).toEqual(["offer.create", "offer.update", "offer.status"]);
+    expect(JSON.parse(rows[2]?.data ?? "{}")).toEqual({ from: "active", to: "paused" });
+  });
+
+  it("updateOffer is a compare-and-set on status: a stale caller changes and audits nothing", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null, { status: "paused" });
+    const lost = await updateOffer(testEnv.DB, { id: o.id, offer: input(m, null, { label: "try_it", status: "active" }), expectedStatus: "active", actorUserId: admin.id, now: at(2) });
+    expect(lost).toBeNull();
+    expect(await findOfferById(testEnv.DB, o.id)).toMatchObject({ label: "visit_site", status: "paused" });
+    expect(await actionsOf(o.id)).toEqual(["offer.create"]);
+    expect(await updateOffer(testEnv.DB, { id: "missing", offer: input(m, null), expectedStatus: "active", actorUserId: admin.id, now: at(3) })).toBeNull();
+  });
+
+  it("updateOffer never moves an offer to another merchant or onto another merchant's program", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const foreign = await makeProgram(other);
+    const o = await makeOffer(m, null);
+    expect(await updateOffer(testEnv.DB, { id: o.id, offer: input(other, null), expectedStatus: "active", actorUserId: admin.id, now: at(2) })).toBeNull();
+    expect(await updateOffer(testEnv.DB, { id: o.id, offer: input(m, foreign), expectedStatus: "active", actorUserId: admin.id, now: at(3) })).toBeNull();
+    expect(await findOfferById(testEnv.DB, o.id)).toMatchObject({ subjectId: m.id, programId: null });
+    expect(await actionsOf(o.id)).toEqual(["offer.create"]);
+  });
+
+  it("archived is terminal: no transition out of it, but an archived offer can still be edited", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null, { status: "archived" });
+    for (const to of ["active", "paused"] as const) {
+      expect(await updateOffer(testEnv.DB, { id: o.id, offer: input(m, null, { status: to }), expectedStatus: "archived", actorUserId: admin.id, now: at(2) }), to).toBeNull();
+    }
+    expect((await findOfferById(testEnv.DB, o.id))?.status).toBe("archived");
+    expect((await updateOffer(testEnv.DB, { id: o.id, offer: input(m, null, { label: "learn_more", status: "archived" }), expectedStatus: "archived", actorUserId: admin.id, now: at(3) }))?.label).toBe("learn_more");
+    const live = await makeOffer(m, null);
+    expect((await updateOffer(testEnv.DB, { id: live.id, offer: input(m, null, { status: "archived" }), expectedStatus: "active", actorUserId: admin.id, now: at(4) }))?.status).toBe("archived");
+    expect(await actionsOf(o.id)).toEqual(["offer.create", "offer.update"]);
+  });
+
+  it("updateOffer only touches merchant offers: one whose subject_type is product returns null and stays unchanged", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    await testEnv.DB.prepare("UPDATE offers SET subject_type = 'product' WHERE id = ?1").bind(o.id).run();
+    expect(await updateOffer(testEnv.DB, { id: o.id, offer: input(m, null, { label: "try_it" }), expectedStatus: "active", actorUserId: admin.id, now: at(2) })).toBeNull();
+    expect(await findOfferById(testEnv.DB, o.id)).toMatchObject({ label: "visit_site", subjectType: "product" });
+    expect(await actionsOf(o.id)).toEqual(["offer.create"]);
+  });
+
+  it("the audit guard is keyed on the offer's last write id (a lost write audits nothing)", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    const audit = (writeId: string) =>
+      auditStatement(testEnv.DB, { actorUserId: admin.id, action: "offer.update", entity: "offer", entityId: o.id, now: at(9) }, { partnerTable: "offers", id: o.id, writeId });
+    await audit("not-the-last-write").run();
+    expect(await actionsOf(o.id)).toEqual(["offer.create"]);
+    const real = await testEnv.DB.prepare("SELECT write_id FROM offers WHERE id = ?1").bind(o.id).first<{ write_id: string }>();
+    await audit(real?.write_id ?? "").run();
+    expect(await actionsOf(o.id)).toEqual(["offer.create", "offer.update"]);
+  });
+
+  it("finds by id and lists a merchant's offers oldest first, none of another merchant's", async () => {
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const a = await makeOffer(m, null);
+    const b = await makeOffer(m, null, { label: "try_it" });
+    await makeOffer(other, null);
+    expect(await findOfferById(testEnv.DB, "missing")).toBeNull();
+    expect((await listOffersByMerchant(testEnv.DB, m.id)).map((o) => o.id)).toEqual([a.id, b.id]);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/db/offers.test.ts
+```
+
+Expected: FAIL (không có `db/offers.ts`, `makeOffer`).
+
+Sửa `apps/web/src/db/audit.ts`: đổi kiểu (docblock thêm "offer"):
+
+```ts
+export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs" | "offers"; id: string; writeId: string };
+```
+
+Cập nhật docblock của kiểu này ("merchant / program / offer row's last write") và docblock của `auditStatement` ("`partnerTable` + `id` on that merchant / program / offer row's last write id").
+
+và thêm nhánh literal ngay sau khối `if (onlyIf.partnerTable === "merchants") { … }`, trước `return` của `partner_programs`:
+
+```ts
+    if (onlyIf.partnerTable === "offers") {
+      return db
+        .prepare(
+          `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+           WHERE EXISTS (SELECT 1 FROM offers WHERE id = ?8 AND write_id = ?9)`,
+        )
+        .bind(...values, onlyIf.id, onlyIf.writeId);
+    }
+```
+
+`apps/web/src/db/offers.ts` (phần ghi; phần đọc ở Step 4):
+
+```ts
+import type { OfferInput, OfferKind, OfferLabel, OfferStatus } from "../domain/offer.ts";
+import { ulid } from "../lib/ulid.ts";
+import { runAudited } from "./audit.ts";
+
+/** The only writer of `offers` (module `monetization`, addendum §3.2). */
+
+export type Offer = {
+  id: string;
+  programId: string | null;
+  subjectType: "product" | "merchant" | "article";
+  subjectId: string;
+  kind: OfferKind;
+  label: OfferLabel;
+  destinationUrl: string;
+  trackingTemplate: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: OfferStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type Row = {
+  id: string;
+  program_id: string | null;
+  subject_type: "product" | "merchant" | "article";
+  subject_id: string;
+  kind: OfferKind;
+  label: OfferLabel;
+  destination_url: string;
+  tracking_template: string | null;
+  status: OfferStatus;
+  starts_at: string | null;
+  ends_at: string | null;
+  write_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+const toOffer = (r: Row): Offer => ({
+  id: r.id,
+  programId: r.program_id,
+  subjectType: r.subject_type,
+  subjectId: r.subject_id,
+  kind: r.kind,
+  label: r.label,
+  destinationUrl: r.destination_url,
+  trackingTemplate: r.tracking_template,
+  startsAt: r.starts_at,
+  endsAt: r.ends_at,
+  status: r.status,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+type Actor = { actorUserId: string; now: string };
+
+/**
+ * Null when the merchant (`subject_id`) does not exist or the program belongs to another merchant: nothing is written, nothing audited
+ * (the caller has already run parseOfferForm, so that is a bug or a race, not a user error). A CHECK of 0011 (a program without a
+ * template, an unknown label) is rejected by the database and throws.
+ */
+export async function createOffer(db: D1Database, input: Actor & { offer: OfferInput }): Promise<Offer | null> {
+  const id = ulid(Date.parse(input.now));
+  const writeId = ulid();
+  const o = input.offer;
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `INSERT INTO offers (id, program_id, subject_type, subject_id, kind, label, destination_url, tracking_template, status, starts_at, ends_at, write_id, created_at, updated_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13
+         WHERE ?3 = 'merchant' AND EXISTS (SELECT 1 FROM merchants WHERE id = ?4)
+           AND (?2 IS NULL OR EXISTS (SELECT 1 FROM partner_programs WHERE id = ?2 AND merchant_id = ?4))
+         RETURNING *`,
+      )
+      .bind(id, o.programId, o.subjectType, o.subjectId, o.kind, o.label, o.destinationUrl, o.trackingTemplate, o.status, o.startsAt, o.endsAt, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "offer.create", entity: "offer", entityId: id, data: { merchantId: o.subjectId, programId: o.programId }, now: input.now },
+    { partnerTable: "offers", id, writeId },
+  );
+  return row ? toOffer(row) : null;
+}
+
+/**
+ * Compare-and-set on `status = expectedStatus`; the offer keeps its merchant (`subject_id` must equal the input's) and may only point at a
+ * program of that merchant; `archived` is terminal (the status may only stay `archived`). Null when any of these fails or the offer is missing:
+ * nothing written, nothing audited. Audit: `offer.status` (data from, to) when the status changes, else `offer.update`.
+ */
+export async function updateOffer(db: D1Database, input: Actor & { id: string; offer: OfferInput; expectedStatus: OfferStatus }): Promise<Offer | null> {
+  const writeId = ulid();
+  const o = input.offer;
+  const changed = o.status !== input.expectedStatus;
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `UPDATE offers SET program_id = ?3, kind = ?4, label = ?5, destination_url = ?6, tracking_template = ?7, starts_at = ?8, ends_at = ?9,
+                status = ?10, write_id = ?11, updated_at = ?12
+         WHERE id = ?1 AND status = ?2 AND subject_type = 'merchant' AND subject_id = ?13
+           AND (status <> 'archived' OR ?10 = 'archived')
+           AND (?3 IS NULL OR EXISTS (SELECT 1 FROM partner_programs WHERE id = ?3 AND merchant_id = ?13))
+         RETURNING *`,
+      )
+      .bind(input.id, input.expectedStatus, o.programId, o.kind, o.label, o.destinationUrl, o.trackingTemplate, o.startsAt, o.endsAt, o.status, writeId, input.now, o.subjectId),
+    {
+      actorUserId: input.actorUserId,
+      action: changed ? "offer.status" : "offer.update",
+      entity: "offer",
+      entityId: input.id,
+      ...(changed ? { data: { from: input.expectedStatus, to: o.status } } : {}),
+      now: input.now,
+    },
+    { partnerTable: "offers", id: input.id, writeId },
+  );
+  return row ? toOffer(row) : null;
+}
+
+export async function findOfferById(db: D1Database, id: string): Promise<Offer | null> {
+  const row = await db.prepare("SELECT * FROM offers WHERE id = ?1").bind(id).first<Row>();
+  return row ? toOffer(row) : null;
+}
+
+/** For /admin/merchants/:id: the merchant's own offers (subject_type merchant), oldest first. */
+export async function listOffersByMerchant(db: D1Database, merchantId: string): Promise<Offer[]> {
+  const { results } = await db.prepare("SELECT * FROM offers WHERE subject_type = 'merchant' AND subject_id = ?1 ORDER BY created_at, id").bind(merchantId).all<Row>();
+  return results.map(toOffer);
+}
+```
+
+Fixture. Thêm vào `apps/web/test/fixtures.ts` (import `createOffer, type Offer` từ `../src/db/offers.ts`, `type OfferInput` vào import sẵn có từ `../src/domain/offer.ts`):
+
+```ts
+/**
+ * An `active` offer of `merchant` on example.com. With a program it is an affiliate offer with a template; without, the merchant's own link.
+ * Shares `fixtureNow` with the other fixtures. Does not check hosts (the domain does that).
+ */
+export async function makeOffer(merchant: { id: string }, program: { id: string } | null, overrides: Partial<OfferInput> = {}): Promise<Offer> {
+  const offer: OfferInput = {
+    programId: program?.id ?? null,
+    subjectType: "merchant",
+    subjectId: merchant.id,
+    kind: program ? "affiliate" : "official",
+    label: "visit_site",
+    destinationUrl: "https://example.com/",
+    trackingTemplate: program ? "https://example.com/r?c={click_id}" : null,
+    startsAt: null,
+    endsAt: null,
+    status: "active",
+    ...overrides,
+  };
+  const admin = await ensureUser("partner-fixtures@vnx.si");
+  const created = await createOffer(testEnv.DB, { offer, actorUserId: admin.id, now: fixtureNow() });
+  if (!created) throw new Error("merchant or program not found");
+  return created;
+}
+```
+
+```bash
+npm test -w apps/web -- test/db/offers.test.ts test/db/merchants.test.ts test/db/programs.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 3: `setDefaultOffer` (test trước)**
+
+`apps/web/test/db/offer-context.test.ts` (toàn bộ file sau Step 4; ở bước này viết trước phần dưới đây, với các import `findDefaultOfferContext`, `findOfferWithContext`, `resolveOfferRedirect`, `ulid` và hằng `FLAGS_ON`, `run` thêm ở Step 4):
+
+```ts
+import { describe, expect, it } from "vitest";
+import { findMerchantById, setDefaultOffer } from "../../src/db/merchants.ts";
+import { ensureUser, makeMerchant, makeOffer } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = "2026-10-05T00:00:00.000Z";
+const at = (n: number) => new Date(Date.parse(NOW) + n * 1000).toISOString();
+const actionsOf = async (entityId: string) =>
+  (await testEnv.DB.prepare("SELECT action FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string }>()).results.map((a) => a.action);
+
+describe("setDefaultOffer (ownership inside the UPDATE)", () => {
+  it("sets the merchant's own offer, audits merchant.update with the offer id, and can clear it", async () => {
+    const admin = await ensureUser("d-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    const set = await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: o.id, actorUserId: admin.id, now: at(2) });
+    expect(set).toMatchObject({ id: m.id, defaultOfferId: o.id, updatedAt: at(2) });
+    const audit = await testEnv.DB.prepare("SELECT data FROM audit_log WHERE entity_id = ?1 AND action = 'merchant.update'").bind(m.id).first<{ data: string }>();
+    expect(JSON.parse(audit?.data ?? "{}")).toEqual({ defaultOfferId: o.id });
+    expect((await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: null, actorUserId: admin.id, now: at(3) }))?.defaultOfferId).toBeNull();
+    expect(await actionsOf(m.id)).toEqual(["merchant.create", "merchant.update", "merchant.update"]);
+  });
+
+  it("another merchant's offer, an archived offer, a non-merchant offer, an unknown offer or merchant: null, nothing written, nothing audited", async () => {
+    const admin = await ensureUser("d-admin@vnx.si");
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const foreign = await makeOffer(other, null);
+    const archived = await makeOffer(m, null, { status: "archived" });
+    const productOffer = await makeOffer(m, null);
+    await testEnv.DB.prepare("UPDATE offers SET subject_type = 'product' WHERE id = ?1").bind(productOffer.id).run();
+    for (const offerId of [foreign.id, archived.id, productOffer.id, "missing"]) {
+      expect(await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId, actorUserId: admin.id, now: at(2) }), offerId).toBeNull();
+    }
+    expect(await setDefaultOffer(testEnv.DB, { merchantId: "missing", offerId: null, actorUserId: admin.id, now: at(3) })).toBeNull();
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBeNull();
+    expect(await actionsOf(m.id)).toEqual(["merchant.create"]);
+    expect(await actionsOf("missing")).toEqual([]);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/db/offer-context.test.ts
+```
+
+Expected: FAIL (`setDefaultOffer` chưa có). Thêm vào `apps/web/src/db/merchants.ts` (trước `findMerchantById`):
+
+```ts
+/**
+ * The merchant's default offer (what /go/:slug follows). The ownership check is inside the UPDATE: the offer must be of this merchant
+ * (subject_type merchant, subject_id) and not archived, or `offerId` is null (clear). Null otherwise (no such merchant, or the check
+ * failed): nothing written, nothing audited.
+ */
+export async function setDefaultOffer(db: D1Database, input: Actor & { merchantId: string; offerId: string | null }): Promise<Merchant | null> {
+  const writeId = ulid();
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `UPDATE merchants SET default_offer_id = ?2, write_id = ?3, updated_at = ?4
+         WHERE id = ?1
+           AND (?2 IS NULL OR EXISTS (SELECT 1 FROM offers WHERE id = ?2 AND subject_type = 'merchant' AND subject_id = ?1 AND status <> 'archived'))
+         RETURNING *`,
+      )
+      .bind(input.merchantId, input.offerId, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "merchant.update", entity: "merchant", entityId: input.merchantId, data: { defaultOfferId: input.offerId }, now: input.now },
+    { partnerTable: "merchants", id: input.merchantId, writeId },
+  );
+  return row ? toMerchant(row) : null;
+}
+```
+
+```bash
+npm test -w apps/web -- test/db/offer-context.test.ts test/db/merchants.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Hàm đọc cho `/go/` (test trước)**
+
+Trong `apps/web/test/db/offer-context.test.ts` thêm import `import { findDefaultOfferContext, findOfferWithContext, type RedirectRows } from "../../src/db/offers.ts";`, `import { resolveOfferRedirect } from "../../src/domain/offer.ts";`, `import { ulid } from "../../src/lib/ulid.ts";`, thêm `makeProgram` vào import fixtures, và thêm cuối file:
+
+```ts
+const FLAGS_ON = { affiliate: true, partner_referral: false };
+const resolve = (rows: RedirectRows, clickId = ulid()) =>
+  resolveOfferRedirect({ ...rows, flags: FLAGS_ON, now: at(1), clickId, locale: "en", src: "tools" });
+
+describe("findOfferWithContext (exactly what resolveOfferRedirect needs)", () => {
+  it("returns offer, program and merchant, and the result feeds resolveOfferRedirect as is", async () => {
+    const m = await makeMerchant({ allowedHosts: ["example.com", "app.example.com"] });
+    const p = await makeProgram(m);
+    const o = await makeOffer(m, p);
+    const rows = await findOfferWithContext(testEnv.DB, o.id);
+    expect(rows.offer).toEqual({ id: o.id, subjectType: "merchant", subjectId: m.id, programId: p.id, status: "active", destinationUrl: "https://example.com/", trackingTemplate: "https://example.com/r?c={click_id}", startsAt: null, endsAt: null });
+    expect(rows.program).toEqual({ id: p.id, merchantId: m.id, type: "affiliate", status: "active" });
+    expect(rows.merchant).toEqual({ id: m.id, status: "active", websiteUrl: "https://example.com/", allowedHosts: ["example.com", "app.example.com"] });
+    const clickId = ulid();
+    expect(resolve(rows, clickId)).toEqual({ kind: "tracked", url: `https://example.com/r?c=${clickId}`, programId: p.id });
+  });
+
+  it("an offer without a program has a null program and still resolves", async () => {
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null, { destinationUrl: "https://example.com/page" });
+    const rows = await findOfferWithContext(testEnv.DB, o.id);
+    expect(rows.program).toBeNull();
+    expect(rows.merchant?.id).toBe(m.id);
+    expect(resolve(rows).kind).toBe("tracked");
+  });
+
+  it("an unknown offer gives three nulls (resolveOfferRedirect says offer_missing)", async () => {
+    const rows = await findOfferWithContext(testEnv.DB, "missing");
+    expect(rows).toEqual({ offer: null, program: null, merchant: null });
+    expect(resolve(rows)).toEqual({ kind: "not_found", reason: "offer_missing" });
+  });
+
+  it("the merchant is loaded by subject_id, only for subject_type merchant", async () => {
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    await testEnv.DB.prepare("UPDATE offers SET subject_type = 'product' WHERE id = ?1").bind(o.id).run();
+    const rows = await findOfferWithContext(testEnv.DB, o.id);
+    expect(rows.offer?.subjectType).toBe("product");
+    expect(rows.merchant).toBeNull();
+  });
+
+  it("a program of another merchant is returned as stored; the domain refuses it", async () => {
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const foreign = await makeProgram(other);
+    const o = await makeOffer(m, null);
+    await testEnv.DB.prepare("UPDATE offers SET program_id = ?2, tracking_template = 'https://example.com/r' WHERE id = ?1").bind(o.id, foreign.id).run();
+    const rows = await findOfferWithContext(testEnv.DB, o.id);
+    expect(rows.program?.merchantId).toBe(other.id);
+    expect(rows.merchant?.id).toBe(m.id);
+    expect(resolve(rows)).toEqual({ kind: "not_found", reason: "program_merchant" });
+  });
+
+  it("damaged allowed_hosts read as an empty list and never throw", async () => {
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    for (const bad of ['{"a":1}', '["127.0.0.1"]', '"example.com"']) {
+      await testEnv.DB.prepare("UPDATE merchants SET allowed_hosts = ?2 WHERE id = ?1").bind(m.id, bad).run();
+      expect((await findOfferWithContext(testEnv.DB, o.id)).merchant?.allowedHosts, bad).toEqual([]);
+    }
+  });
+});
+
+describe("findDefaultOfferContext", () => {
+  const admin = () => ensureUser("d-admin@vnx.si");
+
+  it("returns the merchant's default offer with its program and merchant, and it resolves", async () => {
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    const o = await makeOffer(m, p);
+    await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: o.id, actorUserId: (await admin()).id, now: at(2) });
+    const rows = await findDefaultOfferContext(testEnv.DB, m.slug);
+    expect(rows?.offer.id).toBe(o.id);
+    expect(rows?.program?.id).toBe(p.id);
+    expect(rows?.merchant.id).toBe(m.id);
+    expect(rows && resolve(rows).kind).toBe("tracked");
+  });
+
+  it("an unknown slug, or a merchant without a default offer, gives null", async () => {
+    const m = await makeMerchant();
+    await makeOffer(m, null);
+    expect(await findDefaultOfferContext(testEnv.DB, "no-such-slug-0000")).toBeNull();
+    expect(await findDefaultOfferContext(testEnv.DB, m.slug)).toBeNull();
+  });
+
+  it("a default offer that belongs to another merchant gives null, even when written straight into the row", async () => {
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const foreign = await makeOffer(other, null);
+    await testEnv.DB.prepare("UPDATE merchants SET default_offer_id = ?2 WHERE id = ?1").bind(m.id, foreign.id).run();
+    expect(await findDefaultOfferContext(testEnv.DB, m.slug)).toBeNull();
+    expect(await findDefaultOfferContext(testEnv.DB, other.slug)).toBeNull();
+  });
+
+  it("a paused merchant and an archived default offer are still returned (the route and the domain decide)", async () => {
+    const m = await makeMerchant({ status: "paused" });
+    const o = await makeOffer(m, null);
+    await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: o.id, actorUserId: (await admin()).id, now: at(2) });
+    expect((await findDefaultOfferContext(testEnv.DB, m.slug))?.merchant.status).toBe("paused");
+    await testEnv.DB.prepare("UPDATE offers SET status = 'archived' WHERE id = ?1").bind(o.id).run();
+    const rows = await findDefaultOfferContext(testEnv.DB, m.slug);
+    expect(rows && resolve(rows)).toEqual({ kind: "not_found", reason: "offer_archived" });
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/db/offer-context.test.ts
+```
+
+Expected: FAIL (`findOfferWithContext`, `findDefaultOfferContext` chưa có). Thêm vào `apps/web/src/db/offers.ts` (import thêm `import type { MerchantStatus } from "../domain/merchant.ts";`, `ProgramStatus`, `ProgramType`, `RedirectInput`, `RedirectMerchant`, `RedirectOffer`, `RedirectProgram` vào import type từ `../domain/offer.ts`, và `import { parseStoredHosts } from "./merchants.ts";`):
+
+```ts
+/** What resolveOfferRedirect takes from the database (domain/offer.ts#RedirectInput). */
+export type RedirectRows = Pick<RedirectInput, "offer" | "program" | "merchant">;
+
+type ContextRow = {
+  o_id: string;
+  o_subject_type: "product" | "merchant" | "article";
+  o_subject_id: string;
+  o_program_id: string | null;
+  o_status: OfferStatus;
+  o_destination_url: string;
+  o_tracking_template: string | null;
+  o_starts_at: string | null;
+  o_ends_at: string | null;
+  p_id: string | null;
+  p_merchant_id: string | null;
+  p_type: ProgramType | null;
+  p_status: ProgramStatus | null;
+  m_id: string | null;
+  m_status: MerchantStatus | null;
+  m_website_url: string | null;
+  m_allowed_hosts: string | null;
+};
+
+// One query. The merchant is the offer's subject (never the program's merchant: the domain compares the two); the program comes from program_id.
+const CONTEXT_SQL = `SELECT o.id AS o_id, o.subject_type AS o_subject_type, o.subject_id AS o_subject_id, o.program_id AS o_program_id, o.status AS o_status,
+       o.destination_url AS o_destination_url, o.tracking_template AS o_tracking_template, o.starts_at AS o_starts_at, o.ends_at AS o_ends_at,
+       p.id AS p_id, p.merchant_id AS p_merchant_id, p.type AS p_type, p.status AS p_status,
+       m.id AS m_id, m.status AS m_status, m.website_url AS m_website_url, m.allowed_hosts AS m_allowed_hosts
+  FROM offers o
+  LEFT JOIN partner_programs p ON p.id = o.program_id
+  LEFT JOIN merchants m ON m.id = o.subject_id AND o.subject_type = 'merchant'`;
+
+function toRedirectRows(r: ContextRow): { offer: RedirectOffer; program: RedirectProgram | null; merchant: RedirectMerchant | null } {
+  return {
+    offer: {
+      id: r.o_id,
+      subjectType: r.o_subject_type,
+      subjectId: r.o_subject_id,
+      programId: r.o_program_id,
+      status: r.o_status,
+      destinationUrl: r.o_destination_url,
+      trackingTemplate: r.o_tracking_template,
+      startsAt: r.o_starts_at,
+      endsAt: r.o_ends_at,
+    },
+    program: r.p_id === null || r.p_merchant_id === null || r.p_type === null || r.p_status === null ? null : { id: r.p_id, merchantId: r.p_merchant_id, type: r.p_type, status: r.p_status },
+    merchant:
+      r.m_id === null || r.m_status === null || r.m_website_url === null || r.m_allowed_hosts === null
+        ? null
+        : { id: r.m_id, status: r.m_status, websiteUrl: r.m_website_url, allowedHosts: parseStoredHosts(r.m_allowed_hosts) },
+  };
+}
+
+/** For /go/o/:offerId. An unknown offer gives three nulls, which resolveOfferRedirect answers with `offer_missing`. */
+export async function findOfferWithContext(db: D1Database, offerId: string): Promise<RedirectRows> {
+  const row = await db.prepare(`${CONTEXT_SQL} WHERE o.id = ?1`).bind(offerId).first<ContextRow>();
+  return row ? toRedirectRows(row) : { offer: null, program: null, merchant: null };
+}
+
+/**
+ * For /go/:merchantSlug: the merchant's default offer. Null when the slug is unknown, the merchant has no default offer, or the default
+ * offer is not a merchant offer of that same merchant (the merchant is joined through the offer's subject_id, so a foreign offer never matches).
+ * A paused merchant is still returned: the route turns `merchant.status !== "active"` into 404.
+ */
+export async function findDefaultOfferContext(db: D1Database, merchantSlug: string): Promise<(RedirectRows & { offer: RedirectOffer; merchant: RedirectMerchant }) | null> {
+  const row = await db.prepare(`${CONTEXT_SQL} WHERE m.slug = ?1 AND m.default_offer_id = o.id AND o.subject_type = 'merchant'`).bind(merchantSlug).first<ContextRow>();
+  if (!row) return null;
+  const rows = toRedirectRows(row);
+  return rows.merchant ? { ...rows, merchant: rows.merchant } : null;
+}
+```
+
+```bash
+npm test -w apps/web -- test/db/offer-context.test.ts test/db/offers.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Nối test kiến trúc**
+
+`apps/web/test/architecture.test.ts`:
+- Thêm vào `WRITERS` sau `partner_programs`: `offers: "../src/db/offers.ts",`.
+- `MONEY_ALLOWED` thành `new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/offers.ts", "../src/db/audit.ts"])`; trong comment phía trên đổi "Task 2d: db/offers.ts;" thành "Task 2d: db/offers.ts (setDefaultOffer stays in db/merchants.ts, which owns `merchants`);".
+- Thêm test vào `describe` "ranking never reads money":
+
+```ts
+  it("after Task 2d the allowlist is exactly the four db files", () => {
+    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts"]);
+  });
+```
+
+(Task 3 sửa test này khi thêm `routes/admin-merchants.tsx`.)
+
+```bash
+npm test -w apps/web -- test/architecture.test.ts
+grep -rniE "elevenlabs|partnerstack" apps/web/src; test $? -eq 1
+```
+
+Expected: PASS; `grep` không in dòng nào.
+
+- [ ] **Step 6: Kiểm toàn bộ và commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/db/offers.ts apps/web/src/db/audit.ts apps/web/src/db/merchants.ts apps/web/src/domain/offer.ts apps/web/test/fixtures.ts apps/web/test/architecture.test.ts apps/web/test/domain/offer.test.ts apps/web/test/db/offers.test.ts apps/web/test/db/offer-context.test.ts
+git commit -m "feat(web): offer db module and redirect reads (VNX-2102a-4)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận:**
+- `npm test -w apps/web -- test/db/offers.test.ts test/db/offer-context.test.ts test/domain/offer.test.ts test/architecture.test.ts` xanh.
+- `findOfferWithContext` / `findDefaultOfferContext` trả đúng `RedirectOffer` / `RedirectProgram` / `RedirectMerchant`, đưa thẳng vào `resolveOfferRedirect` ra `tracked` (có / không chương trình); merchant nạp theo `subject_id` với `subject_type = 'merchant'`; chương trình của merchant khác → domain `program_merchant`; `allowed_hosts` hỏng → `[]`, không ném; offer mặc định của merchant khác → `null`.
+- `setDefaultOffer`: offer của merchant khác, `archived`, không phải `subject_type = 'merchant'`, không tồn tại → `null`, không ghi, không audit (kiểm trong chính UPDATE; test đọc lại `default_offer_id`).
+- `createOffer`: merchant không tồn tại hoặc chương trình của merchant khác → `null`, không dòng, không audit; template rỗng / `null` khi có chương trình, nhãn lạ → ném lỗi, không để lại dòng.
+- `updateOffer`: CAS theo `expectedStatus`; đổi chủ hoặc sang chương trình của merchant khác → `null`; `archived` cuối cùng (`offerTransitionAllowed` bảng đầy đủ, db khớp); audit `offer.create|update|status`; guard `write_id` sai không ghi audit (test trực tiếp `auditStatement`).
+- `MONEY_ALLOWED` đúng 4 file; `offers` có trong `WRITERS` (chỉ `db/offers.ts` ghi bảng `offers`; `db/merchants.ts` chỉ đọc `offers` trong subselect); `grep -rniE "elevenlabs|partnerstack" apps/web/src` không in dòng nào.
+- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ≈ 640 dòng (`offers.ts` ~215, `audit.ts` ~12, `merchants.ts` ~25, domain ~5, fixtures ~30, architecture ~8, test ~345). Hơi trên mức 600 chỉ vì test (mã chạy được ≈ 300 dòng); không tách thêm. Commit `feat(web): offer db module and redirect reads (VNX-2102a-4)`.
 
 ---
 
 ### Task 3: VNX-2102b — Admin merchant, chương trình, offer
 
-**Phạm vi:** `routes/admin-merchants.tsx` và các view `views/admin/{MerchantsPage,MerchantDetailPage}.tsx`: danh sách merchant; tạo merchant (tên, slug, website_url https, `allowed_hosts`, mô tả văn bản thuần ≤ giới hạn spec 8.6, `indexable`, trạng thái); trang chi tiết có ba khu: merchant (sửa, đổi `status`), chương trình (tạo / sửa các trường điều khoản, không mặc định, nhập `terms_url`, `terms_verified_at`; nút chuyển `active` hiển thị lỗi rõ khi thiếu), offer (tạo / sửa `kind`, `label`, `destination_url`, `tracking_template`, `starts_at`, `ends_at`, `status`; nút "đặt làm offer mặc định"). **Xem trước URL cuối** cho từng offer: gọi `previewUrl` với `click_id` mẫu (`01HZZZZZZZZZZZZZZZZZZZZZZZ`), `locale = en`, `src = tools` và hiện cả kết quả `resolveOfferRedirect` ở trạng thái hiện tại (tracked / fallback / not_found, kèm lý do dạng khóa i18n). Kiểm host và template lúc lưu qua domain Task 2, lỗi hiện cạnh trường. Mọi ghi dùng db Task 2 và audit `merchant.*`, `program.*`, `offer.*`. Mục nav `merchants` trong `AdminLayout`. Không có trang public. **Phán quyết Controller (2026-10-05, từ review 2c):** slug merchant chỉ đọc sau khi tạo; merchant `archived` và chương trình `ended` là trạng thái cuối (ẩn nút chuyển, dùng `merchantTransitionAllowed` / `programTransitionAllowed` của domain; db cũng chặn); form tạo merchant mới mặc định `paused` (db yêu cầu `status` tường minh). **Nghĩa vụ thêm (Opus review Task 2):** lưu merchant mà `allowed_hosts` hoặc `website_url` đổi thì kiểm lại mọi offer chưa `archived` của merchant đó bằng domain Task 2b và từ chối lưu, liệt kê các offer sẽ hỏng; nhãn ô ngày của offer ghi rõ UTC; cảnh báo khi `allowed_hosts` chứa hậu tố nhiều người thuê (`github.io`, `vercel.app`, `pages.dev`, …).
+**Phạm vi:** `routes/admin-merchants.tsx` và các view `views/admin/{MerchantsPage,MerchantDetailPage}.tsx`: danh sách merchant; tạo merchant (tên, slug, website_url https, `allowed_hosts`, mô tả văn bản thuần ≤ giới hạn spec 8.6, `indexable`, trạng thái); trang chi tiết có ba khu: merchant (sửa, đổi `status`), chương trình (tạo / sửa các trường điều khoản, không mặc định, nhập `terms_url`, `terms_verified_at`; nút chuyển `active` hiển thị lỗi rõ khi thiếu), offer (tạo / sửa `kind`, `label`, `destination_url`, `tracking_template`, `starts_at`, `ends_at`, `status`; nút "đặt làm offer mặc định"). **Xem trước URL cuối** cho từng offer: gọi `previewUrl` với `click_id` mẫu (`01HZZZZZZZZZZZZZZZZZZZZZZZ`), `locale = en`, `src = tools` và hiện cả kết quả `resolveOfferRedirect` ở trạng thái hiện tại (tracked / fallback / not_found, kèm lý do dạng khóa i18n). Kiểm host và template lúc lưu qua domain Task 2, lỗi hiện cạnh trường. Mọi ghi dùng db Task 2 và audit `merchant.*`, `program.*`, `offer.*`. Mục nav `merchants` trong `AdminLayout`. Không có trang public. **Phán quyết Controller (2026-10-05, từ review 2c):** slug merchant chỉ đọc sau khi tạo; merchant `archived` và chương trình `ended` là trạng thái cuối (ẩn nút chuyển, dùng `merchantTransitionAllowed` / `programTransitionAllowed` của domain; db cũng chặn); form tạo merchant mới mặc định `paused` (db yêu cầu `status` tường minh). **Nghĩa vụ thêm (Opus review Task 2):** lưu merchant mà `allowed_hosts` hoặc `website_url` đổi thì kiểm lại mọi offer chưa `archived` của merchant đó bằng domain Task 2b và từ chối lưu, liệt kê các offer sẽ hỏng; nhãn ô ngày của offer ghi rõ UTC; cảnh báo khi `allowed_hosts` chứa hậu tố nhiều người thuê (`github.io`, `vercel.app`, `pages.dev`, …). **Nghĩa vụ thêm (Opus review Task 2d):** (a) cảnh báo hoặc yêu cầu xác nhận khi admin lưu trữ (`archived`) offer đang là offer mặc định của merchant; (b) trang chi tiết merchant hiện "offer mặc định đã lưu trữ" khi `default_offer_id` trỏ tới offer `archived`; (c) ánh xạ `null` từ db: `updateOffer` → `null` là lỗi "đã thay đổi trong lúc bạn sửa" (compare-and-set thua); `createOffer` / `setDefaultOffer` → `null` sau khi Task 3 đã kiểm trước thì trả 404.
 
 **Files (dự kiến):** Create `src/routes/admin-merchants.tsx`, `src/views/admin/{MerchantsPage,MerchantDetailPage}.tsx`; Modify `src/app.ts`, `src/views/admin/AdminLayout.tsx`, 4 file locale; Test `test/admin/merchants.test.ts`.
 
