@@ -185,7 +185,7 @@ Spec §5.3 "Tổng quan" Hub chưa nói builder thấy lượt xem/click của p
 - **GPC:** `Sec-GPC: 1` → không đặt cookie, không đếm `views`/`demo_clicks`/`outbound_clicks` vào `product_daily_stats`, không ghi `product_view_dedupe`; trang vẫn 200 và redirect vẫn chạy. Đây là cơ chế phản đối nêu trong Privacy (câu hỏi (b)).
 - **Dedupe:** một lần mỗi (`visitor_hash`, product, loại) mỗi ngày UTC; loại = `views`, `demo`, `site`. Click ra từ `/go/o/` và `/go/:merchant` (offer) KHÔNG BAO GIỜ cộng `product_daily_stats`; chỉ `demo` và `site` cộng.
 - **Thiếu `ANALYTICS_SALT` (một luật duy nhất):** không cộng gì vào `product_daily_stats` (không views, không clicks; Inquiry không cần salt nên vẫn đếm), không cookie, `visitor_hash = null`; dòng `outbound_clicks` VẪN ghi; `console.warn` một lần mỗi isolate. Lệch phụ lục 2.5 ("không dedupe", ngụ ý vẫn cộng): thiếu salt thì cộng không dedupe sẽ thổi phồng Trending nên không cộng; đây là lệch được ghi nhận, cần Opus/Owner chấp thuận.
-- **Cookie:** tên `__Host-vnx_vid`; giá trị `^[0-9a-f]{32}$`; `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax`; `Max-Age` = số giây tới 00:00 UTC kế tiếp, tối thiểu 60 (khuyến nghị (b), vì băm đã đổi theo ngày; 30 ngày chỉ là phương án phụ, không có lợi ích đếm). CHỈ đặt trên `GET /p/:slug` trả 200 cho một khách được đếm (không bot, không builder của product, không đội của chúng tôi, không GPC, có `ANALYTICS_SALT`). `/go/p/` chỉ ĐỌC cookie, không bao giờ đặt. Không đặt trên `/admin`, `/ops`, `/hub`, `/me`. Phản hồi có `Set-Cookie` kèm `Cache-Control: private`.
+- **Cookie:** tên `__Host-vnx_vid`; giá trị `^[0-9a-f]{32}$`; `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax`; `Max-Age` = số giây tới 00:00 UTC kế tiếp (không sàn: luôn ≥ 1; khuyến nghị (b), vì băm đã đổi theo ngày; 30 ngày chỉ là phương án phụ, không có lợi ích đếm). CHỈ đặt trên `GET /p/:slug` trả 200 cho một khách được đếm (không bot, không builder của product, không đội của chúng tôi, không GPC, có `ANALYTICS_SALT`). `/go/p/` chỉ ĐỌC cookie, không bao giờ đặt. Không đặt trên `/admin`, `/ops`, `/hub`, `/me`. Phản hồi có `Set-Cookie` kèm `Cache-Control: private`.
 - **Salt:** `ANALYTICS_SALT` là `wrangler secret`, `.dev.vars` ở local, KHÔNG trong repo, KHÔNG trong `wrangler.jsonc` `vars`; thêm `ANALYTICS_SALT?: string` vào `Bindings`.
 - **Tải ghi D1:** mỗi lượt xem được đếm là một `db.batch` (dedupe + upsert) qua `waitUntil`, tức tối đa 2 lần ghi mỗi lượt; bot, GPC, builder chủ, đội nội bộ không ghi. Mức này chấp nhận được ở quy mô Wave 1; nếu vượt, gom theo isolate (ngoài phạm vi).
 - **`/go/p/:slug/{demo,site}`:** chỉ GET/HEAD (HEAD không ghi), không tiền tố locale, đọc duy nhất `src` ∈ `product_page|builder_page|catalog|home|article|tools` (khác → `unknown`), đích chỉ lấy từ `products.demo_url` / `products.website_url` trong DB (không bao giờ từ query); chuẩn hóa bằng `new URL(raw).href` rồi chạy kiểm URL công khai `validatePublicUrl` (thuần, không allowlist: `https:`, không userinfo, `isPublicHostname` đúng, `port` rỗng; `Location` luôn là `href` đã chuẩn hóa); CÙNG hàm được dùng ở editor product khi lưu `demo_url`/`website_url`; trước khi deploy Owner chạy một truy vấn SQL kiểm toàn bộ `demo_url`/`website_url` hiện có (liệt kê giá trị không qua hàm; Task 4 ghi truy vấn vào báo cáo); diễn giải ADR-007 luật 7 cho product: host đã đăng ký là host đang lưu của product, kiểm lúc lưu và lúc redirect; gắn `utm_source=vnx.si&utm_medium=referral` trừ khi URL đã có tham số `utm_*`; `302` + `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: origin`; product không `published` hoặc builder không `approved` hoặc thiếu URL → 404 theo locale mặc định, không ghi click; URL hỏng trong DB → 404 + `console.error`.
@@ -212,7 +212,7 @@ Spec §5.3 "Tổng quan" Hub chưa nói builder thấy lượt xem/click của p
 | # | ID | Nội dung | Phụ thuộc | Chặn bởi |
 |---|---|---|---|---|
 | 1 | VNX-0701a | Migration `0014_product_stats`, `domain/stats.ts`, `db/stats.ts`, đếm Inquiry khi vào `open`, test sở hữu bảng | — | — |
-| 2 | VNX-0707a | `domain/bot.ts` (luật bot chung, thay `isBotRequest`), `domain/visitor.ts` (HMAC, `dayKey`, `parseVisitorCookie`, hết hạn cuối ngày UTC, `hasGpc`), `ANALYTICS_SALT` vào `Bindings`/README/`wrangler.jsonc` ghi chú | 1 | — |
+| 2 | VNX-0707a | `domain/bot.ts` (luật bot chung, thay `isBotRequest`), `domain/visitor.ts` (HMAC, `dayKey`, `parseVisitorCookie`, hết hạn cuối ngày UTC, `hasGpc`), `auth/staff.ts#isStaff`, `ANALYTICS_SALT` vào `Bindings`/`wrangler.jsonc` ghi chú | 1 | — |
 | 3c | VNX-0701c | Thông báo cho người dùng đã đăng nhập về thay đổi Privacy (câu chữ chờ Owner duyệt) | 1 | câu chữ thông báo |
 | 3 | VNX-0701b | Cookie `__Host-vnx_vid` (chỉ `GET /p/:slug` 200), GPC, migration `0015_view_dedupe`, đếm `views`, dọn `product_view_dedupe` (bảng + retention + Privacy "xóa sau 2 ngày" cùng một chỗ), Privacy (câu chữ (b)) | 1, 2 | (b), (f) |
 | 4 | VNX-0707b | `/go/p/:slug/{demo,site}` trước catch-all, ghi `outbound_clicks` kèm `visitor_hash`, cộng `demo_clicks`/`outbound_clicks`, `ProductPage` đổi link, sửa `go.test.ts` | 1, 2 | — (Privacy do Task 3; nếu Task 3 chưa chạy thì `visitor_hash` giữ null, xem Task 4) |
@@ -582,11 +582,523 @@ Diff ước tính ~330 dòng (gồm test). Không có chuỗi giao diện, khôn
 
 ### Task 2: VNX-0707a — Luật bot chung và nhận diện người xem
 
-**Scope:** thuần domain, chưa nối vào route. Chuyển `isBotRequest` sang `domain/bot.ts` (giữ đúng luật hiện tại, quyết định 6), `domain/outbound.ts` re-export để không vỡ test cũ; thêm `domain/visitor.ts`: `VISITOR_COOKIE = "__Host-vnx_vid"`, `visitorCookieMaxAge(now: Date): number` (giây tới 00:00 UTC kế tiếp, tối thiểu 60), `VISITOR_ID_RE`, `parseVisitorCookie(value: string | undefined): string | null` (thuần, trả id hợp lệ hoặc null), `hasGpc(headerValue: string | null | undefined): boolean` (`Sec-GPC` đúng bằng `1`), `newVisitorId(): string` (16 byte `crypto.getRandomValues`, hex), `dayKey(salt, day): Promise<CryptoKey>`/`visitorHash(salt, cookie, day): Promise<string | null>` (HMAC-SHA256 hex; `null` khi `salt` rỗng hoặc cookie sai định dạng), và `shouldCount({ isBot, isOwnBuilder, isStaff, isGpc }): boolean` (`isStaff` do route tính bằng vị từ chung với guard `/admin` và `/ops`). Thêm `ANALYTICS_SALT?: string` vào `Bindings` (`env.ts`), `.dev.vars.example` nếu có, ghi chú `wrangler secret put ANALYTICS_SALT` ở `wrangler.jsonc` và thứ tự deploy.
+**Scope:** thuần domain, chưa nối vào route (Task 3, 4 nối). Làm ba việc: (1) luật bot chung `domain/bot.ts`; (2) `domain/visitor.ts` (nhận diện người xem, thuần, WebCrypto); (3) vị từ "đội nội bộ" dùng chung: `isAdminUser` (sync, `auth/admin.ts`, chính biểu thức của guard `/admin`) và `isStaff` (async, file mới `auth/staff.ts`), cùng `ANALYTICS_SALT` vào `Bindings`. Không route nào đổi hành vi; `/go/` vẫn ghi `visitor_hash: null`.
 
-**Files:** Create `apps/web/src/domain/bot.ts`, `apps/web/src/domain/visitor.ts`; Modify `apps/web/src/domain/outbound.ts` (xóa bản cũ, `export { isBotRequest } from "./bot.ts"`), `apps/web/src/routes/go.ts` (import từ `bot.ts`), `apps/web/src/env.ts`, `apps/web/wrangler.jsonc`; Test `test/domain/bot.test.ts`, `test/domain/visitor.test.ts` (giữ test `isBotRequest` hiện có).
+**Files:**
+- Create: `apps/web/src/domain/bot.ts`, `apps/web/src/domain/visitor.ts`, `apps/web/src/auth/staff.ts`
+- Modify: `apps/web/src/domain/outbound.ts` (xóa `BOT_UA`, `CfLike`, `isBotRequest`; BẮT BUỘC thêm `import type { CfLike } from "./bot.ts";` (`countryOf` còn dùng) và giữ `export { isBotRequest, type CfLike } from "./bot.ts"` để test cũ và import cũ không vỡ)
+- Modify: `apps/web/src/routes/go.ts` (import `isBotRequest`, `CfLike` từ `../domain/bot.ts`)
+- Modify: `apps/web/src/auth/admin.ts` (thêm `isAdminUser`, sync), `apps/web/src/auth/middleware.ts` (`requireAdmin` gọi `isAdminUser`, hành vi y hệt)
+- Modify: `apps/web/src/env.ts` (`ANALYTICS_SALT?: string`), `apps/web/wrangler.jsonc` (chỉ chú thích)
+- Test: Create `apps/web/test/domain/bot.test.ts`, `apps/web/test/domain/visitor.test.ts`, `apps/web/test/auth/staff.test.ts` (cho `isAdminUser` và `isStaff`); giữ nguyên `test/domain/outbound.test.ts` (khối `isBotRequest` cũ vẫn chạy qua re-export và là bằng chứng "không vỡ")
 
-**Acceptance:** `visitorHash` cùng cookie khác ngày → khác; cùng cookie + cùng ngày + cùng salt → bằng nhau; khác salt → khác; salt rỗng/undefined → `null`; cookie không khớp `^[0-9a-f]{32}$` → `null`; không nối được ngày (hai băm không có tiền tố/hậu tố chung); `newVisitorId` luôn khớp regex và 1000 lần không trùng; `visitorCookieMaxAge` = 86400 lúc 00:00:00 UTC, 60 lúc 23:59:30 UTC (sàn), đúng giữa ngày; `parseVisitorCookie` nhận id hợp lệ, trả null cho undefined/rỗng/hoa/dài sai/ký tự lạ; `hasGpc("1")` true, `"0"`, `""`, `undefined`, `"true"` false; `isBotRequest` giữ nguyên bảng test hiện có (UA rỗng, mỗi từ khóa regex, `verifiedBot`, trình duyệt thật không bị gắn bot); `shouldCount` đúng bảng chân trị; `domain/` vẫn không import Hono/db (test kiến trúc); `grep -rn "ANALYTICS_SALT" apps/web/wrangler.jsonc` chỉ thấy trong chú thích, không trong `vars`. Kiểm: `npm test -w apps/web -- test/domain test/architecture.test.ts` + `npm run typecheck -w apps/web`. Diff ~220 dòng.
+**Interfaces:**
+- Consumes: `isBotRequest(userAgent, cf)`/`CfLike` hiện ở `domain/outbound.ts`; `adminEmails(env)` (`auth/admin.ts`); `SessionUser` (`auth/sessions.ts`: `id`, `email`, `locale`, `isAdmin`); `Bindings` (`env.ts`).
+- Produces:
+  - `domain/bot.ts`: `type CfLike`, `BOT_UA: RegExp`, `isBotRequest(userAgent: string | null | undefined, cf: CfLike): boolean`.
+  - `domain/visitor.ts`: `VISITOR_COOKIE = "__Host-vnx_vid"`, `VISITOR_ID_RE`, `visitorCookieMaxAge(now: Date): number` (= `ceil((00:00 UTC kế − now)/1000)`, luôn ≥ 1, không sàn), `usableSalt(salt: string | undefined): string | null`, `parseVisitorCookie(value: string | null | undefined): string | null`, `newVisitorId(): string`, `hasGpc(headers: { get(name: string): string | null }): boolean`, `visitorHash(salt: string | undefined, day: string, visitorId: string): Promise<string | null>`, `type CountContext`, `shouldCount(ctx: CountContext): boolean`.
+  - `auth/admin.ts`: `isAdminUser(user: Pick<SessionUser, "email" | "isAdmin"> | null | undefined, env: Pick<Bindings, "ADMIN_EMAILS">): boolean` (sync; đúng biểu thức hiện tại của `requireAdmin`).
+  - `auth/staff.ts`: `isStaff(env: Pick<Bindings, "DB" | "ADMIN_EMAILS">, user: Pick<SessionUser, "email" | "isAdmin"> | null | undefined): Promise<boolean>` (hiện trả `isAdminUser(user, env)`; async ngay từ bây giờ để chỗ gọi của Task 3, 4 đã `await`).
+  - `Bindings.ANALYTICS_SALT?: string`.
+
+**Quyết định kỹ thuật** (Reviewer kiểm):
+1. **Hai vị từ, hai file, không ai đọc `users.is_admin` trực tiếp.** `requireAdmin` có biểu thức inline `user.isAdmin && adminEmails(env).has(user.email)`. Rút nguyên văn ra `isAdminUser` (sync, `auth/admin.ts`); `requireAdmin` gọi nó, hành vi y hệt (`test/admin/*`, `test/auth/admin-sync.test.ts` làm bằng chứng). `isStaff` ở file MỚI `auth/staff.ts`, async, hiện chỉ trả `isAdminUser(user, env)`; Task 3, 4 gọi `await isStaff(c.env, user)`. Domain KHÔNG import `auth/`: `shouldCount` nhận boolean.
+   **Hợp đồng merge với Ops O1** (nhánh `feat/ops-o1` thêm `auth/ops.ts` với `resolveOpsRole(env: Pick<Bindings,"DB"|"ADMIN_EMAILS">, user): Promise<OpsRole|null>`, import `adminEmails` từ `auth/admin.ts`, không sửa `admin.ts` lẫn `middleware.ts`): khi merge O1, `isStaff` trở thành `isAdminUser(user, env) || (await resolveOpsRole(env, user)) !== null`, kèm một test rằng thành viên `ops_members` (viewer) KHÔNG được đếm. KHÔNG bao giờ nới `requireAdmin`. Controller ghi điều này vào nghĩa vụ của CURRENT-STATUS.
+   **Cho Task 3, 4:** chỉ gọi `isStaff` khi có người dùng đăng nhập, và chỉ sau các kiểm tra rẻ (bot, GPC, salt).
+   **Cho Task 3:** không bao giờ phát lại hay gia hạn một id hợp lệ đã gửi tới; chỉ gửi `Set-Cookie` khi KHÔNG có cookie hợp lệ.
+2. **Luật bot giữ nguyên:** UA rỗng/khoảng trắng, `BOT_UA`, `cf.botManagement.verifiedBot === true`. Không dùng `botManagement.score` (không bịa ngưỡng). Chỉ chuyển chỗ; câu chú thích cũ "M7 may replace this" đổi thành "the one bot rule (spec 8.11)".
+3. **`visitorHash(salt, day, visitorId)`:** `dayKey = HMAC-SHA256(key = salt, msg = day)`; `hash = hex(HMAC-SHA256(key = dayKey, msg = visitorId))`, với `day` đã ghép tiền tố như trên. `dayKey` có tách miền: thông điệp là `vnx.si/visitor/v1|${day}`. `usableSalt(salt)` trả salt khi không rỗng/không toàn khoảng trắng, ngược lại `null`; `visitorHash` và `hasSalt` ở caller đều dùng nó, nên salt trắng không bao giờ cho `shouldCount = true`. Salt thiếu (`undefined`, rỗng, toàn khoảng trắng) hoặc `visitorId` sai định dạng → `null` ("không có salt/không có id", caller bỏ qua đếm; salt rỗng sẽ làm `importKey` ném, nên chặn trước). `day` sai định dạng `YYYY-MM-DD` → ném (lỗi lập trình; caller lấy `day` từ `utcDay`).
+4. **`hasGpc` nhận `headers` (có `get`)** để tránh caller phải tự đọc tên header; `Headers.get` không phân biệt hoa thường. Chỉ đúng `1` (sau `trim`) mới là GPC (spec GPC: giá trị `1`); `0`, `true`, rỗng, thiếu → false.
+5. **`ANALYTICS_SALT` không vào `vitest.config.ts` bindings.** Test của Task 2 truyền salt tường minh; Task 3, 4 tự tiêm `{ ...testEnv, ANALYTICS_SALT: "…" }` cho từng ca để ca "thiếu salt" dùng `testEnv` nguyên bản (đúng luật "thiếu salt → không đếm"). Đặt salt toàn cục sẽ khiến mọi test hiện có chạm vào luật đếm.
+6. Không có `.dev.vars.example` trong repo (`.dev.vars` bị `.gitignore`); ghi chú đặt trong `wrangler.jsonc` cạnh ghi chú `MAIL_DRIVER`, KHÔNG tạo file mới, KHÔNG đưa salt vào `vars`.
+7. Cảnh báo "một lần mỗi isolate" khi thiếu salt là việc của helper route (Task 3, `http/visitor.ts`), không phải domain thuần.
+
+- [ ] **Step 1: Test luật bot (fail)**
+
+`apps/web/test/domain/bot.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { BOT_UA, isBotRequest, type CfLike } from "../../src/domain/bot.ts";
+import * as outbound from "../../src/domain/outbound.ts";
+
+const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+const SAFARI = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+
+/** The EPIC 21 rule, frozen here as the reference: Task 2 only MOVES it, so the new function must agree with it on every row. */
+function legacyIsBotRequest(userAgent: string | null | undefined, cf: CfLike): boolean {
+  if (!userAgent || userAgent.trim() === "") return true;
+  return /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|curl|wget|python-requests|headlesschrome/i.test(userAgent) || cf?.botManagement?.verifiedBot === true;
+}
+
+const UAS: (string | null | undefined)[] = [
+  undefined, null, "", "   ", "\t",
+  "Googlebot/2.1 (+http://www.google.com/bot.html)", "Bingbot/2.0", "AhrefsBot", "Mozilla/5.0 (compatible; Yahoo! Slurp)", "Baiduspider/2.0", "Mozilla/5.0 (compatible; Crawler/1.0)",
+  "facebookexternalhit/1.1", "Slackbot-LinkExpanding 1.0", "WhatsApp Link Preview", "UptimeMonitor/1.0",
+  "curl/8.5.0", "Wget/1.21", "python-requests/2.31", "Mozilla/5.0 HeadlessChrome/120.0",
+  CHROME, SAFARI, "Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0", "Opera/9.80", "robot-free browser without the keyword",
+];
+const CFS: CfLike[] = [undefined, null, {}, { botManagement: {} }, { botManagement: { verifiedBot: false } }, { botManagement: { verifiedBot: true } }, { botManagement: { verifiedBot: "true" } }, { country: "VN" }];
+
+describe("the one bot rule (spec 8.11, Reviewer decision 6)", () => {
+  it("agrees with the EPIC 21 isBotRequest on every (user agent, cf) pair of the table", () => {
+    for (const ua of UAS) for (const cf of CFS) expect(isBotRequest(ua, cf), `${JSON.stringify(ua)} ${JSON.stringify(cf)}`).toBe(legacyIsBotRequest(ua, cf));
+  });
+
+  it.each([
+    [undefined, undefined, true],
+    ["", undefined, true],
+    ["   ", undefined, true],
+    ["Googlebot/2.1", undefined, true],
+    ["curl/8.5.0", undefined, true],
+    [CHROME, undefined, false],
+    [SAFARI, null, false],
+    [CHROME, { botManagement: { verifiedBot: false } }, false],
+    [CHROME, { botManagement: { verifiedBot: true } }, true],
+    [CHROME, { botManagement: { verifiedBot: "true" } }, false],
+  ] as [string | undefined, CfLike, boolean][])("UA %j with cf %j gives %s", (ua, cf, expected) => {
+    expect(isBotRequest(ua, cf)).toBe(expected);
+  });
+
+  it("does not read a bot score: a high score alone never makes a browser a bot, a low one never clears a bot UA", () => {
+    expect(isBotRequest(CHROME, { botManagement: { score: 1 } } as unknown as CfLike)).toBe(false);
+    expect(isBotRequest("curl/8.5.0", { botManagement: { score: 99 } } as unknown as CfLike)).toBe(true);
+  });
+
+  it("matches the keyword list of Global Constraints and no other", () => {
+    expect(BOT_UA.source).toBe("bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|curl|wget|python-requests|headlesschrome");
+    expect(BOT_UA.flags).toBe("i");
+  });
+
+  it("domain/outbound.ts re-exports the same function (callers and old tests keep working)", () => {
+    expect(outbound.isBotRequest).toBe(isBotRequest);
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/domain/bot.test.ts` → FAIL (`domain/bot.ts` không tồn tại).
+
+- [ ] **Step 2: Luật bot (impl)**
+
+`apps/web/src/domain/bot.ts`:
+
+```ts
+/** The one bot rule (spec 8.11) for views, clicks and de-duplication. Pure: no Hono, no D1. */
+
+/** The two fields of `request.cf` that the rule reads. */
+export type CfLike = { country?: unknown; botManagement?: { verifiedBot?: unknown } } | null | undefined;
+
+export const BOT_UA = /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|curl|wget|python-requests|headlesschrome/i;
+
+/**
+ * Empty or blank User-Agent, a User-Agent matching BOT_UA, or Cloudflare's `verifiedBot`. Spec 8.11 also says "cf.botManagement if
+ * present" but gives no score threshold, so the score is NOT read (no invented number). Never blocks a request: callers only skip counting.
+ */
+export function isBotRequest(userAgent: string | null | undefined, cf: CfLike): boolean {
+  if (!userAgent || userAgent.trim() === "") return true;
+  return BOT_UA.test(userAgent) || cf?.botManagement?.verifiedBot === true;
+}
+```
+
+`apps/web/src/domain/outbound.ts`: xóa dòng `export type CfLike = …`, hằng `BOT_UA` và hàm `isBotRequest` (cùng chú thích), thêm sau dòng import:
+
+```ts
+export { isBotRequest, type CfLike } from "./bot.ts";
+```
+
+`apps/web/src/routes/go.ts`: bỏ `isBotRequest` và `type CfLike` khỏi import `../domain/outbound.ts` và thêm `import { isBotRequest, type CfLike } from "../domain/bot.ts";`. (Nếu `outbound.ts` còn dùng `CfLike` cho `countryOf`, thêm `import type { CfLike } from "./bot.ts";` ở đầu file và giữ dòng re-export.)
+
+Chạy: `npm test -w apps/web -- test/domain/bot.test.ts test/domain/outbound.test.ts test/monetization/go.test.ts` → PASS (khối `isBotRequest` cũ trong `outbound.test.ts` xanh qua re-export).
+
+- [ ] **Step 3: Test `visitor` (fail)**
+
+`apps/web/test/domain/visitor.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { VISITOR_COOKIE, VISITOR_ID_RE, hasGpc, newVisitorId, usableSalt, parseVisitorCookie, shouldCount, visitorCookieMaxAge, visitorHash } from "../../src/domain/visitor.ts";
+
+const ID = "0123456789abcdef0123456789abcdef";
+const ID2 = "fedcba9876543210fedcba9876543210";
+const SALT = "test-salt-not-a-secret-0000000000";
+
+describe("cookie name and Max-Age (Owner (b): expires at the end of the UTC day)", () => {
+  it("names the cookie with the __Host- prefix", () => {
+    expect(VISITOR_COOKIE).toBe("__Host-vnx_vid");
+  });
+
+  it.each([
+    ["2026-10-05T00:00:00.000Z", 86_400],
+    ["2026-10-05T00:00:00.001Z", 86_400],
+    ["2026-10-05T12:00:00.000Z", 43_200],
+    ["2026-10-05T23:00:00.000Z", 3_600],
+    ["2026-10-05T23:58:00.000Z", 120],
+    ["2026-10-05T23:58:59.500Z", 61],
+    ["2026-10-05T23:59:00.000Z", 60],
+    ["2026-10-05T23:59:30.000Z", 30],
+    ["2026-10-05T23:59:59.999Z", 1],
+    ["2026-12-31T23:59:59.999Z", 1],
+    ["2026-12-31T12:00:00.000Z", 43_200],
+    ["2028-02-28T18:00:00.000Z", 21_600],
+  ])("at %s the Max-Age is %i seconds", (iso, expected) => {
+    expect(visitorCookieMaxAge(new Date(iso))).toBe(expected);
+  });
+
+  it("is always between 1 second and one day (no floor: the cookie ends with the UTC day)", () => {
+    for (let s = 0; s < 86_400; s += 997) {
+      const age = visitorCookieMaxAge(new Date(Date.UTC(2026, 9, 5, 0, 0, 0) + s * 1000));
+      expect(age).toBeGreaterThanOrEqual(1);
+      expect(age).toBeLessThanOrEqual(86_400);
+    }
+  });
+  // The Date is read with getUTC* only, so the machine time zone cannot change the result.
+});
+
+describe("parseVisitorCookie", () => {
+  it("accepts exactly 32 lower-case hex characters", () => {
+    expect(parseVisitorCookie(ID)).toBe(ID);
+    expect(parseVisitorCookie("0".repeat(32))).toBe("0".repeat(32));
+    expect(parseVisitorCookie("f".repeat(32))).toBe("f".repeat(32));
+  });
+
+  it.each([
+    [undefined], [null], [""], [" "], [ID.toUpperCase()], [`${ID}0`], [ID.slice(1)], [` ${ID}`], [`${ID} `], [`${ID}\n`], [`${ID.slice(0, 31)}g`], [`${ID.slice(0, 31)}-`],
+    ["a=b"], ["../../etc/passwd"], ["0x" + "a".repeat(30)], ["é".repeat(32)], ["'; DROP TABLE x;--"],
+  ] as (string | null | undefined)[][])("rejects %j", (value) => {
+    expect(parseVisitorCookie(value as string | null | undefined)).toBeNull();
+  });
+});
+
+describe("newVisitorId", () => {
+  it("always matches the cookie format and does not repeat", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 1000; i++) {
+      const id = newVisitorId();
+      expect(id).toMatch(VISITOR_ID_RE);
+      expect(parseVisitorCookie(id)).toBe(id);
+      seen.add(id);
+    }
+    expect(seen.size).toBe(1000);
+  });
+});
+
+describe("hasGpc (Sec-GPC: 1 is the opt-out)", () => {
+  const h = (value?: string) => new Headers(value === undefined ? {} : { "Sec-GPC": value });
+  it("is true only for the value 1", () => {
+    expect(hasGpc(h("1"))).toBe(true);
+    expect(hasGpc(new Headers({ "sec-gpc": "1" }))).toBe(true);
+    expect(hasGpc(new Headers([["SEC-GPC", " 1 "]]))).toBe(true);
+  });
+  it.each([["0"], ["true"], ["yes"], ["11"], ["1, 1"], ["on"], [""]])("is false for %j", (value) => {
+    expect(hasGpc(h(value))).toBe(false);
+  });
+  it("is false when the header is absent or only a lookalike is sent", () => {
+    expect(hasGpc(h())).toBe(false);
+    expect(hasGpc(new Headers({ DNT: "1" }))).toBe(false);
+    expect(hasGpc(new Headers({ "Sec-GPC-Extra": "1" }))).toBe(false);
+  });
+});
+
+describe("visitorHash (addendum 2.2: dayKey = HMAC(salt, day), hash = HMAC(dayKey, visitor id))", () => {
+  it("is deterministic within a day: 64 hex characters", async () => {
+    const a = await visitorHash(SALT, "2026-10-05", ID);
+    const b = await visitorHash(SALT, "2026-10-05", ID);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(b).toBe(a);
+  });
+
+  it("changes every day, so one cookie cannot be followed across days", async () => {
+    const d1 = await visitorHash(SALT, "2026-10-05", ID);
+    const d2 = await visitorHash(SALT, "2026-10-06", ID);
+    const d3 = await visitorHash(SALT, "2026-11-05", ID);
+    expect(new Set([d1, d2, d3]).size).toBe(3);
+    // No shared prefix or suffix between days that would let two hashes be matched by eye or by LIKE.
+    expect(d1!.slice(0, 8)).not.toBe(d2!.slice(0, 8));
+    expect(d1!.slice(-8)).not.toBe(d2!.slice(-8));
+  });
+
+  it("differs per visitor and per salt", async () => {
+    const base = await visitorHash(SALT, "2026-10-05", ID);
+    expect(await visitorHash(SALT, "2026-10-05", ID2)).not.toBe(base);
+    expect(await visitorHash(`${SALT}x`, "2026-10-05", ID)).not.toBe(base);
+  });
+
+  it("equals an independent HMAC-SHA256 chain (key chain order matters)", async () => {
+    const enc = new TextEncoder();
+    const hmac = async (key: ArrayBuffer | Uint8Array, msg: string) =>
+      crypto.subtle.sign("HMAC", await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]), enc.encode(msg));
+    const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+    const dayKey = await hmac(enc.encode(SALT), "vnx.si/visitor/v1|2026-10-05");
+    expect(await visitorHash(SALT, "2026-10-05", ID)).toBe(hex(await hmac(dayKey, ID)));
+    // Swapped roles must not give the same value.
+    const swapped = await hmac(enc.encode(ID), "vnx.si/visitor/v1|2026-10-05");
+    expect(await visitorHash(SALT, "2026-10-05", ID)).not.toBe(hex(swapped));
+  });
+
+  it("returns null without a usable salt (the caller then skips counting)", async () => {
+    for (const salt of [undefined, "", "   "]) expect(await visitorHash(salt, "2026-10-05", ID)).toBeNull();
+  });
+
+  it("returns null for an id that is not a valid cookie value", async () => {
+    for (const bad of ["", ID.toUpperCase(), "short", `${ID}0`]) expect(await visitorHash(SALT, "2026-10-05", bad)).toBeNull();
+  });
+
+  it("throws on a day that is not YYYY-MM-DD (a programming error, callers use utcDay)", async () => {
+    await expect(visitorHash(SALT, "2026-10-05T00:00:00Z", ID)).rejects.toThrow();
+    await expect(visitorHash(SALT, "", ID)).rejects.toThrow();
+  });
+});
+
+describe("usableSalt", () => {
+  it("returns a real salt and null for unset, empty or blank, so a blank salt never lets shouldCount be true", () => {
+    expect(usableSalt(SALT)).toBe(SALT);
+    for (const salt of [undefined, "", " ", "\t\n"]) expect(usableSalt(salt)).toBeNull();
+  });
+});
+
+describe("shouldCount (Global Constraints: not counted when …)", () => {
+  const ok = { isBot: false, isStaff: false, isOwnBuilder: false, isGpc: false, hasSalt: true };
+
+  it("counts an ordinary visitor with a salt", () => {
+    expect(shouldCount(ok)).toBe(true);
+  });
+
+  it.each([["isBot"], ["isStaff"], ["isOwnBuilder"], ["isGpc"]] as const)("does not count when %s", (flag) => {
+    expect(shouldCount({ ...ok, [flag]: true })).toBe(false);
+  });
+
+  it("does not count without a salt", () => {
+    expect(shouldCount({ ...ok, hasSalt: false })).toBe(false);
+  });
+
+  it("truth table: exactly one of the 32 combinations counts", () => {
+    let counted = 0;
+    for (let n = 0; n < 32; n++) {
+      const ctx = { isBot: !!(n & 1), isStaff: !!(n & 2), isOwnBuilder: !!(n & 4), isGpc: !!(n & 8), hasSalt: !!(n & 16) };
+      const result = shouldCount(ctx);
+      if (result) {
+        counted++;
+        expect(ctx).toEqual(ok);
+      }
+    }
+    expect(counted).toBe(1);
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/domain/visitor.test.ts` → FAIL (module không tồn tại).
+
+- [ ] **Step 4: Domain `visitor` (impl)**
+
+`apps/web/src/domain/visitor.ts`:
+
+```ts
+/**
+ * Anonymous visitor identity for product statistics (addendum 2.2, spec 8.11; Owner (b) 2026-10-05). Pure: no Hono, no D1.
+ * The cookie value is a random id with no link to a person. `visitorHash` mixes it with a secret that changes every UTC day, so
+ * two days cannot be joined. Web Crypto only (`crypto.subtle`, `crypto.getRandomValues`).
+ */
+
+export const VISITOR_COOKIE = "__Host-vnx_vid";
+export const VISITOR_ID_RE = /^[0-9a-f]{32}$/;
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const encoder = new TextEncoder();
+/** Domain separation for the day key. */
+const DAY_KEY_PREFIX = "vnx.si/visitor/v1|";
+
+/** Seconds until the next 00:00 UTC (86400 at exactly 00:00:00); always >= 1, so the cookie ends with the UTC day. */
+export function visitorCookieMaxAge(now: Date): number {
+  const nextMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return Math.ceil((nextMidnight - now.getTime()) / 1000);
+}
+
+/** The id when it has exactly the shape newVisitorId makes, else null (never trust a cookie). */
+export function parseVisitorCookie(value: string | null | undefined): string | null {
+  return typeof value === "string" && VISITOR_ID_RE.test(value) ? value : null;
+}
+
+/** 16 random bytes as 32 lower-case hex characters. */
+export function newVisitorId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** True for `Sec-GPC: 1` only (Global Privacy Control). */
+export function hasGpc(headers: { get(name: string): string | null }): boolean {
+  return headers.get("Sec-GPC")?.trim() === "1";
+}
+
+async function hmac(key: BufferSource, message: string): Promise<ArrayBuffer> {
+  const k = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.sign("HMAC", k, encoder.encode(message));
+}
+
+/** The salt when it is set and not blank, else null. Use it for `hasSalt` too. */
+export function usableSalt(salt: string | undefined): string | null {
+  return typeof salt === "string" && salt.trim() !== "" ? salt : null;
+}
+
+/**
+ * `hex(HMAC-SHA256(dayKey, visitorId))` with `dayKey = HMAC-SHA256(salt, "vnx.si/visitor/v1|" + day)`; `day` is the UTC date `YYYY-MM-DD` (see `utcDay`).
+ * Null when there is no salt (unset, empty or blank) or the id is not a valid cookie value: the caller then does not count.
+ * Throws on a malformed `day`.
+ */
+export async function visitorHash(salt: string | undefined, day: string, visitorId: string): Promise<string | null> {
+  if (!DAY_RE.test(day)) throw new Error(`invalid day: ${day}`);
+  const key = usableSalt(salt);
+  if (key === null || !VISITOR_ID_RE.test(visitorId)) return null;
+  const dayKey = await hmac(encoder.encode(key), DAY_KEY_PREFIX + day);
+  return [...new Uint8Array(await hmac(dayKey, visitorId))].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export interface CountContext {
+  isBot: boolean;
+  /** Our team: the same predicate as the /admin guard (`isStaff`). */
+  isStaff: boolean;
+  /** The signed-in user is the builder of this product. */
+  isOwnBuilder: boolean;
+  /** The request carries `Sec-GPC: 1`. */
+  isGpc: boolean;
+  /** `usableSalt(env.ANALYTICS_SALT) !== null`. */
+  hasSalt: boolean;
+}
+
+/** One rule for views and clicks: count only a real, non-opted-out visitor who is neither the product's builder nor our team, and only with a salt. */
+export function shouldCount(ctx: CountContext): boolean {
+  return ctx.hasSalt && !ctx.isBot && !ctx.isStaff && !ctx.isOwnBuilder && !ctx.isGpc;
+}
+```
+
+Chạy: `npm test -w apps/web -- test/domain/visitor.test.ts` → PASS.
+
+- [ ] **Step 5: Test `isAdminUser` và `isStaff` (fail)**
+
+`apps/web/test/auth/staff.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { isAdminUser } from "../../src/auth/admin.ts";
+import { isStaff } from "../../src/auth/staff.ts";
+import { testEnv } from "../helpers.ts";
+
+const admins = { ADMIN_EMAILS: "owner@vnx.si, Second@VNX.si" };
+const envWith = (ADMIN_EMAILS: string | undefined) => ({ DB: testEnv.DB, ADMIN_EMAILS });
+
+describe("isAdminUser: exactly the /admin guard expression (requireAdmin calls it)", () => {
+  it("is true for an admin user whose e-mail is in ADMIN_EMAILS", () => {
+    expect(isAdminUser({ email: "owner@vnx.si", isAdmin: true }, admins)).toBe(true);
+    expect(isAdminUser({ email: "second@vnx.si", isAdmin: true }, admins)).toBe(true);
+  });
+  it("is false without the is_admin flag, even when the e-mail is listed", () => {
+    expect(isAdminUser({ email: "owner@vnx.si", isAdmin: false }, admins)).toBe(false);
+  });
+  it("is false when the e-mail is no longer listed (revocation), or the list is unset or empty", () => {
+    expect(isAdminUser({ email: "gone@vnx.si", isAdmin: true }, admins)).toBe(false);
+    expect(isAdminUser({ email: "owner@vnx.si", isAdmin: true }, {})).toBe(false);
+    expect(isAdminUser({ email: "owner@vnx.si", isAdmin: true }, { ADMIN_EMAILS: "" })).toBe(false);
+  });
+  it("is false for a visitor who is not signed in", () => {
+    expect(isAdminUser(null, admins)).toBe(false);
+    expect(isAdminUser(undefined, admins)).toBe(false);
+  });
+});
+
+describe("isStaff (async; today the same answer as isAdminUser, Ops O1 widens it at merge)", () => {
+  it("is true for an admin user in ADMIN_EMAILS", async () => {
+    expect(await isStaff(envWith(admins.ADMIN_EMAILS), { email: "owner@vnx.si", isAdmin: true })).toBe(true);
+  });
+  it("is false for a flag-less user, a revoked e-mail, an unset list or no user", async () => {
+    expect(await isStaff(envWith(admins.ADMIN_EMAILS), { email: "owner@vnx.si", isAdmin: false })).toBe(false);
+    expect(await isStaff(envWith(admins.ADMIN_EMAILS), { email: "gone@vnx.si", isAdmin: true })).toBe(false);
+    expect(await isStaff(envWith(undefined), { email: "owner@vnx.si", isAdmin: true })).toBe(false);
+    expect(await isStaff(envWith(admins.ADMIN_EMAILS), null)).toBe(false);
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/auth/staff.test.ts` → FAIL (`isAdminUser`, `auth/staff.ts` chưa có).
+
+- [ ] **Step 6: `isAdminUser`, `isStaff`, `Bindings`, ghi chú triển khai (impl)**
+
+`apps/web/src/auth/admin.ts` (thêm; giữ `adminEmails` nguyên):
+
+```ts
+import type { Bindings } from "../env.ts";
+import type { SessionUser } from "./sessions.ts";
+
+// … adminEmails unchanged …
+
+/** The /admin guard predicate. ADMIN_EMAILS is the source of truth (removing an e-mail revokes access on the next request). Never widened. */
+export function isAdminUser(user: Pick<SessionUser, "email" | "isAdmin"> | null | undefined, env: Pick<Bindings, "ADMIN_EMAILS">): boolean {
+  return !!user && user.isAdmin && adminEmails(env).has(user.email);
+}
+```
+
+`apps/web/src/auth/staff.ts` (mới):
+
+```ts
+import type { Bindings } from "../env.ts";
+import { isAdminUser } from "./admin.ts";
+import type { SessionUser } from "./sessions.ts";
+
+/**
+ * "Our team" for product statistics: such visitors are never counted. Async so call sites already await it. Today it equals the /admin
+ * guard. At the Ops O1 merge it becomes `isAdminUser(user, env) || (await resolveOpsRole(env, user)) !== null`, with a test that an
+ * `ops_members` viewer is not counted. Do not widen `requireAdmin`. Call it only for a signed-in user and after the cheap checks (bot, GPC, salt).
+ */
+export async function isStaff(env: Pick<Bindings, "DB" | "ADMIN_EMAILS">, user: Pick<SessionUser, "email" | "isAdmin"> | null | undefined): Promise<boolean> {
+  return isAdminUser(user, env);
+}
+```
+
+`apps/web/src/auth/middleware.ts` `requireAdmin`: đổi điều kiện thành `if (!isAdminUser(user, c.env)) return errorResponse(c, "forbidden", 403);` (giữ chú thích; import `isAdminUser` thay `adminEmails` nếu `adminEmails` không còn dùng ở file này).
+
+`apps/web/src/env.ts`, trong `Bindings` sau `TURNSTILE_DRIVER`:
+
+```ts
+  /** Secret for the daily visitor hash (VNX-0707a). Unset: no views or clicks are counted and no visitor cookie is set. `wrangler secret put ANALYTICS_SALT`; `.dev.vars` locally; never in the repo. */
+  ANALYTICS_SALT?: string;
+```
+
+`apps/web/wrangler.jsonc`: thay dòng `// Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.` bằng `… TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS, ANALYTICS_SALT.`; thêm sau dòng `MAIL_DRIVER` cuối file:
+
+```jsonc
+  // ANALYTICS_SALT (M7): `wrangler secret put ANALYTICS_SALT` with a random value of 32+ characters (e.g. `openssl rand -hex 32`). Local dev:
+  // add ANALYTICS_SALT=<any random string> to apps/web/.dev.vars (git-ignored). Never put it in "vars". While it is unset the Worker counts
+  // no views or clicks and sets no visitor cookie. Rotating it only restarts de-duplication for that day.
+```
+
+Chạy: `npm test -w apps/web -- test/auth test/admin test/domain test/architecture.test.ts` → PASS (`requireAdmin` không đổi hành vi).
+
+- [ ] **Step 7: Kiểm tra cuối, commit**
+
+```
+npm run typecheck -w apps/web
+npm test
+grep -n "ANALYTICS_SALT" apps/web/wrangler.jsonc
+git add apps/web/src/domain/bot.ts apps/web/src/domain/visitor.ts apps/web/src/domain/outbound.ts apps/web/src/routes/go.ts apps/web/src/auth/admin.ts apps/web/src/auth/staff.ts apps/web/src/auth/middleware.ts apps/web/src/env.ts apps/web/wrangler.jsonc apps/web/test/domain/bot.test.ts apps/web/test/domain/visitor.test.ts apps/web/test/auth/staff.test.ts
+git commit -m "feat(web): shared bot rule, visitor hash and staff predicate (VNX-0707a)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+Kết quả `grep` phải chỉ là dòng chú thích (bắt đầu bằng `//`), không có `ANALYTICS_SALT` trong khối `"vars"`.
+
+**Tiêu chí chấp nhận → cách kiểm:**
+
+| # | Tiêu chí | Kiểm bằng |
+|---|---|---|
+| AC1 | Luật bot cùng kết quả với `isBotRequest` cũ trên bảng UA x `cf`; không đọc điểm bot; `outbound.ts` re-export cùng hàm | `npm test -w apps/web -- test/domain/bot.test.ts` |
+| AC2 | Test `isBotRequest` cũ và `/go/` (EPIC 21) vẫn xanh, không sửa | `npm test -w apps/web -- test/domain/outbound.test.ts test/monetization/go.test.ts` |
+| AC3 | `Max-Age` đúng biên 00:00 UTC (86400, giữa ngày, 30 s, 1 s ở 23:59:59.999, cuối năm; không sàn) | `npm test -w apps/web -- test/domain/visitor.test.ts` |
+| AC4 | `parseVisitorCookie`, `newVisitorId` (1000 lần không trùng), `hasGpc` (`1`, `0`, `true`, rỗng, thiếu, không phân biệt hoa thường tên header) | cùng file |
+| AC5 | `usableSalt`; `visitorHash` (tiền tố `vnx.si/visitor/v1|`): xác định trong ngày, khác giữa các ngày/visitor/salt, khớp chuỗi HMAC độc lập, `null` khi thiếu salt hoặc id sai, ném khi `day` sai | cùng file |
+| AC6 | `shouldCount`: đúng 1 trong 32 tổ hợp được đếm | cùng file |
+| AC7 | `isAdminUser` là biểu thức guard `/admin`, `isStaff` (async) hiện trùng nó; `requireAdmin` không đổi hành vi | `npm test -w apps/web -- test/auth test/admin` |
+| AC8 | `domain/` không import Hono/db; mọi bảng vẫn có đúng một writer | `npm test -w apps/web -- test/architecture.test.ts` |
+| AC9 | `ANALYTICS_SALT` có trong `Bindings`, chỉ nằm trong chú thích `wrangler.jsonc`, không có file bí mật nào trong diff | `grep -n "ANALYTICS_SALT" apps/web/wrangler.jsonc apps/web/src/env.ts` và `git diff --stat` |
+| AC10 | Typecheck sạch, toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
+
+Diff ước tính ~430 dòng (gồm test; code sản xuất ~110). Không có chuỗi giao diện, không locale. Không đụng migration.
 
 ---
 
