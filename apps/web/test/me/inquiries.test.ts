@@ -38,12 +38,15 @@ describe("/me (spec §5.4)", () => {
     expect(html).toContain("Send now");
     expect(html).toContain(`action="/me/inquiries/${inquiry.id}/confirm"`);
     expect((await findUserById(testEnv.DB, client.id))?.display_name).toBeNull();
+    const counted = async () => (await testEnv.DB.prepare("SELECT COALESCE(SUM(inquiries), 0) AS n FROM product_daily_stats WHERE product_id = ?1").bind(inquiry.productId).first<{ n: number }>())?.n;
+    expect(await counted()).toBe(0);
     const res = await post(`/vi/me/inquiries/${inquiry.id}/confirm`, {}, cookie);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/vi/me/inquiries/${inquiry.id}`);
     const opened = await findInquiryById(testEnv.DB, inquiry.id);
     expect(opened?.status).toBe("open");
     expect(opened?.openedAt).not.toBeNull();
+    expect(await counted()).toBe(1);
     expect((await findUserById(testEnv.DB, client.id))?.display_name).toBe("Minh Tran");
     expect(outbox.filter((m) => m.to === "me-now-b@vnx.si")).toHaveLength(1);
     const [first] = await listMessages(testEnv.DB, inquiry.id);
@@ -52,6 +55,7 @@ describe("/me (spec §5.4)", () => {
     expect(JSON.parse(audit!.data)).toEqual({ via: "me" });
     // A second press: already open -> 409, nothing more is sent.
     expect((await post(`/me/inquiries/${inquiry.id}/confirm`, {}, cookie)).status).toBe(409);
+    expect(await counted()).toBe(1);
     expect(outbox.filter((m) => m.to === "me-now-b@vnx.si")).toHaveLength(1);
   });
 

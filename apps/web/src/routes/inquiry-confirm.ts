@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { auditStatement } from "../db/audit.ts";
 import { listMessages, returnedInquiry, setInquiryStatusStatement } from "../db/inquiries.ts";
+import { inquiryOpenedStatement } from "../db/stats.ts";
 import { setDisplayNameIfEmpty } from "../db/users.ts";
 import type { Inquiry } from "../domain/inquiry.ts";
 import type { AppEnv } from "../env.ts";
@@ -19,6 +20,8 @@ export async function openPendingInquiry(c: Context<AppEnv>, inquiry: Inquiry, u
   const [moved] = await c.env.DB.batch([
     setInquiryStatusStatement(c.env.DB, { id: inquiry.id, from: "pending_verification", to: "open", now: iso }),
     auditStatement(c.env.DB, { actorUserId: user.id, action: "inquiry.verify", entity: "inquiry", entityId: inquiry.id, data: { via }, now: iso }, guard),
+    // M7 (spec §8.11): counts only when this batch is the one that opened the inquiry (opened_at = iso).
+    inquiryOpenedStatement(c.env.DB, { inquiryId: inquiry.id, openedAt: iso }),
   ]);
   if (!returnedInquiry(moved)) return false;
   await setDisplayNameIfEmpty(c.env.DB, user.id, inquiry.clientName, iso);

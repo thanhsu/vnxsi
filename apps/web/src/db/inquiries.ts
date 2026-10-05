@@ -1,5 +1,6 @@
 import { MAX_NOTIFY_ATTEMPTS, type AdminInquiry, type BudgetBand, type Inquiry, type InquiryMessage, type InquiryStatus, type InquirySummary, type InquiryType, type MessageKind } from "../domain/inquiry.ts";
 import { ulid } from "../lib/ulid.ts";
+import { inquiryOpenedStatement } from "./stats.ts";
 
 type Row = {
   id: string;
@@ -108,8 +109,10 @@ export function createInquiryStatements(db: D1Database, input: NewInquiry, onlyI
 
 /** The inquiry and its first message (the client's text; its notification tells the builder) in one transaction. */
 export async function createInquiry(db: D1Database, input: NewInquiry): Promise<{ inquiry: Inquiry; firstMessageId: string }> {
-  const { statements, firstMessageId } = createInquiryStatements(db, input);
-  const [rows] = await db.batch(statements);
+  const { id, statements, firstMessageId } = createInquiryStatements(db, input);
+  // M7: a signed-in inquiry opens here, so it counts here (spec §8.11); createInquiryStatements stays unchanged for M6's request flow.
+  const counted = input.status === "open" && input.productId ? [inquiryOpenedStatement(db, { inquiryId: id, openedAt: input.now })] : [];
+  const [rows] = await db.batch([...statements, ...counted]);
   const row = rows?.results[0] as Row | undefined;
   if (!row) throw new Error("inquiry insert failed");
   return { inquiry: toInquiry(row), firstMessageId };

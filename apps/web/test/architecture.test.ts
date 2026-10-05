@@ -46,6 +46,7 @@ const WRITERS: Record<string, string> = {
   partner_programs: "../src/db/programs.ts",
   offers: "../src/db/offers.ts",
   outbound_clicks: "../src/db/clicks.ts",
+  product_daily_stats: "../src/db/stats.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {
