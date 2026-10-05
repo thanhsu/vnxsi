@@ -36,7 +36,7 @@
   // Daily job at 01:00 UTC (spec §8.4): src/jobs/daily.ts (reminders, admin alert, notification retries, clean-up).
   // Registered on the next `npm run deploy`. M7 adds "5 * * * *".
   "triggers": { "crons": ["0 1 * * *"] }
-  // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.
+  // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS, ANALYTICS_SALT.
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
@@ -58,4 +58,8 @@
   //
   // MAIL_DRIVER selects the mailer. Local dev: set MAIL_DRIVER=console in apps/web/.dev.vars.
   // Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.
+  //
+  // ANALYTICS_SALT (M7): `wrangler secret put ANALYTICS_SALT` with a random value of 32+ characters (e.g. `openssl rand -hex 32`). Local dev:
+  // add ANALYTICS_SALT=<any random string> to apps/web/.dev.vars (git-ignored). Never put it in "vars". While it is unset the Worker counts
+  // no views or clicks and sets no visitor cookie. Rotating it only restarts de-duplication for that day.
 }

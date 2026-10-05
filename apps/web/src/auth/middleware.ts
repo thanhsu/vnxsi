@@ -3,7 +3,7 @@ import { findBuilderByUserId } from "../db/builders.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { errorResponse } from "../views/error-response.tsx";
-import { adminEmails } from "./admin.ts";
+import { isAdminUser } from "./admin.ts";
 import { readSessionCookie } from "./cookies.ts";
 import { getSessionUser } from "./sessions.ts";
 
@@ -38,7 +38,7 @@ export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = c.get("user");
   if (!user) return toLogin(c);
   // ADMIN_EMAILS is the source of truth: removing an e-mail revokes access on the next request.
-  if (!user.isAdmin || !adminEmails(c.env).has(user.email)) return errorResponse(c, "forbidden", 403);
+  if (!isAdminUser(user, c.env)) return errorResponse(c, "forbidden", 403);
   await next();
 };
 
