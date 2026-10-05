@@ -301,3 +301,19 @@ Nguồn: [phụ lục monetization](../superpowers/specs/2026-10-04-vnxsi-moneti
 |---|---|---|---|
 | VNX-2401 | Registry vị trí, `AdProvider` bản `direct`, ô kích thước cố định, tải lười | AGENT | 💤 |
 | VNX-2402 | (Tùy quyết định) mạng quảng cáo bên thứ ba + CMP + CSP | AGENT, HIGH-RISK | 💤 |
+
+## EPIC 25 — Ops console (ADR-010)
+
+Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md`. O1 plan `docs/superpowers/plans/2026-10-05-vnxsi-ops-o1.md` (APPROVED 2026-10-05); bắt đầu sau khi EPIC 21 và VNX-0803 merge. O2 (thước đo, sức khỏe), O3 (nội dung, marketing; cần ADR lưu câu chữ trong DB), O4 (cài đặt) lên kế hoạch sau.
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2501 | `ops_members`, `ops_member_invites` (`0013`), ma trận capability | AGENT, FOUNDATION | ⏳ |
+| VNX-2502 | Guard 404 kín, `no-store`/`noindex`, robots, parity bỏ qua `ops.` | AGENT, HIGH-RISK | ⏳ |
+| VNX-2503 | Shell Ops + Overview hàng chờ | AGENT | ⏳ |
+| VNX-2504 | Chuyển Marketplace vào `/ops/marketplace/*` | AGENT | ⏳ |
+| VNX-2505 | Chuyển Users, Feedback; chặn khóa Owner gốc | AGENT, HIGH-RISK | ⏳ |
+| VNX-2506 | Team & roles, lời mời 7 ngày, kích hoạt qua magic link | AGENT, HIGH-RISK | ⏳ |
+| VNX-2507 | Audit log | AGENT | ⏳ |
+| VNX-2508 | Chuyển hướng `/admin`, link email/cron, màn hình EPIC 21 | AGENT, HIGH-RISK | ⏳ |
+| VNX-2509 | Rà giao diện, a11y | AGENT | ⏳ |
