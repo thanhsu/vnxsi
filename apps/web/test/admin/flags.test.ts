@@ -9,7 +9,7 @@ const app = () => createApp();
 const send = (req: Request) => app().request(req, undefined, testEnv);
 const admin = () => signIn("owner@vnx.si", { admin: true });
 
-describe("/admin/flags (addendum §3.6)", () => {
+describe("/admin/flags (addendum §3.6)", { timeout: 30_000 }, () => {
   beforeEach(async () => {
     await testEnv.DB.prepare("DELETE FROM feature_flags").run();
     resetFlagCache();

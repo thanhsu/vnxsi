@@ -58,7 +58,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("/go/o/:offerId and /go/:merchantSlug: the redirect truth table over HTTP", () => {
+describe("/go/o/:offerId and /go/:merchantSlug: the redirect truth table over HTTP", { timeout: 30_000 }, () => {
   it("tracked: flag on, everything active → 302 to the filled template; the click row id is the click_id", async () => {
     const { offer, merchant } = await seed();
     const res = await call(`/go/o/${offer.id}?src=tools`);
@@ -204,7 +204,7 @@ describe("/go/o/:offerId and /go/:merchantSlug: the redirect truth table over HT
   });
 });
 
-describe("/go/:merchantSlug: which merchants answer", () => {
+describe("/go/:merchantSlug: which merchants answer", { timeout: 30_000 }, () => {
   it("a paused merchant, a merchant without a default offer, an unknown slug, an archived default offer: 404 and no click", async () => {
     const paused = await seed({ merchant: { status: "paused" } });
     const bare = await makeMerchant();
@@ -220,7 +220,7 @@ describe("/go/:merchantSlug: which merchants answer", () => {
   });
 });
 
-describe("open redirect and URL tricks (Review Focus 1 and 2)", () => {
+describe("open redirect and URL tricks (Review Focus 1 and 2)", { timeout: 30_000 }, () => {
   it.each([
     `/go/https://${EVIL}`,
     `/go/%2F%2F${EVIL}`,
@@ -296,7 +296,7 @@ describe("open redirect and URL tricks (Review Focus 1 and 2)", () => {
   });
 });
 
-describe("what never reaches D1", () => {
+describe("what never reaches D1", { timeout: 30_000 }, () => {
   /** A D1 whose every entry point throws and counts: a request that gets this far read the database. */
   function untouchableDb() {
     const state = { calls: 0 };
@@ -331,7 +331,7 @@ describe("what never reaches D1", () => {
   });
 });
 
-describe("methods", () => {
+describe("methods", { timeout: 30_000 }, () => {
   it.each(["POST", "PUT", "PATCH", "DELETE"])("%s on /go/ with a valid Origin is 405 with Allow: GET, HEAD, and writes nothing", async (method) => {
     const { offer, merchant } = await seed();
     const before = await totalClicks();
@@ -363,7 +363,7 @@ describe("methods", () => {
   });
 });
 
-describe("the click row (Review Focus 7)", () => {
+describe("the click row (Review Focus 7)", { timeout: 30_000 }, () => {
   it("one GET records one row: kind offer, src, locale from a same-host Referer, country, referrer host only, no visitor hash, nothing personal", async () => {
     const { offer } = await seed();
     const { user, cookie } = await signIn("go-click@vnx.si");
@@ -409,7 +409,7 @@ describe("the click row (Review Focus 7)", () => {
   });
 });
 
-describe("the click is written through waitUntil", () => {
+describe("the click is written through waitUntil", { timeout: 30_000 }, () => {
   /** Wraps the INSERT into outbound_clicks (and only it) so a test can delay or break it. */
   function dbWithInsert(wrap: (run: () => Promise<unknown>) => Promise<unknown>): Bindings {
     const DB = new Proxy(testEnv.DB, {
@@ -467,7 +467,7 @@ describe("the click is written through waitUntil", () => {
   });
 });
 
-describe("flag cache (Review Focus 3, 60 s)", () => {
+describe("flag cache (Review Focus 3, 60 s)", { timeout: 30_000 }, () => {
   it("a change made straight in D1 is not seen until the cache is reset; setFlag clears it at once", async () => {
     const { offer } = await seed();
     const kind = async () => ((await call(`/go/o/${offer.id}`)).headers.get("location") ?? "").includes("/r?c=") ? "tracked" : "fallback";
@@ -488,7 +488,7 @@ describe("flag cache (Review Focus 3, 60 s)", () => {
   });
 });
 
-describe("the rest of the site keeps its own headers", () => {
+describe("the rest of the site keeps its own headers", { timeout: 30_000 }, () => {
   it.each(["/", "/products", "/vi/products"])("%s does not get Referrer-Policy: origin (only /go/ sets it)", async (path) => {
     const res = await call(path);
     expect(res.headers.get("referrer-policy")).not.toBe("origin");

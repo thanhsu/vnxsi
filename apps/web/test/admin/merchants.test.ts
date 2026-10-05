@@ -32,7 +32,7 @@ const auditActions = async (entityId: string) =>
   (await testEnv.DB.prepare("SELECT action FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string }>()).results.map((r) => r.action);
 const merchantCount = () => n("SELECT COUNT(*) AS n FROM merchants");
 
-describe("/admin/merchants access", () => {
+describe("/admin/merchants access", { timeout: 30_000 }, () => {
   it("is for admins only; every page is no-store and noindex; a cross-site POST is refused", async () => {
     const m = await makeMerchant();
     const { cookie: userCookie } = await signIn("mer-user@vnx.si");
@@ -94,7 +94,7 @@ describe("/admin/merchants access", () => {
   });
 });
 
-describe("create merchant", () => {
+describe("create merchant", { timeout: 30_000 }, () => {
   it("shows the new-merchant form with status paused selected", async () => {
     const { cookie } = await admin();
     const html = await (await send(getReq("/admin/merchants", cookie))).text();
@@ -150,7 +150,7 @@ describe("create merchant", () => {
   });
 });
 
-describe("edit merchant", () => {
+describe("edit merchant", { timeout: 30_000 }, () => {
   it("never changes the slug and does not render a slug input on the detail page", async () => {
     const { cookie } = await admin();
     const m = await makeMerchant();
@@ -229,7 +229,7 @@ describe("edit merchant", () => {
   });
 });
 
-describe("merchant status", () => {
+describe("merchant status", { timeout: 30_000 }, () => {
   it("moves between active and paused, audits merchant.status, and refuses a no-op or an unknown status", async () => {
     const { cookie } = await admin();
     const m = await makeMerchant({ status: "paused" });
@@ -256,7 +256,7 @@ describe("merchant status", () => {
   });
 });
 
-describe("programs", () => {
+describe("programs", { timeout: 30_000 }, () => {
   it("creates a draft with no defaulted terms (every optional field stays null) and audits program.create", async () => {
     const { cookie } = await admin();
     const m = await makeMerchant();

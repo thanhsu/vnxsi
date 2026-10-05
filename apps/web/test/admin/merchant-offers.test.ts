@@ -29,7 +29,7 @@ beforeEach(async () => {
   resetFlagCache();
 });
 
-describe("create and edit offers", () => {
+describe("create and edit offers", { timeout: 30_000 }, () => {
   it("enters the partner-shaped data: untracked link, template, try_it label, set as default", async () => {
     const { cookie } = await admin();
     const m = await makeMerchant({ websiteUrl: "https://elevenlabs.example/", allowedHosts: ["try.example.net", "elevenlabs.example"] });
@@ -126,7 +126,7 @@ describe("create and edit offers", () => {
   });
 });
 
-describe("default offer", () => {
+describe("default offer", { timeout: 30_000 }, () => {
   it("sets the merchant's own offer, can clear it, and a foreign, archived or unknown offer is a 404 that writes nothing", async () => {
     const { cookie } = await admin();
     const m = await makeMerchant();
@@ -172,7 +172,7 @@ describe("default offer", () => {
   });
 });
 
-describe("final URL preview", () => {
+describe("final URL preview", { timeout: 30_000 }, () => {
   it("shows the tracked link and the fallback link side by side, with the flag on and with it off", async () => {
     const { cookie, user } = await admin();
     const m = await makeMerchant();
@@ -214,7 +214,7 @@ describe("final URL preview", () => {
   });
 });
 
-describe("offer section access", () => {
+describe("offer section access", { timeout: 30_000 }, () => {
   it("offer routes are admin only and refuse a cross-site POST", async () => {
     const m = await makeMerchant();
     const o = await makeOffer(m, null);

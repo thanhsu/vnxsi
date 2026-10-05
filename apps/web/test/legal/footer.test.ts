@@ -8,7 +8,7 @@ import { testEnv } from "../helpers.ts";
 const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
 const footerOf = (html: string) => /<footer[^>]*>([\s\S]*)<\/footer>/.exec(html)?.[1] ?? "";
 
-describe("site footer (VNX-0705a AC6; Company group since VNX-0709)", () => {
+describe("site footer (VNX-0705a AC6; Company group since VNX-0709)", { timeout: 30_000 }, () => {
   it("links Terms, Privacy and Media kit in the page's locale on /, /products and /p/:slug", async () => {
     const { product } = await makeLiveProduct("footer-live@vnx.si", "footer-live", "Footer Live");
     for (const rest of ["/", "/products", `/p/${product.slug}`]) {

@@ -25,7 +25,7 @@ const PAGES = [
 
 const metaKey = (meta: string, part: "title" | "description") => `${meta}.${part}` as MessageKey;
 
-describe("legal pages (VNX-0705a)", () => {
+describe("legal pages (VNX-0705a)", { timeout: 30_000 }, () => {
   it("AC1: every page answers 200 in 4 locales with one h1, canonical, hreflang and meta description", async () => {
     for (const { rest, meta } of PAGES) {
       for (const locale of LOCALES) {

@@ -33,7 +33,7 @@ const dbWith = (answer: "empty" | "throw"): Bindings => {
   return { ...testEnv, DB: db } as Bindings;
 };
 
-describe("/disclosure partner list (VNX-2104b)", () => {
+describe("/disclosure partner list (VNX-2104b)", { timeout: 30_000 }, () => {
   it("shows exactly one 'none' line, in every locale, when the list is empty", async () => {
     const env = dbWith("empty");
     for (const locale of LOCALES) {

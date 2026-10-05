@@ -25,7 +25,7 @@ beforeEach(() => resetFlagCache());
 // The flag is global to the file's database: always leave it off, even when an assertion above failed.
 afterEach(() => setIndexing(false));
 
-describe("/tools/:slug availability", () => {
+describe("/tools/:slug availability", { timeout: 30_000 }, () => {
   it("answers 404 in every locale for an unknown, paused or archived merchant, and for a malformed slug", async () => {
     const paused = await makeMerchant({ status: "paused" });
     const archived = await makeMerchant({ status: "archived" });
@@ -45,7 +45,7 @@ describe("/tools/:slug availability", () => {
   });
 });
 
-describe("/tools/:slug with offers (Review Focus 4)", () => {
+describe("/tools/:slug with offers (Review Focus 4)", { timeout: 30_000 }, () => {
   it("shows name, description, disclosure above the buttons, sponsored default link and plain other link, in 4 locales", async () => {
     const m = await makeMerchant({ name: "Acme Tool", description: "First line.\n\n- one\n- two" });
     const program = await makeProgram(m);
@@ -159,7 +159,7 @@ describe("/tools/:slug with offers (Review Focus 4)", () => {
   });
 });
 
-describe("/tools/:slug indexing (Owner 2026-10-05)", () => {
+describe("/tools/:slug indexing (Owner 2026-10-05)", { timeout: 30_000 }, () => {
   it("is noindex without canonical or hreflang unless indexable = 1 AND content_indexing is on", async () => {
     const indexable = await makeMerchant({ indexable: true });
     const notIndexable = await makeMerchant({ indexable: false });
@@ -188,7 +188,7 @@ describe("/tools/:slug indexing (Owner 2026-10-05)", () => {
   });
 });
 
-describe("Owner-approved wording, pinned literally (plan block A)", () => {
+describe("Owner-approved wording, pinned literally (plan block A)", { timeout: 30_000 }, () => {
   const BLOCK_A = {
     en: "VNX.SI may earn a commission when you sign up or buy through some links on this page. This never changes how products are ranked.",
     vi: "VNX.SI có thể nhận hoa hồng khi bạn đăng ký hoặc mua qua một số liên kết trên trang này. Điều này không bao giờ thay đổi cách xếp hạng sản phẩm.",

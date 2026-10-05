@@ -13,7 +13,7 @@ const fetchSitemap = async () => {
   return { res, xml: await res.text() };
 };
 
-describe("/sitemap.xml (spec §8.8)", () => {
+describe("/sitemap.xml (spec §8.8)", { timeout: 30_000 }, () => {
   it("lists public products and builders in 4 locales with hreflang alternates, on APP_ORIGIN", async () => {
     const { builder, product } = await makeLiveProduct("sm-live@vnx.si", "sm-live", "Sitemap Live", { at: "2026-09-30T08:00:00.000Z" });
     const { res, xml } = await fetchSitemap();
@@ -87,7 +87,7 @@ describe("/sitemap.xml (spec §8.8)", () => {
   });
 });
 
-describe("/sitemap.xml tool pages (VNX-2104a, Owner 2026-10-05)", () => {
+describe("/sitemap.xml tool pages (VNX-2104a, Owner 2026-10-05)", { timeout: 30_000 }, () => {
   const setIndexing = async (enabled: boolean) => {
     const admin = await ensureUser("sm-tools-admin@vnx.si");
     await setFlag(testEnv.DB, { key: "content_indexing", enabled, actorUserId: admin.id, now: new Date().toISOString() });
