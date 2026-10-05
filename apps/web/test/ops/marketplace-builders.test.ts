@@ -50,8 +50,8 @@ const get = async (path: string, cookie: string) => {
 const post = (path: string, cookie: string, form: Record<string, string> = {}, bindings: Bindings = env) => send(path, { cookie, form }, bindings);
 
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
-/** Every form in the page except the sign-out form of the shell. */
-const actionForms = (html: string) => [...mainOf(html).matchAll(/<form\b[^>]*>/g)].map((m) => m[0]).filter((f) => f.includes('method="post"'));
+/** Every POST form in the page's <main> (the shell's sign-out form sits outside it). */
+const actionForms = (main: string) => [...main.matchAll(/<form\b[^>]*>/g)].map((m) => m[0]).filter((f) => f.includes('method="post"'));
 const auditCount = async (entityId: string) =>
   (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id = ?1").bind(entityId).first<{ n: number }>())!.n;
 const statusCount = async (status: string) => (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM builders WHERE status = ?1").bind(status).first<{ n: number }>())!.n;
