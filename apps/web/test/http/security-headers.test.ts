@@ -69,7 +69,8 @@ describe("security headers on the real app (VNX-0803 F2)", () => {
 
   it("CSP needs nothing inline: no page carries a style attribute, an event handler or an executable inline script", async () => {
     const app = createApp();
-    for (const path of ["/", "/login", "/products", "/builders", "/request", "/contact", "/terms", "/privacy", "/media-kit", "/vi", "/zh-hans/contact", "/auth/verify?t=nope"]) {
+    // EPIC 21 public pages too: /disclosure, and /tools/:slug (404 page here, no active merchant in the test DB).
+    for (const path of ["/", "/login", "/products", "/builders", "/request", "/contact", "/terms", "/privacy", "/media-kit", "/disclosure", "/tools/nope", "/vi", "/zh-hans/contact", "/auth/verify?t=nope"]) {
       const html = await (await app.request(getReq(path), undefined, testEnv)).text();
       expect(html, path).not.toMatch(/\sstyle="/);
       expect(html, path).not.toMatch(/\son[a-z]+="/);
