@@ -1,6 +1,7 @@
 import { createSession } from "../src/auth/sessions.ts";
 import { createBuilder,setBuilderStatus } from "../src/db/builders.ts";
 import { createMerchant, type Merchant } from "../src/db/merchants.ts";
+import { createOffer, type Offer } from "../src/db/offers.ts";
 import { createProgram, type PartnerProgram } from "../src/db/programs.ts";
 import { createInquiry, setInquiryStatus } from "../src/db/inquiries.ts";
 import { addMedia } from "../src/db/media.ts";
@@ -12,7 +13,7 @@ import { createUser, findUserByEmail, type UserRow } from "../src/db/users.ts";
 import type { Builder, BuilderProfile, BuilderStatus, WorkLanguage } from "../src/domain/builder.ts";
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
 import type { MerchantInput, MerchantStatus } from "../src/domain/merchant.ts";
-import type { ProgramInput } from "../src/domain/offer.ts";
+import type { OfferInput, ProgramInput } from "../src/domain/offer.ts";
 import { ulid } from "../src/lib/ulid.ts";
 import type { TierInput } from "../src/domain/pricing-input.ts";
 import type { ProductFields } from "../src/domain/product-input.ts";
@@ -303,5 +304,29 @@ export async function makeProgram(merchant: { id: string }, overrides: Partial<P
   const admin = await ensureUser("partner-fixtures@vnx.si");
   const created = await createProgram(testEnv.DB, { merchantId: merchant.id, program, actorUserId: admin.id, now: fixtureNow() });
   if (!created) throw new Error("merchant not found");
+  return created;
+}
+
+/**
+ * An `active` offer of `merchant` on example.com. With a program it is an affiliate offer with a template; without, the merchant's own link.
+ * Shares `fixtureNow` with the other fixtures. Does not check hosts (the domain does that).
+ */
+export async function makeOffer(merchant: { id: string }, program: { id: string } | null, overrides: Partial<OfferInput> = {}): Promise<Offer> {
+  const offer: OfferInput = {
+    programId: program?.id ?? null,
+    subjectType: "merchant",
+    subjectId: merchant.id,
+    kind: program ? "affiliate" : "official",
+    label: "visit_site",
+    destinationUrl: "https://example.com/",
+    trackingTemplate: program ? "https://example.com/r?c={click_id}" : null,
+    startsAt: null,
+    endsAt: null,
+    status: "active",
+    ...overrides,
+  };
+  const admin = await ensureUser("partner-fixtures@vnx.si");
+  const created = await createOffer(testEnv.DB, { offer, actorUserId: admin.id, now: fixtureNow() });
+  if (!created) throw new Error("merchant or program not found");
   return created;
 }

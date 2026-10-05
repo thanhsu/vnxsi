@@ -126,6 +126,29 @@ export async function setMerchantStatus(db: D1Database, input: Actor & { id: str
   return row ? toMerchant(row) : null;
 }
 
+/**
+ * The merchant's default offer (what /go/:slug follows). The ownership check is inside the UPDATE: the offer must be of this merchant
+ * (subject_type merchant, subject_id) and not archived, or `offerId` is null (clear). Null otherwise (no such merchant, or the check
+ * failed): nothing written, nothing audited.
+ */
+export async function setDefaultOffer(db: D1Database, input: Actor & { merchantId: string; offerId: string | null }): Promise<Merchant | null> {
+  const writeId = ulid();
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `UPDATE merchants SET default_offer_id = ?2, write_id = ?3, updated_at = ?4
+         WHERE id = ?1
+           AND (?2 IS NULL OR EXISTS (SELECT 1 FROM offers WHERE id = ?2 AND subject_type = 'merchant' AND subject_id = ?1 AND status <> 'archived'))
+         RETURNING *`,
+      )
+      .bind(input.merchantId, input.offerId, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "merchant.update", entity: "merchant", entityId: input.merchantId, data: { defaultOfferId: input.offerId }, now: input.now },
+    { partnerTable: "merchants", id: input.merchantId, writeId },
+  );
+  return row ? toMerchant(row) : null;
+}
+
 export async function findMerchantById(db: D1Database, id: string): Promise<Merchant | null> {
   const row = await db.prepare("SELECT * FROM merchants WHERE id = ?1").bind(id).first<Row>();
   return row ? toMerchant(row) : null;

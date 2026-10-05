@@ -26,15 +26,15 @@ export type AuditInviteGuard = InviteGuard;
 export type AuditFeedbackGuard = FeedbackGuard;
 /** Written only when that feature flag row's last write carries this write id, i.e. this batch's upsert changed it (see setFlag). */
 export type AuditFlagGuard = { flagKey: string; writeId: string };
-/** Written only when that merchant / program row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
-export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"; id: string; writeId: string };
+/** Written only when that merchant / program / offer row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
+export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs" | "offers"; id: string; writeId: string };
 
 /**
  * The audit INSERT as a statement, so a route can commit it in one db.batch with the change it records.
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
  * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id,
- * `partnerTable` + `id` on that merchant / program row's last write id.
+ * `partnerTable` + `id` on that merchant / program / offer row's last write id.
  */
 export function auditStatement(
   db: D1Database,
@@ -117,6 +117,15 @@ export function auditStatement(
           `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
            SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
            WHERE EXISTS (SELECT 1 FROM merchants WHERE id = ?8 AND write_id = ?9)`,
+        )
+        .bind(...values, onlyIf.id, onlyIf.writeId);
+    }
+    if (onlyIf.partnerTable === "offers") {
+      return db
+        .prepare(
+          `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+           WHERE EXISTS (SELECT 1 FROM offers WHERE id = ?8 AND write_id = ?9)`,
         )
         .bind(...values, onlyIf.id, onlyIf.writeId);
     }

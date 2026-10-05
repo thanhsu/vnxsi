@@ -153,6 +153,11 @@ export function programTransitionAllowed(from: ProgramStatus, to: ProgramStatus)
   return from === to || from !== "ended";
 }
 
+/** `archived` is terminal for offers too (Controller 2026-10-05); staying where it is is not a transition. Also enforced in db/offers.ts#updateOffer. */
+export function offerTransitionAllowed(from: OfferStatus, to: OfferStatus): boolean {
+  return from === to || from !== "archived";
+}
+
 // ---- Offers ----
 
 export type OfferFormValues = { kind: string; label: string; destinationUrl: string; trackingTemplate: string; startsAt: string; endsAt: string; status: string };

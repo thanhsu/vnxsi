@@ -12,6 +12,7 @@ import {
   PROGRAM_STATUSES,
   PROGRAM_TYPES,
   programActivationError,
+  offerTransitionAllowed,
   programTransitionAllowed,
   resolveOfferRedirect,
   type OfferContext,
@@ -427,5 +428,21 @@ describe("programTransitionAllowed", () => {
     for (const from of PROGRAM_STATUSES) {
       for (const to of PROGRAM_STATUSES) expect(programTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "ended");
     }
+  });
+});
+
+describe("offerTransitionAllowed", () => {
+  it("archived is terminal; everything else moves freely; no change is always fine", () => {
+    for (const from of OFFER_STATUSES) {
+      for (const to of OFFER_STATUSES) expect(offerTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "archived");
+    }
+  });
+
+  it("lists the forbidden and the allowed pairs explicitly", () => {
+    expect(offerTransitionAllowed("archived", "active")).toBe(false);
+    expect(offerTransitionAllowed("archived", "paused")).toBe(false);
+    expect(offerTransitionAllowed("archived", "archived")).toBe(true);
+    expect(offerTransitionAllowed("active", "archived")).toBe(true);
+    expect(offerTransitionAllowed("paused", "active")).toBe(true);
   });
 });
