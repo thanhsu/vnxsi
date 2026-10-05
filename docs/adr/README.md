@@ -13,3 +13,4 @@ Template: `ADR-000-template.md`. Đổi trạng thái hoặc nội dung một AD
 | [ADR-007](ADR-007-monetization.md) | Monetization là module riêng; ranking không đọc tiền; mọi link ra ngoài qua `/go/`; conversion chỉ khi partner xác nhận | Accepted (2026-10-04) | `test/architecture.test.ts`, `test/monetization/*.test.ts` (M7, EPIC 21) |
 | [ADR-008](ADR-008-sponsored-placement.md) | Sponsored là ô tách riêng có nhãn, không đổi thứ tự xếp hạng (bổ sung ADR-004) | Accepted (2026-10-04) | test thứ tự organic bất biến (EPIC 23) |
 | [ADR-009](ADR-009-advertising.md) | Quảng cáo chỉ ở trang nội dung, qua `AdProvider`, tải lười; chưa code | Accepted (2026-10-04, chỉ thiết kế) | — |
+| [ADR-010](ADR-010-ops-console.md) | Ops console `/ops` (tiếng Anh), 4 vai trò trong DB với `ADMIN_EMAILS` là Owner gốc, 404 kín, audit; thay một phần ADR-002 và ADR-003 | Accepted (Owner 2026-10-05) | test O1 (role matrix, 404 kín, audit, parity `ops.*`) |

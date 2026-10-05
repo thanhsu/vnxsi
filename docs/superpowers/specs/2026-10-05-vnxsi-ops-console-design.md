@@ -1,7 +1,7 @@
 # VNX.SI Ops Console — Design Spec
 
 - **Ngày:** 2026-10-05
-- **Trạng thái:** Phạm vi đã được Reviewer duyệt để làm cơ sở cho O1; các quyết định về quyền bên dưới được Owner xác nhận ngày 2026-10-05. Các tiêu chí UI là yêu cầu thiết kế cần review bằng mockup trước khi viết code.
+- **Trạng thái:** Approved bởi Owner 2026-10-05 sau review `.ai/reviews/OPS-DESIGN-review.md` (bản nháp do Codex soạn). Các tiêu chí UI là yêu cầu thiết kế cần review bằng mockup trước khi viết code.
 - **Phạm vi:** chuyển khu vực vận hành nội bộ từ `/admin/...` sang console `/ops/...`, có vai trò riêng, audit log và design bar cho giao diện OPS.
 - **Không thuộc task này:** code, migration, plan triển khai O1, quyết định nội dung chi tiết của O2/O3/O4 hoặc EPIC 21.
 - **Liên quan:** [UI/UX audit và design system](../../design/2026-10-04-ui-audit-and-redesign.md), [ADR-002](../../adr/ADR-002-auth-magic-link.md), [ADR-003](../../adr/ADR-003-i18n.md), [ADR-010](../../adr/ADR-010-ops-console.md).
@@ -119,7 +119,7 @@ Bộ lọc phải thể hiện trong URL để bookmark/back giữ được ng�
 
 Projection an toàn tối thiểu gồm `created_at`, `actor_user_id`, `action`, `entity`, `entity_id`. Không render raw `audit_log.data`, email riêng tư, nội dung Inquiry/Feedback, magic-link token, session identifier, API key hay secret. Chỉ được thêm label/display name đã được duyệt trong chính sách field visibility; row không được link tới detail mà role hiện tại không được phép xem.
 
-O1 bắt buộc ghi audit nguyên tử cho grant/change/remove membership và lifecycle của ý định chờ. Audit hiện có của suspend/unsuspend, Marketplace, Feedback, Content, Monetization, Feature flags, login, revoke session hoặc invite được giữ và hiển thị qua projection an toàn khi đã tồn tại; O1 không mở rộng thành việc retrofit atomic audit cho toàn bộ mutation legacy. Root-protection denial không làm thay đổi dữ liệu, nên security audit record là tùy chọn của implementation.
+O1 bắt buộc ghi audit nguyên tử cho grant/change/remove membership và lifecycle của ý định chờ. Audit hiện có của suspend/unsuspend, Marketplace, Feedback, Content, Monetization, Feature flags, login, revoke session hoặc invite được giữ và hiển thị qua projection an toàn khi đã tồn tại; O1 không mở rộng thành việc retrofit atomic audit cho toàn bộ mutation legacy. Mọi lần từ chối do bảo vệ Owner gốc **luôn** ghi một dòng audit (actor, hành động bị chặn, đối tượng, thời điểm), dù không có dữ liệu nào thay đổi (Owner 2026-10-05).
 
 Projection tối thiểu ở trên là mặc định đủ để bắt đầu O1. Mọi field visibility mở rộng, retention hoặc dữ liệu nhạy cảm mới phải có approval riêng trước khi thêm; không tự mở rộng projection vì module mới tạo payload.
 
@@ -160,7 +160,7 @@ Email mới dùng canonical `/ops` và path con. Email cũ được hỗ trợ q
 - Trang admin cũ được render/di chuyển dưới `/ops/...` bằng tiếng Anh. Các path admin cũ chỉ còn vai trò compatibility mapping.
 - `/ops` là không gian canonical. VNX.SI không hứa duy trì một UI song song ở `/admin` sau thời gian chuyển đổi; compatibility route phải redirect hoặc delegate an toàn.
 - EPIC 21 session `vnxsi-93` sẽ đặt các màn hình monetization của họ (flags, merchants) dưới `/ops`. Nếu merge sau Ops, hai bên gộp theo route/capability mapping ở bảng legacy, không tạo sidebar trùng hoặc link chết.
-- Ops dùng `t()` cho mọi chuỗi giao diện. Vì canonical Ops hiển thị English, route dùng locale `en`; để giữ quy tắc AGENTS và parity hiện có, key vẫn phải có trong cả bốn locale file cho tới khi Owner đổi chính sách i18n. Không tạo key hard-code trong JSX.
+- Ops dùng `t()` cho mọi chuỗi giao diện, route dùng locale `en`. Khóa `ops.*` chỉ có trong `en.ts`; test parity bỏ qua tiền tố `ops.` (Owner 2026-10-05, ADR-010). Không hard-code chuỗi trong JSX.
 
 ## 7. Quality bar cho UI OPS chuyên nghiệp
 
@@ -248,7 +248,9 @@ Plan O1 sau này phải chứng minh ít nhất các behavior sau bằng test ro
 - monetization tạm Owner-only;
 - email thành viên chưa có user chỉ là permission intent; chỉ activate sau khi magic link xác minh email chuẩn hóa khớp; dùng bảng pending riêng là hướng khuyến nghị;
 - user suspended mất Ops ngay, kể cả root Owner; mở khóa có thể khôi phục quyền theo cấu hình hiện hành;
-- canonical Ops là English và route không có locale prefix; vẫn dùng `t()` và giữ parity key bốn locale theo chính sách hiện tại.
+- canonical Ops là English và route không có locale prefix; dùng `t()`, khóa `ops.*` chỉ ở `en.ts`;
+- mọi lần từ chối do bảo vệ Owner gốc luôn ghi audit;
+- Content chỉ thấy số đếm tổng hợp an toàn trên Overview (Owner xác nhận 2026-10-05).
 
 **Cần chốt trước O1:**
 
