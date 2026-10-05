@@ -244,13 +244,14 @@ describe("queues (AC4)", () => {
     expect(numberOf(mainOf(html), "builders")).toBe("1");
   });
 
-  it("links the Builders (VNX-2504a) and Products (VNX-2504a2) queues to their lists and no queue whose list page does not exist yet (no dead links)", async () => {
+  it("links the Builders (VNX-2504a), Products (VNX-2504a2) and Requests (VNX-2504b) queues to their lists and no queue whose list page does not exist yet (no dead links)", async () => {
     for (const role of ["owner", "operator", "viewer"] as const) {
       const { cookie } = await asRole(role);
       const main = mainOf((await getOverview(cookie)).html);
-      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders", "/ops/marketplace/products"]);
+      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests"]);
       expect(card(main, "builders"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/builders">Open queue/);
       expect(card(main, "products"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/products">Open queue/);
+      expect(card(main, "requests"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/requests">Open queue/);
     }
   });
 });
