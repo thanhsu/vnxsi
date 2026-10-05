@@ -911,4 +911,12 @@ export const vi: Messages = {
   "offers.err.url": "Link bị từ chối ({code}). Phải là https, không có thông tin người dùng, cổng hay địa chỉ IP, và nằm trên host được phép.",
   "offers.err.template": "Mẫu bị từ chối ({code}). Chỉ dùng {click_id}, {locale} và {src}, đặt sau host, trên host được phép.",
   "offers.err.confirmArchive": "Hãy tick ô xác nhận để lưu trữ offer mặc định.",
+  "offer.label.learn_more": "Tìm hiểu thêm về {name}",
+  "offer.label.get_started": "Bắt đầu với {name}",
+  "offer.label.start_trial": "Bắt đầu dùng thử {name}",
+  "offer.label.visit_site": "Truy cập {name}",
+  "offer.label.try_it": "Dùng thử {name}",
+  "disclosure.note": "VNX.SI có thể nhận hoa hồng khi bạn đăng ký hoặc mua qua một số liên kết trên trang này. Điều này không bao giờ thay đổi cách xếp hạng sản phẩm.",
+  "disclosure.learnMore": "Tìm hiểu thêm",
+  "tools.offers": "Liên kết tới {name}",
 };

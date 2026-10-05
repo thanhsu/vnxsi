@@ -361,7 +361,7 @@ const instantMs = (s: string): number => {
   return !Number.isNaN(t) && new Date(t).toISOString() === s ? t : NaN;
 };
 
-function windowState(offer: RedirectOffer, now: string): "inside" | "before" | "after" | "invalid" {
+function windowState(offer: Pick<RedirectOffer, "startsAt" | "endsAt">, now: string): "inside" | "before" | "after" | "invalid" {
   const at = Date.parse(now);
   const starts = offer.startsAt === null ? -Infinity : instantMs(offer.startsAt);
   const ends = offer.endsAt === null ? Infinity : instantMs(offer.endsAt);
@@ -369,6 +369,9 @@ function windowState(offer: RedirectOffer, now: string): "inside" | "before" | "
   if (at < starts) return "before";
   return at >= ends ? "after" : "inside";
 }
+
+/** True while `now` is inside [starts_at, ends_at) (an open end is always inside; a malformed instant is outside). Same rule as /go/. */
+export const offerInWindow = (o: Pick<RedirectOffer, "startsAt" | "endsAt">, now: string): boolean => windowState(o, now) === "inside";
 
 /**
  * Plan header, Reviewer decisions 8–10. Missing or archived offer or merchant, a broken reference, or a URL that fails the rules: not_found.
@@ -416,3 +419,48 @@ export function resolveOfferRedirect(i: RedirectInput): RedirectResult {
   const site = withUtm(merchant.websiteUrl, merchant.allowedHosts);
   return site.ok ? { kind: "fallback", url: site.url, reason } : notFound("website_invalid");
 }
+
+// ---- Public tool page (/tools/:slug) ----
+
+/** A merchant offer as the database returns it for the public page. */
+export type ListedOffer = { offer: RedirectOffer; label: OfferLabel; program: RedirectProgram | null };
+export type VisibleOffer = { id: string; label: OfferLabel; isDefault: boolean; programId: string | null };
+
+/**
+ * The offers the page shows: active, inside their window, and answered by /go/ with tracked or fallback (never not_found), so no button
+ * leads to a 404 or an expired promotion. A flag that is off or a program that is not active does NOT hide an offer (it falls back to
+ * the merchant's website). Keeps the input order (the database puts the default offer first).
+ */
+export function visibleOffers(i: {
+  merchant: RedirectMerchant & { defaultOfferId: string | null };
+  rows: readonly ListedOffer[];
+  flags: RedirectInput["flags"];
+  now: string;
+}): VisibleOffer[] {
+  const out: VisibleOffer[] = [];
+  for (const { offer, label, program } of i.rows) {
+    if (offer.status !== "active" || !offerInWindow(offer, i.now)) continue;
+    const result = resolveOfferRedirect({
+      offer,
+      program,
+      merchant: i.merchant,
+      flags: i.flags,
+      now: i.now,
+      clickId: SAMPLE_VALUES.click_id,
+      locale: SAMPLE_VALUES.locale,
+      src: SAMPLE_VALUES.src,
+    });
+    if (result.kind === "not_found") continue;
+    out.push({ id: offer.id, label, isDefault: offer.id === i.merchant.defaultOfferId, programId: offer.programId });
+  }
+  return out;
+}
+
+/** Addendum §3.4: the disclosure shows when at least one rendered offer has a program, whatever the flag or the program status. */
+export const showsDisclosure = (offers: readonly { programId: string | null }[]): boolean => offers.some((o) => o.programId !== null);
+
+/** `sponsored` for links that can earn money (they have a program), plain `noopener` for the merchant's own link. */
+export const offerRel = (o: { programId: string | null }): "sponsored noopener" | "noopener" => (o.programId !== null ? "sponsored noopener" : "noopener");
+
+/** Owner 2026-10-05: a tool page is indexed (no noindex, in the sitemap) only when the merchant is `indexable` and the `content_indexing` flag is on. */
+export const toolIndexable = (m: { indexable: boolean }, contentIndexing: boolean): boolean => m.indexable && contentIndexing;

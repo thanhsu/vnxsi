@@ -1,5 +1,5 @@
 import type { MerchantStatus } from "../domain/merchant.ts";
-import type { OfferInput, OfferKind, OfferLabel, OfferStatus, ProgramStatus, ProgramType, RedirectInput, RedirectMerchant, RedirectOffer, RedirectProgram } from "../domain/offer.ts";
+import type { ListedOffer, OfferInput, OfferKind, OfferLabel,OfferStatus, ProgramStatus, ProgramType, RedirectInput, RedirectMerchant, RedirectOffer, RedirectProgram } from "../domain/offer.ts";
 import { ulid } from "../lib/ulid.ts";
 import { runAudited } from "./audit.ts";
 import { parseStoredHosts } from "./merchants.ts";
@@ -137,6 +137,7 @@ type ContextRow = {
   o_subject_id: string;
   o_program_id: string | null;
   o_status: OfferStatus;
+  o_label: OfferLabel;
   o_destination_url: string;
   o_tracking_template: string | null;
   o_starts_at: string | null;
@@ -152,7 +153,7 @@ type ContextRow = {
 };
 
 // One query. The merchant is the offer's subject (never the program's merchant: the domain compares the two); the program comes from program_id.
-const CONTEXT_SQL = `SELECT o.id AS o_id, o.subject_type AS o_subject_type, o.subject_id AS o_subject_id, o.program_id AS o_program_id, o.status AS o_status,
+const CONTEXT_SQL = `SELECT o.id AS o_id, o.subject_type AS o_subject_type, o.subject_id AS o_subject_id, o.program_id AS o_program_id, o.status AS o_status, o.label AS o_label,
        o.destination_url AS o_destination_url, o.tracking_template AS o_tracking_template, o.starts_at AS o_starts_at, o.ends_at AS o_ends_at,
        p.id AS p_id, p.merchant_id AS p_merchant_id, p.type AS p_type, p.status AS p_status,
        m.id AS m_id, m.status AS m_status, m.website_url AS m_website_url, m.allowed_hosts AS m_allowed_hosts
@@ -197,4 +198,22 @@ export async function findDefaultOfferContext(db: D1Database, merchantSlug: stri
   if (!row) return null;
   const rows = toRedirectRows(row);
   return rows.merchant ? { ...rows, merchant: rows.merchant } : null;
+}
+
+/**
+ * For /tools/:slug: the merchant's offers with status `active` (merchant subject only), the merchant's default offer first, then oldest first.
+ * Time window and resolvability are the domain's job (visibleOffers).
+ */
+export async function listActiveMerchantOffers(db: D1Database, merchantId: string): Promise<ListedOffer[]> {
+  const { results } = await db
+    .prepare(
+      `${CONTEXT_SQL} WHERE o.subject_type = 'merchant' AND o.subject_id = ?1 AND o.status = 'active'
+       ORDER BY COALESCE(m.default_offer_id = o.id, 0) DESC, o.created_at, o.id`,
+    )
+    .bind(merchantId)
+    .all<ContextRow>();
+  return results.map((r) => {
+    const { offer, program } = toRedirectRows(r);
+    return { offer, label: r.o_label, program };
+  });
 }

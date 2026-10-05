@@ -159,3 +159,18 @@ export async function listMerchants(db: D1Database): Promise<Merchant[]> {
   const { results } = await db.prepare("SELECT * FROM merchants ORDER BY name COLLATE NOCASE, id").all<Row>();
   return results.map(toMerchant);
 }
+
+/** For /tools/:slug: any status (the route turns anything but `active` into a 404). */
+export async function findMerchantBySlug(db: D1Database, slug: string): Promise<Merchant | null> {
+  const row = await db.prepare("SELECT * FROM merchants WHERE slug = ?1").bind(slug).first<Row>();
+  return row ? toMerchant(row) : null;
+}
+
+/** For the sitemap: tool pages that are active and marked indexable (the `content_indexing` flag is checked by the caller). */
+export async function listSitemapMerchants(db: D1Database, limit = 10000): Promise<{ slug: string; updatedAt: string }[]> {
+  const { results } = await db
+    .prepare("SELECT slug, updated_at FROM merchants WHERE status = 'active' AND indexable = 1 ORDER BY slug LIMIT ?1")
+    .bind(limit)
+    .all<{ slug: string; updated_at: string }>();
+  return results.map((r) => ({ slug: r.slug, updatedAt: r.updated_at }));
+}

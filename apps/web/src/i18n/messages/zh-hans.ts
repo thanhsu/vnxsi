@@ -910,4 +910,12 @@ export const zhHans: Messages = {
   "offers.err.url": "链接被拒绝（{code}）。必须是 https，不含用户信息、端口或 IP 地址，且位于允许的主机上。",
   "offers.err.template": "模板被拒绝（{code}）。仅可使用 {click_id}、{locale} 和 {src}，且位于主机之后、允许的主机上。",
   "offers.err.confirmArchive": "请勾选确认以归档默认优惠。",
+  "offer.label.learn_more": "了解 {name}",
+  "offer.label.get_started": "开始使用 {name}",
+  "offer.label.start_trial": "开始试用 {name}",
+  "offer.label.visit_site": "访问 {name}",
+  "offer.label.try_it": "试用 {name}",
+  "disclosure.note": "当您通过本页的部分链接注册或购买时，VNX.SI 可能获得佣金。这绝不会影响产品的排名方式。",
+  "disclosure.learnMore": "了解更多",
+  "tools.offers": "前往 {name} 的链接",
 };

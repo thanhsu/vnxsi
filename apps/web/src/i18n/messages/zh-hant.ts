@@ -910,4 +910,12 @@ export const zhHant: Messages = {
   "offers.err.url": "連結被拒絕（{code}）。必須是 https，不含使用者資訊、連接埠或 IP 位址，且位於允許的主機上。",
   "offers.err.template": "範本被拒絕（{code}）。僅可使用 {click_id}、{locale} 和 {src}，且位於主機之後、允許的主機上。",
   "offers.err.confirmArchive": "請勾選確認以封存預設優惠。",
+  "offer.label.learn_more": "瞭解 {name}",
+  "offer.label.get_started": "開始使用 {name}",
+  "offer.label.start_trial": "開始試用 {name}",
+  "offer.label.visit_site": "前往 {name}",
+  "offer.label.try_it": "試用 {name}",
+  "disclosure.note": "當您透過本頁的部分連結註冊或購買時，VNX.SI 可能獲得佣金。這絕不會影響產品的排名方式。",
+  "disclosure.learnMore": "瞭解更多",
+  "tools.offers": "前往 {name} 的連結",
 };

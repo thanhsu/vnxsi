@@ -908,6 +908,14 @@ export const en = {
   "offers.err.url": "Link refused ({code}). It must be https, without user info, port or IP address, on an allowed host.",
   "offers.err.template": "Template refused ({code}). Use only {click_id}, {locale} and {src}, after the host, on an allowed host.",
   "offers.err.confirmArchive": "Tick the confirmation to archive the default offer.",
+  "offer.label.learn_more": "Learn more about {name}",
+  "offer.label.get_started": "Get started with {name}",
+  "offer.label.start_trial": "Start a trial with {name}",
+  "offer.label.visit_site": "Visit {name}",
+  "offer.label.try_it": "Try {name}",
+  "disclosure.note": "VNX.SI may earn a commission when you sign up or buy through some links on this page. This never changes how products are ranked.",
+  "disclosure.learnMore": "Learn more",
+  "tools.offers": "Links to {name}",
 } as const;
 
 export type MessageKey = keyof typeof en;
