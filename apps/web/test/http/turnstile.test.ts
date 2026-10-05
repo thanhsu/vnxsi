@@ -21,6 +21,13 @@ describe("Turnstile (spec §8.2; fail closed, Owner 2026-10-04)", () => {
     expect(await verifyTurnstile(prodLike, FAKE_TURNSTILE_PASS, null)).toBe("unavailable");
   });
 
+  it("drops the fake driver when a real mail key is set, even with MAIL_DRIVER=fake (VNX-0803 F6)", async () => {
+    const misconfigured = { ...testEnv, RESEND_API_KEY: "re_live_key", TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET: undefined } as Bindings;
+    expect(misconfigured.MAIL_DRIVER).toBe("fake");
+    expect(turnstileSiteKey(misconfigured)).toBeNull();
+    expect(await verifyTurnstile(misconfigured, FAKE_TURNSTILE_PASS, null)).toBe("unavailable");
+  });
+
   it("is unavailable without both keys", async () => {
     const noSecret = { ...real, TURNSTILE_SECRET: undefined } as Bindings;
     const noSite = { ...real, TURNSTILE_SITE_KEY: "" } as Bindings;

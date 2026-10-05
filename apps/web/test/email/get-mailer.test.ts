@@ -8,6 +8,13 @@ import { testEnv } from "../helpers.ts";
 import type { Bindings } from "../../src/env.ts";
 
 describe("getMailer", () => {
+  it("ignores the console and fake drivers once a real key exists (VNX-0803 F6)", () => {
+    for (const driver of ["console", "fake"]) {
+      const env = { ...testEnv, MAIL_DRIVER: driver, RESEND_API_KEY: "re_live_key" } as Bindings;
+      expect(getMailer(env), driver).toBeInstanceOf(ResendMailer);
+    }
+  });
+
   it("returns FakeMailer when MAIL_DRIVER is 'fake'", () => {
     const env = { ...testEnv, MAIL_DRIVER: "fake", RESEND_API_KEY: undefined } as Bindings;
     const mailer = getMailer(env);
