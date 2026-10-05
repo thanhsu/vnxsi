@@ -4,6 +4,7 @@ import type { AppEnv } from "./env.ts";
 import { noStorePrivate } from "./http/no-store.ts";
 import { originCheck } from "./http/origin.ts";
 import { requestId } from "./http/request-id.ts";
+import { securityHeaders } from "./http/security-headers.ts";
 import { localeFromPath } from "./i18n/locales.ts";
 import { localeMiddleware } from "./i18n/middleware.ts";
 import { registerAuthRoutes } from "./routes/auth.tsx";
@@ -40,6 +41,7 @@ import { errorResponse } from "./views/error-response.tsx";
 export function createApp() {
   const app = new Hono<AppEnv>();
   app.use("*", requestId);
+  app.use("*", securityHeaders);
   app.use("*", localeMiddleware);
   app.use("*", originCheck);
   app.use("*", sessionMiddleware);
