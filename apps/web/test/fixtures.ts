@@ -1,5 +1,7 @@
 import { createSession } from "../src/auth/sessions.ts";
 import { createBuilder,setBuilderStatus } from "../src/db/builders.ts";
+import { createMerchant, type Merchant } from "../src/db/merchants.ts";
+import { createProgram, type PartnerProgram } from "../src/db/programs.ts";
 import { createInquiry, setInquiryStatus } from "../src/db/inquiries.ts";
 import { addMedia } from "../src/db/media.ts";
 import { replaceTiers } from "../src/db/pricing.ts";
@@ -9,6 +11,9 @@ import { grantBadge } from "../src/db/verifications.ts";
 import { createUser, findUserByEmail, type UserRow } from "../src/db/users.ts";
 import type { Builder, BuilderProfile, BuilderStatus, WorkLanguage } from "../src/domain/builder.ts";
 import { parseBuilderProfile, type BuilderFormValues } from "../src/domain/builder-input.ts";
+import type { MerchantInput, MerchantStatus } from "../src/domain/merchant.ts";
+import type { ProgramInput } from "../src/domain/offer.ts";
+import { ulid } from "../src/lib/ulid.ts";
 import type { TierInput } from "../src/domain/pricing-input.ts";
 import type { ProductFields } from "../src/domain/product-input.ts";
 import type { Inquiry, InquiryStatus, InquiryType } from "../src/domain/inquiry.ts";
@@ -249,4 +254,54 @@ export async function proposeOn(invite: RequestInvite, now = new Date().toISOStr
     .bind(invite.id, now)
     .run();
   return (await listRequestInvites(testEnv.DB, invite.requestId)).find((x) => x.invite.id === invite.id)!.invite;
+}
+
+// One increasing clock for every fixture row, starting before any `at(n)` of the tests (2026-10-05), so create audit rows sort first.
+let fixtureClock = Date.parse("2026-10-01T00:00:00.000Z");
+const fixtureNow = () => new Date((fixtureClock += 1000)).toISOString();
+
+/** A merchant on example.com (generic test data; real partner names appear nowhere in src). Defaults to `active`, not indexable. */
+export async function makeMerchant(overrides: Partial<MerchantInput> & { status?: MerchantStatus } = {}): Promise<Merchant> {
+  const { status = "active", ...fields } = overrides;
+  const tag = ulid().slice(-8).toLowerCase();
+  const merchant: MerchantInput = {
+    name: `Acme ${tag}`,
+    slug: `acme-${tag}`,
+    websiteUrl: "https://example.com/",
+    allowedHosts: ["example.com"],
+    description: "Plain text description.",
+    indexable: false,
+    ...fields,
+  };
+  const admin = await ensureUser("partner-fixtures@vnx.si");
+  const res = await createMerchant(testEnv.DB, { merchant, status, actorUserId: admin.id, now: fixtureNow() });
+  if (!res.ok) throw new Error(res.reason);
+  return res.merchant;
+}
+
+/**
+ * A program of `merchant` with terms filled in and status `active` (the common test case); override `status: "draft"` etc.
+ * Shares `fixtureNow` with `makeMerchant`.
+ */
+export async function makeProgram(merchant: { id: string }, overrides: Partial<ProgramInput> = {}): Promise<PartnerProgram> {
+  const program: ProgramInput = {
+    name: "Acme affiliate",
+    type: "affiliate",
+    network: null,
+    provider: "generic_template",
+    commissionModel: null,
+    commissionRateBps: null,
+    commissionFlatMinor: null,
+    currency: null,
+    cookieDays: null,
+    attributionNotes: null,
+    termsUrl: "https://example.com/terms",
+    termsVerifiedAt: "2026-10-01",
+    status: "active",
+    ...overrides,
+  };
+  const admin = await ensureUser("partner-fixtures@vnx.si");
+  const created = await createProgram(testEnv.DB, { merchantId: merchant.id, program, actorUserId: admin.id, now: fixtureNow() });
+  if (!created) throw new Error("merchant not found");
+  return created;
 }

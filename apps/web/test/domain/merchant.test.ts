@@ -4,6 +4,7 @@ import {
   MERCHANT_NAME_MAX,
   MERCHANT_STATUSES,
   merchantSlugError,
+  merchantTransitionAllowed,
   parseAllowedHosts,
   parseMerchantForm,
   RESERVED_MERCHANT_SLUGS,
@@ -113,5 +114,13 @@ describe("parseMerchantForm", () => {
   it("keeps indexable as given", () => {
     const r = parseMerchantForm(values({ indexable: true }));
     expect(r.ok && r.merchant.indexable).toBe(true);
+  });
+});
+
+describe("merchantTransitionAllowed", () => {
+  it("archived is terminal; everything else moves freely; no change is always fine", () => {
+    for (const from of MERCHANT_STATUSES) {
+      for (const to of MERCHANT_STATUSES) expect(merchantTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "archived");
+    }
   });
 });

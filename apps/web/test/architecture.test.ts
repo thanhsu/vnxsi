@@ -42,6 +42,8 @@ const WRITERS: Record<string, string> = {
   request_invites: "../src/db/requests.ts",
   feedback: "../src/db/feedback.ts",
   feature_flags: "../src/db/flags.ts",
+  merchants: "../src/db/merchants.ts",
+  partner_programs: "../src/db/programs.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {
@@ -100,14 +102,19 @@ const RANKING_FILES = [
   "../src/views/admin/RequestDetailPage.tsx",
 ];
 
-// Allowlist: only these files may import a monetization db module or run SQL on a money table. Starts empty; each task adds
-// the files it creates (Task 2: db/{merchants,programs,offers}.ts; Task 3: routes/admin-merchants.tsx; Task 4: db/clicks.ts,
+// Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
+// the files it creates (Task 2c: db/{merchants,programs}.ts, and db/audit.ts, which only reads `write_id` of those rows to guard audit rows; Task 2d: db/offers.ts; Task 3: routes/admin-merchants.tsx; Task 4: db/clicks.ts,
 // routes/go.ts, jobs/daily.ts; Task 5: routes/tools.tsx, routes/seo.ts; Task 6: routes/legal.tsx).
-const MONEY_ALLOWED = new Set<string>([]);
+const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/audit.ts"]);
 
 describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("lists only files that exist", () => {
     for (const file of RANKING_FILES) expect(sources[file], file).toBeDefined();
+  });
+
+  it("the allowlist holds only files that exist, and no ranking file is on it", () => {
+    for (const file of MONEY_ALLOWED) expect(sources[file], file).toBeDefined();
+    for (const file of RANKING_FILES) expect(MONEY_ALLOWED.has(file), file).toBe(false);
   });
 
   it("ranking files import no monetization db module", () => {

@@ -66,3 +66,8 @@ export function parseMerchantForm(v: MerchantFormValues): { ok: true; merchant: 
   if (!hosts.ok || Object.keys(errors).length > 0) return { ok: false, errors };
   return { ok: true, merchant: { name, slug, websiteUrl, allowedHosts: hosts.hosts, description, indexable: v.indexable } };
 }
+
+/** `archived` is terminal (Controller 2026-10-05); staying where it is is not a transition. Also enforced in db/merchants.ts#setMerchantStatus. */
+export function merchantTransitionAllowed(from: MerchantStatus, to: MerchantStatus): boolean {
+  return from === to || from !== "archived";
+}

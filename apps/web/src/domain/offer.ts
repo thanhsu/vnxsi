@@ -148,6 +148,11 @@ export function flagForProgram(type: ProgramType): "affiliate" | "partner_referr
   return type === "direct" ? null : "partner_referral";
 }
 
+/** `ended` is terminal (Controller 2026-10-05); staying where it is is not a transition. Also enforced in db/programs.ts#updateProgram. */
+export function programTransitionAllowed(from: ProgramStatus, to: ProgramStatus): boolean {
+  return from === to || from !== "ended";
+}
+
 // ---- Offers ----
 
 export type OfferFormValues = { kind: string; label: string; destinationUrl: string; trackingTemplate: string; startsAt: string; endsAt: string; status: string };

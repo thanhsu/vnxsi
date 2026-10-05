@@ -12,6 +12,7 @@ import {
   PROGRAM_STATUSES,
   PROGRAM_TYPES,
   programActivationError,
+  programTransitionAllowed,
   resolveOfferRedirect,
   type OfferContext,
   type OfferFormValues,
@@ -418,5 +419,13 @@ describe("resolveOfferRedirect: the full truth table", () => {
             }
     expect(count).toBe(108);
     expect(wrong).toEqual([]);
+  });
+});
+
+describe("programTransitionAllowed", () => {
+  it("ended is terminal; everything else moves freely; no change is always fine", () => {
+    for (const from of PROGRAM_STATUSES) {
+      for (const to of PROGRAM_STATUSES) expect(programTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "ended");
+    }
   });
 });

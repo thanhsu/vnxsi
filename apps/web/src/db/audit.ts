@@ -26,17 +26,20 @@ export type AuditInviteGuard = InviteGuard;
 export type AuditFeedbackGuard = FeedbackGuard;
 /** Written only when that feature flag row's last write carries this write id, i.e. this batch's upsert changed it (see setFlag). */
 export type AuditFlagGuard = { flagKey: string; writeId: string };
+/** Written only when that merchant / program row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
+export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"; id: string; writeId: string };
 
 /**
  * The audit INSERT as a statement, so a route can commit it in one db.batch with the change it records.
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
- * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id.
+ * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id,
+ * `partnerTable` + `id` on that merchant / program row's last write id.
  */
 export function auditStatement(
   db: D1Database,
   input: AuditInput,
-  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard,
+  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard,
 ): D1PreparedStatement {
   const id = ulid(Date.parse(input.now));
   const data = JSON.stringify(input.data ?? {});
@@ -107,6 +110,24 @@ export function auditStatement(
       )
       .bind(...values, onlyIf.flagKey, onlyIf.writeId);
   }
+  if ("partnerTable" in onlyIf) {
+    if (onlyIf.partnerTable === "merchants") {
+      return db
+        .prepare(
+          `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+           WHERE EXISTS (SELECT 1 FROM merchants WHERE id = ?8 AND write_id = ?9)`,
+        )
+        .bind(...values, onlyIf.id, onlyIf.writeId);
+    }
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM partner_programs WHERE id = ?8 AND write_id = ?9)`,
+      )
+      .bind(...values, onlyIf.id, onlyIf.writeId);
+  }
   return db
     .prepare(
       `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
@@ -115,6 +136,15 @@ export function auditStatement(
          AND (?11 IS NULL OR EXISTS (SELECT 1 FROM product_verifications WHERE product_id = ?8 AND kind = ?11 AND revoked_at = ?7))`,
     )
     .bind(...values, onlyIf.productId, onlyIf.status, onlyIf.updatedAt, onlyIf.revoked ?? null);
+}
+
+/**
+ * One write statement that ends in RETURNING, and its audit row guarded on that write, in one db.batch (so both or neither).
+ * Returns the row, or null when the statement changed nothing; then no audit row exists either.
+ */
+export async function runAudited<T>(db: D1Database, write: D1PreparedStatement, audit: AuditInput, guard: AuditPartnerGuard): Promise<T | null> {
+  const [res] = await db.batch<T>([write, auditStatement(db, audit, guard)]);
+  return res?.results[0] ?? null;
 }
 
 export async function writeAudit(db: D1Database, input: AuditInput): Promise<void> {
