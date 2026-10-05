@@ -3,7 +3,7 @@
 _Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 
 ## Tóm tắt
-- **EPIC 21 lát mỏng partner (2026-10-05):** **xong** trên nhánh `feat/epic21-partner-slice`: 11 task (VNX-2101, 2102a-1…4, 2102b-1/2, 2103-1/2, 2104a/b), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md`. Đã gộp `main` hai lần (`e77c769`, `9760016`). 1194 test, typecheck sạch; chạy cả bộ dưới tải máy có vài test 5 s timeout ở file có sẵn từ trước, chạy riêng thì xanh. Review: `.ai/reviews/EPIC21-partner-slice-review.md`, APPROVE WITH CHANGES. Merge vào `main`: `<merge SHA>`. Chưa deploy; ElevenLabs chưa bật (xem "Điều kiện trước khi deploy").
+- **EPIC 21 lát mỏng partner (2026-10-05):** **xong** trên nhánh `feat/epic21-partner-slice`: 11 task (VNX-2101, 2102a-1…4, 2102b-1/2, 2103-1/2, 2104a/b), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md`. Đã gộp `main` hai lần (`e77c769`, `9760016`). 1194 test, typecheck sạch; chạy cả bộ dưới tải máy có vài test 5 s timeout ở file có sẵn từ trước, chạy riêng thì xanh. Review: `.ai/reviews/EPIC21-partner-slice-review.md`, APPROVE WITH CHANGES. Đã merge vào `main` (`7622105`, đã push); chưa deploy (cần `db:migrate:remote` áp `0010`–`0012` trước). Chưa deploy; ElevenLabs chưa bật (xem "Điều kiện trước khi deploy").
 - **Ops console (2026-10-05):** Owner yêu cầu trang Ops riêng gồm 4 nhóm (gộp admin, tổng quan + sức khỏe, nội dung & marketing, cài đặt), chia O1 (khung, vai trò, audit, chuyển `/admin`) → O2 → O3 → O4. Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md` và ADR-010 **Accepted** (review `.ai/reviews/OPS-DESIGN-review.md`). Mockup O1 duyệt (canvas, `docs/design/mockups/ops/`); plan O1 `docs/superpowers/plans/2026-10-05-vnxsi-ops-o1.md` **APPROVED** (EPIC 25, VNX-2501…2509; lời mời Ops hết hạn 7 ngày). Bắt đầu sau khi EPIC 21 và VNX-0803 merge.
 - **Production (2026-10-05, lần 2):** `main` `3c77ac5` (M6 + PR #6 bật lại R2) **đã deploy** (version `74b85569`, binding `MEDIA` = `vnxsi-media`, cron `0 1 * * *`). D1 production đã áp `0001`–`0009`. Smoke: 15 route OK (gồm `/request`), R2 đọc qua `/media` đã kiểm bằng object tạm (đã xóa). Upload ảnh và submit product giờ dùng được.
 - **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Đã merge vào `main` (`e9f53a2`, đã push).
@@ -107,7 +107,7 @@ _Cập nhật lần cuối: 2026-10-05 bởi Reviewer (Claude)._
 | VNX-2104b `/disclosure` | ✅ | cd57462, 3fff6f5 | `cd57462` nguồn `docs/legal/disclosure.md` (khối B); danh sách merchant `active` có chương trình `active` |
 | Gộp `main` vào EPIC 21 | ✅ | e77c769 | `origin/main` `b60d8ed` (PR #6 bật R2, PR #7 tài liệu deploy); giữ `r2_buckets` MEDIA |
 | Gộp `main` vào EPIC 21 (lần 2) | ✅ | 9760016 | `origin/main` `2ed46f4` (PR #8 Ops console); lấy bản của `main` cho file Ops; nhánh vẫn có `703f5b3` (Owner giữ) |
-| Merge EPIC 21 vào `main` | ⏳ | `<merge SHA>` | |
+| Merge EPIC 21 vào `main` | ✅ | 7622105 | merge commit, Opus duyệt theo ủy quyền Owner; đã push. Chưa deploy |
 
 ## Điều kiện trước khi deploy `main`
 
