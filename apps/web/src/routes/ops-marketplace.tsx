@@ -21,9 +21,10 @@ import { decideProduct, grantProductBadge, revokeProductBadge, type AdminProduct
 import { actorOf, opsShell, registeredPaths } from "./ops.tsx";
 
 /**
- * Ops Marketplace queues (VNX-2504a Builders, VNX-2504a2 Products; spec §2.2, §3.1, §7.3). Pages need marketplace.view, every POST marketplace.act;
- * anyone else gets the sealed 404 of requireOps. The decisions are the /admin ones (decideBuilder, decideProduct and
- * the badge functions): same state machine, compare-and-set, badges, audit and e-mail. Filters come from the URL and only allowlisted values are kept.
+ * Ops Marketplace queues (VNX-2504a Builders, VNX-2504a2 Products; spec §2.2, §3.1, §7.3). Pages need
+ * marketplace.view, every POST marketplace.act; anyone else gets the sealed 404 of requireOps. The decisions are the
+ * /admin ones (decideBuilder, decideProduct and the badge functions): same state machine, compare-and-set, badges,
+ * audit and e-mail. Filters come from the URL and only allowlisted values are kept.
  */
 
 const SEARCH_MAX = 100;
