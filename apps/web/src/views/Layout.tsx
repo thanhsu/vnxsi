@@ -233,6 +233,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
               <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
               <a href={localizedPath(locale, "/terms")}>{tr("footer.terms")}</a>
               <a href={localizedPath(locale, "/privacy")}>{tr("footer.privacy")}</a>
+              <a href={localizedPath(locale, "/disclosure")}>{tr("footer.disclosure")}</a>
             </nav>
           </div>
           <div class="container footer-bottom">

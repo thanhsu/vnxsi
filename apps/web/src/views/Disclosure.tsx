@@ -11,3 +11,23 @@ export const DisclosureNote: FC<{ locale: Locale }> = ({ locale }) => {
     </p>
   );
 };
+
+/** /disclosure §3: the companies with an active partner program, from the database. The `lang` on the "none" line keeps it in the page's language inside the English-only text of zh-*; merchant names carry no `lang`. */
+export const ActivePartners: FC<{ locale: Locale; partners: readonly { slug: string; name: string }[] }> = ({ locale, partners }) => {
+  const tr = translator(locale);
+  return (
+    <div data-partners="active">
+      {partners.length === 0 ? (
+        <p lang={locale}>{tr("disclosure.noPartners")}</p>
+      ) : (
+        <ul>
+          {partners.map((p) => (
+            <li>
+              <a href={localizedPath(locale, `/tools/${p.slug}`)}>{p.name}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};

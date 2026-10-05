@@ -23,6 +23,7 @@ export function registerSeoRoutes(app: Hono<AppEnv>) {
       { rest: "/request", localized: true },
       { rest: "/terms", localized: true },
       { rest: "/privacy", localized: true },
+      { rest: "/disclosure", localized: true },
       { rest: "/media-kit", localized: true },
       { rest: "/contact", localized: true },
       ...products.map((p) => ({ rest: `/p/${p.slug}`, lastmod: p.updatedAt, localized: true })),

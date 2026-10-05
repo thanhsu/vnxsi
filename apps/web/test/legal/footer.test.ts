@@ -22,6 +22,7 @@ describe("site footer (VNX-0705a AC6; Company group since VNX-0709)", () => {
           ["/terms", "footer.terms"],
           ["/privacy", "footer.privacy"],
           ["/media-kit", "footer.mediaKit"],
+          ["/disclosure", "footer.disclosure"],
         ] as const) {
           expect(footer, `${path} ${href}`).toContain(`<a href="${localizedPath(locale, href)}">${t(locale, key)}</a>`);
         }

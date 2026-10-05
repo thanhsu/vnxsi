@@ -45,24 +45,25 @@ const textOf = (html: string) =>
 const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
 
 const CASES = [
-  { name: "terms", path: "/terms" },
-  { name: "privacy", path: "/privacy" },
-  { name: "media-kit", path: "/media-kit" },
+  { name: "terms", path: "/terms", min: 11 },
+  { name: "privacy", path: "/privacy", min: 11 },
+  { name: "media-kit", path: "/media-kit", min: 11 },
+  { name: "disclosure", path: "/disclosure", min: 10 },
 ] as const;
 
 describe("legal pages match docs/legal/*.md word for word (VNX-0705a AC2)", () => {
-  it("reads the three approved source files", () => {
+  it("reads the four approved source files", () => {
     for (const { name } of CASES) expect(sourceOf(name)).toContain("## EN");
   });
 
-  for (const { name, path } of CASES) {
+  for (const { name, path, min } of CASES) {
     for (const [lang, prefix] of [
       ["EN", ""],
       ["VI", "/vi"],
     ] as const) {
       it(`${name} ${lang}: every heading, paragraph and list item appears in order`, async () => {
         const lines = expectedLines(partOf(sourceOf(name), lang));
-        expect(lines.length, name).toBeGreaterThan(10);
+        expect(lines.length, name).toBeGreaterThanOrEqual(min);
         const res = await get(prefix + path);
         expect(res.status).toBe(200);
         const text = textOf(mainOf(await res.text()));

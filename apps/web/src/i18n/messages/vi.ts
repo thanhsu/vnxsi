@@ -919,4 +919,8 @@ export const vi: Messages = {
   "disclosure.note": "VNX.SI có thể nhận hoa hồng khi bạn đăng ký hoặc mua qua một số liên kết trên trang này. Điều này không bao giờ thay đổi cách xếp hạng sản phẩm.",
   "disclosure.learnMore": "Tìm hiểu thêm",
   "tools.offers": "Liên kết tới {name}",
+  "legal.disclosure.title": "Công khai quan hệ đối tác",
+  "legal.disclosure.description": "Cách VNX.SI có thể nhận hoa hồng từ link partner, và vì sao thứ hạng không bao giờ được bán.",
+  "footer.disclosure": "Công khai quan hệ đối tác",
+  "disclosure.noPartners": "Hiện chưa có.",
 };

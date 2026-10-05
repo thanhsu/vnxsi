@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMerchantBySlug, listSitemapMerchants, setDefaultOffer } from "../../src/db/merchants.ts";
+import { findMerchantBySlug, listActiveProgramMerchants, listSitemapMerchants, setDefaultOffer } from "../../src/db/merchants.ts";
 import { listActiveMerchantOffers } from "../../src/db/offers.ts";
 import { ensureUser, makeMerchant, makeOffer, makeProgram } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
@@ -43,5 +43,32 @@ describe("listSitemapMerchants", () => {
     const slugs = (await listSitemapMerchants(testEnv.DB)).map((m) => m.slug);
     expect(slugs).toContain(live.slug);
     for (const m of [hidden, paused]) expect(slugs).not.toContain(m.slug);
+  });
+});
+
+describe("listActiveProgramMerchants", () => {
+  it("lists active merchants that have an active program, once each, by name; nobody else", async () => {
+    const twice = await makeMerchant({ name: "Zeta Active Twice" });
+    await makeProgram(twice);
+    await makeProgram(twice);
+    const first = await makeMerchant({ name: "alpha active once" });
+    await makeProgram(first);
+    const draft = await makeMerchant();
+    await makeProgram(draft, { status: "draft", termsUrl: null, termsVerifiedAt: null });
+    const ended = await makeMerchant();
+    await makeProgram(ended, { status: "ended" });
+    const pausedMerchant = await makeMerchant({ status: "paused" });
+    await makeProgram(pausedMerchant);
+    const archivedMerchant = await makeMerchant({ status: "archived" });
+    await makeProgram(archivedMerchant);
+    await makeMerchant(); // no program
+
+    const rows = await listActiveProgramMerchants(testEnv.DB);
+    const slugs = rows.map((r) => r.slug);
+    expect(slugs.filter((s) => s === twice.slug)).toHaveLength(1);
+    expect(slugs).toContain(first.slug);
+    for (const m of [draft, ended, pausedMerchant, archivedMerchant]) expect(slugs, m.slug).not.toContain(m.slug);
+    expect(rows.find((r) => r.slug === first.slug)).toEqual({ slug: first.slug, name: "alpha active once" });
+    expect(slugs.indexOf(first.slug)).toBeLessThan(slugs.indexOf(twice.slug));
   });
 });

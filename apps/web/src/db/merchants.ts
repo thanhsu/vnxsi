@@ -174,3 +174,14 @@ export async function listSitemapMerchants(db: D1Database, limit = 10000): Promi
     .all<{ slug: string; updated_at: string }>();
   return results.map((r) => ({ slug: r.slug, updatedAt: r.updated_at }));
 }
+
+/** For /disclosure §3: active merchants with at least one active program, by name. Nothing else is listed (draft, paused, ended programs, paused or archived merchants). */
+export async function listActiveProgramMerchants(db: D1Database): Promise<{ slug: string; name: string }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT m.slug, m.name FROM merchants m JOIN partner_programs p ON p.merchant_id = m.id
+       WHERE m.status = 'active' AND p.status = 'active' GROUP BY m.id ORDER BY m.name COLLATE NOCASE, m.id`,
+    )
+    .all<{ slug: string; name: string }>();
+  return results;
+}

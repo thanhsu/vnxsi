@@ -916,6 +916,10 @@ export const en = {
   "disclosure.note": "VNX.SI may earn a commission when you sign up or buy through some links on this page. This never changes how products are ranked.",
   "disclosure.learnMore": "Learn more",
   "tools.offers": "Links to {name}",
+  "legal.disclosure.title": "Disclosure",
+  "legal.disclosure.description": "How VNX.SI may earn from partner links, and why rankings are never for sale.",
+  "footer.disclosure": "Disclosure",
+  "disclosure.noPartners": "None at the moment.",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -918,4 +918,8 @@ export const zhHans: Messages = {
   "disclosure.note": "当您通过本页的部分链接注册或购买时，VNX.SI 可能获得佣金。这绝不会影响产品的排名方式。",
   "disclosure.learnMore": "了解更多",
   "tools.offers": "前往 {name} 的链接",
+  "legal.disclosure.title": "披露声明",
+  "legal.disclosure.description": "说明 VNX.SI 可能如何通过合作链接获得佣金，以及为什么排名绝不出售。",
+  "footer.disclosure": "披露声明",
+  "disclosure.noPartners": "目前暂无。",
 };
