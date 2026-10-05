@@ -91,7 +91,7 @@ const Id: FC<{ value: string }> = ({ value }) => (
   </span>
 );
 
-const AlertIcon: FC = () => (
+export const AlertIcon: FC = () => (
   <svg class="ops-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
     <path d="M12 4l9 16H3zM12 10v4M12 17v.5" />
   </svg>
@@ -132,7 +132,7 @@ const QueueCard: FC<{ queue: QueueView }> = ({ queue }) => {
   );
 };
 
-const ActorCell: FC<{ actor: ActivityActor }> = ({ actor }) => {
+export const ActorCell: FC<{ actor: ActivityActor }> = ({ actor }) => {
   if (actor.kind === "system") return <span class="ops-muted">{tr("ops.activity.system")}</span>;
   if (actor.kind === "email") return <span class="ops-break">{actor.email}</span>;
   return <Id value={actor.id} />;

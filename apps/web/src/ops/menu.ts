@@ -21,7 +21,10 @@ export const OPS_GROUPS = [
 export type OpsGroup = (typeof OPS_GROUPS)[number]["group"];
 
 /** The icon names OpsLayout knows how to draw. */
-export type OpsIcon = "overview";
+export type OpsIcon = "overview" | "builders";
+
+/** Menu items that show how many items wait in their queue (the Overview counts). */
+export type OpsMenuCount = "builders";
 
 export interface OpsMenuItem {
   group: OpsGroup;
@@ -29,9 +32,13 @@ export interface OpsMenuItem {
   path: string;
   capability: OpsCapability;
   icon: OpsIcon;
+  count?: OpsMenuCount;
 }
 
-export const OPS_MENU: readonly OpsMenuItem[] = [{ group: "main", labelKey: "ops.nav.overview", path: "/ops", capability: "overview.view", icon: "overview" }];
+export const OPS_MENU: readonly OpsMenuItem[] = [
+  { group: "main", labelKey: "ops.nav.overview", path: "/ops", capability: "overview.view", icon: "overview" },
+  { group: "marketplace", labelKey: "ops.nav.builders", path: "/ops/marketplace/builders", capability: "marketplace.view", icon: "builders", count: "builders" },
+];
 
 /** Whether a GET route with exactly this path is registered in the app. */
 export type IsRegistered = (path: string) => boolean;
@@ -46,6 +53,8 @@ export interface VisibleItem {
   path: string;
   icon: OpsIcon;
   current: boolean;
+  /** Items waiting in the queue, when the item has a count and it could be read. */
+  count: number | null;
 }
 
 export interface VisibleGroup {
@@ -55,12 +64,18 @@ export interface VisibleGroup {
 }
 
 /** The sidebar for this role: reachable items only, grouped in order; a group left empty is dropped with its heading. */
-export function visibleMenu(role: OpsRole, isRegistered: IsRegistered, currentPath: string, items: readonly OpsMenuItem[] = OPS_MENU): VisibleGroup[] {
+export function visibleMenu(
+  role: OpsRole,
+  isRegistered: IsRegistered,
+  currentPath: string,
+  items: readonly OpsMenuItem[] = OPS_MENU,
+  counts: Partial<Record<OpsMenuCount, number>> = {},
+): VisibleGroup[] {
   const groups: VisibleGroup[] = [];
   for (const { group, labelKey } of OPS_GROUPS) {
     const shown = items
       .filter((item) => item.group === group && reachable(role, item.path, item.capability, isRegistered))
-      .map((item) => ({ labelKey: item.labelKey, path: item.path, icon: item.icon, current: item.path === currentPath }));
+      .map((item) => ({ labelKey: item.labelKey, path: item.path, icon: item.icon, current: item.path === currentPath, count: item.count ? (counts[item.count] ?? null) : null }));
     if (shown.length > 0) groups.push({ group, labelKey, items: shown });
   }
   return groups;

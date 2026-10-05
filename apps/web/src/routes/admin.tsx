@@ -52,28 +52,46 @@ export function registerAdminRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "post", "/admin/builders/:userId/unsuspend", requireAdmin, (c) => decide(c, "unsuspend"));
 }
 
-/** Shared by every admin action on a builder: validate, compare-and-set, audit, notify. */
+export type BuilderDecision =
+  | { kind: "not_found" }
+  | { kind: "invalid_reason"; builder: BuilderAccount }
+  | { kind: "conflict" }
+  | { kind: "done"; userId: string; mailed: boolean };
+
+/** /admin's answer to each outcome of decideBuilder (unchanged behaviour). */
 export async function decide(c: Context<AppEnv>, action: BuilderAction) {
+  const r = await decideBuilder(c, action);
+  if (r.kind === "not_found") return errorResponse(c, "notFound", 404);
+  if (r.kind === "invalid_reason") {
+    return page(c, <BuilderDetailPage locale={c.get("locale")} origin={requestOrigin(c)} builder={r.builder} notice={null} reasonError={action} />, 400);
+  }
+  if (r.kind === "conflict") return errorResponse(c, "conflict", 409);
+  return c.redirect(localizedPath(c.get("locale"), `/admin/builders/${r.userId}?done=${r.mailed ? "1" : "mail_failed"}`), 303);
+}
+
+/**
+ * Shared by every action on a builder, from /admin and /ops (VNX-2504a): validate, compare-and-set, audit, notify.
+ * The caller renders the outcome. Reads `:userId` from the route.
+ */
+export async function decideBuilder(c: Context<AppEnv>, action: BuilderAction): Promise<BuilderDecision> {
   const admin = c.get("user")!;
   const builder = await findBuilderAccount(c.env.DB, c.req.param("userId") ?? "");
-  if (!builder) return errorResponse(c, "notFound", 404);
+  if (!builder) return { kind: "not_found" };
 
   let reason: string | null = null;
   const policy = REASON[action];
   if (policy !== "none") {
     const body = await c.req.parseBody();
     const parsed = ReasonSchema[policy].safeParse(typeof body.reason === "string" ? body.reason.replace(/\r\n?/g, "\n") : "");
-    if (!parsed.success) {
-      return page(c, <BuilderDetailPage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} notice={null} reasonError={action} />, 400);
-    }
+    if (!parsed.success) return { kind: "invalid_reason", builder };
     reason = parsed.data || null;
   }
 
   const next = transition(builder.status, action, "admin");
-  if (!next.ok) return errorResponse(c, "conflict", 409);
+  if (!next.ok) return { kind: "conflict" };
   const now = new Date().toISOString();
   const updated = await setBuilderStatus(c.env.DB, { userId: builder.userId, from: builder.status, to: next.status, reviewNote: reason, now });
-  if (!updated) return errorResponse(c, "conflict", 409);
+  if (!updated) return { kind: "conflict" };
   await writeAudit(c.env.DB, {
     actorUserId: admin.id,
     action: `builder.${action}`,
@@ -89,7 +107,7 @@ export async function decide(c: Context<AppEnv>, action: BuilderAction) {
   }
 
   const mailed = action === "approve" || action === "reject" ? await notify(c, { ...builder, ...updated }, action, reason) : true;
-  return c.redirect(localizedPath(c.get("locale"), `/admin/builders/${builder.userId}?done=${mailed ? "1" : "mail_failed"}`), 303);
+  return { kind: "done", userId: builder.userId, mailed };
 }
 
 /** Spec §8.3: tell the builder in their own language. A failed send never undoes the decision. */

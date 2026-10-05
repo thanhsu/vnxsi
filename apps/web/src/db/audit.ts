@@ -193,17 +193,13 @@ export interface AuditListing {
   entityId: string | null;
 }
 
-/** The newest audit rows, newest first (Ops Overview, VNX-2503). Selects no `data`. Read only. */
-export async function listRecentAudit(db: D1Database, limit: number): Promise<AuditListing[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT a.id, a.created_at, a.actor_user_id, a.action, a.entity, a.entity_id, u.email AS actor_email, m.user_id IS NOT NULL AS actor_is_member
-       FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id LEFT JOIN ops_members m ON m.user_id = a.actor_user_id
-       ORDER BY a.created_at DESC, a.id DESC LIMIT ?1`,
-    )
-    .bind(limit)
-    .all<{ id: string; created_at: string; actor_user_id: string | null; action: string; entity: string; entity_id: string | null; actor_email: string | null; actor_is_member: number }>();
-  return results.map((r) => ({
+const LISTING_SELECT = `SELECT a.id, a.created_at, a.actor_user_id, a.action, a.entity, a.entity_id, u.email AS actor_email, m.user_id IS NOT NULL AS actor_is_member
+  FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id LEFT JOIN ops_members m ON m.user_id = a.actor_user_id`;
+
+type ListingRow = { id: string; created_at: string; actor_user_id: string | null; action: string; entity: string; entity_id: string | null; actor_email: string | null; actor_is_member: number };
+
+function toListing(r: ListingRow): AuditListing {
+  return {
     id: r.id,
     createdAt: r.created_at,
     actorUserId: r.actor_user_id,
@@ -212,5 +208,20 @@ export async function listRecentAudit(db: D1Database, limit: number): Promise<Au
     action: r.action,
     entity: r.entity,
     entityId: r.entity_id,
-  }));
+  };
+}
+
+/** The newest audit rows, newest first (Ops Overview, VNX-2503). Selects no `data`. Read only. */
+export async function listRecentAudit(db: D1Database, limit: number): Promise<AuditListing[]> {
+  const { results } = await db.prepare(`${LISTING_SELECT} ORDER BY a.created_at DESC, a.id DESC LIMIT ?1`).bind(limit).all<ListingRow>();
+  return results.map(toListing);
+}
+
+/** One object's audit rows, newest first (Ops detail "History", VNX-2504a). Same projection: no `data`. Read only. */
+export async function listEntityAudit(db: D1Database, entity: string, entityId: string, limit: number): Promise<AuditListing[]> {
+  const { results } = await db
+    .prepare(`${LISTING_SELECT} WHERE a.entity = ?1 AND a.entity_id = ?2 ORDER BY a.created_at DESC, a.id DESC LIMIT ?3`)
+    .bind(entity, entityId, limit)
+    .all<ListingRow>();
+  return results.map(toListing);
 }

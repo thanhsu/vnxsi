@@ -10,7 +10,7 @@ import { countRequestsToMatch } from "../db/requests.ts";
 import { REMIND_AFTER_MS } from "../domain/inquiry.ts";
 import { can, type OpsCapability, type OpsRole } from "../domain/ops.ts";
 import type { AppEnv } from "../env.ts";
-import { reachable, visibleMenu, type IsRegistered } from "../ops/menu.ts";
+import { OPS_MENU, reachable, visibleMenu, type IsRegistered, type OpsMenuCount } from "../ops/menu.ts";
 import type { OpsEnvironment, OpsShell } from "../views/ops/OpsLayout.tsx";
 import { OverviewPage, type ActivityActor, type ActivityView, type QueueId, type QueueView } from "../views/ops/OverviewPage.tsx";
 import { page } from "../views/render.ts";
@@ -30,7 +30,7 @@ export function opsEnvironment(appOrigin: string | undefined): OpsEnvironment {
 }
 
 /** GET paths registered in `app`, read once on first use (registration is over by the time a request arrives). */
-function registeredPaths(app: Hono<AppEnv>): IsRegistered {
+export function registeredPaths(app: Hono<AppEnv>): IsRegistered {
   let paths: Set<string> | null = null;
   return (path) => {
     paths ??= new Set(app.routes.filter((r) => r.method === "GET").map((r) => r.path));
@@ -38,10 +38,22 @@ function registeredPaths(app: Hono<AppEnv>): IsRegistered {
   };
 }
 
-/** What OpsLayout needs for the signed-in member on `currentPath`. Only after requireOps (opsRole and user are set). */
-export function opsShell(c: Context<AppEnv>, isRegistered: IsRegistered, currentPath: string): OpsShell {
+const MENU_COUNTS: Record<OpsMenuCount, (db: D1Database) => Promise<{ count: number }>> = { builders: countBuilderReviewQueue };
+
+/**
+ * What OpsLayout needs for the signed-in member on `currentPath`. Only after requireOps (opsRole and user are set).
+ * Reads the waiting count of each visible menu item that has one; a count that fails to read is left out, never 0.
+ */
+export async function opsShell(c: Context<AppEnv>, isRegistered: IsRegistered, currentPath: string): Promise<OpsShell> {
   const role = c.get("opsRole");
-  return { role, email: c.get("user")?.email ?? "", environment: opsEnvironment(c.env.APP_ORIGIN), menu: visibleMenu(role, isRegistered, currentPath) };
+  const wanted = OPS_MENU.filter((item) => item.count && reachable(role, item.path, item.capability, isRegistered)).map((item) => item.count!);
+  const settled = await Promise.allSettled(wanted.map((key) => MENU_COUNTS[key](c.env.DB)));
+  const counts: Partial<Record<OpsMenuCount, number>> = {};
+  settled.forEach((result, i) => {
+    if (result.status === "fulfilled") counts[wanted[i]!] = result.value.count;
+    else console.error(JSON.stringify({ requestId: c.get("requestId"), event: "ops.menu.count_failed", count: wanted[i], error: String(result.reason) }));
+  });
+  return { role, email: c.get("user")?.email ?? "", environment: opsEnvironment(c.env.APP_ORIGIN), menu: visibleMenu(role, isRegistered, currentPath, OPS_MENU, counts) };
 }
 
 /** Each queue, the list page it opens (once that route exists) and the capability that page will declare. */
@@ -59,7 +71,7 @@ const RECENT_ACTIVITY_LIMIT = 10;
  * Spec §4: e-mail only for an actor who is the root Owner (ADMIN_EMAILS) or an Ops member; anyone else by user ID;
  * no actor is the system.
  */
-function actorOf(row: { actorUserId: string | null; actorEmail: string | null; actorIsOpsMember: boolean }, owners: Set<string>): ActivityActor {
+export function actorOf(row: { actorUserId: string | null; actorEmail: string | null; actorIsOpsMember: boolean }, owners: Set<string>): ActivityActor {
   if (!row.actorUserId) return { kind: "system" };
   const email = row.actorEmail?.toLowerCase() ?? null;
   if (email && (row.actorIsOpsMember || owners.has(email))) return { kind: "email", email: row.actorEmail! };
@@ -120,6 +132,6 @@ export function registerOpsRoutes(app: Hono<AppEnv>) {
       }
     }
 
-    return page(c, <OverviewPage shell={opsShell(c, isRegistered, "/ops")} queues={queues} readAt={now.toISOString()} activity={activity} />);
+    return page(c, <OverviewPage shell={await opsShell(c, isRegistered, "/ops")} queues={queues} readAt={now.toISOString()} activity={activity} />);
   });
 }

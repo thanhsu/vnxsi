@@ -23,6 +23,8 @@ export interface OpsShell {
 export type OpsLayoutProps = OpsShell & {
   /** The page name: the <title> prefix and the last breadcrumb. */
   page: string;
+  /** Breadcrumbs between "Ops" and the page, such as the menu group. */
+  trail?: string[];
 };
 
 const tr = (key: OpsMessageKey, params?: Record<string, string | number>) => t("en", key, params);
@@ -33,6 +35,7 @@ const ENV_LABEL: Record<OpsEnvironment, OpsMessageKey> = { production: "ops.env.
 /** Line icons, 16 px, drawn in currentColor by .ops-icon. */
 const ICON_PATHS: Record<OpsIcon, string> = {
   overview: "M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z",
+  builders: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c1.5-4 4.5-6 8-6s6.5 2 8 6",
 };
 
 const NavIcon: FC<{ icon: OpsIcon }> = ({ icon }) => (
@@ -74,6 +77,12 @@ const OpsNav: FC<{ menu: VisibleGroup[]; idPrefix: string }> = ({ menu, idPrefix
             <a class="ops-nav-link" href={item.path} aria-current={item.current ? "page" : undefined}>
               <NavIcon icon={item.icon} />
               {tr(item.labelKey)}
+              {item.count ? (
+                <span class="ops-nav-n">
+                  <span class="visually-hidden">{tr("ops.nav.waiting")}</span>
+                  {item.count}
+                </span>
+              ) : null}
             </a>
           ))}
         </div>
@@ -100,7 +109,13 @@ const Who: FC<{ role: OpsRole; email: string }> = ({ role, email }) => (
   </>
 );
 
-export const OpsLayout: FC<PropsWithChildren<OpsLayoutProps>> = ({ page, role, email, environment, menu, children }) => (
+const Sep: FC = () => (
+  <span class="ops-crumb-sep" aria-hidden="true">
+    /
+  </span>
+);
+
+export const OpsLayout: FC<PropsWithChildren<OpsLayoutProps>> = ({ page, trail = [], role, email, environment, menu, children }) => (
   <html lang="en">
     <head>
       <meta charset="utf-8" />
@@ -125,9 +140,13 @@ export const OpsLayout: FC<PropsWithChildren<OpsLayoutProps>> = ({ page, role, e
             <Brand extra="ops-top-brand" />
             <nav class="ops-crumb" aria-label={tr("ops.layout.breadcrumb")}>
               <span>{tr("ops.layout.crumbRoot")}</span>
-              <span class="ops-crumb-sep" aria-hidden="true">
-                /
-              </span>
+              <Sep />
+              {trail.map((crumb) => (
+                <>
+                  <span>{crumb}</span>
+                  <Sep />
+                </>
+              ))}
               <span aria-current="page">{page}</span>
             </nav>
             <span class={`ops-env ops-env-${environment}`}>

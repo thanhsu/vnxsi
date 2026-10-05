@@ -43,6 +43,7 @@ import { registerLandingRoutes } from "./routes/landing.tsx";
 import { registerLegalRoutes } from "./routes/legal.tsx";
 import { registerContactRoutes } from "./routes/contact.tsx";
 import { registerOpsRoutes } from "./routes/ops.tsx";
+import { registerOpsMarketplaceRoutes } from "./routes/ops-marketplace.tsx";
 import { errorResponse } from "./views/error-response.tsx";
 
 export function createApp() {
@@ -94,6 +95,7 @@ export function createApp() {
   registerAdminMerchantRoutes(app);
   // Ops console pages (VNX-2503), each behind requireOps(capability); before the /ops catch-all below.
   registerOpsRoutes(app);
+  registerOpsMarketplaceRoutes(app);
   // Last in the Ops group: an unknown /ops path gets the same sealed 404 as a refused one (plan O1).
   app.all("/ops", opsNotFound);
   app.all("/ops/*", opsNotFound);
