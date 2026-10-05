@@ -2321,23 +2321,999 @@ git commit -m "feat(web): pure program and offer rules and redirect resolution (
 
 ---
 
-### Task 2c: VNX-2102a-3 — Migration `0011_partners`, db và nối test kiến trúc
+### Task 2c: VNX-2102a-3 — Migration `0011_partners`, db merchant và chương trình, nối test kiến trúc
 
-**Phạm vi (chỉ mô tả; Planner viết chi tiết ngay trước khi làm, sau khi Task 2b xong):** Migration `apps/web/migrations/0011_partners.sql` tạo `merchants`, `partner_programs`, `offers` đúng cột phụ lục 3.2: không DEFAULT cho `commission_model`, `commission_rate_bps`, `commission_flat_minor`, `currency`, `cookie_days`; `CHECK (status != 'active' OR (terms_url IS NOT NULL AND terms_verified_at IS NOT NULL AND type != 'direct'))` trên `partner_programs`; `CHECK (program_id IS NULL OR tracking_template IS NOT NULL)` trên `offers`; enum `label` gồm `try_it`; `merchants.website_url` bắt buộc, `merchants.slug` unique, `merchants.default_offer_id` không FK (tránh vòng, kiểm ở db); `offers.subject_type` CHECK `product|merchant|article` (lát mỏng chỉ tạo `merchant`); chỉ mục `offers(subject_type, subject_id, status)`, `partner_programs(merchant_id)`. Db: `db/merchants.ts`, `db/programs.ts`, `db/offers.ts` (mỗi file duy nhất ghi bảng của nó; ghi cùng audit `merchant.*` / `program.*` / `offer.*` trong `db.batch` theo kiểu `Guard` của `db/requests.ts` và `db/audit.ts`; `setDefaultOffer` chỉ nhận offer `subject_type = merchant` của đúng merchant; truy vấn đọc cho `/go` và `/tools`: `findMerchantBySlug`, `findOfferWithContext(offerId)`, `findDefaultOfferContext(merchantId)` (cả hai trả thêm `subjectType`, `subjectId` của offer và nạp merchant theo `subject_id`; khi đọc `allowed_hosts` JSON chỉ giữ mục qua `isPublicHostname`, JSON hỏng cho danh sách rỗng), `listActiveMerchantOffers(merchantId, now)`, `listActiveProgramMerchants`; các hàm đọc trả đúng kiểu `RedirectOffer` / `RedirectProgram` / `RedirectMerchant` của Task 2b). Nối test kiến trúc: `merchants`, `partner_programs`, `offers` vào `WRITERS`; ba file `db/{merchants,programs,offers}.ts` vào `MONEY_ALLOWED` (và các bảng tiền của chúng vẫn bị cấm với `RANKING_FILES`). Fixtures `test/fixtures.ts`: `makeMerchant`, `makeProgram`, `makeOffer`. `wrangler.jsonc`: ghi chú thứ tự deploy `0011_partners`.
+**Tách đôi (Planner đề xuất, kích thước):** cả phần 2c gốc ước ≈ 940 dòng (migration ~75, db ~470, fixtures ~60, test ~330). Task này là phần một, ≈ 640 dòng (không locale): migration cho cả ba bảng, guard audit mới, `db/merchants.ts`, `db/programs.ts`, fixtures `makeMerchant` / `makeProgram`, nối test kiến trúc. Phần hai là Task 2d (bên dưới): `db/offers.ts`, `setDefaultOffer`, `makeOffer`. Các hàm đọc dành cho `/tools` và `/disclosure` (`findMerchantBySlug`, `listActiveMerchantOffers`, `listActiveProgramMerchants`) **không** nằm ở 2c/2d: Task 5 và 6 tự thêm (Task 3 không cần).
 
-**Files (dự kiến):** Create `apps/web/migrations/0011_partners.sql`, `src/db/{merchants,programs,offers}.ts`; Modify `test/architecture.test.ts`, `test/fixtures.ts`, `wrangler.jsonc`, `src/db/audit.ts` (nếu cần guard mới); Test `test/db/{merchants,programs,offers}.test.ts`, `test/db/partners-migration.test.ts` (grep không DEFAULT điều khoản; CHECK `active` thiếu `terms_url` / `terms_verified_at` / `direct`; CHECK offer có chương trình thiếu template; không có cột `ON DELETE` gây xóa dây chuyền ngoài ý muốn).
+**Files:**
+- Create: `apps/web/migrations/0011_partners.sql`
+- Create: `apps/web/src/db/merchants.ts`, `apps/web/src/db/programs.ts`
+- Modify: `apps/web/src/db/audit.ts` (guard `AuditPartnerGuard`, hàm `runAudited`)
+- Modify: `apps/web/src/domain/merchant.ts` (`merchantTransitionAllowed`), `apps/web/src/domain/offer.ts` (`programTransitionAllowed`)
+- Modify: `apps/web/test/fixtures.ts` (`makeMerchant`, `makeProgram`), `apps/web/test/architecture.test.ts`, `apps/web/wrangler.jsonc` (chỉ comment)
+- Test: `apps/web/test/domain/merchant.test.ts`, `apps/web/test/domain/offer.test.ts` (thêm test chuyển trạng thái), `apps/web/test/db/partners-migration.test.ts`, `apps/web/test/db/merchants.test.ts`, `apps/web/test/db/programs.test.ts`
+- Không có chuỗi giao diện, không sửa route.
+
+**Interfaces:**
+- Consumes (đã commit): `MerchantInput`, `MerchantStatus` (`domain/merchant.ts`); `ProgramInput`, `ProgramType`, `ProgramStatus`, `ProgramProvider`, `CommissionModel` (`domain/offer.ts`); `isPublicHostname` (`domain/offer-url.ts`); `auditStatement`, `AuditInput` (`db/audit.ts`); `ulid` (`lib/ulid.ts`).
+- Produces (`db/audit.ts`): `type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"; id: string; writeId: string }` (Task 2d thêm `"offers"`) (thêm vào union `onlyIf` của `auditStatement`); `runAudited<T>(db, write, audit, guard): Promise<T | null>`.
+- Produces (domain): `merchantTransitionAllowed(from, to)`, `programTransitionAllowed(from, to)`.
+- Produces (`db/merchants.ts`): `type Merchant`; `parseStoredHosts(raw)`; `createMerchant(db, { merchant, status, actorUserId, now })` → `{ ok: true; merchant } | { ok: false; reason: "slug_taken" }`; `updateMerchant(db, { id, merchant: Omit<MerchantInput, "slug">, actorUserId, now })` → `Merchant | null`; `setMerchantStatus(db, { id, from, to, actorUserId, now })` → `Merchant | null`; `findMerchantById(db, id)`; `listMerchants(db)`.
+- Produces (`db/programs.ts`): `type PartnerProgram`; `createProgram(db, { merchantId, program, actorUserId, now })` → `PartnerProgram | null` (null khi merchant không tồn tại); `updateProgram(db, { id, program, expectedStatus, actorUserId, now })` → `PartnerProgram | null` (null khi không có dòng hoặc `status` hiện tại khác `expectedStatus`); `findProgramById(db, id)`; `listProgramsByMerchant(db, merchantId)`.
+- Produces (`test/fixtures.ts`): `makeMerchant(overrides?)`, `makeProgram(merchant, overrides?)`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **`write_id` trên cả ba bảng** (bài học Task 1): mỗi lệnh ghi đặt `write_id` mới (ULID); dòng audit đi cùng `db.batch` chỉ được ghi khi `write_id` hiện tại của dòng bằng giá trị đó (`AuditPartnerGuard`). Ghi thua (compare-and-set không khớp, `ON CONFLICT DO NOTHING`, không có dòng) thì không có audit. `runAudited` gom việc "một câu ghi có `RETURNING` + audit có guard trong một batch", trả dòng hoặc `null`. Không dùng `meta.changes`. SQL guard viết **literal từng bảng** (`FROM merchants`, `FROM partner_programs`; Task 2d thêm `FROM offers`), không nội suy tên bảng, để test allowlist tiền nhìn thấy chúng; vì vậy `db/audit.ts` nằm trong `MONEY_ALLOWED` (chỉ đọc `write_id` để canh dòng audit). `MONEY_ALLOWED` sau 2c đúng ba file: `db/merchants.ts`, `db/programs.ts`, `db/audit.ts`.
+2. **CHECK vi phạm thì ném lỗi, không trả `null`** (chốt chặn cuối, không phải cơ chế chính; các test không dùng chúng để chứng minh tính nguyên tử, việc đó do thiết kế `write_id` + batch). `createProgram` / `updateProgram` không tự kiểm lại luật `active` ở SQL (domain Task 2b đã kiểm, CHECK của CSDL là chốt chặn cuối); Route Task 3 chỉ gọi sau khi `parseProgramForm` đã ok nên lỗi này nghĩa là lỗi lập trình, trả 500.
+3. **Compare-and-set theo `status`:** `setMerchantStatus` (`WHERE status = from`), `updateProgram` (`WHERE status = expectedStatus`, kể cả khi form không đổi status). Sửa trường khác không có CAS thứ hai (người sửa sau thắng; chấp nhận cho một admin). Audit action: `merchant.status` / `program.status` khi `status` đổi, `merchant.update` / `program.update` khi không.
+4. **`slug` merchant không đổi được sau khi tạo** (`updateMerchant` không nhận slug): `/go/:slug` và `/tools/:slug` là URL được chia sẻ, đổi slug làm chết link. Task 3 hiện slug chỉ đọc ở form sửa.
+5. **`createMerchant` bắt buộc truyền `status`** (không mặc định ở db): luật nghiệp vụ "merchant mới ở trạng thái nào" thuộc Task 3 (xem câu hỏi mở trong báo cáo Planner). Fixture `makeMerchant` mặc định `active`.
+6. **Không có DEFAULT trên bất kỳ cột nào** (Controller, theo review): `indexable`, `status`, `write_id`, `description`… do db truyền (`createMerchant` truyền `indexable` tường minh). Test migration khẳng định không có `\bDEFAULT\b` nào.
+7. **`ON DELETE`:** mọi FK để mặc định (NO ACTION: xóa dòng cha còn con bị từ chối); không có lệnh xóa nào ở slice nên không có xóa dây chuyền. `merchants.default_offer_id` và `offers.subject_id` không có FK (vòng / đa hình), kiểm ở db (Task 2d).
+8. `allowed_hosts` có `CHECK (json_valid(allowed_hosts))` nên chuỗi không phải JSON không vào được CSDL; `parseStoredHosts` vẫn phòng thủ cho JSON sai hình dạng (ví dụ `{"a":1}`, mảng lẫn IP) và JSON hỏng.
+9. **CHECK chương trình `active` và offer (theo review):** chương trình `active` cần `terms_url` và `terms_verified_at` khác NULL **và khác chuỗi rỗng**, và `type != 'direct'`; `CHECK (program_id IS NULL OR (tracking_template IS NOT NULL AND tracking_template <> ''))`: offer có chương trình cần `tracking_template` khác NULL và khác rỗng. Có test cho cả chuỗi rỗng.
+10. **Trạng thái cuối (Controller):** merchant `archived` và chương trình `ended` là **cuối cùng**, không chuyển ra được. Ép ở domain bằng hàm thuần `merchantTransitionAllowed(from, to)` (`domain/merchant.ts`) và `programTransitionAllowed(from, to)` (`domain/offer.ts`; `from === to` là "không đổi", luôn được), và ở db trong chính câu compare-and-set (`setMerchantStatus`: `AND ?2 <> ?3 AND ?2 <> 'archived'`, nên `from === to` cũng không ghi gì; `updateProgram`: `AND (status <> 'ended' OR ?15 = 'ended')`). Task 3 dùng hai hàm domain để ẩn nút và báo lỗi. Slug merchant không đổi sau khi tạo (mục 4). Form Task 3 tạo merchant mới ở `paused` (db vẫn bắt buộc truyền `status`, mục 5).
+11. **`created_at` trong fixture:** `makeMerchant` và `makeProgram` dùng chung đồng hồ `fixtureClock` tăng 1 giây mỗi lần gọi, bắt đầu `2026-10-01T00:00:00.000Z`, trước mọi `at(n)` (`2026-10-05...`) của test, nên `merchant.create` luôn sắp trước `merchant.update`.
+12. Lưu ý khi viết chuỗi SQL: test kiến trúc "ghi bảng chỉ từ module sở hữu" quét `INSERT INTO|UPDATE|DELETE FROM <tên>` viết hoa; không viết các cụm đó (viết hoa) trong comment hay chuỗi không phải SQL.
+
+- [ ] **Step 1: Test migration (fail)**
+
+`apps/web/test/db/partners-migration.test.ts` (không dùng fixtures; chỉ SQL thô, nên chạy được trước khi có module db):
+
+```ts
+import { describe, expect, it } from "vitest";
+import { ulid } from "../../src/lib/ulid.ts";
+import { testEnv } from "../helpers.ts";
+
+const files = import.meta.glob("../../migrations/0011_partners.sql", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const code = (Object.values(files)[0] ?? "")
+  .split("\n")
+  .filter((l) => !l.trim().startsWith("--"))
+  .join("\n");
+const NOW = "2026-10-05T00:00:00.000Z";
+
+type Cols = Record<string, string | number | null>;
+async function insert(table: string, cols: Cols): Promise<string> {
+  const id = ulid();
+  const all: Cols = { id, write_id: "w", created_at: NOW, updated_at: NOW, ...cols };
+  const keys = Object.keys(all);
+  await testEnv.DB.prepare(`INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map((_, i) => `?${i + 1}`).join(", ")})`)
+    .bind(...keys.map((k) => all[k] ?? null))
+    .run();
+  return id;
+}
+const merchant = (o: Cols = {}) =>
+  insert("merchants", { indexable: 0, slug: `m-${ulid().slice(-10).toLowerCase()}`, name: "M", website_url: "https://example.com/", allowed_hosts: '["example.com"]', description: "", status: "active", ...o });
+const program = (merchantId: string, o: Cols = {}) =>
+  insert("partner_programs", { merchant_id: merchantId, name: "P", type: "affiliate", provider: "manual", status: "draft", ...o });
+const offer = (merchantId: string, o: Cols = {}) =>
+  insert("offers", { subject_type: "merchant", subject_id: merchantId, kind: "official", label: "visit_site", destination_url: "https://example.com/", status: "active", ...o });
+
+describe("0011_partners (addendum §3.2, Review Focus 6)", () => {
+  it("is additive, has no DEFAULT at all and no cascade", () => {
+    expect(code).toMatch(/CREATE TABLE merchants/);
+    expect(code).not.toMatch(/\b(DROP|ALTER)\b/i);
+    expect(code).not.toMatch(/ON DELETE/i);
+    expect(code).not.toMatch(/\bDEFAULT\b/i);
+  });
+
+  it("leaves commission, cookie and currency empty when nothing is given", async () => {
+    const p = await program(await merchant());
+    const row = await testEnv.DB.prepare("SELECT commission_model, commission_rate_bps, commission_flat_minor, currency, cookie_days FROM partner_programs WHERE id = ?1").bind(p).first();
+    expect(row).toEqual({ commission_model: null, commission_rate_bps: null, commission_flat_minor: null, currency: null, cookie_days: null });
+  });
+
+  it("merchants: slug unique, status and JSON checked, indexable has no default", async () => {
+    await merchant({ slug: "dup-slug-0011" });
+    await expect(merchant({ slug: "dup-slug-0011" })).rejects.toThrow();
+    await expect(merchant({ status: "deleted" })).rejects.toThrow();
+    await expect(merchant({ allowed_hosts: "not json" })).rejects.toThrow();
+    await expect(merchant({ indexable: 2 })).rejects.toThrow();
+    await expect(
+      testEnv.DB.prepare("INSERT INTO merchants (id, slug, name, website_url, allowed_hosts, description, status, write_id, created_at, updated_at) VALUES ('x', 'no-indexable', 'M', 'https://example.com/', '[]', '', 'active', 'w', ?1, ?1)").bind(NOW).run(),
+    ).rejects.toThrow();
+  });
+
+  it("programs: active needs terms_url, terms_verified_at and a type other than direct", async () => {
+    const m = await merchant();
+    const terms = { terms_url: "https://example.com/terms", terms_verified_at: NOW };
+    await expect(program(m, { status: "active" })).rejects.toThrow();
+    await expect(program(m, { status: "active", terms_url: terms.terms_url })).rejects.toThrow();
+    await expect(program(m, { status: "active", terms_verified_at: NOW })).rejects.toThrow();
+    await expect(program(m, { status: "active", terms_url: "", terms_verified_at: NOW })).rejects.toThrow();
+    await expect(program(m, { status: "active", terms_url: terms.terms_url, terms_verified_at: "" })).rejects.toThrow();
+    await expect(program(m, { status: "active", type: "direct", ...terms })).rejects.toThrow();
+    await expect(program(m, { status: "active", ...terms })).resolves.toBeTypeOf("string");
+    await expect(program(m, { status: "draft", type: "direct" })).resolves.toBeTypeOf("string");
+    await expect(program(m, { status: "paused" })).resolves.toBeTypeOf("string");
+    await expect(program(m, { type: "barter" })).rejects.toThrow();
+    await expect(program(m, { commission_model: "magic" })).rejects.toThrow();
+  });
+
+  it("programs: merchant_id must exist and a merchant with programs cannot be deleted", async () => {
+    await expect(program("no-such-merchant")).rejects.toThrow();
+    const m = await merchant();
+    await program(m);
+    await expect(testEnv.DB.prepare("DELETE FROM merchants WHERE id = ?1").bind(m).run()).rejects.toThrow();
+  });
+
+  it("offers: a program needs a non-empty tracking template; label and subject_type are enums", async () => {
+    const m = await merchant();
+    const p = await program(m);
+    await expect(offer(m, { program_id: p })).rejects.toThrow();
+    await expect(offer(m, { program_id: p, tracking_template: "" })).rejects.toThrow();
+    await expect(offer(m, { program_id: p, tracking_template: "https://example.com/c?x={click_id}" })).resolves.toBeTypeOf("string");
+    await expect(offer(m)).resolves.toBeTypeOf("string");
+    await expect(offer(m, { label: "try_it" })).resolves.toBeTypeOf("string");
+    await expect(offer(m, { label: "buy_now" })).rejects.toThrow();
+    await expect(offer(m, { subject_type: "person" })).rejects.toThrow();
+    await expect(offer(m, { kind: "gift" })).rejects.toThrow();
+    await expect(offer(m, { status: "deleted" })).rejects.toThrow();
+    await expect(offer(m, { program_id: "no-such-program", tracking_template: "https://example.com/c" })).rejects.toThrow();
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/db/partners-migration.test.ts
+```
+
+Expected: FAIL (không có bảng `merchants`).
+
+- [ ] **Step 2: Migration**
+
+`apps/web/migrations/0011_partners.sql`:
+
+```sql
+-- EPIC 21 partners (addendum §3.2). Additive only: three new tables, nothing existing is changed.
+-- Terms are never defaulted (ADR-007 rule 5): commission, cookie and currency columns may be NULL.
+-- No DEFAULT anywhere: every value is chosen by the db module. Foreign keys keep the default NO ACTION: nothing cascades.
+-- `write_id` is the random id of the last write; the audit row of that write is guarded on it (see AuditPartnerGuard).
+-- No FK on merchants.default_offer_id (a cycle with offers) or offers.subject_id (polymorphic): the db modules check them.
+CREATE TABLE merchants (
+  id               TEXT PRIMARY KEY,
+  slug             TEXT NOT NULL UNIQUE,
+  name             TEXT NOT NULL,
+  website_url      TEXT NOT NULL,
+  -- JSON array of host names (domain/offer-url.ts#isPublicHostname); read through parseStoredHosts.
+  allowed_hosts    TEXT NOT NULL CHECK (json_valid(allowed_hosts)),
+  logo_key         TEXT,
+  description      TEXT NOT NULL,
+  default_offer_id TEXT,
+  indexable        INTEGER NOT NULL CHECK (indexable IN (0, 1)),
+  status           TEXT NOT NULL CHECK (status IN ('active', 'paused', 'archived')),
+  write_id         TEXT NOT NULL,
+  created_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL
+);
+
+CREATE TABLE partner_programs (
+  id                    TEXT PRIMARY KEY,
+  merchant_id           TEXT NOT NULL REFERENCES merchants (id),
+  name                  TEXT NOT NULL,
+  type                  TEXT NOT NULL CHECK (type IN ('affiliate', 'referral', 'revenue_share', 'direct')),
+  network               TEXT,
+  provider              TEXT NOT NULL CHECK (provider IN ('generic_template', 'manual')),
+  commission_model      TEXT CHECK (commission_model IS NULL OR commission_model IN ('percent', 'flat', 'tiered', 'custom')),
+  commission_rate_bps   INTEGER,
+  commission_flat_minor INTEGER,
+  currency              TEXT,
+  cookie_days           INTEGER,
+  attribution_notes     TEXT,
+  terms_url             TEXT,
+  terms_verified_at     TEXT,
+  status                TEXT NOT NULL CHECK (status IN ('draft', 'active', 'paused', 'ended')),
+  write_id              TEXT NOT NULL,
+  created_at            TEXT NOT NULL,
+  updated_at            TEXT NOT NULL,
+  -- ADR-007 rule 5, and the slice rule that `direct` has no flag so it can never be active (also checked in domain/offer.ts).
+  CHECK (status != 'active' OR (terms_url IS NOT NULL AND terms_url <> '' AND terms_verified_at IS NOT NULL AND terms_verified_at <> '' AND type != 'direct'))
+);
+CREATE INDEX idx_programs_merchant ON partner_programs (merchant_id, status);
+
+CREATE TABLE offers (
+  id                TEXT PRIMARY KEY,
+  -- NULL = an offer that earns nothing (the merchant's own link).
+  program_id        TEXT REFERENCES partner_programs (id),
+  subject_type      TEXT NOT NULL CHECK (subject_type IN ('product', 'merchant', 'article')),
+  subject_id        TEXT NOT NULL,
+  kind              TEXT NOT NULL CHECK (kind IN ('official', 'trial', 'affiliate', 'referral', 'sponsored')),
+  label             TEXT NOT NULL CHECK (label IN ('learn_more', 'get_started', 'start_trial', 'visit_site', 'try_it')),
+  destination_url   TEXT NOT NULL,
+  tracking_template TEXT,
+  status            TEXT NOT NULL CHECK (status IN ('active', 'paused', 'archived')),
+  starts_at         TEXT,
+  ends_at           TEXT,
+  write_id          TEXT NOT NULL,
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL,
+  -- An offer with a program needs a real template: NULL and the empty string are both refused.
+  CHECK (program_id IS NULL OR (tracking_template IS NOT NULL AND tracking_template <> ''))
+);
+CREATE INDEX idx_offers_subject ON offers (subject_type, subject_id, status);
+CREATE INDEX idx_offers_program ON offers (program_id);
+```
+
+```bash
+npm test -w apps/web -- test/db/partners-migration.test.ts
+```
+
+Expected: PASS (`applyD1Migrations` đọc thư mục `migrations`).
+
+- [ ] **Step 3: Guard audit, `db/merchants.ts`, fixture `makeMerchant` (test trước)**
+
+`apps/web/test/db/merchants.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { auditStatement } from "../../src/db/audit.ts";
+import { createMerchant, findMerchantById, listMerchants, parseStoredHosts, setMerchantStatus, updateMerchant } from "../../src/db/merchants.ts";
+import type { MerchantInput } from "../../src/domain/merchant.ts";
+import { ulid } from "../../src/lib/ulid.ts";
+import { ensureUser, makeMerchant } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = "2026-10-05T00:00:00.000Z";
+// Distinct instants: ULIDs are not monotonic inside one millisecond, so audit order is never read from ids.
+const at = (n: number) => new Date(Date.parse(NOW) + n * 1000).toISOString();
+const slugOf = () => `acme-${ulid().slice(-8).toLowerCase()}`;
+const input = (o: Partial<MerchantInput> = {}): MerchantInput => ({
+  name: "Acme",
+  slug: slugOf(),
+  websiteUrl: "https://example.com/",
+  allowedHosts: ["example.com", "app.example.com"],
+  description: "Plain text.",
+  indexable: false,
+  ...o,
+});
+const audits = async (entityId: string) =>
+  (await testEnv.DB.prepare("SELECT action, actor_user_id, data FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string; actor_user_id: string; data: string }>()).results;
+const actionsOf = async (entityId: string) => (await audits(entityId)).map((a) => a.action);
+
+describe("db/merchants (addendum §3.2)", () => {
+  it("creates a merchant with one audit row", async () => {
+    const admin = await ensureUser("m-admin@vnx.si");
+    const m = input();
+    const res = await createMerchant(testEnv.DB, { merchant: m, status: "paused", actorUserId: admin.id, now: at(1) });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.merchant).toMatchObject({ slug: m.slug, name: "Acme", status: "paused", indexable: false, defaultOfferId: null, logoKey: null, allowedHosts: ["example.com", "app.example.com"], createdAt: at(1), updatedAt: at(1) });
+    const rows = await audits(res.merchant.id);
+    expect(rows.map((r) => r.action)).toEqual(["merchant.create"]);
+    expect(rows[0]?.actor_user_id).toBe(admin.id);
+    expect(JSON.parse(rows[0]?.data ?? "{}")).toEqual({ slug: m.slug });
+  });
+
+  it("a taken slug returns slug_taken and writes neither a row nor an audit row", async () => {
+    const admin = await ensureUser("m-admin@vnx.si");
+    const first = input();
+    await createMerchant(testEnv.DB, { merchant: first, status: "active", actorUserId: admin.id, now: at(1) });
+    const second = await createMerchant(testEnv.DB, { merchant: { ...first, name: "Other" }, status: "active", actorUserId: admin.id, now: at(2) });
+    expect(second).toEqual({ ok: false, reason: "slug_taken" });
+    const n = async (sql: string) => (await testEnv.DB.prepare(sql).bind(first.slug).first<{ n: number }>())?.n;
+    expect(await n("SELECT COUNT(*) AS n FROM merchants WHERE slug = ?1")).toBe(1);
+    expect(await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'merchant.create' AND json_extract(data, '$.slug') = ?1")).toBe(1);
+  });
+
+  it("updates every field except slug and status, with one merchant.update audit row; an unknown id changes nothing", async () => {
+    const admin = await ensureUser("m-admin@vnx.si");
+    const m = await makeMerchant({ status: "paused" });
+    const next = { name: "Renamed", websiteUrl: "https://shop.example.org/", allowedHosts: ["example.org"], description: "New text.", indexable: true };
+    const updated = await updateMerchant(testEnv.DB, { id: m.id, merchant: next, actorUserId: admin.id, now: at(5) });
+    expect(updated).toMatchObject({ ...next, slug: m.slug, status: "paused", updatedAt: at(5) });
+    expect(await actionsOf(m.id)).toEqual(["merchant.create", "merchant.update"]);
+
+    expect(await updateMerchant(testEnv.DB, { id: "missing", merchant: next, actorUserId: admin.id, now: at(6) })).toBeNull();
+    expect(await actionsOf("missing")).toEqual([]);
+  });
+
+  it("setMerchantStatus is a compare-and-set: the loser writes nothing and audits nothing", async () => {
+    const admin = await ensureUser("m-admin@vnx.si");
+    const m = await makeMerchant();
+    const won = await setMerchantStatus(testEnv.DB, { id: m.id, from: "active", to: "paused", actorUserId: admin.id, now: at(2) });
+    expect(won?.status).toBe("paused");
+    const lost = await setMerchantStatus(testEnv.DB, { id: m.id, from: "active", to: "archived", actorUserId: admin.id, now: at(3) });
+    expect(lost).toBeNull();
+    expect((await findMerchantById(testEnv.DB, m.id))?.status).toBe("paused");
+    const rows = await audits(m.id);
+    expect(rows.map((r) => r.action)).toEqual(["merchant.create", "merchant.status"]);
+    expect(JSON.parse(rows[1]?.data ?? "{}")).toEqual({ from: "active", to: "paused" });
+  });
+
+  it("archived is terminal and a status to itself is not a change: nothing is written or audited", async () => {
+    const admin = await ensureUser("m-admin@vnx.si");
+    const m = await makeMerchant();
+    expect(await setMerchantStatus(testEnv.DB, { id: m.id, from: "active", to: "active", actorUserId: admin.id, now: at(2) })).toBeNull();
+    expect((await setMerchantStatus(testEnv.DB, { id: m.id, from: "active", to: "archived", actorUserId: admin.id, now: at(3) }))?.status).toBe("archived");
+    for (const to of ["active", "paused", "archived"] as const) {
+      expect(await setMerchantStatus(testEnv.DB, { id: m.id, from: "archived", to, actorUserId: admin.id, now: at(4) }), to).toBeNull();
+    }
+    expect(await actionsOf(m.id)).toEqual(["merchant.create", "merchant.status"]);
+  });
+
+  it("the audit guard is keyed on the row's last write id (a lost write audits nothing)", async () => {
+    const admin = await ensureUser("m-admin@vnx.si");
+    const m = await makeMerchant();
+    const audit = (writeId: string) =>
+      auditStatement(testEnv.DB, { actorUserId: admin.id, action: "merchant.update", entity: "merchant", entityId: m.id, now: at(9) }, { partnerTable: "merchants", id: m.id, writeId });
+    await audit("not-the-last-write").run();
+    expect(await actionsOf(m.id)).toEqual(["merchant.create"]);
+    const real = await testEnv.DB.prepare("SELECT write_id FROM merchants WHERE id = ?1").bind(m.id).first<{ write_id: string }>();
+    await audit(real?.write_id ?? "").run();
+    expect(await actionsOf(m.id)).toEqual(["merchant.create", "merchant.update"]);
+  });
+
+  it("parseStoredHosts keeps only public host names and never throws", () => {
+    expect(parseStoredHosts('["example.com","Evil.COM","127.0.0.1","localhost","a b.com",7,null]')).toEqual(["example.com"]);
+    for (const bad of ["not json", '{"a":1}', '"example.com"', "null", ""]) expect(parseStoredHosts(bad), bad).toEqual([]);
+  });
+
+  it("reads allowed_hosts through parseStoredHosts", async () => {
+    const m = await makeMerchant();
+    await testEnv.DB.prepare("UPDATE merchants SET allowed_hosts = ?2 WHERE id = ?1").bind(m.id, '["example.com","127.0.0.1"]').run();
+    expect((await findMerchantById(testEnv.DB, m.id))?.allowedHosts).toEqual(["example.com"]);
+    await testEnv.DB.prepare("UPDATE merchants SET allowed_hosts = ?2 WHERE id = ?1").bind(m.id, '{"a":1}').run();
+    expect((await findMerchantById(testEnv.DB, m.id))?.allowedHosts).toEqual([]);
+  });
+
+  it("finds by id and lists by name", async () => {
+    const tag = ulid().slice(-6);
+    const z = await makeMerchant({ name: `Zed ${tag}` });
+    const a = await makeMerchant({ name: `alpha ${tag}` });
+    expect(await findMerchantById(testEnv.DB, "missing")).toBeNull();
+    const ids = (await listMerchants(testEnv.DB)).map((m) => m.id).filter((id) => id === z.id || id === a.id);
+    expect(ids).toEqual([a.id, z.id]);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/db/merchants.test.ts
+```
+
+Expected: FAIL (không có `db/merchants.ts`, `makeMerchant`).
+
+Sửa `apps/web/src/db/audit.ts`:
+
+1. Thêm kiểu sau `AuditFlagGuard`:
+
+```ts
+/** Written only when that merchant / program row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
+export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"; id: string; writeId: string };
+```
+
+2. Thêm `| AuditPartnerGuard` vào kiểu tham số `onlyIf` của `auditStatement`, thêm "`partnerTable` on that row's last write id" vào docblock, và thêm nhánh này ngay sau nhánh `"flagKey" in onlyIf` (SQL literal từng bảng):
+
+```ts
+  if ("partnerTable" in onlyIf) {
+    if (onlyIf.partnerTable === "merchants") {
+      return db
+        .prepare(
+          `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+           WHERE EXISTS (SELECT 1 FROM merchants WHERE id = ?8 AND write_id = ?9)`,
+        )
+        .bind(...values, onlyIf.id, onlyIf.writeId);
+    }
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM partner_programs WHERE id = ?8 AND write_id = ?9)`,
+      )
+      .bind(...values, onlyIf.id, onlyIf.writeId);
+  }
+```
+
+3. Thêm sau `writeAudit`:
+
+```ts
+/**
+ * One write statement that ends in RETURNING, and its audit row guarded on that write, in one db.batch (so both or neither).
+ * Returns the row, or null when the statement changed nothing; then no audit row exists either.
+ */
+export async function runAudited<T>(db: D1Database, write: D1PreparedStatement, audit: AuditInput, guard: AuditPartnerGuard): Promise<T | null> {
+  const [res] = await db.batch<T>([write, auditStatement(db, audit, guard)]);
+  return res?.results[0] ?? null;
+}
+```
+
+`apps/web/src/db/merchants.ts`:
+
+```ts
+import type { MerchantInput, MerchantStatus } from "../domain/merchant.ts";
+import { isPublicHostname } from "../domain/offer-url.ts";
+import { ulid } from "../lib/ulid.ts";
+import { runAudited } from "./audit.ts";
+
+/** The only writer of `merchants` (module `monetization`, addendum §3.2). */
+
+export type Merchant = {
+  id: string;
+  slug: string;
+  name: string;
+  websiteUrl: string;
+  allowedHosts: string[];
+  logoKey: string | null;
+  description: string;
+  defaultOfferId: string | null;
+  indexable: boolean;
+  status: MerchantStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type Row = {
+  id: string;
+  slug: string;
+  name: string;
+  website_url: string;
+  allowed_hosts: string;
+  logo_key: string | null;
+  description: string;
+  default_offer_id: string | null;
+  indexable: number;
+  status: MerchantStatus;
+  write_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * The stored JSON array, keeping only entries that are public host names (`isPublicHostname`). Anything else (not JSON, not an
+ * array, an IP, an upper-case name) is dropped, so a damaged row can only shrink the allow-list, never widen it.
+ */
+export function parseStoredHosts(raw: string): string[] {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) ? value.filter((h): h is string => typeof h === "string" && isPublicHostname(h)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export const toMerchant = (r: Row): Merchant => ({
+  id: r.id,
+  slug: r.slug,
+  name: r.name,
+  websiteUrl: r.website_url,
+  allowedHosts: parseStoredHosts(r.allowed_hosts),
+  logoKey: r.logo_key,
+  description: r.description,
+  defaultOfferId: r.default_offer_id,
+  indexable: r.indexable === 1,
+  status: r.status,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+type Actor = { actorUserId: string; now: string };
+
+/** The slug is taken: nothing is written (no row, no audit row). `status` is the caller's choice: the db has no default. */
+export async function createMerchant(
+  db: D1Database,
+  input: Actor & { merchant: MerchantInput; status: MerchantStatus },
+): Promise<{ ok: true; merchant: Merchant } | { ok: false; reason: "slug_taken" }> {
+  const id = ulid(Date.parse(input.now));
+  const writeId = ulid();
+  const m = input.merchant;
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `INSERT INTO merchants (id, slug, name, website_url, allowed_hosts, description, indexable, status, write_id, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
+         ON CONFLICT(slug) DO NOTHING
+         RETURNING *`,
+      )
+      .bind(id, m.slug, m.name, m.websiteUrl, JSON.stringify(m.allowedHosts), m.description, m.indexable ? 1 : 0, input.status, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "merchant.create", entity: "merchant", entityId: id, data: { slug: m.slug }, now: input.now },
+    { partnerTable: "merchants", id, writeId },
+  );
+  return row ? { ok: true, merchant: toMerchant(row) } : { ok: false, reason: "slug_taken" };
+}
+
+/** Every editable field except `slug` (shared links) and `status` (use setMerchantStatus). Null when there is no such merchant. */
+export async function updateMerchant(db: D1Database, input: Actor & { id: string; merchant: Omit<MerchantInput, "slug"> }): Promise<Merchant | null> {
+  const writeId = ulid();
+  const m = input.merchant;
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `UPDATE merchants SET name = ?2, website_url = ?3, allowed_hosts = ?4, description = ?5, indexable = ?6, write_id = ?7, updated_at = ?8
+         WHERE id = ?1
+         RETURNING *`,
+      )
+      .bind(input.id, m.name, m.websiteUrl, JSON.stringify(m.allowedHosts), m.description, m.indexable ? 1 : 0, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "merchant.update", entity: "merchant", entityId: input.id, now: input.now },
+    { partnerTable: "merchants", id: input.id, writeId },
+  );
+  return row ? toMerchant(row) : null;
+}
+
+/**
+ * Compare-and-set: changes the merchant only while it is still in `from`; null otherwise (nothing written, nothing audited). `archived` is
+ * terminal and `from === to` is not a change, so both also return null.
+ */
+export async function setMerchantStatus(db: D1Database, input: Actor & { id: string; from: MerchantStatus; to: MerchantStatus }): Promise<Merchant | null> {
+  const writeId = ulid();
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare("UPDATE merchants SET status = ?3, write_id = ?4, updated_at = ?5 WHERE id = ?1 AND status = ?2 AND ?2 <> ?3 AND ?2 <> 'archived' RETURNING *")
+      .bind(input.id, input.from, input.to, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "merchant.status", entity: "merchant", entityId: input.id, data: { from: input.from, to: input.to }, now: input.now },
+    { partnerTable: "merchants", id: input.id, writeId },
+  );
+  return row ? toMerchant(row) : null;
+}
+
+export async function findMerchantById(db: D1Database, id: string): Promise<Merchant | null> {
+  const row = await db.prepare("SELECT * FROM merchants WHERE id = ?1").bind(id).first<Row>();
+  return row ? toMerchant(row) : null;
+}
+
+/** For /admin/merchants: every merchant, by name. */
+export async function listMerchants(db: D1Database): Promise<Merchant[]> {
+  const { results } = await db.prepare("SELECT * FROM merchants ORDER BY name COLLATE NOCASE, id").all<Row>();
+  return results.map(toMerchant);
+}
+```
+
+Fixtures. Thêm vào `apps/web/test/fixtures.ts` các import `import { createMerchant, type Merchant } from "../src/db/merchants.ts";`, `import type { MerchantInput, MerchantStatus } from "../src/domain/merchant.ts";`, `import { ulid } from "../src/lib/ulid.ts";` (nếu chưa có) và thêm cuối file:
+
+```ts
+// One increasing clock for every fixture row, starting before any `at(n)` of the tests (2026-10-05), so create audit rows sort first.
+let fixtureClock = Date.parse("2026-10-01T00:00:00.000Z");
+const fixtureNow = () => new Date((fixtureClock += 1000)).toISOString();
+
+/** A merchant on example.com (generic test data; real partner names appear nowhere in src). Defaults to `active`, not indexable. */
+export async function makeMerchant(overrides: Partial<MerchantInput> & { status?: MerchantStatus } = {}): Promise<Merchant> {
+  const { status = "active", ...fields } = overrides;
+  const tag = ulid().slice(-8).toLowerCase();
+  const merchant: MerchantInput = {
+    name: `Acme ${tag}`,
+    slug: `acme-${tag}`,
+    websiteUrl: "https://example.com/",
+    allowedHosts: ["example.com"],
+    description: "Plain text description.",
+    indexable: false,
+    ...fields,
+  };
+  const admin = await ensureUser("partner-fixtures@vnx.si");
+  const res = await createMerchant(testEnv.DB, { merchant, status, actorUserId: admin.id, now: fixtureNow() });
+  if (!res.ok) throw new Error(res.reason);
+  return res.merchant;
+}
+```
+
+```bash
+npm test -w apps/web -- test/db/merchants.test.ts test/db/partners-migration.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: `db/programs.ts` và fixture `makeProgram` (test trước)**
+
+`apps/web/test/db/programs.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createProgram, findProgramById, listProgramsByMerchant, updateProgram } from "../../src/db/programs.ts";
+import type { ProgramInput } from "../../src/domain/offer.ts";
+import { ensureUser, makeMerchant, makeProgram } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = "2026-10-05T00:00:00.000Z";
+const at = (n: number) => new Date(Date.parse(NOW) + n * 1000).toISOString();
+const program = (o: Partial<ProgramInput> = {}): ProgramInput => ({
+  name: "Acme program",
+  type: "affiliate",
+  network: null,
+  provider: "manual",
+  commissionModel: null,
+  commissionRateBps: null,
+  commissionFlatMinor: null,
+  currency: null,
+  cookieDays: null,
+  attributionNotes: null,
+  termsUrl: null,
+  termsVerifiedAt: null,
+  status: "draft",
+  ...o,
+});
+const TERMS = { termsUrl: "https://example.com/terms", termsVerifiedAt: "2026-10-01" };
+const audits = async (entityId: string) =>
+  (await testEnv.DB.prepare("SELECT action, data FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string; data: string }>()).results;
+const createAudits = async (merchantId: string) =>
+  (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'program.create' AND json_extract(data, '$.merchantId') = ?1").bind(merchantId).first<{ n: number }>())?.n;
+
+describe("db/programs (addendum §3.2, Review Focus 6)", () => {
+  it("creates a program with no commission, cookie or currency defaulted, and one program.create audit row", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await createProgram(testEnv.DB, { merchantId: m.id, program: program({ network: "ExampleNet" }), actorUserId: admin.id, now: at(1) });
+    expect(p).toMatchObject({ merchantId: m.id, name: "Acme program", type: "affiliate", network: "ExampleNet", status: "draft", commissionModel: null, commissionRateBps: null, commissionFlatMinor: null, currency: null, cookieDays: null, termsUrl: null, termsVerifiedAt: null });
+    const rows = await audits(p?.id ?? "");
+    expect(rows.map((a) => a.action)).toEqual(["program.create"]);
+    expect(JSON.parse(rows[0]?.data ?? "{}")).toEqual({ merchantId: m.id, type: "affiliate" });
+  });
+
+  it("stores the numbers given and nothing else", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await createProgram(testEnv.DB, {
+      merchantId: m.id,
+      program: program({ commissionModel: "percent", commissionRateBps: 3000, currency: "USD", cookieDays: 60, attributionNotes: "last click", ...TERMS, status: "active" }),
+      actorUserId: admin.id,
+      now: at(1),
+    });
+    expect(p).toMatchObject({ commissionModel: "percent", commissionRateBps: 3000, commissionFlatMinor: null, currency: "USD", cookieDays: 60, attributionNotes: "last click", status: "active", ...TERMS });
+  });
+
+  it("a merchant that does not exist gets no program and no audit row", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    expect(await createProgram(testEnv.DB, { merchantId: "missing", program: program(), actorUserId: admin.id, now: at(1) })).toBeNull();
+    expect(await createAudits("missing")).toBe(0);
+  });
+
+  it("the database also refuses an active program without terms, or of type direct (defence in depth: the domain refuses first), leaving no row and no audit row", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    for (const bad of [program({ status: "active" }), program({ status: "active", termsUrl: TERMS.termsUrl }), program({ status: "active", type: "direct", ...TERMS })]) {
+      await expect(createProgram(testEnv.DB, { merchantId: m.id, program: bad, actorUserId: admin.id, now: at(1) })).rejects.toThrow();
+    }
+    expect((await listProgramsByMerchant(testEnv.DB, m.id)).length).toBe(0);
+    expect(await createAudits(m.id)).toBe(0);
+  });
+
+  it("updateProgram: a field edit audits program.update, a status change audits program.status with from and to", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "draft" });
+    const edited = await updateProgram(testEnv.DB, { id: p.id, program: { ...program(), name: "Renamed", cookieDays: 30 }, expectedStatus: "draft", actorUserId: admin.id, now: at(2) });
+    expect(edited).toMatchObject({ name: "Renamed", cookieDays: 30, status: "draft", updatedAt: at(2) });
+    const activated = await updateProgram(testEnv.DB, { id: p.id, program: program({ ...TERMS, status: "active" }), expectedStatus: "draft", actorUserId: admin.id, now: at(3) });
+    expect(activated).toMatchObject({ status: "active", ...TERMS });
+    const rows = await audits(p.id);
+    expect(rows.map((r) => r.action)).toEqual(["program.create", "program.update", "program.status"]);
+    expect(JSON.parse(rows[2]?.data ?? "{}")).toEqual({ from: "draft", to: "active" });
+  });
+
+  it("updateProgram is a compare-and-set on status: a stale caller changes and audits nothing", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "paused" });
+    const lost = await updateProgram(testEnv.DB, { id: p.id, program: program({ name: "Late", ...TERMS, status: "active" }), expectedStatus: "draft", actorUserId: admin.id, now: at(2) });
+    expect(lost).toBeNull();
+    expect(await findProgramById(testEnv.DB, p.id)).toMatchObject({ name: p.name, status: "paused" });
+    expect((await audits(p.id)).map((a) => a.action)).toEqual(["program.create"]);
+    expect(await updateProgram(testEnv.DB, { id: "missing", program: program(), expectedStatus: "draft", actorUserId: admin.id, now: at(3) })).toBeNull();
+  });
+
+  it("the database also refuses updateProgram to active without terms or of type direct (defence in depth), leaving row and audit unchanged", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "draft" });
+    await expect(updateProgram(testEnv.DB, { id: p.id, program: program({ status: "active" }), expectedStatus: "draft", actorUserId: admin.id, now: at(2) })).rejects.toThrow();
+    await expect(updateProgram(testEnv.DB, { id: p.id, program: program({ type: "direct", ...TERMS, status: "active" }), expectedStatus: "draft", actorUserId: admin.id, now: at(3) })).rejects.toThrow();
+    expect((await findProgramById(testEnv.DB, p.id))?.status).toBe("draft");
+    expect((await audits(p.id)).map((a) => a.action)).toEqual(["program.create"]);
+  });
+
+  it("ended is terminal: no transition out of it, but an ended program can still be edited", async () => {
+    const admin = await ensureUser("p-admin@vnx.si");
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "ended" });
+    for (const to of ["draft", "active", "paused"] as const) {
+      expect(await updateProgram(testEnv.DB, { id: p.id, program: program({ ...TERMS, status: to }), expectedStatus: "ended", actorUserId: admin.id, now: at(2) }), to).toBeNull();
+    }
+    expect((await findProgramById(testEnv.DB, p.id))?.status).toBe("ended");
+    expect((await updateProgram(testEnv.DB, { id: p.id, program: program({ ...TERMS, name: "Closed", status: "ended" }), expectedStatus: "ended", actorUserId: admin.id, now: at(3) }))?.name).toBe("Closed");
+    expect((await audits(p.id)).map((a) => a.action)).toEqual(["program.create", "program.update"]);
+  });
+
+  it("finds by id and lists a merchant's programs oldest first", async () => {
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const a = await makeProgram(m, { name: "A" });
+    const b = await makeProgram(m, { name: "B" });
+    await makeProgram(other);
+    expect(await findProgramById(testEnv.DB, "missing")).toBeNull();
+    expect((await listProgramsByMerchant(testEnv.DB, m.id)).map((p) => p.id)).toEqual([a.id, b.id]);
+  });
+});
+```
+
+Ghi chú: `makeProgram` dùng `fixtureNow` (đồng hồ chung với `makeMerchant`) để `created_at` khác nhau; test cuối vì vậy không dựa vào thứ tự ULID. Implementer giữ đúng đoạn fixture.
+
+```bash
+npm test -w apps/web -- test/db/programs.test.ts
+```
+
+Expected: FAIL (không có `db/programs.ts`, `makeProgram`).
+
+`apps/web/src/db/programs.ts`:
+
+```ts
+import type { CommissionModel, ProgramInput, ProgramProvider, ProgramStatus, ProgramType } from "../domain/offer.ts";
+import { ulid } from "../lib/ulid.ts";
+import { runAudited } from "./audit.ts";
+
+/** The only writer of `partner_programs` (module `monetization`, addendum §3.2). */
+
+export type PartnerProgram = {
+  id: string;
+  merchantId: string;
+  name: string;
+  type: ProgramType;
+  network: string | null;
+  provider: ProgramProvider;
+  commissionModel: CommissionModel | null;
+  commissionRateBps: number | null;
+  commissionFlatMinor: number | null;
+  currency: string | null;
+  cookieDays: number | null;
+  attributionNotes: string | null;
+  termsUrl: string | null;
+  termsVerifiedAt: string | null;
+  status: ProgramStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type Row = {
+  id: string;
+  merchant_id: string;
+  name: string;
+  type: ProgramType;
+  network: string | null;
+  provider: ProgramProvider;
+  commission_model: CommissionModel | null;
+  commission_rate_bps: number | null;
+  commission_flat_minor: number | null;
+  currency: string | null;
+  cookie_days: number | null;
+  attribution_notes: string | null;
+  terms_url: string | null;
+  terms_verified_at: string | null;
+  status: ProgramStatus;
+  write_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+const toProgram = (r: Row): PartnerProgram => ({
+  id: r.id,
+  merchantId: r.merchant_id,
+  name: r.name,
+  type: r.type,
+  network: r.network,
+  provider: r.provider,
+  commissionModel: r.commission_model,
+  commissionRateBps: r.commission_rate_bps,
+  commissionFlatMinor: r.commission_flat_minor,
+  currency: r.currency,
+  cookieDays: r.cookie_days,
+  attributionNotes: r.attribution_notes,
+  termsUrl: r.terms_url,
+  termsVerifiedAt: r.terms_verified_at,
+  status: r.status,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+type Actor = { actorUserId: string; now: string };
+
+/**
+ * Null when the merchant does not exist. A program that breaks the CHECK of 0011 (active without terms, or `direct` and active) is rejected
+ * by the database (defence in depth: the caller has already run parseProgramForm, so that is a bug, not a user error).
+ */
+export async function createProgram(db: D1Database, input: Actor & { merchantId: string; program: ProgramInput }): Promise<PartnerProgram | null> {
+  const id = ulid(Date.parse(input.now));
+  const writeId = ulid();
+  const p = input.program;
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `INSERT INTO partner_programs (id, merchant_id, name, type, network, provider, commission_model, commission_rate_bps, commission_flat_minor, currency,
+                                       cookie_days, attribution_notes, terms_url, terms_verified_at, status, write_id, created_at, updated_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17
+         WHERE EXISTS (SELECT 1 FROM merchants WHERE id = ?2)
+         RETURNING *`,
+      )
+      .bind(id, input.merchantId, p.name, p.type, p.network, p.provider, p.commissionModel, p.commissionRateBps, p.commissionFlatMinor, p.currency, p.cookieDays, p.attributionNotes, p.termsUrl, p.termsVerifiedAt, p.status, writeId, input.now),
+    { actorUserId: input.actorUserId, action: "program.create", entity: "program", entityId: id, data: { merchantId: input.merchantId, type: p.type }, now: input.now },
+    { partnerTable: "partner_programs", id, writeId },
+  );
+  return row ? toProgram(row) : null;
+}
+
+/**
+ * Writes every field (the merchant never changes) as a compare-and-set on `status = expectedStatus`, and never moves a program out of `ended` (terminal); null when the program is missing or its
+ * status moved meanwhile. Audit: `program.status` (data from, to) when the status changes, else `program.update`. Same CHECK behaviour as createProgram.
+ */
+export async function updateProgram(db: D1Database, input: Actor & { id: string; program: ProgramInput; expectedStatus: ProgramStatus }): Promise<PartnerProgram | null> {
+  const writeId = ulid();
+  const p = input.program;
+  const changed = p.status !== input.expectedStatus;
+  const row = await runAudited<Row>(
+    db,
+    db
+      .prepare(
+        `UPDATE partner_programs SET name = ?3, type = ?4, network = ?5, provider = ?6, commission_model = ?7, commission_rate_bps = ?8, commission_flat_minor = ?9,
+                currency = ?10, cookie_days = ?11, attribution_notes = ?12, terms_url = ?13, terms_verified_at = ?14, status = ?15, write_id = ?16, updated_at = ?17
+         WHERE id = ?1 AND status = ?2 AND (status <> 'ended' OR ?15 = 'ended')
+         RETURNING *`,
+      )
+      .bind(input.id, input.expectedStatus, p.name, p.type, p.network, p.provider, p.commissionModel, p.commissionRateBps, p.commissionFlatMinor, p.currency, p.cookieDays, p.attributionNotes, p.termsUrl, p.termsVerifiedAt, p.status, writeId, input.now),
+    {
+      actorUserId: input.actorUserId,
+      action: changed ? "program.status" : "program.update",
+      entity: "program",
+      entityId: input.id,
+      ...(changed ? { data: { from: input.expectedStatus, to: p.status } } : {}),
+      now: input.now,
+    },
+    { partnerTable: "partner_programs", id: input.id, writeId },
+  );
+  return row ? toProgram(row) : null;
+}
+
+export async function findProgramById(db: D1Database, id: string): Promise<PartnerProgram | null> {
+  const row = await db.prepare("SELECT * FROM partner_programs WHERE id = ?1").bind(id).first<Row>();
+  return row ? toProgram(row) : null;
+}
+
+/** Oldest first. */
+export async function listProgramsByMerchant(db: D1Database, merchantId: string): Promise<PartnerProgram[]> {
+  const { results } = await db.prepare("SELECT * FROM partner_programs WHERE merchant_id = ?1 ORDER BY created_at, id").bind(merchantId).all<Row>();
+  return results.map(toProgram);
+}
+```
+
+Fixture. Thêm vào `apps/web/test/fixtures.ts` (import `createProgram, type PartnerProgram` từ `../src/db/programs.ts`, `type ProgramInput` từ `../src/domain/offer.ts`):
+
+```ts
+/**
+ * A program of `merchant` with terms filled in and status `active` (the common test case); override `status: "draft"` etc.
+ * Shares `fixtureNow` with `makeMerchant`.
+ */
+export async function makeProgram(merchant: { id: string }, overrides: Partial<ProgramInput> = {}): Promise<PartnerProgram> {
+  const program: ProgramInput = {
+    name: "Acme affiliate",
+    type: "affiliate",
+    network: null,
+    provider: "generic_template",
+    commissionModel: null,
+    commissionRateBps: null,
+    commissionFlatMinor: null,
+    currency: null,
+    cookieDays: null,
+    attributionNotes: null,
+    termsUrl: "https://example.com/terms",
+    termsVerifiedAt: "2026-10-01",
+    status: "active",
+    ...overrides,
+  };
+  const admin = await ensureUser("partner-fixtures@vnx.si");
+  const created = await createProgram(testEnv.DB, { merchantId: merchant.id, program, actorUserId: admin.id, now: fixtureNow() });
+  if (!created) throw new Error("merchant not found");
+  return created;
+}
+```
+
+(Điều khoản mặc định chỉ có trong fixture test, không có trong db.)
+
+```bash
+npm test -w apps/web -- test/db/programs.test.ts test/db/merchants.test.ts test/db/partners-migration.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 4b: Chuyển trạng thái cuối ở domain (test trước)**
+
+Thêm vào `apps/web/test/domain/merchant.test.ts` (import `merchantTransitionAllowed`, `MERCHANT_STATUSES`) và `apps/web/test/domain/offer.test.ts` (import `programTransitionAllowed`, `PROGRAM_STATUSES`):
+
+```ts
+describe("merchantTransitionAllowed", () => {
+  it("archived is terminal; everything else moves freely; no change is always fine", () => {
+    for (const from of MERCHANT_STATUSES) {
+      for (const to of MERCHANT_STATUSES) expect(merchantTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "archived");
+    }
+  });
+});
+```
+
+```ts
+describe("programTransitionAllowed", () => {
+  it("ended is terminal; everything else moves freely; no change is always fine", () => {
+    for (const from of PROGRAM_STATUSES) {
+      for (const to of PROGRAM_STATUSES) expect(programTransitionAllowed(from, to), `${from}->${to}`).toBe(from === to || from !== "ended");
+    }
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/domain/merchant.test.ts test/domain/offer.test.ts
+```
+
+Expected: FAIL (hàm chưa có). Thêm vào `domain/merchant.ts`:
+
+```ts
+/** `archived` is terminal (Controller 2026-10-05); staying where it is is not a transition. Also enforced in db/merchants.ts#setMerchantStatus. */
+export function merchantTransitionAllowed(from: MerchantStatus, to: MerchantStatus): boolean {
+  return from === to || from !== "archived";
+}
+```
+
+và vào `domain/offer.ts` (sau `flagForProgram`):
+
+```ts
+/** `ended` is terminal (Controller 2026-10-05); staying where it is is not a transition. Also enforced in db/programs.ts#updateProgram. */
+export function programTransitionAllowed(from: ProgramStatus, to: ProgramStatus): boolean {
+  return from === to || from !== "ended";
+}
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Nối test kiến trúc và ghi chú deploy**
+
+`apps/web/test/architecture.test.ts`:
+- Thêm vào `WRITERS`: `merchants: "../src/db/merchants.ts",` và `partner_programs: "../src/db/programs.ts",` (`offers` thêm ở Task 2d).
+- `MONEY_ALLOWED`: đổi thành `new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/audit.ts"])`; sửa comment trên đó: "Task 2c: db/{merchants,programs}.ts, and db/audit.ts (it only reads `write_id` of those rows to guard audit rows); Task 2d: db/offers.ts; Task 3: …".
+- Thêm test trong `describe` "ranking never reads money" để allowlist không phình ngầm:
+
+```ts
+  it("the allowlist holds only files that exist, and no ranking file is on it", () => {
+    for (const file of MONEY_ALLOWED) expect(sources[file], file).toBeDefined();
+    for (const file of RANKING_FILES) expect(MONEY_ALLOWED.has(file), file).toBe(false);
+  });
+```
+
+`apps/web/wrangler.jsonc` (chỉ comment): trong dòng bước 1 thêm `, 0011_partners` sau `0010_feature_flags`; đổi dòng `// 0010_feature_flags (EPIC 21) ships with its code the same way: migrate first, then deploy.` thành `// 0010_feature_flags and 0011_partners (EPIC 21) ship with their code the same way: migrate first, then deploy.`
+
+```bash
+npm test -w apps/web -- test/architecture.test.ts
+grep -rniE "elevenlabs|partnerstack" apps/web/src; test $? -eq 1
+grep -n "0011_partners" apps/web/wrangler.jsonc
+```
+
+Expected: PASS; `grep` thứ nhất không in dòng nào; `grep` thứ hai in hai dòng.
+
+- [ ] **Step 6: Kiểm toàn bộ và commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/migrations/0011_partners.sql apps/web/src/domain/merchant.ts apps/web/src/domain/offer.ts apps/web/test/domain/merchant.test.ts apps/web/test/domain/offer.test.ts apps/web/src/db/audit.ts apps/web/src/db/merchants.ts apps/web/src/db/programs.ts apps/web/test/fixtures.ts apps/web/test/architecture.test.ts apps/web/test/db/partners-migration.test.ts apps/web/test/db/merchants.test.ts apps/web/test/db/programs.test.ts apps/web/wrangler.jsonc
+git commit -m "feat(web): partner schema, merchant and program db modules (VNX-2102a-3)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
 
 **Tiêu chí chấp nhận:**
-- Review Focus 6 ở tầng CSDL: INSERT chương trình `active` thiếu `terms_url` hoặc `terms_verified_at`, hoặc `type = 'direct'`, bị CHECK từ chối; INSERT offer có `program_id` mà `tracking_template` null bị từ chối; `grep -inE "DEFAULT" apps/web/migrations/0011_partners.sql` không có dòng nào thuộc các cột điều khoản.
-- Ghi bảng chỉ từ module sở hữu (`npm test -w apps/web -- test/architecture.test.ts`); allowlist tiền thêm đúng ba file db.
-- `setDefaultOffer` với offer của merchant khác → từ chối, không ghi; `program.merchant_id` khác merchant của offer bị từ chối ở db; mỗi thao tác ghi đúng một dòng `audit_log`, không ghi khi compare-and-set thua.
-- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ≲ 600 dòng (migration ~60, db ~220, fixtures ~50, test ~230). Commit `feat(web): partner schema and db modules (VNX-2102a-3)`.
+- `npm test -w apps/web -- test/db/partners-migration.test.ts test/db/merchants.test.ts test/db/programs.test.ts test/architecture.test.ts` xanh.
+- Review Focus 6 ở CSDL: INSERT chương trình `active` thiếu `terms_url`, thiếu `terms_verified_at`, hoặc `type = 'direct'` bị CHECK từ chối (test migration, cả INSERT thô lẫn qua `createProgram` / `updateProgram`, audit không còn dòng); INSERT offer có `program_id` mà `tracking_template` NULL **hoặc rỗng** bị từ chối; migration không có `DEFAULT` nào, không `ON DELETE`, không `DROP` / `ALTER`; `terms_url` hoặc `terms_verified_at` là chuỗi rỗng cũng bị từ chối khi `active`.
+- Trạng thái cuối: `merchantTransitionAllowed` / `programTransitionAllowed` (bảng đầy đủ); `setMerchantStatus` từ `archived` hoặc `from === to` → null, không ghi; `updateProgram` ra khỏi `ended` → null, không ghi.
+- Ghi bảng chỉ từ module sở hữu: `merchants` và `partner_programs` có trong `WRITERS`; `MONEY_ALLOWED` sau task đúng ba file: `db/merchants.ts`, `db/programs.ts`, `db/audit.ts` (audit.ts chứa SQL literal `FROM merchants` / `FROM partner_programs` chỉ để đọc `write_id`).
+- Mỗi thao tác ghi đúng một dòng `audit_log` (`merchant.create|update|status`, `program.create|update|status`); compare-and-set thua, `slug_taken`, merchant không tồn tại → không có audit; guard `write_id` sai → không ghi audit (test trực tiếp `auditStatement`).
+- `grep -rniE "elevenlabs|partnerstack" apps/web/src` không in dòng nào.
+- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ≈ 680 dòng (migration ~80, domain + test ~45, `audit.ts` ~25, `merchants.ts` ~125, `programs.ts` ~125, fixtures ~50, test ~380 trong đó test migration ~85). Commit `feat(web): partner schema, merchant and program db modules (VNX-2102a-3)`.
+
+---
+
+### Task 2d: VNX-2102a-4 — `db/offers.ts`, offer mặc định và đọc cho `/go/`
+
+**Phạm vi (chỉ mô tả; Planner viết chi tiết ngay trước khi làm, sau khi Task 2c xong):** `apps/web/src/db/offers.ts` (duy nhất ghi `offers`; `type Offer`; `createOffer(db, { offer: OfferInput, actorUserId, now })` và `updateOffer(db, { id, offer, expectedStatus, actorUserId, now })` theo mẫu `runAudited` / `AuditPartnerGuard` của 2c (thêm `"offers"` vào kiểu guard và một nhánh SQL literal `FROM offers` trong `db/audit.ts`), trả `Offer | null`; câu `INSERT … SELECT … WHERE` chỉ ghi khi merchant (`subject_id`) tồn tại và `program.merchant_id = subject_id`, `updateOffer` thêm `AND subject_id = ?` và cùng điều kiện chương trình; `findOfferById`, `listOffersByMerchant(db, merchantId)`; `findOfferWithContext(db, offerId)` → `{ offer: RedirectOffer | null; program: RedirectProgram | null; merchant: RedirectMerchant | null }` bằng một truy vấn `offers LEFT JOIN partner_programs LEFT JOIN merchants` (merchant nạp theo `offers.subject_id` khi `subject_type = 'merchant'`, không theo chương trình; `allowed_hosts` qua `parseStoredHosts` của 2c; kiểu trả đúng `RedirectOffer` / `RedirectProgram` / `RedirectMerchant` của Task 2b, có `subjectType`, `subjectId`); `findDefaultOfferContext(db, merchantSlug)` → cùng kiểu hoặc `null` khi slug lạ, merchant không có `default_offer_id`, hoặc offer mặc định không có `subject_type = 'merchant'` và `subject_id` đúng merchant của slug; việc "merchant không `active` → 404" của `GET /go/:merchantSlug` do route Task 4 làm từ `merchant.status`). `db/merchants.ts` thêm `setDefaultOffer(db, { merchantId, offerId | null, actorUserId, now })`: một `UPDATE … WHERE id = merchant AND (offerId IS NULL OR EXISTS (SELECT 1 FROM offers WHERE id = offerId AND subject_type = 'merchant' AND subject_id = merchant AND status != 'archived')) RETURNING *`, audit `merchant.update` với `data.defaultOfferId`; offer của merchant khác hoặc đã `archived` → `null`, không ghi. Fixture `makeOffer(merchant, program | null, overrides)`. Test kiến trúc: `offers: "../src/db/offers.ts"` vào `WRITERS`, `db/offers.ts` vào `MONEY_ALLOWED`. Test `test/db/offers.test.ts`: chương trình của merchant khác bị từ chối, `createOffer` thiếu merchant → `null`, CAS `expectedStatus`, audit `offer.create|update|status`, `findOfferWithContext` cho offer có / không chương trình và cho `allowed_hosts` hỏng (rỗng, không throw), `findDefaultOfferContext` với offer mặc định trỏ sang merchant khác → `null`, `setDefaultOffer` với offer của merchant khác / `archived` → `null` và không ghi. Commit `feat(web): offer db module and redirect reads (VNX-2102a-4)`. Diff ước ≈ 420 dòng.
 
 ---
 
 ### Task 3: VNX-2102b — Admin merchant, chương trình, offer
 
-**Phạm vi:** `routes/admin-merchants.tsx` và các view `views/admin/{MerchantsPage,MerchantDetailPage}.tsx`: danh sách merchant; tạo merchant (tên, slug, website_url https, `allowed_hosts`, mô tả văn bản thuần ≤ giới hạn spec 8.6, `indexable`, trạng thái); trang chi tiết có ba khu: merchant (sửa, đổi `status`), chương trình (tạo / sửa các trường điều khoản, không mặc định, nhập `terms_url`, `terms_verified_at`; nút chuyển `active` hiển thị lỗi rõ khi thiếu), offer (tạo / sửa `kind`, `label`, `destination_url`, `tracking_template`, `starts_at`, `ends_at`, `status`; nút "đặt làm offer mặc định"). **Xem trước URL cuối** cho từng offer: gọi `previewUrl` với `click_id` mẫu (`01HZZZZZZZZZZZZZZZZZZZZZZZ`), `locale = en`, `src = tools` và hiện cả kết quả `resolveOfferRedirect` ở trạng thái hiện tại (tracked / fallback / not_found, kèm lý do dạng khóa i18n). Kiểm host và template lúc lưu qua domain Task 2, lỗi hiện cạnh trường. Mọi ghi dùng db Task 2 và audit `merchant.*`, `program.*`, `offer.*`. Mục nav `merchants` trong `AdminLayout`. Không có trang public. **Nghĩa vụ thêm (Opus review Task 2):** lưu merchant mà `allowed_hosts` hoặc `website_url` đổi thì kiểm lại mọi offer chưa `archived` của merchant đó bằng domain Task 2b và từ chối lưu, liệt kê các offer sẽ hỏng; nhãn ô ngày của offer ghi rõ UTC; cảnh báo khi `allowed_hosts` chứa hậu tố nhiều người thuê (`github.io`, `vercel.app`, `pages.dev`, …).
+**Phạm vi:** `routes/admin-merchants.tsx` và các view `views/admin/{MerchantsPage,MerchantDetailPage}.tsx`: danh sách merchant; tạo merchant (tên, slug, website_url https, `allowed_hosts`, mô tả văn bản thuần ≤ giới hạn spec 8.6, `indexable`, trạng thái); trang chi tiết có ba khu: merchant (sửa, đổi `status`), chương trình (tạo / sửa các trường điều khoản, không mặc định, nhập `terms_url`, `terms_verified_at`; nút chuyển `active` hiển thị lỗi rõ khi thiếu), offer (tạo / sửa `kind`, `label`, `destination_url`, `tracking_template`, `starts_at`, `ends_at`, `status`; nút "đặt làm offer mặc định"). **Xem trước URL cuối** cho từng offer: gọi `previewUrl` với `click_id` mẫu (`01HZZZZZZZZZZZZZZZZZZZZZZZ`), `locale = en`, `src = tools` và hiện cả kết quả `resolveOfferRedirect` ở trạng thái hiện tại (tracked / fallback / not_found, kèm lý do dạng khóa i18n). Kiểm host và template lúc lưu qua domain Task 2, lỗi hiện cạnh trường. Mọi ghi dùng db Task 2 và audit `merchant.*`, `program.*`, `offer.*`. Mục nav `merchants` trong `AdminLayout`. Không có trang public. **Phán quyết Controller (2026-10-05, từ review 2c):** slug merchant chỉ đọc sau khi tạo; merchant `archived` và chương trình `ended` là trạng thái cuối (ẩn nút chuyển, dùng `merchantTransitionAllowed` / `programTransitionAllowed` của domain; db cũng chặn); form tạo merchant mới mặc định `paused` (db yêu cầu `status` tường minh). **Nghĩa vụ thêm (Opus review Task 2):** lưu merchant mà `allowed_hosts` hoặc `website_url` đổi thì kiểm lại mọi offer chưa `archived` của merchant đó bằng domain Task 2b và từ chối lưu, liệt kê các offer sẽ hỏng; nhãn ô ngày của offer ghi rõ UTC; cảnh báo khi `allowed_hosts` chứa hậu tố nhiều người thuê (`github.io`, `vercel.app`, `pages.dev`, …).
 
 **Files (dự kiến):** Create `src/routes/admin-merchants.tsx`, `src/views/admin/{MerchantsPage,MerchantDetailPage}.tsx`; Modify `src/app.ts`, `src/views/admin/AdminLayout.tsx`, 4 file locale; Test `test/admin/merchants.test.ts`.
 
