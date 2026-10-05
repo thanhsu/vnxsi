@@ -330,6 +330,12 @@ describe("resolveOfferRedirect: not_found", () => {
     expect(resolve({ program: prog({ merchantId: "M2" }) })).toEqual(notFound("program_merchant"));
     expect(resolve({ offer: offer({ trackingTemplate: null }) })).toEqual(notFound("template_missing"));
     expect(resolve({ offer: offer({ trackingTemplate: null }), flags: FLAGS_OFF })).toEqual(notFound("template_missing"));
+    expect(resolve({ offer: offer({ trackingTemplate: "" }) })).toEqual(notFound("template_missing"));
+    expect(resolve({ offer: offer({ trackingTemplate: "" }), flags: FLAGS_OFF })).toEqual(notFound("template_missing"));
+  });
+
+  it("a stored template with a placeholder in the host never lets a request value choose the host", () => {
+    expect(resolve({ offer: offer({ trackingTemplate: "https://{src}/x" }), src: "elevenlabs.io" })).toEqual(notFound("invalid_url"));
   });
 
   it("an offer whose subject is not this merchant (with or without a program)", () => {

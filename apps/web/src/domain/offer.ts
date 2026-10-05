@@ -327,7 +327,7 @@ export function resolveOfferRedirect(i: RedirectInput): RedirectResult {
   if (offer.programId !== null) {
     if (!program || program.id !== offer.programId) return notFound("program_missing");
     if (program.merchantId !== merchant.id) return notFound("program_merchant");
-    if (offer.trackingTemplate === null) return notFound("template_missing");
+    if (offer.trackingTemplate === null || offer.trackingTemplate === "") return notFound("template_missing");
   }
   const window = windowState(offer, i.now);
   if (window === "invalid") return notFound("window_invalid");
@@ -349,6 +349,8 @@ export function resolveOfferRedirect(i: RedirectInput): RedirectResult {
       const url = withUtm(offer.destinationUrl, merchant.allowedHosts);
       return url.ok ? { kind: "tracked", url: url.url, programId: null } : notFound("invalid_url");
     }
+    // Re-check the stored template itself: a corrupt row such as https://{src}/x must never let a request value pick the host.
+    if (!parseTemplate(offer.trackingTemplate ?? "", merchant.allowedHosts).ok) return notFound("invalid_url");
     const url = fillAndValidate(offer.trackingTemplate ?? "", { click_id: i.clickId, locale: i.locale, src: i.src }, merchant.allowedHosts);
     return url.ok ? { kind: "tracked", url: url.url, programId: program.id } : notFound("invalid_url");
   }

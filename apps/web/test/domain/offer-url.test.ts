@@ -196,6 +196,12 @@ describe("rule 7: the host is one of allowed_hosts, exactly or as a subdomain", 
 });
 
 describe("rule 8: Location is the re-validated new URL(final).href", () => {
+  it("reports the second pass's own error when the href grows past 2048 through encoding", () => {
+    const raw = `https://elevenlabs.io/${'"'.repeat(1000)}`;
+    expect(raw.length).toBeLessThan(MAX_URL_LENGTH);
+    expect(code(raw)).toBe("length");
+  });
+
   it("returns the normalised href and it validates to itself", () => {
     for (const [raw, href] of [
       ["https://elevenlabs.io", "https://elevenlabs.io/"],

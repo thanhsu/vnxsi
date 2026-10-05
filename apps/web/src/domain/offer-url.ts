@@ -88,7 +88,8 @@ export function validateFinalUrl(raw: string, allowed: readonly string[]): UrlRe
   const first = check(raw, allowed);
   if (!first.ok) return first;
   const second = check(first.url, allowed);
-  return second.ok && second.url === first.url ? second : { ok: false, error: "parse" };
+  if (!second.ok) return second;
+  return second.url === first.url ? second : { ok: false, error: "parse" };
 }
 
 export type TemplateError = "braces" | "placeholder" | "placeholder_position";
