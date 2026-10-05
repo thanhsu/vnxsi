@@ -1009,6 +1009,7 @@ export const en = {
   "ops.builders.col.builder": "Builder",
   "ops.builders.back": "Builders",
   "ops.builders.bio": "About",
+  "ops.builders.website": "Website",
   "ops.builders.noHistory": "No audit entries for this builder yet.",
   "ops.builders.approveHelp": "Approve e-mails the builder and makes the profile public. Every action adds an audit entry.",
   "ops.builders.rejectOpen": "Reject…",

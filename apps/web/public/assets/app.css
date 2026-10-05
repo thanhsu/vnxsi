@@ -644,7 +644,7 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .ops-nav-n { margin-left: auto; color: var(--muted); font: 500 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .ops-nav-link[aria-current="page"] .ops-nav-n { color: var(--primary); }
 .ops-ph-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.ops-back { align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; margin: -12px 0 -12px; font-weight: 500; text-decoration: none; }
+.ops-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: -12px 0 -12px; font-weight: 500; text-decoration: none; }
 .ops-back:hover { text-decoration: underline; }
 .ops-queue-list { overflow: hidden; }
 .ops-tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }

@@ -50,12 +50,12 @@ export const BuildersListPage: FC<ListProps> = ({ shell, status, q, counts, buil
                 <thead>
                   <tr>
                     <th scope="col">{tr("ops.builders.col.builder")}</th>
+                    <th scope="col">{tr("ops.list.status")}</th>
                     <th scope="col">{tr("admin.col.handle")}</th>
                     <th scope="col">{tr("admin.col.email")}</th>
                     <th scope="col">{tr("admin.col.country")}</th>
                     <th scope="col">{tr("admin.col.created")}</th>
                     <th scope="col">{tr("admin.col.invite")}</th>
-                    <th scope="col">{tr("ops.list.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -66,14 +66,14 @@ export const BuildersListPage: FC<ListProps> = ({ shell, status, q, counts, buil
                           {b.name}
                         </a>
                       </td>
+                      <td>
+                        <StatusPill status={b.status} />
+                      </td>
                       <td class="ops-mono">{b.handle}</td>
                       <td>{b.email}</td>
                       <td>{countryName("en", b.country)}</td>
                       <td class="ops-mono">{b.createdAt.slice(0, 10)}</td>
                       <td>{tr(b.inviteCodeHash ? "admin.yes" : "admin.no")}</td>
-                      <td>
-                        <StatusPill status={b.status} />
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -103,7 +103,7 @@ export const BuilderDetailPage: FC<DetailProps> = ({ shell, builder: b, filter, 
   return (
     <OpsLayout {...shell} page={b.name} trail={[tr("ops.group.marketplace"), tr("ops.nav.builders")]}>
       <a class="ops-back" href={BUILDERS_PATH + qs(filter)}>
-        <span aria-hidden="true">← </span>
+        <span aria-hidden="true">←</span>
         {tr("ops.builders.back")}
       </a>
       <div class="ops-ph ops-ph-row">
@@ -127,7 +127,7 @@ export const BuilderDetailPage: FC<DetailProps> = ({ shell, builder: b, filter, 
             <dd>{b.headline}</dd>
             <dt>{tr("admin.col.country")}</dt>
             <dd>{countryName("en", b.country)}</dd>
-            <dt>{tr("builder.field.websiteUrl")}</dt>
+            <dt>{tr("ops.builders.website")}</dt>
             <dd class="ops-break">
               {b.websiteUrl ? (
                 <a href={b.websiteUrl} rel="nofollow ugc noopener" target="_blank">
