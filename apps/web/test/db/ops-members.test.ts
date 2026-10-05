@@ -5,6 +5,7 @@ import {
   createOpsInviteStatement,
   deleteOpsMemberStatement,
   expireOpsInvitesStatement,
+  findOpsAccess,
   findOpsInviteById,
   findOpsMember,
   findPendingOpsInvite,
@@ -12,6 +13,7 @@ import {
   listOpsMembers,
   setOpsMemberRoleStatement,
 } from "../../src/db/ops-members.ts";
+import { setUserStatusStatement } from "../../src/db/users.ts";
 import { INVITE_TTL_MS } from "../../src/domain/ops.ts";
 import { ensureUser } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
@@ -219,6 +221,41 @@ describe("db/ops-members: members", () => {
     expect(await deleteOpsMemberStatement(db(), { userId: user.id }).first()).toMatchObject({ user_id: user.id, role: "content" });
     expect(await findOpsMember(db(), user.id)).toBeNull();
     expect(await deleteOpsMemberStatement(db(), { userId: user.id }).first()).toBeNull();
+  });
+});
+
+describe("db/ops-members: access read for the guard (spec §3.2, VNX-2502)", () => {
+  it("reads the user's status, e-mail and member role in one query, for members and non-members alike", async () => {
+    const owner = await ensureUser(`ops-db-acc-own-${tag()}@vnx.si`);
+    const plain = await ensureUser(`ops-db-acc-plain-${tag()}@vnx.si`);
+    const member = await ensureUser(`ops-db-acc-mem-${tag()}@vnx.si`);
+    const item = await invite({ email: member.email, role: "content", createdBy: owner.id, now: "2026-10-05T08:00:00.000Z" });
+    await db().batch(acceptOpsInviteStatements(db(), { inviteId: item.id, userId: member.id, now: "2026-10-05T09:00:00.000Z" }));
+
+    expect(await findOpsAccess(db(), plain.id)).toEqual({ userStatus: "active", email: plain.email, memberRole: null });
+    expect(await findOpsAccess(db(), member.id)).toEqual({ userStatus: "active", email: member.email, memberRole: "content" });
+    expect(await findOpsAccess(db(), `no-such-user-${tag()}`)).toBeNull();
+  });
+
+  it("reports a suspended user's status and keeps their member role, so the resolver can refuse it", async () => {
+    const owner = await ensureUser(`ops-db-acc-own2-${tag()}@vnx.si`);
+    const member = await ensureUser(`ops-db-acc-susp-${tag()}@vnx.si`);
+    const item = await invite({ email: member.email, role: "operator", createdBy: owner.id, now: "2026-10-05T08:00:00.000Z" });
+    await db().batch(acceptOpsInviteStatements(db(), { inviteId: item.id, userId: member.id, now: "2026-10-05T09:00:00.000Z" }));
+    await setUserStatusStatement(db(), { id: member.id, from: "active", to: "suspended", now: "2026-10-05T10:00:00.000Z" }).run();
+
+    expect(await findOpsAccess(db(), member.id)).toEqual({ userStatus: "suspended", email: member.email, memberRole: "operator" });
+  });
+
+  it("sees a removed member at once (no caching)", async () => {
+    const owner = await ensureUser(`ops-db-acc-own3-${tag()}@vnx.si`);
+    const member = await ensureUser(`ops-db-acc-del-${tag()}@vnx.si`);
+    const item = await invite({ email: member.email, role: "viewer", createdBy: owner.id, now: "2026-10-05T08:00:00.000Z" });
+    await db().batch(acceptOpsInviteStatements(db(), { inviteId: item.id, userId: member.id, now: "2026-10-05T09:00:00.000Z" }));
+    expect((await findOpsAccess(db(), member.id))?.memberRole).toBe("viewer");
+
+    await deleteOpsMemberStatement(db(), { userId: member.id }).run();
+    expect((await findOpsAccess(db(), member.id))?.memberRole).toBeNull();
   });
 });
 
