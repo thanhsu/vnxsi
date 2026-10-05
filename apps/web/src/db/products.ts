@@ -249,6 +249,16 @@ export async function listProductsByStatus(db: D1Database, status: ProductStatus
   return results.map(toWithBuilder);
 }
 
+/**
+ * Ops Overview queue (VNX-2503): products in review and the oldest submission. An in_review product is read-only, so
+ * its updated_at is the moment it was submitted (same order as the review queue). Read only.
+ */
+export async function countProductReviewQueue(db: D1Database): Promise<{ count: number; oldest: string | null }> {
+  const row = await db.prepare("SELECT COUNT(*) AS n, MIN(updated_at) AS oldest FROM products WHERE status = 'in_review'").first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("product queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
 /** Spec §5.5 "Mới chỉnh sửa": published products edited since `since`, newest edit first. */
 export async function listRecentlyEdited(db: D1Database, since: string, limit = 200): Promise<ProductWithBuilder[]> {
   const { results } = await db

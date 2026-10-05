@@ -178,3 +178,39 @@ export function inviteExpiryAuditStatements(
     ),
   );
 }
+
+/** One audit row in the safe projection (spec §4): never `data`. The actor's e-mail and Ops membership come along so the caller can decide what to show. */
+export interface AuditListing {
+  id: string;
+  createdAt: string;
+  actorUserId: string | null;
+  /** The actor's current e-mail, or null when there is no actor or the user no longer exists. */
+  actorEmail: string | null;
+  /** Whether the actor is an Ops member now (ops_members). The root Owner comes from ADMIN_EMAILS, outside the database. */
+  actorIsOpsMember: boolean;
+  action: string;
+  entity: string;
+  entityId: string | null;
+}
+
+/** The newest audit rows, newest first (Ops Overview, VNX-2503). Selects no `data`. Read only. */
+export async function listRecentAudit(db: D1Database, limit: number): Promise<AuditListing[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT a.id, a.created_at, a.actor_user_id, a.action, a.entity, a.entity_id, u.email AS actor_email, m.user_id IS NOT NULL AS actor_is_member
+       FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id LEFT JOIN ops_members m ON m.user_id = a.actor_user_id
+       ORDER BY a.created_at DESC, a.id DESC LIMIT ?1`,
+    )
+    .bind(limit)
+    .all<{ id: string; created_at: string; actor_user_id: string | null; action: string; entity: string; entity_id: string | null; actor_email: string | null; actor_is_member: number }>();
+  return results.map((r) => ({
+    id: r.id,
+    createdAt: r.created_at,
+    actorUserId: r.actor_user_id,
+    actorEmail: r.actor_email,
+    actorIsOpsMember: r.actor_is_member === 1,
+    action: r.action,
+    entity: r.entity,
+    entityId: r.entity_id,
+  }));
+}

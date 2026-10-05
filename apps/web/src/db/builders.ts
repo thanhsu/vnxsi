@@ -207,6 +207,13 @@ export async function listBuildersByStatus(db: D1Database, status: BuilderStatus
   return results.map(toAccount);
 }
 
+/** Ops Overview queue (VNX-2503): pending builders and when the oldest applied (same order as the review queue). Read only. */
+export async function countBuilderReviewQueue(db: D1Database): Promise<{ count: number; oldest: string | null }> {
+  const row = await db.prepare("SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM builders WHERE status = 'pending'").first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("builder queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
 /** Public builders for the sitemap. The cap keeps the sitemap under 50,000 URLs (× 4 locales). */
 export async function listSitemapBuilders(db: D1Database, limit = 2000): Promise<{ handle: string; updatedAt: string }[]> {
   const { results } = await db

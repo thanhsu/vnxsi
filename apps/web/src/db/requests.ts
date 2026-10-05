@@ -354,6 +354,15 @@ export async function listRequestsForAdmin(db: D1Database, status: RequestStatus
   return results.map(toAdmin);
 }
 
+/** Ops Overview queue (VNX-2503): submitted requests waiting to be matched, and the oldest submission (same order as the queue). Read only. */
+export async function countRequestsToMatch(db: D1Database): Promise<{ count: number; oldest: string | null }> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n, MIN(COALESCE(submitted_at, created_at)) AS oldest FROM requests WHERE status = 'submitted'")
+    .first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("request queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
 export async function findAdminRequest(db: D1Database, id: string): Promise<AdminRequest | null> {
   const row = await db.prepare(`${ADMIN_SELECT} WHERE r.id = ?1`).bind(id).first<AdminRow>();
   return row ? toAdmin(row) : null;
