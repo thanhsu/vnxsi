@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { readFlags, resetFlagCache } from "../../src/db/flags.ts";
+import { isFlagEnabled, readFlags, resetFlagCache } from "../../src/db/flags.ts";
 import { FLAG_KEYS } from "../../src/domain/flags.ts";
 import { makeBuilder, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
@@ -32,6 +32,8 @@ describe("/admin/flags (addendum §3.6)", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const html = await res.text();
     for (const key of FLAG_KEYS) expect(html, key).toContain(`/admin/flags/${key}`);
+    expect(html.match(/data-state="off"/g)).toHaveLength(FLAG_KEYS.length);
+    expect(html).not.toContain('data-state="on"');
     expect(html).toContain('<meta name="robots" content="noindex"');
   });
 
@@ -57,7 +59,9 @@ describe("/admin/flags (addendum §3.6)", () => {
 
   it("shows the flag state it read from D1, not the cache", async () => {
     const { cookie } = await admin();
-    await send(formPost("/admin/flags/content_indexing", { enabled: "1" }, { cookie }));
+    expect(await isFlagEnabled(testEnv.DB, "content_indexing")).toBe(false); // primes the cache with "off"
+    await testEnv.DB.prepare("INSERT INTO feature_flags (key, enabled, updated_by, updated_at) VALUES ('content_indexing', 1, NULL, '2026-10-05T00:00:00.000Z')").run();
+    expect(await isFlagEnabled(testEnv.DB, "content_indexing")).toBe(false); // still cached
     const html = await (await send(getReq("/admin/flags", cookie))).text();
     expect(html).toMatch(/content_indexing[\s\S]*?data-state="on"/);
   });

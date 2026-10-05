@@ -24,14 +24,14 @@ export type AuditInvitesGuard = { requestId: string; inviteIds: string[] };
 export type AuditInviteGuard = InviteGuard;
 /** Written only when the batch's feedback compare-and-set went through (see FeedbackGuard, VNX-0710). */
 export type AuditFeedbackGuard = FeedbackGuard;
-/** Written only when that feature flag row currently has this value and was last written by this actor at that instant (see setFlag). */
-export type AuditFlagGuard = { flagKey: string; enabled: 0 | 1; updatedAt: string; updatedBy: string };
+/** Written only when that feature flag row's last write carries this write id, i.e. this batch's upsert changed it (see setFlag). */
+export type AuditFlagGuard = { flagKey: string; writeId: string };
 
 /**
  * The audit INSERT as a statement, so a route can commit it in one db.batch with the change it records.
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
- * `inviteId` on the invitation's, `feedbackId` on the feedback row's.
+ * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id.
  */
 export function auditStatement(
   db: D1Database,
@@ -103,9 +103,9 @@ export function auditStatement(
       .prepare(
         `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
          SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-         WHERE EXISTS (SELECT 1 FROM feature_flags WHERE key = ?8 AND enabled = ?9 AND updated_at = ?10 AND updated_by = ?11)`,
+         WHERE EXISTS (SELECT 1 FROM feature_flags WHERE key = ?8 AND write_id = ?9)`,
       )
-      .bind(...values, onlyIf.flagKey, onlyIf.enabled, onlyIf.updatedAt, onlyIf.updatedBy);
+      .bind(...values, onlyIf.flagKey, onlyIf.writeId);
   }
   return db
     .prepare(

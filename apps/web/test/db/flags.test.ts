@@ -50,11 +50,9 @@ describe("feature flags (addendum §3.1)", () => {
 
   it("is atomic: two concurrent identical sets change once and audit once", async () => {
     const admin = await ensureUser("flags-admin3@vnx.si");
-    // The audit guard compares updated_at, so two calls in the same millisecond by the same actor are indistinguishable;
-    // the calls here are a millisecond apart, as two real requests are.
     const results = await Promise.all([
       setFlag(testEnv.DB, { key: "ads", enabled: true, actorUserId: admin.id, now: NOW }),
-      setFlag(testEnv.DB, { key: "ads", enabled: true, actorUserId: admin.id, now: "2026-10-05T00:00:00.001Z" }),
+      setFlag(testEnv.DB, { key: "ads", enabled: true, actorUserId: admin.id, now: NOW }),
     ]);
     expect(results.filter((r) => r.changed)).toHaveLength(1);
     expect(await auditCount("ads")).toBe(1);
@@ -77,6 +75,25 @@ describe("feature flags (addendum §3.1)", () => {
     expect(await isFlagEnabled(testEnv.DB, "partner_referral", t0)).toBe(false);
     await setFlag(testEnv.DB, { key: "partner_referral", enabled: true, actorUserId: admin.id, now: NOW });
     expect(await isFlagEnabled(testEnv.DB, "partner_referral", t0 + 1)).toBe(true);
+  });
+
+  it("does not cache a read that started before a set and finished after it", async () => {
+    const admin = await ensureUser("flags-admin4@vnx.si");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow = {
+      prepare: (sql: string) => {
+        const stmt = testEnv.DB.prepare(sql);
+        return { all: async () => { const res = await stmt.all(); await gate; return res; } };
+      },
+    } as unknown as D1Database;
+    const t0 = 4_000_000;
+    const stale = isFlagEnabled(slow, "affiliate", t0); // reads "off", then waits at the gate
+    await new Promise((r) => setTimeout(r, 20));
+    await setFlag(testEnv.DB, { key: "affiliate", enabled: true, actorUserId: admin.id, now: NOW });
+    release();
+    expect(await stale).toBe(false);
+    expect(await isFlagEnabled(testEnv.DB, "affiliate", t0 + 1)).toBe(true);
   });
 
   it("fails closed when D1 cannot be read, and does not cache the failure", async () => {

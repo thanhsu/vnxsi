@@ -5,5 +5,7 @@ CREATE TABLE feature_flags (
   key        TEXT PRIMARY KEY,
   enabled    INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
   updated_by TEXT REFERENCES users (id) ON DELETE SET NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  -- Random id of the last write; the audit row of that write is guarded on it (see setFlag).
+  write_id   TEXT
 );
