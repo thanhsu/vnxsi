@@ -4045,51 +4045,3292 @@ git commit -m "feat(web): offer db module and redirect reads (VNX-2102a-4)" -m "
 
 ---
 
-### Task 3: VNX-2102b — Admin merchant, chương trình, offer
+### Task 3: VNX-2102b-1 — Admin merchant và chương trình (phần 1 trong 2)
 
-**Phạm vi:** `routes/admin-merchants.tsx` và các view `views/admin/{MerchantsPage,MerchantDetailPage}.tsx`: danh sách merchant; tạo merchant (tên, slug, website_url https, `allowed_hosts`, mô tả văn bản thuần ≤ giới hạn spec 8.6, `indexable`, trạng thái); trang chi tiết có ba khu: merchant (sửa, đổi `status`), chương trình (tạo / sửa các trường điều khoản, không mặc định, nhập `terms_url`, `terms_verified_at`; nút chuyển `active` hiển thị lỗi rõ khi thiếu), offer (tạo / sửa `kind`, `label`, `destination_url`, `tracking_template`, `starts_at`, `ends_at`, `status`; nút "đặt làm offer mặc định"). **Xem trước URL cuối** cho từng offer: gọi `previewUrl` với `click_id` mẫu (`01HZZZZZZZZZZZZZZZZZZZZZZZ`), `locale = en`, `src = tools` và hiện cả kết quả `resolveOfferRedirect` ở trạng thái hiện tại (tracked / fallback / not_found, kèm lý do dạng khóa i18n). Kiểm host và template lúc lưu qua domain Task 2, lỗi hiện cạnh trường. Mọi ghi dùng db Task 2 và audit `merchant.*`, `program.*`, `offer.*`. Mục nav `merchants` trong `AdminLayout`. Không có trang public. **Phán quyết Controller (2026-10-05, từ review 2c):** slug merchant chỉ đọc sau khi tạo; merchant `archived` và chương trình `ended` là trạng thái cuối (ẩn nút chuyển, dùng `merchantTransitionAllowed` / `programTransitionAllowed` của domain; db cũng chặn); form tạo merchant mới mặc định `paused` (db yêu cầu `status` tường minh). **Nghĩa vụ thêm (Opus review Task 2):** lưu merchant mà `allowed_hosts` hoặc `website_url` đổi thì kiểm lại mọi offer chưa `archived` của merchant đó bằng domain Task 2b và từ chối lưu, liệt kê các offer sẽ hỏng; nhãn ô ngày của offer ghi rõ UTC; cảnh báo khi `allowed_hosts` chứa hậu tố nhiều người thuê (`github.io`, `vercel.app`, `pages.dev`, …). **Nghĩa vụ thêm (Opus review Task 2d):** (a) cảnh báo hoặc yêu cầu xác nhận khi admin lưu trữ (`archived`) offer đang là offer mặc định của merchant; (b) trang chi tiết merchant hiện "offer mặc định đã lưu trữ" khi `default_offer_id` trỏ tới offer `archived`; (c) ánh xạ `null` từ db: `updateOffer` → `null` là lỗi "đã thay đổi trong lúc bạn sửa" (compare-and-set thua); `createOffer` / `setDefaultOffer` → `null` sau khi Task 3 đã kiểm trước thì trả 404.
+**Tách task (Planner):** phạm vi gốc của Task 3 (merchant + chương trình + offer + xem trước + offer mặc định, kèm nghĩa vụ của review 2 và 2d) ước tính ≈ 1 200 dòng kể cả test, quá xa mức 600. Tách theo đường ranh giới của dữ liệu: **Task 3 (VNX-2102b-1) = `/admin/merchants` (danh sách, tạo, sửa, đổi trạng thái, kiểm lại offer khi đổi host, cảnh báo hậu tố nhiều người thuê) + chương trình**, **Task 3b (VNX-2102b-2) = offer, xem trước URL cuối, offer mặc định**. Trang chi tiết merchant sau Task 3 chưa có khu offer; Task 3b thêm vào cùng trang. Hai task cùng một nhánh, hai commit; Task 3b phụ thuộc Task 3.
 
-**Files (dự kiến):** Create `src/routes/admin-merchants.tsx`, `src/views/admin/{MerchantsPage,MerchantDetailPage}.tsx`; Modify `src/app.ts`, `src/views/admin/AdminLayout.tsx`, 4 file locale; Test `test/admin/merchants.test.ts`.
+**Phạm vi (Task 3):** route `routes/admin-merchants.tsx` (đăng ký bằng `registerAdminMerchantRoutes`), view `views/admin/{MerchantsPage,MerchantDetailPage,partner-fields}.tsx`, mục nav `merchants`. Ba hàm thuần mới trong domain (`MULTI_TENANT_SUFFIXES` / `multiTenantHosts`, `hostsChanged`, `offersBrokenByHosts`). Hai test db hoãn từ review 2d. Quyền admin, kiểm Origin và `Cache-Control: no-store` do `requireAdmin`, middleware chung và `AdminLayout` (`noindex`) đảm nhiệm, giống `/admin/flags`; test xác nhận từng cái. Mọi ghi dùng db Task 2c (đã audit trong cùng `db.batch`).
 
-**Tiêu chí chấp nhận:**
-- Chỉ admin (403 người thường và builder; 303 chưa đăng nhập); POST sai Origin → 403; mọi trang `Cache-Control: no-store` và `noindex`.
-- Tạo merchant với slug `p`, `o`, slug sai định dạng, trùng slug → lỗi trường, không ghi dòng; `allowed_hosts` sai định dạng → lỗi.
-- Lưu offer có host ngoài `allowed_hosts`, template có placeholder lạ, `destination_url` `http:` → lỗi, không ghi dòng (Review Focus 2 ở tầng admin).
-- Chương trình sang `active` khi thiếu `terms_url` hoặc `terms_verified_at` → lỗi hiển thị, trạng thái không đổi (Review Focus 6).
-- Đặt offer mặc định của merchant khác → 404, không ghi gì.
-- Mỗi thao tác ghi đúng một dòng `audit_log` (`merchant.create`, `program.status`, `offer.update`, …).
-- Xem trước hiện URL tracking và URL fallback (`website_url`) cạnh nhau, đúng khi cờ bật và khi cờ tắt; nhãn của `destination_url` trên form là "Untracked link" (4 locale).
-- Offer có chương trình lưu không có template → lỗi trường; `destination_url` trùng template chuẩn hóa → lỗi; chương trình `direct` sang `active` → lỗi hiển thị.
-- Nhập thử dữ liệu ElevenLabs: `destination_url = https://elevenlabs.io`, template `https://try.elevenlabs.io/7fnly5cv33k3`, `allowed_hosts = try.elevenlabs.io, elevenlabs.io`, `label = try_it`, đặt làm mặc định → lưu được.
-- `npm run typecheck -w apps/web`, `npm test` xanh. Diff ≲ 600 dòng không tính locale; nếu vượt, tách 3a (merchant + chương trình) / 3b (offer + xem trước). Commit `feat(web): admin merchants, programs and offers with final-URL preview (VNX-2102b)`.
+**Files:**
+- Create: `apps/web/src/routes/admin-merchants.tsx`
+- Create: `apps/web/src/views/admin/partner-fields.tsx`, `apps/web/src/views/admin/MerchantsPage.tsx`, `apps/web/src/views/admin/MerchantDetailPage.tsx`
+- Modify: `apps/web/src/domain/merchant.ts` (`MULTI_TENANT_SUFFIXES`, `multiTenantHosts`, `hostsChanged`), `apps/web/src/domain/offer.ts` (`offersBrokenByHosts`)
+- Modify: `apps/web/src/app.ts` (đăng ký), `apps/web/src/views/admin/AdminLayout.tsx` (mục `merchants`), 4 file `src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`
+- Modify: `apps/web/test/architecture.test.ts` (`MONEY_ALLOWED` thêm `routes/admin-merchants.tsx`; bài "danh sách đúng 5 file")
+- Test: `apps/web/test/domain/merchant.test.ts` (thêm), `apps/web/test/domain/offer.test.ts` (thêm), `apps/web/test/db/offers.test.ts` (thêm 1 bài), `apps/web/test/db/offer-context.test.ts` (thêm 1 bài), `apps/web/test/admin/merchants.test.ts`
+
+**Interfaces:**
+- Consumes (đã commit): `parseMerchantForm`, `MerchantFormValues`, `MerchantField`, `MerchantFieldError`, `MERCHANT_STATUSES`, `merchantTransitionAllowed` (`domain/merchant.ts`); `parseProgramForm`, `ProgramFormValues`, `ProgramField`, `ProgramFieldError`, `PROGRAM_TYPES`, `PROGRAM_PROVIDERS`, `COMMISSION_MODELS`, `PROGRAM_STATUSES`, `programTransitionAllowed`, `validateFinalUrl`-based `parseTemplate` (qua `offersBrokenByHosts`) (`domain/offer.ts`, `domain/offer-url.ts`); `createMerchant`, `updateMerchant`, `setMerchantStatus`, `findMerchantById`, `listMerchants`, `Merchant` (`db/merchants.ts`); `createProgram`, `updateProgram`, `findProgramById`, `listProgramsByMerchant`, `PartnerProgram` (`db/programs.ts`); `listOffersByMerchant` (`db/offers.ts`); `requireAdmin`, `onLocalized`, `requestOrigin`, `localizedPath`, `errorResponse`, `page`, `translator`, `AdminLayout`; fixtures `signIn`, `makeBuilder`, `makeMerchant`, `makeProgram`, `makeOffer`, `ensureUser`; `formPost`, `getReq`, `testEnv`.
+- Produces (domain): `MULTI_TENANT_SUFFIXES` (17 hậu tố: 10 của đề + `appspot.com`, `blogspot.com`, `onrender.com`, `fly.dev`, `r2.dev`, `s3.amazonaws.com`, `ngrok-free.app`, thêm theo review Opus), `multiTenantHosts(hosts: readonly string[]): string[]`, `hostsChanged(a: readonly string[], b: readonly string[]): boolean`, `type BrokenOffer = { id: string; field: "destinationUrl" | "trackingTemplate"; error: UrlError | TemplateError }`, `offersBrokenByHosts(offers: readonly { id: string; destinationUrl: string; trackingTemplate: string | null }[], hosts: readonly string[]): BrokenOffer[]`.
+- Produces (route): `registerAdminMerchantRoutes(app)`: `GET /admin/merchants`, `POST /admin/merchants`, `GET /admin/merchants/:id`, `POST /admin/merchants/:id`, `POST /admin/merchants/:id/status`, `POST /admin/merchants/:id/programs`, `POST /admin/merchants/:id/programs/:programId`. Task 3b thêm các route offer và offer mặc định.
+- Produces (view): `AdminSection` thêm `"merchants"`; `MerchantView`, `ProgramView`, `MerchantEdit`, `ProgramEdit`, `MerchantFields` (dùng lại ở 3b: `Field`, `aria`, `STATUS_KEY` của `partner-fields.tsx`).
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **View không import `db/`** (test kiến trúc "views/ never import db" cấm cả `import type`). Vì vậy view khai báo kiểu prop cấu trúc `MerchantView`, `ProgramView` (chỉ trường cần dùng); kiểu `Merchant` / `PartnerProgram` của db gán được cho chúng. Hệ quả: **`MONEY_ALLOWED` chỉ thêm `routes/admin-merchants.tsx`** (không thêm file view; đính chính nghĩa vụ "route và view" của đề: view không chạm module db tiền nên không cần vào danh sách, và không được phép import). Bài "danh sách cho phép đúng N file" sửa thành đúng 5 file.
+2. **Trang chi tiết là một trang, nhiều form POST**; lỗi (400) vẽ lại cả trang với giá trị đã nhập và lỗi cạnh trường, chỉ form lỗi mang giá trị đã nhập (`merchantEdit` hoặc `programEdit`), các form khác lấy từ DB. Thành công: `303` về `/admin/merchants/:id?done=1`.
+3. **Slug chỉ đọc sau khi tạo:** form sửa không có `<input name="slug">` (hiện `<code>`); handler sửa gọi `parseMerchantForm({ ...values, slug: merchant.slug })` rồi bỏ `slug` trước khi gọi `updateMerchant` (db cũng không nhận slug). Giá trị `slug` do client gửi lên khi sửa bị bỏ qua.
+4. **Merchant `archived`:** trang chi tiết **vẫn hiện form sửa** (db không chặn sửa trường, như chương trình `ended`; `status` là phần duy nhất bất biến); không có nút chuyển trạng thái, thay bằng ghi chú `merchants.archivedNote`. Chương trình `ended` tương tự: form hiện, ô `status` thay bằng `<input type="hidden" value="ended">` và ghi chú.
+5. **Form tạo merchant mặc định `paused`;** chỉ nhận `active` hoặc `paused` (giá trị khác thành `paused`: giá trị an toàn; không tạo `archived`).
+6. **Đổi trạng thái merchant** là POST riêng (`/status`, trường `to`): `to` ngoài enum → 400; `to` = trạng thái hiện tại hoặc `merchantTransitionAllowed` sai → 409; `setMerchantStatus` trả `null` (thua compare-and-set) → 409; `to = archived` đòi `confirm=1` (ô tick bắt buộc, vì không đảo ngược được) không thì 400.
+7. **Đổi trạng thái chương trình** nằm trong form chương trình (trường `status`) cùng trường `expectedStatus` ẩn (trạng thái lúc vẽ form): `expectedStatus` ngoài enum → 400; `!programTransitionAllowed(expected, status)` → 409; `updateProgram` trả `null` → 409. Lỗi điều khoản (`terms_missing`, `direct_not_active`) hiện cạnh ô `status` (đã do `parseProgramForm` trả). `programId` không thuộc merchant trong URL → 404.
+8. **Kiểm lại offer khi đổi `allowed_hosts` hoặc `website_url`** (nghĩa vụ review Task 2): chỉ chạy khi `hostsChanged(...)` hoặc `websiteUrl` khác bản đang lưu; lấy `listOffersByMerchant` bỏ `archived`, chạy `offersBrokenByHosts` (domain, dùng đúng `validateFinalUrl` / `parseTemplate` lúc redirect). Có offer hỏng → từ chối lưu (400), liệt kê `id` + trường + mã lỗi, **không ghi, không audit**. `website_url` mới đã được `parseMerchantForm` kiểm theo host mới; lý do vẫn kiểm offer khi `website_url` đổi là để tín hiệu "đổi cấu hình link" luôn đi qua cùng một cổng. Không có chốt chặn ở db (đua giữa kiểm và ghi chỉ xảy ra khi hai admin cùng sửa; công cụ một admin, chấp nhận, ghi trong báo cáo).
+9. **Cảnh báo hậu tố nhiều người thuê** không chặn lưu: tính lúc vẽ trang chi tiết từ `allowedHosts` đang lưu (nên luôn hiện chừng nào còn host đó), khối `data-warning="multi-tenant"`. Khớp `host === s || host.endsWith("." + s)`.
+10. **Nhãn enum (type, provider, commission model) hiện mã thô** trong `<code>` / `<option>` (như `flags` hiện `<code>{key}</code>`); trạng thái dịch qua `partner.status.*` dùng chung cho merchant, chương trình và (3b) offer. Lỗi trường dịch đủ 4 locale.
+11. **`requireAdmin`, Origin, `no-store`:** giống `/admin/flags`; không thêm middleware. Redesign PR #4: `AdminLayout` đã dùng `<nav class="subnav">` với `aria-current`; mục `merchants` chỉ thêm vào mảng `NAV` / union `AdminSection`; view dùng lớp `table-wrap`, `table data`, `field`, `error-msg`, `notice`, `card`, `btn` có sẵn, và `test/design/layout.test.ts`, `test/design/assets.test.ts` phải vẫn xanh (không CSS mới, không tài nguyên ngoài).
+
+- [ ] **Step 1: Hai test db hoãn từ review 2d (đặc tả hành vi đã có; phải xanh ngay)**
+
+Thêm vào `apps/web/test/db/offers.test.ts` (trong `describe("db/offers writes …")`; `input`, `audits`, `countFor` đã có ở đầu file):
+
+```ts
+  it("an offer whose subject is a product, even with an id that is also a merchant's id, gets no row and no audit row", async () => {
+    const admin = await ensureUser("o-admin@vnx.si");
+    const m = await makeMerchant();
+    const before = await countFor(m.id);
+    const forged = { ...input(m, null), subjectType: "product" } as unknown as OfferInput; // `subjectId` is the merchant's id on purpose
+    expect(await createOffer(testEnv.DB, { offer: forged, actorUserId: admin.id, now: at(1) })).toBeNull();
+    expect(await countFor(m.id)).toEqual(before);
+  });
+```
+
+Thêm vào `apps/web/test/db/offer-context.test.ts` (trong `describe("setDefaultOffer …")`):
+
+```ts
+  it("accepts the merchant's own paused offer (only archived is refused)", async () => {
+    const admin = await ensureUser("d-admin@vnx.si");
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null, { status: "paused" });
+    expect(await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: o.id, actorUserId: admin.id, now: at(2) })).toMatchObject({ defaultOfferId: o.id });
+  });
+```
+
+```bash
+npm test -w apps/web -- test/db/offers.test.ts test/db/offer-context.test.ts
+```
+
+Expected: PASS (nếu một bài FAIL thì đó là lỗi db của 2d: dừng và báo Reviewer, không sửa db trong task này).
+
+- [ ] **Step 2: Hàm thuần của domain (test trước)**
+
+Thêm vào `apps/web/test/domain/merchant.test.ts` (thêm `hostsChanged`, `MULTI_TENANT_SUFFIXES`, `multiTenantHosts` vào import):
+
+```ts
+describe("multi-tenant host suffixes", () => {
+  it("lists the seventeen shared-hosting suffixes", () => {
+    expect([...MULTI_TENANT_SUFFIXES].sort()).toEqual(
+      [
+        "appspot.com", "azurewebsites.net", "blogspot.com", "cloudfront.net", "firebaseapp.com", "fly.dev", "github.io", "herokuapp.com", "netlify.app",
+        "ngrok-free.app", "onrender.com", "pages.dev", "r2.dev", "s3.amazonaws.com", "vercel.app", "web.app", "workers.dev",
+      ],
+    );
+  });
+
+  it("flags the suffix itself and its subdomains, never a look-alike", () => {
+    expect(multiTenantHosts(["github.io", "foo.github.io", "a.b.vercel.app", "example.com", "notgithub.io", "github.io.example.com"])).toEqual(["github.io", "foo.github.io", "a.b.vercel.app"]);
+    expect(multiTenantHosts([])).toEqual([]);
+  });
+});
+
+describe("hostsChanged", () => {
+  it("compares as sets: order does not matter, content does", () => {
+    expect(hostsChanged(["a.com", "b.com"], ["b.com", "a.com"])).toBe(false);
+    expect(hostsChanged(["a.com"], ["a.com", "b.com"])).toBe(true);
+    expect(hostsChanged(["a.com"], ["b.com"])).toBe(true);
+  });
+});
+```
+
+Thêm vào `apps/web/test/domain/offer.test.ts` (thêm `offersBrokenByHosts` vào import):
+
+```ts
+describe("offersBrokenByHosts (re-check stored offers against new allowed hosts)", () => {
+  const o = (id: string, destinationUrl: string, trackingTemplate: string | null = null) => ({ id, destinationUrl, trackingTemplate });
+
+  it("returns nothing when every offer still passes", () => {
+    expect(offersBrokenByHosts([o("a", "https://example.com/"), o("b", "https://x.example.com/", "https://example.com/r?c={click_id}")], ["example.com"])).toEqual([]);
+  });
+
+  it("lists each broken offer once, with the first failing field and the error code", () => {
+    expect(
+      offersBrokenByHosts(
+        [o("a", "https://example.com/"), o("b", "https://other.com/"), o("c", "https://example.com/", "https://other.com/r?c={click_id}"), o("d", "http://example.com/", "https://other.com/")],
+        ["example.com"],
+      ),
+    ).toEqual([
+      { id: "b", field: "destinationUrl", error: "not_allowed" },
+      { id: "c", field: "trackingTemplate", error: "not_allowed" },
+      { id: "d", field: "destinationUrl", error: "scheme" },
+    ]);
+  });
+
+  it("a stored template with an unknown placeholder is broken too", () => {
+    expect(offersBrokenByHosts([o("e", "https://example.com/", "https://example.com/r?c={nope}")], ["example.com"])).toEqual([{ id: "e", field: "trackingTemplate", error: "placeholder" }]);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/domain/merchant.test.ts test/domain/offer.test.ts
+```
+
+Expected: FAIL (hàm chưa có). Thêm vào `apps/web/src/domain/merchant.ts` (cuối file):
+
+```ts
+/** Shared-hosting suffixes: anyone can publish under them, so allowing one proves nothing about the merchant. A warning, not a rule. */
+export const MULTI_TENANT_SUFFIXES = [
+  "github.io",
+  "vercel.app",
+  "pages.dev",
+  "netlify.app",
+  "herokuapp.com",
+  "workers.dev",
+  "web.app",
+  "firebaseapp.com",
+  "azurewebsites.net",
+  "cloudfront.net",
+  "appspot.com",
+  "blogspot.com",
+  "onrender.com",
+  "fly.dev",
+  "r2.dev",
+  "s3.amazonaws.com",
+  "ngrok-free.app",
+] as const;
+
+/** The hosts that are a shared-hosting suffix or a subdomain of one (never a bare string suffix: `notgithub.io` is fine). */
+export function multiTenantHosts(hosts: readonly string[]): string[] {
+  return hosts.filter((h) => MULTI_TENANT_SUFFIXES.some((s) => h === s || h.endsWith(`.${s}`)));
+}
+
+/** True when the two allow-lists differ as sets. */
+export function hostsChanged(a: readonly string[], b: readonly string[]): boolean {
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.length !== right.length || left.some((h, i) => h !== right[i]);
+}
+```
+
+Thêm vào `apps/web/src/domain/offer.ts` (ngay trước dòng `// ---- Redirect resolution ----`; thêm `type TemplateError` vào import từ `./offer-url.ts`):
+
+```ts
+export type BrokenOffer = { id: string; field: "destinationUrl" | "trackingTemplate"; error: UrlError | TemplateError };
+
+/**
+ * Stored offers that would no longer pass the URL rules under `hosts` (the rules of /go/ itself: validateFinalUrl and parseTemplate).
+ * One entry per offer, the first failing field. Pure: the caller chooses which offers to pass (the admin passes the non-archived ones).
+ */
+export function offersBrokenByHosts(offers: readonly { id: string; destinationUrl: string; trackingTemplate: string | null }[], hosts: readonly string[]): BrokenOffer[] {
+  const broken: BrokenOffer[] = [];
+  for (const o of offers) {
+    const dest = validateFinalUrl(o.destinationUrl, hosts);
+    if (!dest.ok) {
+      broken.push({ id: o.id, field: "destinationUrl", error: dest.error });
+      continue;
+    }
+    if (o.trackingTemplate === null || o.trackingTemplate === "") continue;
+    const tpl = parseTemplate(o.trackingTemplate, hosts);
+    if (!tpl.ok) broken.push({ id: o.id, field: "trackingTemplate", error: tpl.error });
+  }
+  return broken;
+}
+```
+
+Sửa import `./offer-url.ts` ở đầu `offer.ts` thành `import { appendUtm, fillAndValidate, parseTemplate, previewUrl, validateFinalUrl, type TemplateError, type UrlError, type UrlResult } from "./offer-url.ts";`. Chạy lại lệnh trên → PASS.
+
+- [ ] **Step 3: Test admin merchant và chương trình (viết trước, phải FAIL)**
+
+`apps/web/test/admin/merchants.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { findMerchantById } from "../../src/db/merchants.ts";
+import { findProgramById } from "../../src/db/programs.ts";
+import { ulid } from "../../src/lib/ulid.ts";
+import { makeBuilder, makeMerchant, makeOffer, makeProgram, signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+
+const send = (req: Request) => createApp().request(req, undefined, testEnv);
+const admin = () => signIn("owner@vnx.si", { admin: true });
+const tag = () => ulid().slice(-8).toLowerCase();
+const mfields = (o: Record<string, string> = {}) => ({ name: "Acme Tools", slug: `acme-${tag()}`, websiteUrl: "https://example.com/", allowedHosts: "example.com", description: "Plain.", status: "paused", ...o });
+const pfields = (o: Record<string, string> = {}) => ({
+  name: "Acme affiliate",
+  type: "affiliate",
+  network: "",
+  provider: "generic_template",
+  commissionModel: "",
+  commissionRateBps: "",
+  commissionFlatMinor: "",
+  currency: "",
+  cookieDays: "",
+  attributionNotes: "",
+  termsUrl: "",
+  termsVerifiedAt: "",
+  status: "draft",
+  expectedStatus: "draft",
+  ...o,
+});
+const n = async (sql: string, ...args: unknown[]) => (await testEnv.DB.prepare(sql).bind(...args).first<{ n: number }>())?.n ?? -1;
+const auditActions = async (entityId: string) =>
+  (await testEnv.DB.prepare("SELECT action FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string }>()).results.map((r) => r.action);
+const merchantCount = () => n("SELECT COUNT(*) AS n FROM merchants");
+
+describe("/admin/merchants access", () => {
+  it("is for admins only; every page is no-store and noindex; a cross-site POST is refused", async () => {
+    const m = await makeMerchant();
+    const { cookie: userCookie } = await signIn("mer-user@vnx.si");
+    await makeBuilder("mer-builder@vnx.si", "mer-builder", "approved");
+    const b = await signIn("mer-builder@vnx.si");
+    for (const path of ["/admin/merchants", `/admin/merchants/${m.id}`]) {
+      expect((await send(getReq(path, userCookie))).status, path).toBe(403);
+      expect((await send(getReq(path, b.cookie))).status, path).toBe(403);
+      expect((await send(getReq(path))).status, path).toBe(303);
+    }
+    expect((await send(formPost("/admin/merchants", mfields(), { cookie: userCookie }))).status).toBe(403);
+    const { cookie } = await admin();
+    for (const path of ["/admin/merchants", `/admin/merchants/${m.id}`]) {
+      const res = await send(getReq(path, cookie));
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get("cache-control"), path).toBe("no-store");
+      expect(await res.text(), path).toContain('<meta name="robots" content="noindex"');
+    }
+    const before = await merchantCount();
+    expect((await send(formPost("/admin/merchants", mfields(), { cookie, origin: "https://evil.example" }))).status).toBe(403);
+    expect(await merchantCount()).toBe(before);
+  });
+
+  it("every POST route refuses a normal user and a builder with 403 and writes nothing", async () => {
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "draft", termsUrl: null, termsVerifiedAt: null });
+    const { cookie: userCookie } = await signIn("mer-user2@vnx.si");
+    await makeBuilder("mer-builder2@vnx.si", "mer-builder2", "approved");
+    const b = await signIn("mer-builder2@vnx.si");
+    const snapshot = async () => [await merchantCount(), await n("SELECT COUNT(*) AS n FROM partner_programs"), await n("SELECT COUNT(*) AS n FROM audit_log"), JSON.stringify(await findMerchantById(testEnv.DB, m.id)), JSON.stringify(await findProgramById(testEnv.DB, p.id))];
+    const before = await snapshot();
+    const posts: [string, Record<string, string>][] = [
+      [`/admin/merchants/${m.id}`, mfields({ name: "Hacked" })],
+      [`/admin/merchants/${m.id}/status`, { to: "paused" }],
+      [`/admin/merchants/${m.id}/programs`, pfields()],
+      [`/admin/merchants/${m.id}/programs/${p.id}`, pfields({ name: "Hacked", expectedStatus: "draft" })],
+    ];
+    for (const who of [userCookie, b.cookie]) {
+      for (const [path, fields] of posts) expect((await send(formPost(path, fields, { cookie: who }))).status, path).toBe(403);
+    }
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("has a nav entry and works under every locale prefix", async () => {
+    const m = await makeMerchant();
+    const { cookie } = await admin();
+    expect(await (await send(getReq("/admin/merchants", cookie))).text()).toContain('href="/admin/merchants"');
+    for (const prefix of ["/vi", "/zh-hans", "/zh-hant"]) {
+      expect((await send(getReq(`${prefix}/admin/merchants`, cookie))).status, prefix).toBe(200);
+      expect((await send(getReq(`${prefix}/admin/merchants/${m.id}`, cookie))).status, prefix).toBe(200);
+    }
+    expect((await send(getReq("/admin/merchants/01HZZZZZZZZZZZZZZZZZZZZZZZ", cookie))).status).toBe(404);
+  });
+});
+
+describe("create merchant", () => {
+  it("shows the new-merchant form with status paused selected", async () => {
+    const { cookie } = await admin();
+    const html = await (await send(getReq("/admin/merchants", cookie))).text();
+    expect(html).toMatch(/<option value="paused" selected/);
+  });
+
+  it("creates paused by default, one merchant.create audit row, and redirects to the detail page", async () => {
+    const { cookie, user } = await admin();
+    const fields = mfields();
+    delete (fields as Record<string, string | undefined>).status; // not sent at all: the safe default applies
+    const res = await send(formPost("/admin/merchants", fields, { cookie }));
+    expect(res.status).toBe(303);
+    const row = await testEnv.DB.prepare("SELECT id, status, allowed_hosts FROM merchants WHERE slug = ?1").bind(fields.slug).first<{ id: string; status: string; allowed_hosts: string }>();
+    expect(res.headers.get("location")).toBe(`/admin/merchants/${row?.id}?done=1`);
+    expect(row?.status).toBe("paused");
+    expect(JSON.parse(row?.allowed_hosts ?? "[]")).toEqual(["example.com"]);
+    expect(await auditActions(row?.id ?? "")).toEqual(["merchant.create"]);
+    const audit = await testEnv.DB.prepare("SELECT actor_user_id FROM audit_log WHERE entity_id = ?1").bind(row?.id).first<{ actor_user_id: string }>();
+    expect(audit?.actor_user_id).toBe(user.id);
+  });
+
+  it("only `active` is honoured as a chosen status; archived and junk fall back to paused", async () => {
+    const { cookie } = await admin();
+    for (const [status, expected] of [["active", "active"], ["archived", "paused"], ["x", "paused"]] as const) {
+      const f = mfields({ status });
+      await send(formPost("/admin/merchants", f, { cookie }));
+      expect((await testEnv.DB.prepare("SELECT status FROM merchants WHERE slug = ?1").bind(f.slug).first<{ status: string }>())?.status, status).toBe(expected);
+    }
+  });
+
+  it("refuses reserved, malformed and duplicate slugs and bad hosts with a field error and writes nothing", async () => {
+    const { cookie } = await admin();
+    const taken = await makeMerchant();
+    const cases: [Record<string, string>, string][] = [
+      [{ slug: "p" }, "merchants-slug-error"],
+      [{ slug: "o" }, "merchants-slug-error"],
+      [{ slug: "Bad Slug" }, "merchants-slug-error"],
+      [{ slug: taken.slug }, "merchants-slug-error"],
+      [{ allowedHosts: "127.0.0.1" }, "merchants-allowedHosts-error"],
+      [{ allowedHosts: "https://example.com" }, "merchants-allowedHosts-error"],
+      [{ websiteUrl: "http://example.com/" }, "merchants-websiteUrl-error"],
+      [{ websiteUrl: "https://evil.com/" }, "merchants-websiteUrl-error"],
+      [{ name: "" }, "merchants-name-error"],
+    ];
+    for (const [override, errorId] of cases) {
+      const before = await merchantCount();
+      const res = await send(formPost("/admin/merchants", mfields(override), { cookie }));
+      expect(res.status, JSON.stringify(override)).toBe(400);
+      expect(await res.text(), JSON.stringify(override)).toContain(`id="${errorId}"`);
+      expect(await merchantCount(), JSON.stringify(override)).toBe(before);
+    }
+    expect(await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'merchant.create' AND json_extract(data, '$.slug') IN ('p','o')")).toBe(0);
+  });
+});
+
+describe("edit merchant", () => {
+  it("never changes the slug and does not render a slug input on the detail page", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const html = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(html).not.toContain('name="slug"');
+    expect(html).toContain(m.slug);
+    const res = await send(formPost(`/admin/merchants/${m.id}`, mfields({ slug: "hijacked", name: "Renamed" }), { cookie }));
+    expect(res.status).toBe(303);
+    const after = await findMerchantById(testEnv.DB, m.id);
+    expect(after).toMatchObject({ slug: m.slug, name: "Renamed" });
+    expect(await auditActions(m.id)).toEqual(["merchant.create", "merchant.update"]);
+  });
+
+  it("a refused edit never echoes a slug from the request: the read-only slug shown is the stored one", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const res = await send(formPost(`/admin/merchants/${m.id}`, mfields({ slug: "hijacked", name: "" }), { cookie }));
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).not.toContain("hijacked");
+    expect(html).toContain(m.slug);
+  });
+
+  it("unknown merchant: 404, nothing written", async () => {
+    const { cookie } = await admin();
+    expect((await send(formPost("/admin/merchants/01HZZZZZZZZZZZZZZZZZZZZZZZ", mfields(), { cookie }))).status).toBe(404);
+  });
+
+  it("warns (without blocking) about a shared-hosting suffix in the stored hosts", async () => {
+    const { cookie } = await admin();
+    const clean = await makeMerchant();
+    expect(await (await send(getReq(`/admin/merchants/${clean.id}`, cookie))).text()).not.toContain('data-warning="multi-tenant"');
+    const shared = await makeMerchant({ websiteUrl: "https://acme.github.io/", allowedHosts: ["acme.github.io", "example.com"] });
+    const html = await (await send(getReq(`/admin/merchants/${shared.id}`, cookie))).text();
+    expect(html).toContain('data-warning="multi-tenant"');
+    expect(html).toContain("acme.github.io");
+    const saved = await send(formPost(`/admin/merchants/${clean.id}`, mfields({ websiteUrl: "https://x.vercel.app/", allowedHosts: "x.vercel.app\nexample.com" }), { cookie }));
+    expect(saved.status).toBe(303); // a warning, not a refusal
+  });
+
+  it("refuses to save new hosts that would break a non-archived offer, lists it, and writes nothing", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const program = await makeProgram(m);
+    const live = await makeOffer(m, program);
+    const gone = await makeOffer(m, null, { status: "archived", destinationUrl: "https://example.com/old" });
+    const res = await send(formPost(`/admin/merchants/${m.id}`, mfields({ websiteUrl: "https://other.com/", allowedHosts: "other.com" }), { cookie }));
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    const block = html.match(/data-broken[\s\S]*?<\/div>/)?.[0] ?? "";
+    expect(block).toContain(live.id);
+    expect(block).not.toContain(gone.id); // archived offers are not checked
+    expect(await findMerchantById(testEnv.DB, m.id)).toMatchObject({ allowedHosts: ["example.com"], websiteUrl: "https://example.com/" });
+    expect(await auditActions(m.id)).toEqual(["merchant.create"]);
+  });
+
+  it("saves new hosts when every non-archived offer still passes, and widening the hosts needs no check", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    await makeOffer(m, null);
+    const res = await send(formPost(`/admin/merchants/${m.id}`, mfields({ allowedHosts: "example.com\nwww.example.org", websiteUrl: "https://example.com/" }), { cookie }));
+    expect(res.status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.allowedHosts).toEqual(["example.com", "www.example.org"]);
+  });
+
+  it("the offer check also runs when only website_url changes (and passes); dropping a host an offer uses is refused (website_url alone cannot break an offer, since parseMerchantForm already checks it against the hosts)", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant({ allowedHosts: ["example.com", "other.com"] });
+    const broken = await makeOffer(m, null, { destinationUrl: "https://example.com/p" });
+    // hosts unchanged, only the site moves: offers still pass, so it saves
+    expect((await send(formPost(`/admin/merchants/${m.id}`, mfields({ allowedHosts: "example.com\nother.com", websiteUrl: "https://other.com/" }), { cookie }))).status).toBe(303);
+    // drop example.com while keeping the offer on it: refused, offer listed
+    const res = await send(formPost(`/admin/merchants/${m.id}`, mfields({ allowedHosts: "other.com", websiteUrl: "https://other.com/" }), { cookie }));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain(broken.id);
+  });
+});
+
+describe("merchant status", () => {
+  it("moves between active and paused, audits merchant.status, and refuses a no-op or an unknown status", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant({ status: "paused" });
+    expect((await send(formPost(`/admin/merchants/${m.id}/status`, { to: "active" }, { cookie }))).status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.status).toBe("active");
+    expect(await auditActions(m.id)).toEqual(["merchant.create", "merchant.status"]);
+    expect((await send(formPost(`/admin/merchants/${m.id}/status`, { to: "active" }, { cookie }))).status).toBe(409);
+    expect((await send(formPost(`/admin/merchants/${m.id}/status`, { to: "bogus" }, { cookie }))).status).toBe(400);
+    expect(await auditActions(m.id)).toEqual(["merchant.create", "merchant.status"]);
+  });
+
+  it("archiving needs the confirm tick; archived is final: no way out, no buttons, fields still editable", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    expect((await send(formPost(`/admin/merchants/${m.id}/status`, { to: "archived" }, { cookie }))).status).toBe(400);
+    expect((await findMerchantById(testEnv.DB, m.id))?.status).toBe("active");
+    expect((await send(formPost(`/admin/merchants/${m.id}/status`, { to: "archived", confirm: "1" }, { cookie }))).status).toBe(303);
+    for (const to of ["active", "paused"]) expect((await send(formPost(`/admin/merchants/${m.id}/status`, { to }, { cookie }))).status, to).toBe(409);
+    expect((await findMerchantById(testEnv.DB, m.id))?.status).toBe("archived");
+    const html = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(html).not.toContain(`/admin/merchants/${m.id}/status`);
+    expect(html).toContain(`action="/admin/merchants/${m.id}"`); // the edit form is still there
+    expect((await send(formPost(`/admin/merchants/${m.id}`, mfields({ name: "Still editable" }), { cookie }))).status).toBe(303);
+  });
+});
+
+describe("programs", () => {
+  it("creates a draft with no defaulted terms (every optional field stays null) and audits program.create", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const res = await send(formPost(`/admin/merchants/${m.id}/programs`, pfields(), { cookie }));
+    expect(res.status).toBe(303);
+    const row = await testEnv.DB.prepare("SELECT * FROM partner_programs WHERE merchant_id = ?1").bind(m.id).first<Record<string, unknown>>();
+    expect(row).toMatchObject({ status: "draft", commission_model: null, commission_rate_bps: null, commission_flat_minor: null, currency: null, cookie_days: null, terms_url: null, terms_verified_at: null });
+    expect(await auditActions(String(row?.id))).toEqual(["program.create"]);
+  });
+
+  it("refuses active without terms_url or terms_verified_at, and a direct program as active, showing the error on the status field", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const cases: Record<string, string>[] = [
+      { status: "active", expectedStatus: "draft" },
+      { status: "active", termsUrl: "https://example.com/terms" },
+      { status: "active", termsVerifiedAt: "2026-10-01" },
+      { status: "active", type: "direct", termsUrl: "https://example.com/terms", termsVerifiedAt: "2026-10-01" },
+    ];
+    for (const override of cases) {
+      const res = await send(formPost(`/admin/merchants/${m.id}/programs`, pfields(override), { cookie }));
+      expect(res.status, JSON.stringify(override)).toBe(400);
+      expect(await res.text(), JSON.stringify(override)).toContain('id="programs-new-status-error"');
+    }
+    expect(await n("SELECT COUNT(*) AS n FROM partner_programs WHERE merchant_id = ?1", m.id)).toBe(0);
+  });
+
+  it("an existing draft moves to active only once both terms fields are filled; a failed attempt leaves it untouched", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "draft", termsUrl: null, termsVerifiedAt: null });
+    const url = `/admin/merchants/${m.id}/programs/${p.id}`;
+    const bad = await send(formPost(url, pfields({ status: "active" }), { cookie }));
+    expect(bad.status).toBe(400);
+    expect((await findProgramById(testEnv.DB, p.id))?.status).toBe("draft");
+    const ok = await send(formPost(url, pfields({ status: "active", termsUrl: "https://example.com/terms", termsVerifiedAt: "2026-10-01" }), { cookie }));
+    expect(ok.status).toBe(303);
+    expect(await findProgramById(testEnv.DB, p.id)).toMatchObject({ status: "active", termsUrl: "https://example.com/terms", termsVerifiedAt: "2026-10-01" });
+    expect(await auditActions(p.id)).toEqual(["program.create", "program.status"]);
+  });
+
+  it("answers 409 when the status moved since the form was drawn, 404 for a program of another merchant, 404 for an unknown merchant", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const p = await makeProgram(m, { status: "paused" });
+    expect((await send(formPost(`/admin/merchants/${m.id}/programs/${p.id}`, pfields({ status: "draft", expectedStatus: "active" }), { cookie }))).status).toBe(409);
+    expect((await send(formPost(`/admin/merchants/${m.id}/programs/${p.id}`, pfields({ status: "paused", expectedStatus: "bogus" }), { cookie }))).status).toBe(400);
+    expect((await send(formPost(`/admin/merchants/${other.id}/programs/${p.id}`, pfields({ status: "paused", expectedStatus: "paused" }), { cookie }))).status).toBe(404);
+    expect((await send(formPost(`/admin/merchants/01HZZZZZZZZZZZZZZZZZZZZZZZ/programs`, pfields(), { cookie }))).status).toBe(404);
+    expect((await findProgramById(testEnv.DB, p.id))?.status).toBe("paused");
+  });
+
+  it("ended is final: the form has no status choice, a move out is a 409, other fields stay editable", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const p = await makeProgram(m, { status: "ended" });
+    const html = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(html).toContain('<input type="hidden" name="status" value="ended"');
+    const url = `/admin/merchants/${m.id}/programs/${p.id}`;
+    const terms = { termsUrl: "https://example.com/terms", termsVerifiedAt: "2026-10-01" };
+    expect((await send(formPost(url, pfields({ status: "active", expectedStatus: "ended", ...terms }), { cookie }))).status).toBe(409);
+    expect((await send(formPost(url, pfields({ status: "ended", expectedStatus: "ended", name: "Renamed", ...terms }), { cookie }))).status).toBe(303);
+    expect(await findProgramById(testEnv.DB, p.id)).toMatchObject({ status: "ended", name: "Renamed" });
+    expect(await auditActions(p.id)).toEqual(["program.create", "program.update"]);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/admin/merchants.test.ts
+```
+
+Expected: FAIL (404 cho `/admin/merchants`).
+
+- [ ] **Step 4: View dùng chung `partner-fields.tsx`**
+
+`apps/web/src/views/admin/partner-fields.tsx`:
+
+```tsx
+import type { FC, PropsWithChildren } from "hono/jsx";
+import type { MessageKey } from "../../i18n/messages/en.ts";
+
+/** One label for every status of a merchant, program or offer. */
+export const STATUS_KEY: Record<"draft" | "active" | "paused" | "ended" | "archived", MessageKey> = {
+  draft: "partner.status.draft",
+  active: "partner.status.active",
+  paused: "partner.status.paused",
+  ended: "partner.status.ended",
+  archived: "partner.status.archived",
+};
+
+type FieldProps = { id: string; label: string; error?: string | null; hint?: string };
+
+/** Label, control (children), hint and error; the error id is `<id>-error` (the tests and aria-describedby use it). */
+export const Field: FC<PropsWithChildren<FieldProps>> = (p) => (
+  <div class="field">
+    <label for={p.id}>{p.label}</label>
+    {p.children}
+    {p.hint ? (
+      <p class="muted" id={`${p.id}-hint`}>
+        {p.hint}
+      </p>
+    ) : null}
+    {p.error ? (
+      <p id={`${p.id}-error`} class="error-msg">
+        {p.error}
+      </p>
+    ) : null}
+  </div>
+);
+
+export const aria = (id: string, error: unknown) => ({ "aria-invalid": error ? "true" : undefined, "aria-describedby": error ? `${id}-error` : undefined });
+```
+
+- [ ] **Step 5: `MerchantsPage.tsx` (danh sách, tạo, và `MerchantFields` dùng chung)**
+
+`apps/web/src/views/admin/MerchantsPage.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import type { MerchantField, MerchantFieldError, MerchantFormValues, MerchantStatus } from "../../domain/merchant.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import type { MessageKey } from "../../i18n/messages/en.ts";
+import { translator, type Translate } from "../../i18n/t.ts";
+import { AdminLayout } from "./AdminLayout.tsx";
+import { aria, Field, STATUS_KEY } from "./partner-fields.tsx";
+
+export type MerchantView = {
+  id: string;
+  slug: string;
+  name: string;
+  websiteUrl: string;
+  allowedHosts: readonly string[];
+  description: string;
+  indexable: boolean;
+  status: MerchantStatus;
+  defaultOfferId: string | null;
+};
+export type MerchantErrors = Partial<Record<MerchantField, MerchantFieldError | "taken">>;
+export type MerchantEdit = { values: MerchantFormValues; errors: MerchantErrors; broken: { id: string; field: "destinationUrl" | "trackingTemplate"; error: string }[] };
+
+const HOSTS_KEY: Record<string, MessageKey> = {
+  empty: "merchants.err.hostsEmpty",
+  too_many: "merchants.err.hostsTooMany",
+  format: "merchants.err.hostsFormat",
+  duplicate: "merchants.err.hostsDuplicate",
+};
+
+function errorText(tr: Translate, field: MerchantField, e: MerchantFieldError | "taken"): string {
+  if (e.startsWith("url_")) return tr("merchants.err.url", { code: e.slice(4) });
+  if (field === "slug") return tr(e === "reserved" ? "merchants.err.slugReserved" : e === "taken" ? "merchants.err.slugTaken" : "merchants.err.slugFormat");
+  if (field === "allowedHosts") return tr(HOSTS_KEY[e] ?? "merchants.err.required");
+  return tr(e === "too_long" ? "merchants.err.tooLong" : "merchants.err.required");
+}
+
+export const merchantValuesOf = (m: MerchantView): MerchantFormValues => ({
+  name: m.name,
+  slug: m.slug,
+  websiteUrl: m.websiteUrl,
+  allowedHosts: m.allowedHosts.join("\n"),
+  description: m.description,
+  indexable: m.indexable,
+});
+
+type FieldsProps = { locale: Locale; prefix: string; values: MerchantFormValues; errors: MerchantErrors; slugReadonly: boolean };
+
+/** The merchant fields. With `slugReadonly` the slug is text, not an input: it cannot be sent, let alone changed. */
+export const MerchantFields: FC<FieldsProps> = (p) => {
+  const tr = translator(p.locale);
+  const id = (f: string) => `${p.prefix}-${f}`;
+  const err = (f: MerchantField) => (p.errors[f] ? errorText(tr, f, p.errors[f]!) : null);
+  const v = p.values;
+  return (
+    <>
+      <Field id={id("name")} label={tr("merchants.f.name")} error={err("name")}>
+        <input id={id("name")} name="name" required maxlength={80} value={v.name} {...aria(id("name"), p.errors.name)} />
+      </Field>
+      {p.slugReadonly ? (
+        <p>
+          <strong>{tr("merchants.f.slug")}:</strong> <code>{v.slug}</code>
+        </p>
+      ) : (
+        <Field id={id("slug")} label={tr("merchants.f.slug")} hint={tr("merchants.f.slugHint")} error={err("slug")}>
+          <input id={id("slug")} name="slug" required maxlength={60} value={v.slug} {...aria(id("slug"), p.errors.slug)} />
+        </Field>
+      )}
+      <Field id={id("websiteUrl")} label={tr("merchants.f.websiteUrl")} error={err("websiteUrl")}>
+        <input id={id("websiteUrl")} name="websiteUrl" type="url" required maxlength={2048} value={v.websiteUrl} {...aria(id("websiteUrl"), p.errors.websiteUrl)} />
+      </Field>
+      <Field id={id("allowedHosts")} label={tr("merchants.f.hosts")} hint={tr("merchants.f.hostsHint")} error={err("allowedHosts")}>
+        <textarea id={id("allowedHosts")} name="allowedHosts" rows={4} required {...aria(id("allowedHosts"), p.errors.allowedHosts)}>
+          {v.allowedHosts}
+        </textarea>
+      </Field>
+      <Field id={id("description")} label={tr("merchants.f.description")} error={err("description")}>
+        <textarea id={id("description")} name="description" rows={6} maxlength={2000} {...aria(id("description"), p.errors.description)}>
+          {v.description}
+        </textarea>
+      </Field>
+      <p>
+        <label>
+          <input type="checkbox" name="indexable" value="1" checked={v.indexable} /> {tr("merchants.f.indexable")}
+        </label>
+      </p>
+    </>
+  );
+};
+
+type Props = { locale: Locale; origin: string; merchants: MerchantView[]; create: Pick<MerchantEdit, "values" | "errors"> & { status: "active" | "paused" } };
+
+export const NEW_MERCHANT_VALUES: MerchantFormValues = { name: "", slug: "", websiteUrl: "", allowedHosts: "", description: "", indexable: false };
+
+export const MerchantsPage: FC<Props> = (p) => {
+  const tr = translator(p.locale);
+  return (
+    <AdminLayout locale={p.locale} origin={p.origin} title={tr("merchants.title")} rest="/admin/merchants" active="merchants">
+      <h1>{tr("merchants.title")}</h1>
+      <p>{tr("merchants.intro")}</p>
+      {p.merchants.length === 0 ? (
+        <p class="muted">{tr("merchants.empty")}</p>
+      ) : (
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>{tr("merchants.f.name")}</th>
+                <th>{tr("merchants.col.slug")}</th>
+                <th>{tr("merchants.col.status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.merchants.map((m) => (
+                <tr>
+                  <td>
+                    <a href={localizedPath(p.locale, `/admin/merchants/${m.id}`)}>{m.name}</a>
+                  </td>
+                  <td>
+                    <code>{m.slug}</code>
+                  </td>
+                  <td>{tr(STATUS_KEY[m.status])}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <h2>{tr("merchants.new")}</h2>
+      <form method="post" action={localizedPath(p.locale, "/admin/merchants")} class="card">
+        <MerchantFields locale={p.locale} prefix="merchants" values={p.create.values} errors={p.create.errors} slugReadonly={false} />
+        <div class="field">
+          <label for="merchants-status">{tr("merchants.col.status")}</label>
+          <select id="merchants-status" name="status">
+            <option value="paused" selected={p.create.status === "paused"}>
+              {tr("partner.status.paused")}
+            </option>
+            <option value="active" selected={p.create.status === "active"}>
+              {tr("partner.status.active")}
+            </option>
+          </select>
+          <p class="muted">{tr("merchants.newHint")}</p>
+        </div>
+        <button class="btn" type="submit">
+          {tr("merchants.create")}
+        </button>
+      </form>
+    </AdminLayout>
+  );
+};
+```
+
+(Ô lỗi của form tạo có id `merchants-slug-error`, `merchants-allowedHosts-error`, … theo `prefix = "merchants"`; test Step 3 dựa vào đó.)
+
+- [ ] **Step 6: `MerchantDetailPage.tsx` (merchant, trạng thái, chương trình)**
+
+`apps/web/src/views/admin/MerchantDetailPage.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import { MERCHANT_STATUSES, merchantTransitionAllowed, multiTenantHosts } from "../../domain/merchant.ts";
+import {
+  COMMISSION_MODELS,
+  PROGRAM_PROVIDERS,
+  PROGRAM_STATUSES,
+  PROGRAM_TYPES,
+  type CommissionModel,
+  type ProgramField,
+  type ProgramFieldError,
+  type ProgramFormValues,
+  type ProgramProvider,
+  type ProgramStatus,
+  type ProgramType,
+} from "../../domain/offer.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import type { MessageKey } from "../../i18n/messages/en.ts";
+import { translator } from "../../i18n/t.ts";
+import { AdminLayout } from "./AdminLayout.tsx";
+import { MerchantFields, merchantValuesOf, type MerchantEdit, type MerchantView } from "./MerchantsPage.tsx";
+import { aria, Field, STATUS_KEY } from "./partner-fields.tsx";
+
+export type ProgramView = {
+  id: string;
+  name: string;
+  type: ProgramType;
+  network: string | null;
+  provider: ProgramProvider;
+  commissionModel: CommissionModel | null;
+  commissionRateBps: number | null;
+  commissionFlatMinor: number | null;
+  currency: string | null;
+  cookieDays: number | null;
+  attributionNotes: string | null;
+  termsUrl: string | null;
+  termsVerifiedAt: string | null;
+  status: ProgramStatus;
+};
+/** `id` is the program's id, or "new" for the create form. */
+export type ProgramEdit = { id: string; values: ProgramFormValues; errors: Partial<Record<ProgramField, ProgramFieldError>> };
+
+const PROGRAM_ERROR_KEY: Record<ProgramFieldError, MessageKey> = {
+  required: "programs.err.required",
+  too_long: "programs.err.tooLong",
+  choice: "programs.err.choice",
+  number: "programs.err.number",
+  currency: "programs.err.currency",
+  url: "programs.err.url",
+  date: "programs.err.date",
+  terms_missing: "programs.err.termsMissing",
+  direct_not_active: "programs.err.directNotActive",
+};
+
+const s = (v: string | number | null): string => (v === null ? "" : String(v));
+export const programValuesOf = (p: ProgramView): ProgramFormValues => ({
+  name: p.name,
+  type: p.type,
+  network: s(p.network),
+  provider: p.provider,
+  commissionModel: s(p.commissionModel),
+  commissionRateBps: s(p.commissionRateBps),
+  commissionFlatMinor: s(p.commissionFlatMinor),
+  currency: s(p.currency),
+  cookieDays: s(p.cookieDays),
+  attributionNotes: s(p.attributionNotes),
+  termsUrl: s(p.termsUrl),
+  termsVerifiedAt: s(p.termsVerifiedAt),
+  status: p.status,
+});
+/** Nothing is defaulted except the safe status (draft). */
+export const NEW_PROGRAM_VALUES: ProgramFormValues = {
+  name: "", type: "affiliate", network: "", provider: "generic_template", commissionModel: "", commissionRateBps: "", commissionFlatMinor: "",
+  currency: "", cookieDays: "", attributionNotes: "", termsUrl: "", termsVerifiedAt: "", status: "draft",
+};
+
+const TEXT_FIELDS: { name: ProgramField; label: MessageKey; type?: "number" | "url" | "textarea" }[] = [
+  { name: "name", label: "programs.f.name" },
+  { name: "network", label: "programs.f.network" },
+  { name: "commissionRateBps", label: "programs.f.commissionRateBps", type: "number" },
+  { name: "commissionFlatMinor", label: "programs.f.commissionFlatMinor", type: "number" },
+  { name: "currency", label: "programs.f.currency" },
+  { name: "cookieDays", label: "programs.f.cookieDays", type: "number" },
+  { name: "attributionNotes", label: "programs.f.attributionNotes", type: "textarea" },
+  { name: "termsUrl", label: "programs.f.termsUrl", type: "url" },
+  { name: "termsVerifiedAt", label: "programs.f.termsVerifiedAt" },
+];
+
+type ProgramFormProps = { locale: Locale; action: string; edit: ProgramEdit; current: ProgramStatus | null };
+
+/** One program form. `current` is the saved status (null for a new program); `ended` replaces the status choice with a hidden value. */
+const ProgramForm: FC<ProgramFormProps> = (p) => {
+  const tr = translator(p.locale);
+  const v = p.edit.values;
+  const id = (f: string) => `programs-${p.edit.id}-${f}`;
+  const err = (f: ProgramField) => (p.edit.errors[f] ? tr(PROGRAM_ERROR_KEY[p.edit.errors[f]!]) : null);
+  const ended = p.current === "ended";
+  const select = (name: "type" | "provider" | "commissionModel" | "status", options: readonly string[], blank: boolean) => (
+    <select id={id(name)} name={name} {...aria(id(name), p.edit.errors[name])}>
+      {blank ? <option value="">{tr("programs.f.none")}</option> : null}
+      {options.map((o) => (
+        <option value={o} selected={v[name] === o}>
+          {name === "status" ? tr(STATUS_KEY[o as ProgramStatus]) : o}
+        </option>
+      ))}
+    </select>
+  );
+  return (
+    <form method="post" action={p.action} class="card">
+      <input type="hidden" name="expectedStatus" value={p.current ?? "draft"} />
+      {TEXT_FIELDS.slice(0, 2).map((f) => (
+        <Field id={id(f.name)} label={tr(f.label)} error={err(f.name)}>
+          <input id={id(f.name)} name={f.name} value={v[f.name]} {...aria(id(f.name), p.edit.errors[f.name])} />
+        </Field>
+      ))}
+      <Field id={id("type")} label={tr("programs.f.type")} error={err("type")}>
+        {select("type", PROGRAM_TYPES, false)}
+      </Field>
+      <Field id={id("provider")} label={tr("programs.f.provider")} error={err("provider")}>
+        {select("provider", PROGRAM_PROVIDERS, false)}
+      </Field>
+      <Field id={id("commissionModel")} label={tr("programs.f.commissionModel")} error={err("commissionModel")}>
+        {select("commissionModel", COMMISSION_MODELS, true)}
+      </Field>
+      {TEXT_FIELDS.slice(2).map((f) => (
+        <Field id={id(f.name)} label={tr(f.label)} error={err(f.name)}>
+          {f.type === "textarea" ? (
+            <textarea id={id(f.name)} name={f.name} rows={3} maxlength={1000} {...aria(id(f.name), p.edit.errors[f.name])}>
+              {v[f.name]}
+            </textarea>
+          ) : (
+            <input id={id(f.name)} name={f.name} type={f.type === "number" ? "number" : f.type === "url" ? "url" : "text"} min={f.type === "number" ? 0 : undefined} value={v[f.name]} {...aria(id(f.name), p.edit.errors[f.name])} />
+          )}
+        </Field>
+      ))}
+      {ended ? (
+        <>
+          <input type="hidden" name="status" value="ended" />
+          <p class="muted">{tr("programs.endedNote")}</p>
+        </>
+      ) : (
+        <Field id={id("status")} label={tr("programs.f.status")} error={err("status")}>
+          {select("status", PROGRAM_STATUSES, false)}
+        </Field>
+      )}
+      <button class="btn" type="submit">
+        {tr(p.current === null ? "programs.create" : "programs.save")}
+      </button>
+    </form>
+  );
+};
+
+type Props = {
+  locale: Locale;
+  origin: string;
+  merchant: MerchantView;
+  programs: ProgramView[];
+  done: boolean;
+  merchantEdit?: MerchantEdit;
+  programEdit?: ProgramEdit;
+};
+
+export const MerchantDetailPage: FC<Props> = (p) => {
+  const tr = translator(p.locale);
+  const m = p.merchant;
+  const base = `/admin/merchants/${m.id}`;
+  const shared = multiTenantHosts(m.allowedHosts);
+  const edit = p.merchantEdit ?? { values: merchantValuesOf(m), errors: {}, broken: [] };
+  const targets = MERCHANT_STATUSES.filter((to) => to !== m.status && merchantTransitionAllowed(m.status, to));
+  return (
+    <AdminLayout locale={p.locale} origin={p.origin} title={m.name} rest={base} active="merchants">
+      <p>
+        <a href={localizedPath(p.locale, "/admin/merchants")}>{tr("merchants.back")}</a>
+      </p>
+      <h1>{m.name}</h1>
+      <p>
+        <code>{m.slug}</code> · {tr(STATUS_KEY[m.status])}
+      </p>
+      {p.done ? (
+        <p class="notice good" role="status">
+          {tr("partner.saved")}
+        </p>
+      ) : null}
+      {shared.length > 0 ? (
+        <p class="notice" role="note" data-warning="multi-tenant">
+          {tr("merchants.hostsWarn", { hosts: shared.join(", "), name: m.name })}
+        </p>
+      ) : null}
+      {edit.broken.length > 0 ? (
+        <div class="notice" role="alert" data-broken>
+          <p>{tr("merchants.brokenTitle")}</p>
+          <ul>
+            {edit.broken.map((b) => (
+              <li>
+                <code>{b.id}</code>: {tr(b.field === "destinationUrl" ? "partner.field.destinationUrl" : "partner.field.trackingTemplate")} ({b.error})
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <form method="post" action={localizedPath(p.locale, base)} class="card">
+        <MerchantFields locale={p.locale} prefix="merchant" values={edit.values} errors={edit.errors} slugReadonly />
+        <button class="btn" type="submit">
+          {tr("merchants.save")}
+        </button>
+      </form>
+
+      {m.status === "archived" ? (
+        <p class="muted">{tr("merchants.archivedNote")}</p>
+      ) : (
+        <div class="row-actions">
+          {targets.map((to) => (
+            <form method="post" action={localizedPath(p.locale, `${base}/status`)}>
+              <input type="hidden" name="to" value={to} />
+              {to === "archived" ? (
+                <label>
+                  <input type="checkbox" name="confirm" value="1" required /> {tr("merchants.confirmArchive")}
+                </label>
+              ) : null}
+              <button class="btn btn-ghost" type="submit">
+                {tr("merchants.moveTo", { status: tr(STATUS_KEY[to]) })}
+              </button>
+            </form>
+          ))}
+        </div>
+      )}
+
+      <h2>{tr("programs.title")}</h2>
+      <p>{tr("programs.intro")}</p>
+      {p.programs.length === 0 ? <p class="muted">{tr("programs.empty")}</p> : null}
+      {p.programs.map((program) => (
+        <section aria-label={program.name}>
+          <h3>
+            {program.name} · {tr(STATUS_KEY[program.status])}
+          </h3>
+          <ProgramForm
+            locale={p.locale}
+            action={localizedPath(p.locale, `${base}/programs/${program.id}`)}
+            edit={p.programEdit?.id === program.id ? p.programEdit : { id: program.id, values: programValuesOf(program), errors: {} }}
+            current={program.status}
+          />
+        </section>
+      ))}
+      <h3>{tr("programs.new")}</h3>
+      <ProgramForm
+        locale={p.locale}
+        action={localizedPath(p.locale, `${base}/programs`)}
+        edit={p.programEdit?.id === "new" ? p.programEdit : { id: "new", values: NEW_PROGRAM_VALUES, errors: {} }}
+        current={null}
+      />
+    </AdminLayout>
+  );
+};
+```
+
+Ghi chú cho Implementer: nếu `hono/jsx` không chấp nhận `selected={boolean}` / `checked={boolean}` như ở trên, dùng cùng cách các view hiện có xử lý (đối chiếu `ProductDetailPage.tsx`); test `<option value="paused" selected` ở Step 3 là hợp đồng đầu ra. Khi `maxlength` / `rows` / `min` là số, truyền bằng `{80}` như `InvitesPage.tsx`.
+
+- [ ] **Step 7: Route**
+
+`apps/web/src/routes/admin-merchants.tsx`:
+
+```tsx
+import type { Context, Hono } from "hono";
+import { requireAdmin } from "../auth/middleware.ts";
+import { createMerchant, findMerchantById, listMerchants, setMerchantStatus, updateMerchant, type Merchant } from "../db/merchants.ts";
+import { listOffersByMerchant } from "../db/offers.ts";
+import { createProgram, findProgramById, listProgramsByMerchant, updateProgram } from "../db/programs.ts";
+import { hostsChanged, MERCHANT_STATUSES, merchantTransitionAllowed, parseMerchantForm, type MerchantFormValues } from "../domain/merchant.ts";
+import { offersBrokenByHosts, parseProgramForm, PROGRAM_STATUSES, programTransitionAllowed, type ProgramFormValues, type ProgramStatus } from "../domain/offer.ts";
+import type { AppEnv } from "../env.ts";
+import { onLocalized } from "../http/localized.ts";
+import { requestOrigin } from "../http/origin.ts";
+import { localizedPath } from "../i18n/locales.ts";
+import { MerchantDetailPage, type ProgramEdit } from "../views/admin/MerchantDetailPage.tsx";
+import { MerchantsPage, NEW_MERCHANT_VALUES, type MerchantEdit, type MerchantErrors } from "../views/admin/MerchantsPage.tsx";
+import { errorResponse } from "../views/error-response.tsx";
+import { page } from "../views/render.ts";
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+const iso = () => new Date().toISOString();
+
+const merchantValues = (b: Record<string, unknown>): MerchantFormValues => ({
+  name: str(b.name),
+  slug: str(b.slug),
+  websiteUrl: str(b.websiteUrl),
+  allowedHosts: str(b.allowedHosts),
+  description: str(b.description),
+  indexable: b.indexable === "1",
+});
+
+const programValues = (b: Record<string, unknown>): ProgramFormValues => ({
+  name: str(b.name),
+  type: str(b.type),
+  network: str(b.network),
+  provider: str(b.provider),
+  commissionModel: str(b.commissionModel),
+  commissionRateBps: str(b.commissionRateBps),
+  commissionFlatMinor: str(b.commissionFlatMinor),
+  currency: str(b.currency),
+  cookieDays: str(b.cookieDays),
+  attributionNotes: str(b.attributionNotes),
+  termsUrl: str(b.termsUrl),
+  termsVerifiedAt: str(b.termsVerifiedAt),
+  status: str(b.status),
+});
+
+type DetailExtra = { merchantEdit?: MerchantEdit; programEdit?: ProgramEdit };
+
+async function detail(c: Context<AppEnv>, merchant: Merchant, extra: DetailExtra = {}, status: 200 | 400 = 200) {
+  const programs = await listProgramsByMerchant(c.env.DB, merchant.id);
+  return page(c, <MerchantDetailPage locale={c.get("locale")} origin={requestOrigin(c)} merchant={merchant} programs={programs} done={c.req.query("done") === "1"} {...extra} />, status);
+}
+
+async function listPage(c: Context<AppEnv>, create: { values: MerchantFormValues; errors: MerchantErrors; status: "active" | "paused" }, status: 200 | 400 = 200) {
+  return page(c, <MerchantsPage locale={c.get("locale")} origin={requestOrigin(c)} merchants={await listMerchants(c.env.DB)} create={create} />, status);
+}
+
+const back = (c: Context<AppEnv>, id: string) => c.redirect(localizedPath(c.get("locale"), `/admin/merchants/${id}?done=1`), 303);
+
+export function registerAdminMerchantRoutes(app: Hono<AppEnv>) {
+  onLocalized(app, "get", "/admin/merchants", requireAdmin, (c) => listPage(c, { values: NEW_MERCHANT_VALUES, errors: {}, status: "paused" }));
+
+  onLocalized(app, "post", "/admin/merchants", requireAdmin, async (c) => {
+    const body = await c.req.parseBody();
+    const values = merchantValues(body);
+    const status = body.status === "active" ? "active" : "paused"; // the safe default; archived is not offered on creation
+    const parsed = parseMerchantForm(values);
+    if (!parsed.ok) return listPage(c, { values, errors: parsed.errors, status }, 400);
+    const created = await createMerchant(c.env.DB, { merchant: parsed.merchant, status, actorUserId: c.get("user")!.id, now: iso() });
+    if (!created.ok) return listPage(c, { values, errors: { slug: "taken" }, status }, 400);
+    return back(c, created.merchant.id);
+  });
+
+  onLocalized(app, "get", "/admin/merchants/:id", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    return merchant ? detail(c, merchant) : errorResponse(c, "notFound", 404);
+  });
+
+  onLocalized(app, "post", "/admin/merchants/:id", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    if (!merchant) return errorResponse(c, "notFound", 404);
+    const values = { ...merchantValues(await c.req.parseBody()), slug: merchant.slug }; // the slug is never read from the request, also not to redraw the form
+    const parsed = parseMerchantForm(values);
+    if (!parsed.ok) return detail(c, merchant, { merchantEdit: { values, errors: parsed.errors, broken: [] } }, 400);
+    const { slug: _slug, ...fields } = parsed.merchant;
+    if (hostsChanged(merchant.allowedHosts, fields.allowedHosts) || merchant.websiteUrl !== fields.websiteUrl) {
+      const offers = (await listOffersByMerchant(c.env.DB, merchant.id)).filter((o) => o.status !== "archived");
+      const broken = offersBrokenByHosts(offers, fields.allowedHosts);
+      if (broken.length > 0) return detail(c, merchant, { merchantEdit: { values, errors: {}, broken } }, 400);
+    }
+    const saved = await updateMerchant(c.env.DB, { id: merchant.id, merchant: fields, actorUserId: c.get("user")!.id, now: iso() });
+    return saved ? back(c, merchant.id) : errorResponse(c, "notFound", 404);
+  });
+
+  onLocalized(app, "post", "/admin/merchants/:id/status", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    if (!merchant) return errorResponse(c, "notFound", 404);
+    const body = await c.req.parseBody();
+    const to = (MERCHANT_STATUSES as readonly string[]).includes(str(body.to)) ? (str(body.to) as Merchant["status"]) : null;
+    if (!to || (to === "archived" && body.confirm !== "1")) return c.text("Bad request", 400);
+    if (to === merchant.status || !merchantTransitionAllowed(merchant.status, to)) return errorResponse(c, "conflict", 409);
+    const moved = await setMerchantStatus(c.env.DB, { id: merchant.id, from: merchant.status, to, actorUserId: c.get("user")!.id, now: iso() });
+    return moved ? back(c, merchant.id) : errorResponse(c, "conflict", 409);
+  });
+
+  onLocalized(app, "post", "/admin/merchants/:id/programs", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    if (!merchant) return errorResponse(c, "notFound", 404);
+    const values = programValues(await c.req.parseBody());
+    const parsed = parseProgramForm(values);
+    if (!parsed.ok) return detail(c, merchant, { programEdit: { id: "new", values, errors: parsed.errors } }, 400);
+    const created = await createProgram(c.env.DB, { merchantId: merchant.id, program: parsed.program, actorUserId: c.get("user")!.id, now: iso() });
+    return created ? back(c, merchant.id) : errorResponse(c, "notFound", 404);
+  });
+
+  onLocalized(app, "post", "/admin/merchants/:id/programs/:programId", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    const program = merchant ? await findProgramById(c.env.DB, c.req.param("programId") ?? "") : null;
+    if (!merchant || !program || program.merchantId !== merchant.id) return errorResponse(c, "notFound", 404);
+    const body = await c.req.parseBody();
+    const expected = str(body.expectedStatus);
+    if (!(PROGRAM_STATUSES as readonly string[]).includes(expected)) return c.text("Bad request", 400);
+    const values = programValues(body);
+    const parsed = parseProgramForm(values);
+    if (!parsed.ok) return detail(c, merchant, { programEdit: { id: program.id, values, errors: parsed.errors } }, 400);
+    if (!programTransitionAllowed(expected as ProgramStatus, parsed.program.status)) return errorResponse(c, "conflict", 409);
+    const saved = await updateProgram(c.env.DB, { id: program.id, program: parsed.program, expectedStatus: expected as ProgramStatus, actorUserId: c.get("user")!.id, now: iso() });
+    return saved ? back(c, merchant.id) : errorResponse(c, "conflict", 409); // the status moved while the form was open
+  });
+}
+```
+
+Ghi chú: `errorResponse(c, "conflict", 409)` đã được dùng ở `admin-requests.tsx`; nếu `ErrorKind` không có `"conflict"`, dùng đúng kiểu hiện có của `ErrorPage.tsx` (không thêm kiểu mới). `_slug` bị bỏ có chủ ý (nếu lint `no-unused-vars` phàn nàn, đổi thành destructuring bằng `Object.fromEntries` hoặc `omit` nhỏ trong file; không tắt luật cho cả file).
+
+`apps/web/src/app.ts`: import `registerAdminMerchantRoutes` từ `./routes/admin-merchants.tsx`, gọi sau `registerAdminFlagRoutes(app);`. `AdminLayout.tsx`: `AdminSection` thêm `"merchants"`; `NAV` thêm `{ key: "merchants", path: "/admin/merchants", label: "admin.nav.merchants" }` sau `flags`.
+
+- [ ] **Step 8: i18n (đủ 4 locale; nối vào cuối mỗi file, trước `}`)**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `admin.nav.merchants` | Merchants | Merchant | 商家 | 商家 |
+| `partner.saved` | Saved. | Đã lưu. | 已保存。 | 已儲存。 |
+| `partner.status.active` | Active | Đang hoạt động | 启用 | 啟用 |
+| `partner.status.paused` | Paused | Tạm dừng | 已暂停 | 已暫停 |
+| `partner.status.archived` | Archived | Đã lưu trữ | 已归档 | 已封存 |
+| `partner.status.draft` | Draft | Nháp | 草稿 | 草稿 |
+| `partner.status.ended` | Ended | Đã kết thúc | 已结束 | 已結束 |
+| `partner.field.destinationUrl` | Untracked link | Link không tracking | 无跟踪链接 | 無追蹤連結 |
+| `partner.field.trackingTemplate` | Tracking template | Mẫu link tracking | 跟踪模板 | 追蹤範本 |
+| `merchants.title` | Merchants | Merchant | 商家 | 商家 |
+| `merchants.intro` | Companies we link to, with their partner programs and offers. Nothing here changes a ranking. | Các công ty chúng tôi dẫn link tới, cùng chương trình partner và offer của họ. Không mục nào ở đây thay đổi thứ hạng. | 我们链接到的公司及其合作计划和优惠。这里的任何内容都不会改变排名。 | 我們連結到的公司及其合作計畫和優惠。這裡的任何內容都不會改變排名。 |
+| `merchants.empty` | No merchants yet. | Chưa có merchant nào. | 还没有商家。 | 還沒有商家。 |
+| `merchants.col.slug` | Slug | Slug | Slug | Slug |
+| `merchants.col.status` | Status | Trạng thái | 状态 | 狀態 |
+| `merchants.new` | New merchant | Merchant mới | 新建商家 | 新增商家 |
+| `merchants.newHint` | New merchants start paused; turn one on when its offers are ready. | Merchant mới bắt đầu ở trạng thái tạm dừng; bật khi các offer đã sẵn sàng. | 新商家默认为暂停；待优惠准备好后再启用。 | 新商家預設為暫停；待優惠準備好後再啟用。 |
+| `merchants.create` | Create merchant | Tạo merchant | 创建商家 | 建立商家 |
+| `merchants.save` | Save merchant | Lưu merchant | 保存商家 | 儲存商家 |
+| `merchants.back` | All merchants | Tất cả merchant | 全部商家 | 全部商家 |
+| `merchants.f.name` | Name | Tên | 名称 | 名稱 |
+| `merchants.f.slug` | Slug (set once, cannot be changed) | Slug (đặt một lần, không đổi được) | Slug（一次设定，不可更改） | Slug（一次設定，不可更改） |
+| `merchants.f.slugHint` | 3 to 60 lowercase letters, digits or hyphens; not "p" or "o". | 3 đến 60 chữ thường, số hoặc dấu gạch ngang; không được là "p" hay "o". | 3 到 60 个小写字母、数字或连字符；不能是 "p" 或 "o"。 | 3 到 60 個小寫字母、數字或連字號；不能是 "p" 或 "o"。 |
+| `merchants.f.websiteUrl` | Website (https); also the fallback link when an offer cannot be tracked | Website (https); cũng là link thay thế khi offer không theo dõi được | 网站 (https)；offer 无法跟踪时也作为备用链接 | 網站 (https)；offer 無法追蹤時也作為備用連結 |
+| `merchants.f.hosts` | Allowed hosts (one per line) | Host được phép (mỗi dòng một host) | 允许的主机（每行一个） | 允許的主機（每行一個） |
+| `merchants.f.hostsHint` | Every link to this merchant must be on one of these hosts or a subdomain. Use the company's own domain. | Mọi link tới merchant này phải nằm trên một trong các host này hoặc subdomain của chúng. Dùng tên miền riêng của công ty. | 指向该商家的每个链接都必须在这些主机或其子域名上。请使用公司自己的域名。 | 指向該商家的每個連結都必須在這些主機或其子網域上。請使用公司自己的網域。 |
+| `merchants.f.description` | Description (plain text, English, up to 2000 characters) | Mô tả (văn bản thuần, tiếng Anh, tối đa 2000 ký tự) | 描述（纯文本，英文，最多 2000 字符） | 描述（純文字，英文，最多 2000 字元） |
+| `merchants.f.indexable` | Let search engines index the tool page (also needs the content_indexing flag) | Cho công cụ tìm kiếm index trang công cụ (cũng cần cờ content_indexing) | 允许搜索引擎收录工具页（还需开启 content_indexing 开关） | 允許搜尋引擎收錄工具頁（還需開啟 content_indexing 開關） |
+| `merchants.err.required` | Required. | Bắt buộc. | 必填。 | 必填。 |
+| `merchants.err.tooLong` | Too long. | Quá dài. | 太长。 | 太長。 |
+| `merchants.err.slugReserved` | Reserved: "p" and "o" are used by /go/ addresses. | Đã dành riêng: "p" và "o" được dùng cho địa chỉ /go/. | 保留：“p” 和 “o” 用于 /go/ 地址。 | 保留：「p」和「o」用於 /go/ 位址。 |
+| `merchants.err.slugFormat` | Use 3 to 60 lowercase letters, digits or hyphens. | Dùng 3 đến 60 chữ thường, số hoặc dấu gạch ngang. | 请使用 3 到 60 个小写字母、数字或连字符。 | 請使用 3 到 60 個小寫字母、數字或連字號。 |
+| `merchants.err.slugTaken` | This slug is already taken. | Slug này đã có người dùng. | 此 slug 已被使用。 | 此 slug 已被使用。 |
+| `merchants.err.hostsEmpty` | Enter at least one host. | Nhập ít nhất một host. | 请至少输入一个主机。 | 請至少輸入一個主機。 |
+| `merchants.err.hostsTooMany` | At most 20 hosts. | Tối đa 20 host. | 最多 20 个主机。 | 最多 20 個主機。 |
+| `merchants.err.hostsFormat` | Each line must be a plain domain name such as example.com (no https://, path, port, wildcard or IP address). | Mỗi dòng phải là một tên miền thuần như example.com (không có https://, đường dẫn, cổng, ký tự đại diện hay địa chỉ IP). | 每行必须是普通域名，如 example.com（不含 https://、路径、端口、通配符或 IP 地址）。 | 每行必須是普通網域名稱，如 example.com（不含 https://、路徑、連接埠、萬用字元或 IP 位址）。 |
+| `merchants.err.hostsDuplicate` | A host is listed twice. | Có host bị liệt kê hai lần. | 有主机重复。 | 有主機重複。 |
+| `merchants.err.url` | Link refused ({code}). It must be https, without user info, port or IP address, on an allowed host. | Link bị từ chối ({code}). Phải là https, không có thông tin người dùng, cổng hay địa chỉ IP, và nằm trên host được phép. | 链接被拒绝（{code}）。必须是 https，不含用户信息、端口或 IP 地址，且位于允许的主机上。 | 連結被拒絕（{code}）。必須是 https，不含使用者資訊、連接埠或 IP 位址，且位於允許的主機上。 |
+| `merchants.moveTo` | Move to {status} | Chuyển sang {status} | 改为{status} | 改為{status} |
+| `merchants.confirmArchive` | I understand that archived is final and this merchant's links will return 404. | Tôi hiểu rằng đã lưu trữ là không đảo ngược và link của merchant này sẽ trả 404. | 我了解归档不可撤销，且该商家的链接将返回 404。 | 我了解封存不可撤銷，且該商家的連結將回傳 404。 |
+| `merchants.archivedNote` | Archived is final: the merchant cannot be activated again. Its fields can still be edited. | Đã lưu trữ là trạng thái cuối: không thể kích hoạt lại merchant. Vẫn sửa được các trường. | 归档为最终状态：商家无法再次启用，但字段仍可编辑。 | 封存為最終狀態：商家無法再次啟用，但欄位仍可編輯。 |
+| `merchants.hostsWarn` | The allowed hosts include a shared-hosting domain ({hosts}). Anyone can publish a page there, so a link on that host proves nothing about {name}. Use the company's own domain. | Các host được phép có tên miền hosting dùng chung ({hosts}). Ai cũng đăng được trang ở đó, nên link trên host này không chứng minh gì về {name}. Hãy dùng tên miền riêng của công ty. | 允许的主机包含共享托管域名（{hosts}）。任何人都可以在那里发布页面，因此该主机上的链接无法证明与 {name} 有关。请使用公司自己的域名。 | 允許的主機包含共享代管網域（{hosts}）。任何人都可以在那裡發布頁面，因此該主機上的連結無法證明與 {name} 有關。請使用公司自己的網域。 |
+| `merchants.brokenTitle` | Not saved. With these hosts or this website, these offers would no longer pass the link rules: | Chưa lưu. Với các host hoặc website này, các offer sau sẽ không còn qua được luật link: | 未保存。使用这些主机或网站后，以下优惠将不再通过链接规则： | 未儲存。使用這些主機或網站後，以下優惠將不再通過連結規則： |
+| `programs.title` | Programs | Chương trình | 合作计划 | 合作計畫 |
+| `programs.intro` | Type the terms as shown on the partner's page; nothing is filled in for you. A program can be active only with a terms link and the date you checked it, and a direct program can never be active. | Nhập điều khoản đúng như trên trang của partner; không có giá trị nào được điền sẵn. Chương trình chỉ active khi có link điều khoản và ngày bạn đã kiểm, và chương trình direct không bao giờ active được. | 按合作方页面上的原文填写条款，不会预填任何值。只有填写了条款链接和核对日期，计划才能启用；direct 类型的计划永远不能启用。 | 依合作方頁面上的原文填寫條款，不會預填任何值。只有填寫了條款連結和核對日期，計畫才能啟用；direct 類型的計畫永遠不能啟用。 |
+| `programs.empty` | No programs yet. | Chưa có chương trình nào. | 还没有合作计划。 | 還沒有合作計畫。 |
+| `programs.new` | New program | Chương trình mới | 新建合作计划 | 新增合作計畫 |
+| `programs.create` | Create program | Tạo chương trình | 创建合作计划 | 建立合作計畫 |
+| `programs.save` | Save program | Lưu chương trình | 保存合作计划 | 儲存合作計畫 |
+| `programs.endedNote` | Ended is final: the program cannot be reopened. Its other fields can still be edited. | Đã kết thúc là trạng thái cuối: không mở lại được. Vẫn sửa được các trường khác. | 结束为最终状态：计划无法重新开启，但其他字段仍可编辑。 | 結束為最終狀態：計畫無法重新開啟，但其他欄位仍可編輯。 |
+| `programs.f.name` | Name | Tên | 名称 | 名稱 |
+| `programs.f.type` | Type | Loại | 类型 | 類型 |
+| `programs.f.network` | Network (optional) | Mạng lưới (không bắt buộc) | 联盟网络（可选） | 聯盟網路（選填） |
+| `programs.f.provider` | Provider | Cách tích hợp | 集成方式 | 整合方式 |
+| `programs.f.commissionModel` | Commission model (optional) | Mô hình hoa hồng (không bắt buộc) | 佣金模式（可选） | 佣金模式（選填） |
+| `programs.f.commissionRateBps` | Commission rate in basis points, 100 = 1% (optional) | Tỷ lệ hoa hồng theo điểm cơ bản, 100 = 1% (không bắt buộc) | 佣金比例，以基点计，100 = 1%（可选） | 佣金比例，以基點計，100 = 1%（選填） |
+| `programs.f.commissionFlatMinor` | Flat commission in minor units, such as cents (optional) | Hoa hồng cố định theo đơn vị nhỏ nhất, ví dụ cent (không bắt buộc) | 固定佣金，以最小货币单位计，如分（可选） | 固定佣金，以最小貨幣單位計，如分（選填） |
+| `programs.f.currency` | Currency, ISO code such as USD (optional) | Tiền tệ, mã ISO như USD (không bắt buộc) | 货币，ISO 代码，如 USD（可选） | 貨幣，ISO 代碼，如 USD（選填） |
+| `programs.f.cookieDays` | Cookie days (optional) | Số ngày cookie (không bắt buộc) | Cookie 天数（可选） | Cookie 天數（選填） |
+| `programs.f.attributionNotes` | Attribution notes (optional) | Ghi chú ghi nhận (không bắt buộc) | 归因备注（可选） | 歸因備註（選填） |
+| `programs.f.termsUrl` | Terms link (https) | Link điều khoản (https) | 条款链接 (https) | 條款連結 (https) |
+| `programs.f.termsVerifiedAt` | Terms verified on (YYYY-MM-DD, UTC) | Ngày đã kiểm điều khoản (YYYY-MM-DD, UTC) | 条款核对日期（YYYY-MM-DD，UTC） | 條款核對日期（YYYY-MM-DD，UTC） |
+| `programs.f.status` | Status | Trạng thái | 状态 | 狀態 |
+| `programs.f.none` | Not set | Chưa đặt | 未设置 | 未設定 |
+| `programs.err.required` | Required. | Bắt buộc. | 必填。 | 必填。 |
+| `programs.err.tooLong` | Too long. | Quá dài. | 太长。 | 太長。 |
+| `programs.err.choice` | Pick one of the listed values. | Chọn một trong các giá trị trong danh sách. | 请选择列表中的一个值。 | 請選擇列表中的一個值。 |
+| `programs.err.number` | Enter a whole number in range, or leave it empty. | Nhập số nguyên trong khoảng cho phép, hoặc để trống. | 请输入范围内的整数，或留空。 | 請輸入範圍內的整數，或留空。 |
+| `programs.err.currency` | Use a three-letter ISO code such as USD, or leave it empty. | Dùng mã ISO ba chữ cái như USD, hoặc để trống. | 请使用三个字母的 ISO 代码，如 USD，或留空。 | 請使用三個字母的 ISO 代碼，如 USD，或留空。 |
+| `programs.err.url` | Enter an https link, or leave it empty. | Nhập link https, hoặc để trống. | 请输入 https 链接，或留空。 | 請輸入 https 連結，或留空。 |
+| `programs.err.date` | Use the format YYYY-MM-DD, or leave it empty. | Dùng định dạng YYYY-MM-DD, hoặc để trống. | 请使用 YYYY-MM-DD 格式，或留空。 | 請使用 YYYY-MM-DD 格式，或留空。 |
+| `programs.err.termsMissing` | A program can be active only with a terms link and a verified date. | Chương trình chỉ active khi có link điều khoản và ngày đã kiểm. | 只有填写了条款链接和核对日期，计划才能启用。 | 只有填寫了條款連結和核對日期，計畫才能啟用。 |
+| `programs.err.directNotActive` | A direct program cannot be active: it has no feature flag. | Chương trình direct không active được: nó không có cờ tính năng. | direct 类型的计划不能启用：它没有功能开关。 | direct 類型的計畫不能啟用：它沒有功能開關。 |
+
+```bash
+npm test -w apps/web -- test/admin/merchants.test.ts test/i18n/parity.test.ts test/design/layout.test.ts test/design/assets.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 9: Test kiến trúc**
+
+Trong `apps/web/test/architecture.test.ts`: thêm `"../src/routes/admin-merchants.tsx"` vào `MONEY_ALLOWED` (sau `db/audit.ts`), đổi bài "after Task 2d the allowlist is exactly the four db files" thành:
+
+```ts
+  it("after Task 3 the allowlist is exactly the four db files and the merchants admin route", () => {
+    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts", "../src/routes/admin-merchants.tsx"]);
+  });
+```
+
+và cập nhật chú thích trên `MONEY_ALLOWED` (Task 3: chỉ route; view không được import db). Chạy `npm test -w apps/web -- test/architecture.test.ts` → PASS (bài "views/ never import db" vẫn xanh vì view chỉ nhận kiểu cấu trúc).
+
+- [ ] **Step 10: Kiểm toàn bộ và commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+grep -rniE "elevenlabs|partnerstack" apps/web/src
+git add apps/web/src/domain/merchant.ts apps/web/src/domain/offer.ts apps/web/src/routes/admin-merchants.tsx apps/web/src/views/admin/partner-fields.tsx apps/web/src/views/admin/MerchantsPage.tsx apps/web/src/views/admin/MerchantDetailPage.tsx apps/web/src/views/admin/AdminLayout.tsx apps/web/src/app.ts apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/architecture.test.ts apps/web/test/domain/merchant.test.ts apps/web/test/domain/offer.test.ts apps/web/test/db/offers.test.ts apps/web/test/db/offer-context.test.ts apps/web/test/admin/merchants.test.ts
+git commit -m "feat(web): admin merchants and programs (VNX-2102b-1)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận (Task 3):**
+- Chỉ admin: 403 người thường và builder, 303 chưa đăng nhập, POST sai Origin → 403 và không ghi; mọi trang `Cache-Control: no-store` và `<meta name="robots" content="noindex"`; mục nav `merchants` có mặt; 4 locale trả 200.
+- Slug `p`, `o`, sai định dạng, trùng; `allowed_hosts` sai (IP, có `https://`); `website_url` `http:` hoặc ngoài host → 400 kèm lỗi cạnh trường, không ghi dòng, không audit. Merchant tạo mới mặc định `paused`; `archived` không tạo được lúc tạo.
+- Sửa không đổi được slug (không có `<input name="slug">` trên trang chi tiết; giá trị gửi lên bị bỏ qua). Merchant `archived`: không có form `/status`, form sửa vẫn có và lưu được, mọi chuyển ra khỏi `archived` → 409; lưu trữ cần `confirm=1`.
+- Đổi `allowed_hosts` hoặc `website_url` làm hỏng offer chưa `archived` → 400, liệt kê id offer, DB và audit không đổi; offer `archived` không bị kiểm; cảnh báo hậu tố nhiều người thuê hiện nhưng không chặn lưu.
+- Chương trình: tạo không có giá trị mặc định (mọi trường tùy chọn `NULL`); sang `active` thiếu `terms_url` hoặc `terms_verified_at`, hoặc `direct` → 400 với lỗi trên ô `status`, trạng thái không đổi; `ended` là cuối (không có ô chọn, chuyển ra → 409, trường khác sửa được); `expectedStatus` cũ → 409; chương trình của merchant khác → 404; audit `program.create|status|update`.
+- Hai test db hoãn từ 2d xanh (`createOffer` với `subjectType: "product"` → `null`, không dòng, không audit; `setDefaultOffer` nhận offer `paused` của chính merchant).
+- `MONEY_ALLOWED` đúng 5 file; `grep -rniE "elevenlabs|partnerstack" apps/web/src` không in dòng nào; `test/design/*` xanh.
+- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ước tính ≈ 640 dòng không tính locale (route 125, view 330, domain 40, nav/app 8, test ~330 gồm ~10 dòng test db): hơi trên mức 600 chỉ vì test; mã chạy được ≈ 500 dòng. Không tách thêm (đã tách 3 / 3b). Commit `feat(web): admin merchants and programs (VNX-2102b-1)`.
 
 ---
 
-### Task 4: VNX-2103 — `/go/` và `outbound_clicks`
+### Task 3b: VNX-2102b-2 — Offer, xem trước URL cuối, offer mặc định
 
-**Lưu ý:** Privacy (`docs/legal/privacy.md`, `src/legal/content.ts`) phải theo bản `main` mới, đã có các dòng của form liên hệ.
+**Phạm vi:** thêm vào trang chi tiết merchant của Task 3 khu **offer**: danh sách và form tạo / sửa offer (`programId` tùy chọn, `kind`, `label` gồm `try_it`, `destination_url` ghi nhãn "Untracked link", `tracking_template`, `starts_at` / `ends_at` ghi nhãn UTC, `status`), nút **"đặt làm offer mặc định"** / bỏ mặc định, **xem trước URL cuối** cho từng offer (URL tracking điền giá trị mẫu cạnh URL fallback `website_url` + UTM, kèm kết quả `resolveOfferRedirect` hiện tại), xác nhận khi lưu trữ offer mặc định, dòng "offer mặc định đã lưu trữ", ánh xạ `null` của db. Sửa `parseInstant` để nhận `YYYY-MM-DDTHH:MM` (UTC). Thêm hàm thuần `offerPreview`. Task 3 phải đã xong.
 
-**Phạm vi:** Migration `0012_outbound_clicks.sql` đúng phụ lục 2.2 (`id`, `product_id`, `offer_id`, `link_kind` CHECK `demo|site|offer`, `src`, `locale`, `visitor_hash`, `country`, `referrer_host`, `is_bot`, `created_at`; CHECK `product_id IS NOT NULL OR offer_id IS NOT NULL`; ba chỉ mục của phụ lục; không cột IP / email / user). `db/clicks.ts` (duy nhất ghi `outbound_clicks`; `recordClick`; `purgeOldClicks(db, now)` theo `OUTBOUND_CLICK_RETENTION_DAYS`). `domain/outbound.ts` (`parseSrc`, `isBotRequest`, `referrerHost`, `localeFromReferer`, `OUTBOUND_CLICK_RETENTION_DAYS`). `routes/go.ts`: `GET|HEAD /go/o/:offerId`, `GET|HEAD /go/:merchantSlug` (slug `p` / `o` / lạ / merchant không `active` / không offer mặc định → 404; xếp đúng thứ tự khai báo để `/go/o/:offerId` thắng `/go/:merchantSlug`), `app.all("/go/*")` → 405 cho method khác. Dùng `resolveOfferRedirect` (Task 2) với `isFlagEnabled` (Task 1), điền template bằng `click_id = ulid()`, ghi click qua `defer(c, promise)` (thử `c.executionCtx.waitUntil`, nếu không có thì `await`, lỗi chỉ log). Header theo Global Constraints. Cron: `jobs/daily.ts` gọi `purgeOldClicks`. Privacy: chép mục C vào `src/legal/content.ts` (Reviewer đã cập nhật `docs/legal/privacy.md` trước task này). `robots.txt` đã có `Disallow: /go/` (chỉ thêm test hồi quy). **Nghĩa vụ thêm (Opus review Task 2):** route ghi `console.error` (JSON một dòng) cho các lý do dữ liệu hỏng của `resolveOfferRedirect`: `program_missing`, `program_merchant`, `template_missing`, `window_invalid`, `invalid_url`, `website_invalid`, `subject_merchant`; tạo `test/monetization/go.test.ts` (ADR-007).
+**Files:**
+- Modify: `apps/web/src/domain/offer.ts` (`parseInstant` nhận dạng không có `Z`; `offerPreview`, `OfferPreview`)
+- Create: `apps/web/src/views/admin/OfferSection.tsx`
+- Modify: `apps/web/src/views/admin/MerchantDetailPage.tsx` (nhận `offers`, `previews`, `offerEdit`, hiện `OfferSection`; ghi chú offer mặc định đã lưu trữ), `apps/web/src/routes/admin-merchants.tsx` (3 route; `detail()` nạp offer và cờ), 4 file locale
+- Test: `apps/web/test/domain/offer.test.ts` (thêm), `apps/web/test/admin/merchant-offers.test.ts`
+- `test/architecture.test.ts`: không đổi (route đã trong `MONEY_ALLOWED`; `OfferSection.tsx` không import db). Bài danh sách vẫn đúng 5 file.
 
-**Files (dự kiến):** Create `migrations/0012_outbound_clicks.sql`, `src/domain/outbound.ts`, `src/db/clicks.ts`, `src/routes/go.ts`; Modify `src/app.ts`, `src/jobs/daily.ts`, `src/legal/content.ts`, `wrangler.jsonc`, `test/architecture.test.ts` (`outbound_clicks` vào `WRITERS`); Test `test/domain/outbound.test.ts`, `test/monetization/go.test.ts`, `test/jobs/clicks-purge.test.ts`, mở rộng `test/legal/content.test.ts` và `test/seo/robots.test.ts`.
+**Interfaces:**
+- Consumes (đã commit hoặc từ Task 3): `parseOfferForm`, `OfferFormValues`, `OfferField`, `OfferFieldError`, `OfferContext`, `OFFER_KINDS`, `LABELS`, `OFFER_STATUSES`, `offerTransitionAllowed`, `resolveOfferRedirect`, `RedirectResult`, `RedirectOffer`, `RedirectProgram`, `RedirectMerchant`, `previewUrl`, `SAMPLE_VALUES`, `appendUtm`, `validateFinalUrl` (`domain/`); `createOffer`, `updateOffer`, `findOfferById`, `listOffersByMerchant`, `Offer` (`db/offers.ts`); `setDefaultOffer` (`db/merchants.ts`); `readFlags` (`db/flags.ts`); `Field`, `aria`, `STATUS_KEY`, `MerchantDetailPage`.
+- Produces (domain): `type OfferPreview = { tracked: UrlResult; fallback: UrlResult; now: RedirectResult }`, `offerPreview(i: { offer: RedirectOffer; program: RedirectProgram | null; merchant: RedirectMerchant; flags: RedirectInput["flags"]; now: string }): OfferPreview`.
+- Produces (route): `POST /admin/merchants/:id/offers`, `POST /admin/merchants/:id/offers/:offerId`, `POST /admin/merchants/:id/default-offer`.
+- Produces (view): `OfferSection`, `OfferView`, `OfferEdit`.
 
-**Tiêu chí chấp nhận (`test/monetization/go.test.ts` bao phủ đúng danh sách ADR-007 "Được bảo đảm bởi" và Review Focus 1, 2, 3, 7):**
-- Open redirect: `/go/https://evil.com`, `/go/%2F%2Fevil.com`, `?src=https://evil.com`, `?url=…`, `?next=…`, `\`, CR/LF trong slug và query → `Location` chưa bao giờ chứa host ngoài `allowed_hosts`; query lạ bị bỏ qua.
-- Dữ liệu hỏng trong DB (`destination_url` có userinfo / `http:` / IP / host lạ, template điền ra host lạ) → 404 hoặc `fallback` hợp lệ, không bao giờ redirect tới URL không qua kiểm.
-- Offer `paused`, hết hạn, chương trình `draft` / `paused` / `direct`, merchant `paused`, cờ tắt → redirect `fallback` tới `merchants.website_url` hợp lệ, không UTM của template, **có** một dòng `outbound_clicks` (không có `click_id` trong `Location`); `website_url` không hợp lệ → 404, không ghi. Offer / merchant `archived` hoặc không tồn tại → 404, không ghi. Cờ bật → `Location` = `new URL(template đã điền).href`, dòng click có `id` = `click_id` trong URL (khi template có `{click_id}`).
-- `/go/o/:offerId`: id không đúng dạng ULID (`^[0-9A-HJKMNP-TV-Z]{26}$`) → 404 trước khi đọc D1 (test bằng DB giả ném lỗi khi bị gọi).
-- UTM dương tính ở tầng domain (`appendUtm`, vì lát mỏng không có offer không chương trình): offer không chương trình được gắn `utm_source=vnx.si&utm_medium=referral`, không gắn khi URL đã có `utm_*`; `fallback` tới `website_url` được gắn UTM theo cùng luật.
-- Cache 60 s: đổi cờ trực tiếp trong D1 không đổi hành vi trong 60 s (dùng `resetFlagCache` / tiêm `now` ở tầng hàm; ở tầng route kiểm bằng `setFlag` xóa cache).
-- Header `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: origin` trên mọi 302, kể cả `fallback`; 404 và 405 đúng; `HEAD` redirect không ghi click; POST `/go/…` có Origin hợp lệ → 405 và `Allow: GET, HEAD`.
-- Click: một dòng mỗi GET `tracked` hoặc `fallback` (không có dòng cho 404, 405, HEAD); `src` ngoài enum → `unknown`; `locale` từ `Referer` cùng host (vi → `vi`), khác host hoặc không có → `en`; `referrer_host` chỉ host (không path, không query); `country` từ `request.cf.country` nếu có; `visitor_hash` null; bot (UA rỗng, `Googlebot`, `curl`) → `is_bot = 1` và vẫn redirect, vẫn ghi dòng; test schema: bảng không có cột `ip`, `email`, `user_id`.
-- Ghi bằng `waitUntil`: test truyền `ExecutionContext` giả, kiểm response trả về trước khi promise ghi chạy xong, và click vẫn ghi sau khi `await` các promise đã đăng ký; lỗi ghi không đổi response.
-- Cron xóa: dòng cũ hơn ngưỡng bị xóa, dòng mới giữ; chạy hai lần không đổi kết quả.
-- Privacy: `test/legal/content.test.ts` xanh với `docs/legal/privacy.md` đã cập nhật (mục C); `LEGAL_UPDATED_AT` được tăng (hằng dùng chung với Terms, nên ngày của cả Terms và Privacy đổi; `{date}` trong `terms.md` và `privacy.md` vẫn khớp vì cùng hằng); `robots.txt` vẫn có `Disallow: /go/`.
-- Trang site thường (`/`, `/products`, `/p/…`) **không** có `Referrer-Policy: origin` (hồi quy: chỉ `/go/` đặt header này).
-- Danh sách cho phép của test kiến trúc thêm `db/clicks.ts`, `routes/go.ts`, `jobs/daily.ts`; `outbound_clicks` vào `WRITERS`.
-- `test/monetization/conversions.test.ts` của ADR-007 hoãn tới VNX-2105+ (lát mỏng không có conversion); Reviewer ghi vào `CURRENT-STATUS.md`.
-- Cron xóa dùng `OUTBOUND_CLICK_RETENTION_DAYS = 395`.
-- `npm run typecheck -w apps/web`, `npm test` xanh. Task này HIGH-RISK: Reviewer chạy lại toàn bộ test `go` và đọc từng dòng `routes/go.ts` khi review. Diff ≲ 600 dòng không tính locale; nếu vượt, tách 4a (migration + db + domain + cron) / 4b (route + test). Commit `feat(web): /go/ redirects, outbound click log and retention (VNX-2103)`.
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **`parseInstant` nhận hai dạng:** `YYYY-MM-DDTHH:MM` (cùng `:SS`, `.mmm` tùy chọn), hiểu là **UTC** (thêm `Z` trước khi `new Date`), và dạng ISO chuẩn có `Z` như cũ; `YYYY-MM-DD` vẫn là nửa đêm UTC. Trường kiểu ngày của offer là `<input type="text">` (không dùng `datetime-local`, vì nó dùng múi giờ trình duyệt); nhãn ghi "UTC" và gợi ý đổi giờ (`offers.dateHint`: 09:00 UTC = 16:00 giờ Hà Nội). Giá trị đã lưu hiển thị lại ở dạng ISO chuẩn (round-trip được). Thay đổi này thuần domain, `resolveOfferRedirect` giữ nguyên (`instantMs` vẫn chỉ nhận dạng chuẩn mà form lưu).
+2. **Chương trình chọn bằng `programId`** (select; rỗng = không chương trình). Id lạ hoặc của merchant khác: nạp bằng `findProgramById`; không có → lỗi trường `programId` = `program_merchant` (400, không phải 404); có nhưng của merchant khác → `parseOfferForm` trả `program_merchant`. Quy tắc template bắt buộc / khác `destination_url` đã nằm trong `parseOfferForm` (Task 2b).
+3. **Ánh xạ `null` (nghĩa vụ review 2d):** `updateOffer` → `null` = compare-and-set thua → `409` (`errorResponse(…, "conflict", 409)`); `createOffer` / `setDefaultOffer` → `null` **sau** khi route đã kiểm trước → `404`. Route kiểm trước: merchant tồn tại, offer thuộc merchant (`subjectType = "merchant"`, `subjectId`), với `setDefaultOffer` thêm offer chưa `archived`. Nhánh `null` sau kiểm trước chỉ xảy ra khi đua dữ liệu, được db test (2d) phủ; test route phủ phần kiểm trước.
+4. **Lưu trữ offer mặc định cần xác nhận:** form offer của offer đang là `default_offer_id` có thêm ô `confirmArchive` (hiện luôn, ghi rõ hậu quả: `/go/<slug>` trả 404 tới khi đặt offer mặc định khác). Lưu `status = archived` cho offer mặc định mà thiếu `confirmArchive=1` → 400 với lỗi `offers.err.confirmArchive`, không ghi. Offer `archived` **không** bị tự gỡ khỏi `default_offer_id` (quyết định 2d mục 2); thay vào đó trang merchant hiện `merchants.defaultArchived` khi `defaultOfferId` trỏ tới offer `archived`.
+5. **Xem trước là hàm thuần `offerPreview`** (domain, kiểm được bằng test không cần HTTP): `tracked` = `previewUrl(template)` (giá trị mẫu `SAMPLE_VALUES`) khi có template, không thì `destination_url` + UTM; `fallback` = `website_url` + UTM qua cùng cổng `validateFinalUrl`; `now` = `resolveOfferRedirect` với cờ thật đọc **thẳng D1** (`readFlags`, không cache, như `/admin/flags`) và `clickId` / `locale` / `src` mẫu. Lý do của `fallback` / `not_found` hiện bằng mã trong `<code>` (không dịch; là khóa ổn định của domain). Hiện ba dòng cạnh nhau: tracked, fallback, kết quả hiện tại.
+6. **`kind` và `label` hiện mã thô** (như Task 3 mục 10). **Luật `kind` (phán quyết Controller, 2026-10-05, từ review Opus):** `affiliate` và `referral` BẮT BUỘC có chương trình (`errors.kind = "program_required"`); `official` và `trial` không cần (có hay không chương trình đều được); `sponsored` bị từ chối tới EPIC 23 (`errors.kind = "sponsored_unavailable"`, ADR-008). Luật nằm ở `parseOfferForm` (domain, Task 3b Step 1), test ở tầng domain.
+7. **Danh sách offer của merchant chỉ có `subject_type = merchant`** (`listOffersByMerchant`). Sửa offer: route đọc `findOfferById` và từ chối (404) offer không thuộc merchant trong URL, rồi `updateOffer` với `expectedStatus` = trường ẩn `expectedStatus` của form.
+
+- [ ] **Step 1: `parseInstant` nhận `YYYY-MM-DDTHH:MM` (UTC) và `offerPreview` (test trước)**
+
+Thêm vào `apps/web/test/domain/offer.test.ts` (import `parseOfferForm`, `offerPreview`, `type OfferFormValues` nếu chưa có):
+
+```ts
+describe("offer date inputs (UTC)", () => {
+  const ctx = { merchant: { id: "M", allowedHosts: ["example.com"] }, program: null };
+  const form = (o: Partial<OfferFormValues> = {}): OfferFormValues => ({
+    kind: "official", label: "visit_site", destinationUrl: "https://example.com/", trackingTemplate: "", startsAt: "", endsAt: "", status: "active", ...o,
+  });
+  const starts = (raw: string) => {
+    const r = parseOfferForm(form({ startsAt: raw }), ctx);
+    return r.ok ? r.offer.startsAt : r.errors.startsAt;
+  };
+
+  it("reads YYYY-MM-DDTHH:MM as UTC, and still accepts the canonical ISO form and a bare date", () => {
+    expect(starts("2026-10-05T09:30")).toBe("2026-10-05T09:30:00.000Z");
+    expect(starts("2026-10-05T09:30:15")).toBe("2026-10-05T09:30:15.000Z");
+    expect(starts("2026-10-05T09:30:00.000Z")).toBe("2026-10-05T09:30:00.000Z");
+    expect(starts("2026-10-05")).toBe("2026-10-05T00:00:00.000Z");
+    expect(starts("")).toBeNull();
+  });
+
+  it("rejects local-style and impossible values", () => {
+    for (const bad of ["2026-10-05 09:30", "2026-10-05T9:30", "2026-13-01T00:00", "2026-02-30T00:00", "2026-10-05T24:00", "2026-10-05T09:30+07:00", "tomorrow"]) expect(starts(bad), bad).toBe("date");
+  });
+});
+
+describe("offer kind rules (Controller 2026-10-05)", () => {
+  const withProgram = { merchant: { id: "M", allowedHosts: ["example.com"] }, program: { id: "P", merchantId: "M" } };
+  const none = { merchant: withProgram.merchant, program: null };
+  const form = (o: Partial<OfferFormValues>): OfferFormValues => ({
+    kind: "official", label: "visit_site", destinationUrl: "https://example.com/", trackingTemplate: "", startsAt: "", endsAt: "", status: "active", ...o,
+  });
+  const tpl = { trackingTemplate: "https://example.com/r?c={click_id}" };
+  const kindError = (v: OfferFormValues, ctx: Parameters<typeof parseOfferForm>[1]) => {
+    const r = parseOfferForm(v, ctx);
+    return r.ok ? null : (r.errors.kind ?? null);
+  };
+
+  it("affiliate and referral need a program", () => {
+    for (const kind of ["affiliate", "referral"]) {
+      expect(kindError(form({ kind }), none), kind).toBe("program_required");
+      expect(kindError(form({ kind, ...tpl }), withProgram), kind).toBeNull();
+    }
+  });
+
+  it("official and trial need none, and are fine with or without one", () => {
+    for (const kind of ["official", "trial"]) {
+      expect(kindError(form({ kind }), none), kind).toBeNull();
+      expect(kindError(form({ kind, ...tpl }), withProgram), kind).toBeNull();
+    }
+  });
+
+  it("sponsored is refused, with or without a program, until EPIC 23", () => {
+    expect(kindError(form({ kind: "sponsored" }), none)).toBe("sponsored_unavailable");
+    expect(kindError(form({ kind: "sponsored", ...tpl }), withProgram)).toBe("sponsored_unavailable");
+  });
+});
+
+describe("offerPreview", () => {
+  const merchant = { id: "M", status: "active" as const, websiteUrl: "https://example.com/", allowedHosts: ["example.com"] };
+  const offer = {
+    id: "O", subjectType: "merchant" as const, subjectId: "M", programId: "P", status: "active" as const,
+    destinationUrl: "https://example.com/", trackingTemplate: "https://example.com/r?c={click_id}&l={locale}", startsAt: null, endsAt: null,
+  };
+  const program = { id: "P", merchantId: "M", type: "affiliate" as const, status: "active" as const };
+  const base = { offer, program, merchant, now: "2026-10-05T00:00:00.000Z" };
+
+  it("shows the tracked link with the sample values next to the fallback link, whatever the flag says", () => {
+    for (const on of [true, false]) {
+      const p = offerPreview({ ...base, flags: { affiliate: on, partner_referral: false } });
+      expect(p.tracked).toEqual({ ok: true, url: "https://example.com/r?c=01HZZZZZZZZZZZZZZZZZZZZZZZ&l=en" });
+      expect(p.fallback).toEqual({ ok: true, url: "https://example.com/?utm_source=vnx.si&utm_medium=referral" });
+      expect(p.now).toMatchObject(on ? { kind: "tracked" } : { kind: "fallback", reason: "flag_off" });
+    }
+  });
+
+  it("an offer without a program previews its own link with utm, and a broken template says why", () => {
+    const own = offerPreview({ ...base, offer: { ...offer, programId: null, trackingTemplate: null }, program: null, flags: { affiliate: false, partner_referral: false } });
+    expect(own.tracked).toEqual({ ok: true, url: "https://example.com/?utm_source=vnx.si&utm_medium=referral" });
+    const bad = offerPreview({ ...base, offer: { ...offer, trackingTemplate: "https://other.com/r" }, flags: { affiliate: true, partner_referral: false } });
+    expect(bad.tracked).toEqual({ ok: false, error: "not_allowed" });
+    expect(bad.now).toEqual({ kind: "not_found", reason: "invalid_url" });
+    // the same gate as /go/: an unknown placeholder is named as such, not reported as bad characters
+    const unknown = offerPreview({ ...base, offer: { ...offer, trackingTemplate: "https://example.com/r?c={nope}" }, flags: { affiliate: true, partner_referral: false } });
+    expect(unknown.tracked).toEqual({ ok: false, error: "placeholder" });
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/domain/offer.test.ts
+```
+
+Expected: FAIL (`T09:30` không có `Z` bị từ chối; `offerPreview` chưa có). Sửa `parseInstant` trong `domain/offer.ts`:
+
+```ts
+/** `YYYY-MM-DD` (midnight UTC), `YYYY-MM-DDTHH:MM[:SS[.mmm]]` (read as UTC) or the same with a trailing `Z`: the ISO instant, null for empty, or not ok. */
+function parseInstant(raw: string): { ok: true; value: string | null } | { ok: false } {
+  const s = raw.trim();
+  if (s === "") return { ok: true, value: null };
+  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z?)?$/.test(s)) return { ok: false };
+  const d = new Date(s.length === 10 ? `${s}T00:00:00.000Z` : s.endsWith("Z") ? s : `${s}Z`);
+  if (Number.isNaN(d.getTime()) || !d.toISOString().startsWith(s.slice(0, 10))) return { ok: false };
+  return { ok: true, value: d.toISOString() };
+}
+```
+
+Luật `kind` trong `parseOfferForm` (cùng file; thêm `"program_required" | "sponsored_unavailable"` vào union `OfferFieldError`; thay dòng `if (!kind) errors.kind = "choice";` bằng):
+
+```ts
+  if (!kind) errors.kind = "choice";
+  else if (kind === "sponsored") errors.kind = "sponsored_unavailable"; // not before EPIC 23 (ADR-008)
+  else if ((kind === "affiliate" || kind === "referral") && !ctx.program) errors.kind = "program_required";
+```
+
+Các test `parseOfferForm` có sẵn dùng `kind: "affiliate"` mà không có chương trình phải sửa (thêm chương trình hoặc đổi sang `official`); không đổi ý nghĩa của chúng.
+
+Thêm `offerPreview` ngay sau `withUtm` (cùng file; thêm `SAMPLE_VALUES` vào import từ `./offer-url.ts`):
+
+```ts
+export type PreviewLink = { ok: true; url: string } | { ok: false; error: UrlError | TemplateError };
+export type OfferPreview = { tracked: PreviewLink; fallback: UrlResult; now: RedirectResult };
+
+/**
+ * What the admin sees for one offer: the tracked link (the template passes parseTemplate, the same gate /go/ applies, then gets the sample values; as it would be with the flag on; an offer without a template shows its own link with utm), the fallback link
+ * (the merchant's website with utm) and the result /go/ gives right now with the flags passed in. Same gates as /go/; no I/O.
+ */
+export function offerPreview(i: { offer: RedirectOffer; program: RedirectProgram | null; merchant: RedirectMerchant; flags: RedirectInput["flags"]; now: string }): OfferPreview {
+  const hosts = i.merchant.allowedHosts;
+  let tracked: PreviewLink;
+  if (i.offer.trackingTemplate) {
+    const tpl = parseTemplate(i.offer.trackingTemplate, hosts);
+    tracked = tpl.ok ? previewUrl(tpl.template, hosts) : { ok: false, error: tpl.error };
+  } else {
+    tracked = withUtm(i.offer.destinationUrl, hosts);
+  }
+  return {
+    tracked,
+    fallback: withUtm(i.merchant.websiteUrl, hosts),
+    now: resolveOfferRedirect({ ...i, clickId: SAMPLE_VALUES.click_id, locale: SAMPLE_VALUES.locale, src: SAMPLE_VALUES.src }),
+  };
+}
+```
+
+Expected: PASS (đồng thời các test `parseOfferForm` / `resolveOfferRedirect` cũ vẫn xanh).
+
+- [ ] **Step 2: Test admin offer (viết trước, phải FAIL)**
+
+`apps/web/test/admin/merchant-offers.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { findMerchantById, setDefaultOffer } from "../../src/db/merchants.ts";
+import { findOfferById, listOffersByMerchant } from "../../src/db/offers.ts";
+import { makeMerchant, makeOffer, makeProgram, signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+
+const send = (req: Request) => createApp().request(req, undefined, testEnv);
+const admin = () => signIn("owner@vnx.si", { admin: true });
+const ofields = (o: Record<string, string> = {}) => ({
+  programId: "", kind: "official", label: "visit_site", destinationUrl: "https://example.com/", trackingTemplate: "", startsAt: "", endsAt: "", status: "active", expectedStatus: "active", ...o,
+});
+const auditActions = async (entityId: string) =>
+  (await testEnv.DB.prepare("SELECT action FROM audit_log WHERE entity_id = ?1 ORDER BY created_at, id").bind(entityId).all<{ action: string }>()).results.map((r) => r.action);
+const offerCount = async (merchantId: string) => (await listOffersByMerchant(testEnv.DB, merchantId)).length;
+
+beforeEach(async () => {
+  await testEnv.DB.prepare("DELETE FROM feature_flags").run();
+  resetFlagCache();
+});
+
+describe("create and edit offers", () => {
+  it("enters the ElevenLabs-shaped data: untracked link, template, try_it label, set as default", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant({ websiteUrl: "https://elevenlabs.example/", allowedHosts: ["try.example.net", "elevenlabs.example"] });
+    const p = await makeProgram(m);
+    const res = await send(
+      formPost(`/admin/merchants/${m.id}/offers`, ofields({ programId: p.id, kind: "affiliate", label: "try_it", destinationUrl: "https://elevenlabs.example/", trackingTemplate: "https://try.example.net/r/sample-code" }), { cookie }),
+    );
+    expect(res.status).toBe(303);
+    const [offer] = await listOffersByMerchant(testEnv.DB, m.id);
+    expect(offer).toMatchObject({ programId: p.id, label: "try_it", destinationUrl: "https://elevenlabs.example/", trackingTemplate: "https://try.example.net/r/sample-code", status: "active" });
+    expect(await auditActions(offer!.id)).toEqual(["offer.create"]);
+
+    const def = await send(formPost(`/admin/merchants/${m.id}/default-offer`, { offerId: offer!.id }, { cookie }));
+    expect(def.status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBe(offer!.id);
+    expect(await auditActions(m.id)).toEqual(["merchant.create", "merchant.update"]);
+    const html = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(html).toContain("Untracked link");
+    expect(html).toContain("{click_id}"); // the hint text keeps its literal placeholder
+  });
+
+  it("refuses a host outside allowed_hosts, an unknown placeholder, http:, a missing template, and a destination equal to the template; nothing is written", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    const cases: [Record<string, string>, string][] = [
+      [{ destinationUrl: "https://evil.com/" }, "destinationUrl"],
+      [{ destinationUrl: "http://example.com/" }, "destinationUrl"],
+      [{ destinationUrl: "https://example.com@evil.com/" }, "destinationUrl"],
+      [{ programId: p.id, kind: "affiliate", trackingTemplate: "https://example.com/r?c={nope}" }, "trackingTemplate"],
+      [{ programId: p.id, kind: "affiliate", trackingTemplate: "https://evil.com/r" }, "trackingTemplate"],
+      [{ programId: p.id, kind: "affiliate", trackingTemplate: "" }, "trackingTemplate"],
+      [{ programId: p.id, kind: "affiliate", destinationUrl: "https://example.com/r", trackingTemplate: "https://example.com/r" }, "destinationUrl"],
+      [{ label: "buy_now" }, "label"],
+      [{ kind: "affiliate" }, "kind"],
+      [{ kind: "sponsored" }, "kind"],
+      [{ startsAt: "2026-10-05 09:30" }, "startsAt"],
+      [{ startsAt: "2026-10-06T00:00", endsAt: "2026-10-05T00:00" }, "endsAt"],
+      [{ programId: "01HZZZZZZZZZZZZZZZZZZZZZZZ" }, "programId"],
+    ];
+    for (const [override, field] of cases) {
+      const res = await send(formPost(`/admin/merchants/${m.id}/offers`, ofields(override), { cookie }));
+      expect(res.status, JSON.stringify(override)).toBe(400);
+      expect(await res.text(), JSON.stringify(override)).toContain(`id="offers-new-${field}-error"`);
+    }
+    expect(await offerCount(m.id)).toBe(0);
+  });
+
+  it("a program of another merchant is refused", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const foreign = await makeProgram(other);
+    const res = await send(formPost(`/admin/merchants/${m.id}/offers`, ofields({ programId: foreign.id, kind: "affiliate", trackingTemplate: "https://example.com/r" }), { cookie }));
+    expect(res.status).toBe(400);
+    expect(await offerCount(m.id)).toBe(0);
+  });
+
+  it("dates: YYYY-MM-DDTHH:MM is stored as UTC, the form says UTC and shows the stored value back", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    await send(formPost(`/admin/merchants/${m.id}/offers`, ofields({ startsAt: "2026-10-05T09:30", endsAt: "2026-10-06T00:00:00.000Z" }), { cookie }));
+    const [o] = await listOffersByMerchant(testEnv.DB, m.id);
+    expect(o).toMatchObject({ startsAt: "2026-10-05T09:30:00.000Z", endsAt: "2026-10-06T00:00:00.000Z" });
+    const html = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(html).toContain("UTC");
+    expect(html).toContain('value="2026-10-05T09:30:00.000Z"');
+  });
+
+  it("an update audits offer.update or offer.status; a stale expectedStatus is a 409; archived is final; an offer of another merchant is a 404", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const o = await makeOffer(m, null);
+    const foreign = await makeOffer(other, null);
+    const url = `/admin/merchants/${m.id}/offers/${o.id}`;
+    expect((await send(formPost(url, ofields({ label: "learn_more" }), { cookie }))).status).toBe(303);
+    expect((await send(formPost(url, ofields({ status: "paused" }), { cookie }))).status).toBe(303);
+    expect(await auditActions(o.id)).toEqual(["offer.create", "offer.update", "offer.status"]);
+    expect((await send(formPost(url, ofields({ status: "active", expectedStatus: "active" }), { cookie }))).status).toBe(409); // it is paused now
+    expect((await send(formPost(url, ofields({ status: "archived", expectedStatus: "paused" }), { cookie }))).status).toBe(303);
+    expect((await send(formPost(url, ofields({ status: "active", expectedStatus: "archived" }), { cookie }))).status).toBe(409);
+    expect((await findOfferById(testEnv.DB, o.id))?.status).toBe("archived");
+    expect((await send(formPost(url, ofields({ status: "archived", expectedStatus: "bogus" }), { cookie }))).status).toBe(400);
+    expect((await send(formPost(`/admin/merchants/${m.id}/offers/${foreign.id}`, ofields(), { cookie }))).status).toBe(404);
+    expect((await findOfferById(testEnv.DB, foreign.id))?.label).toBe("visit_site");
+  });
+});
+
+describe("default offer", () => {
+  it("sets the merchant's own offer, can clear it, and a foreign, archived or unknown offer is a 404 that writes nothing", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const other = await makeMerchant();
+    const mine = await makeOffer(m, null);
+    const archived = await makeOffer(m, null, { status: "archived" });
+    const foreign = await makeOffer(other, null);
+    const url = `/admin/merchants/${m.id}/default-offer`;
+    for (const id of [foreign.id, archived.id, "01HZZZZZZZZZZZZZZZZZZZZZZZ"]) expect((await send(formPost(url, { offerId: id }, { cookie }))).status, id).toBe(404);
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBeNull();
+    expect(await auditActions(m.id)).toEqual(["merchant.create"]);
+    expect((await send(formPost(url, { offerId: mine.id }, { cookie }))).status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBe(mine.id);
+    expect((await send(formPost(url, { offerId: "" }, { cookie }))).status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBeNull();
+    expect((await send(formPost(`/admin/merchants/01HZZZZZZZZZZZZZZZZZZZZZZZ/default-offer`, { offerId: mine.id }, { cookie }))).status).toBe(404);
+  });
+
+  it("archiving the current default offer needs the confirm tick; then the merchant page says the default offer is archived", async () => {
+    const { cookie, user } = await admin();
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    await setDefaultOffer(testEnv.DB, { merchantId: m.id, offerId: o.id, actorUserId: user.id, now: new Date().toISOString() });
+    const url = `/admin/merchants/${m.id}/offers/${o.id}`;
+    expect(await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text()).not.toContain('data-warning="default-archived"');
+    const refused = await send(formPost(url, ofields({ status: "archived" }), { cookie }));
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain('id="offers-' + o.id + '-confirmArchive-error"');
+    expect((await findOfferById(testEnv.DB, o.id))?.status).toBe("active");
+    expect((await send(formPost(url, ofields({ status: "archived", confirmArchive: "1" }), { cookie }))).status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBe(o.id); // not cleared: /go/ answers 404 for it
+    const warned = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(warned).toMatch(/data-warning="default-archived"[\s\S]*?\/default-offer/); // with a clear-default button inside
+    expect((await send(formPost(`/admin/merchants/${m.id}/default-offer`, { offerId: "" }, { cookie }))).status).toBe(303);
+    expect((await findMerchantById(testEnv.DB, m.id))?.defaultOfferId).toBeNull();
+  });
+
+  it("archiving an offer that is not the default needs no confirmation", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    expect((await send(formPost(`/admin/merchants/${m.id}/offers/${o.id}`, ofields({ status: "archived" }), { cookie }))).status).toBe(303);
+  });
+});
+
+describe("final URL preview", () => {
+  it("shows the tracked link and the fallback link side by side, with the flag on and with it off", async () => {
+    const { cookie, user } = await admin();
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    await makeOffer(m, p, { trackingTemplate: "https://example.com/r?c={click_id}&s={src}" });
+    const tracked = "https://example.com/r?c=01HZZZZZZZZZZZZZZZZZZZZZZZ&amp;s=tools";
+    const fallback = "https://example.com/?utm_source=vnx.si&amp;utm_medium=referral";
+
+    const off = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(off).toContain(tracked);
+    expect(off).toContain(fallback);
+    expect(off).toContain("flag_off");
+    expect(off).toContain('data-preview-now="fallback"');
+
+    await setFlag(testEnv.DB, { key: "affiliate", enabled: true, actorUserId: user.id, now: new Date().toISOString() });
+    const on = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(on).toContain(tracked);
+    expect(on).toContain(fallback);
+    expect(on).toContain('data-preview-now="tracked"');
+  });
+
+  it("a broken stored template shows its error instead of a link", async () => {
+    const { cookie } = await admin();
+    const m = await makeMerchant();
+    const p = await makeProgram(m);
+    await makeOffer(m, p, { trackingTemplate: "https://evil.com/r?c={click_id}" }); // the db does not check hosts: corrupt data
+    const html = await (await send(getReq(`/admin/merchants/${m.id}`, cookie))).text();
+    expect(html).toContain("not_allowed");
+    expect(html).not.toContain("<code>https://evil.com"); // no link is shown for it
+  });
+});
+
+describe("offer section access", () => {
+  it("offer routes are admin only and refuse a cross-site POST", async () => {
+    const m = await makeMerchant();
+    const o = await makeOffer(m, null);
+    const { cookie } = await signIn("offer-user@vnx.si");
+    for (const path of [`/admin/merchants/${m.id}/offers`, `/admin/merchants/${m.id}/offers/${o.id}`, `/admin/merchants/${m.id}/default-offer`]) {
+      expect((await send(formPost(path, ofields({ offerId: o.id }), { cookie }))).status, path).toBe(403);
+    }
+    const admin2 = await admin();
+    const before = await offerCount(m.id);
+    expect((await send(formPost(`/admin/merchants/${m.id}/offers`, ofields(), { cookie: admin2.cookie, origin: "https://evil.example" }))).status).toBe(403);
+    expect(await offerCount(m.id)).toBe(before);
+  });
+});
+```
+
+```bash
+npm test -w apps/web -- test/admin/merchant-offers.test.ts
+```
+
+Expected: FAIL (route offer chưa có).
+
+- [ ] **Step 3: View `OfferSection.tsx`**
+
+`apps/web/src/views/admin/OfferSection.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import {
+  LABELS,
+  OFFER_KINDS,
+  OFFER_STATUSES,
+  type OfferField,
+  type OfferFieldError,
+  type OfferFormValues,
+  type OfferKind,
+  type OfferLabel,
+  type OfferPreview,
+  type OfferStatus,
+} from "../../domain/offer.ts";
+import type { UrlError } from "../../domain/offer-url.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import type { MessageKey } from "../../i18n/messages/en.ts";
+import { translator } from "../../i18n/t.ts";
+import { aria, Field, STATUS_KEY } from "./partner-fields.tsx";
+
+export type OfferView = {
+  id: string;
+  programId: string | null;
+  kind: OfferKind;
+  label: OfferLabel;
+  destinationUrl: string;
+  trackingTemplate: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: OfferStatus;
+};
+type ProgramOption = { id: string; name: string };
+type Values = OfferFormValues & { programId: string };
+type Errors = Partial<Record<OfferField | "confirmArchive", OfferFieldError | "confirm_archive">>;
+/** `id` is the offer's id, or "new". */
+export type OfferEdit = { id: string; values: Values; errors: Errors };
+
+const ERROR_KEY: Record<Exclude<OfferFieldError, `url_${string}` | `template_${"braces" | "placeholder" | "placeholder_position" | UrlError}`> | "confirm_archive", MessageKey> = {
+  required: "offers.err.required",
+  choice: "offers.err.choice",
+  date: "offers.err.date",
+  date_order: "offers.err.dateOrder",
+  program_merchant: "offers.err.programMerchant",
+  program_required: "offers.err.programRequired",
+  sponsored_unavailable: "offers.err.sponsored",
+  template_required: "offers.err.templateRequired",
+  template_without_program: "offers.err.templateWithoutProgram",
+  same_as_template: "offers.err.sameAsTemplate",
+  confirm_archive: "offers.err.confirmArchive",
+};
+
+export const NEW_OFFER_VALUES: Values = { programId: "", kind: "official", label: "visit_site", destinationUrl: "", trackingTemplate: "", startsAt: "", endsAt: "", status: "active" };
+export const offerValuesOf = (o: OfferView): Values => ({
+  programId: o.programId ?? "",
+  kind: o.kind,
+  label: o.label,
+  destinationUrl: o.destinationUrl,
+  trackingTemplate: o.trackingTemplate ?? "",
+  startsAt: o.startsAt ?? "",
+  endsAt: o.endsAt ?? "",
+  status: o.status,
+});
+
+type FormProps = { locale: Locale; action: string; edit: OfferEdit; current: OfferStatus | null; programs: ProgramOption[]; isDefault: boolean };
+
+const OfferForm: FC<FormProps> = (p) => {
+  const tr = translator(p.locale);
+  const v = p.edit.values;
+  const id = (f: string) => `offers-${p.edit.id}-${f}`;
+  const err = (f: OfferField | "confirmArchive"): string | null => {
+    const e = p.edit.errors[f];
+    if (!e) return null;
+    if (e.startsWith("url_")) return tr("offers.err.url", { code: e.slice(4) });
+    if (e.startsWith("template_") && e !== "template_required" && e !== "template_without_program") return tr("offers.err.template", { code: e.slice(9) });
+    return tr(ERROR_KEY[e as keyof typeof ERROR_KEY]);
+  };
+  const select = (name: "kind" | "label" | "status", options: readonly string[]) => (
+    <select id={id(name)} name={name} {...aria(id(name), p.edit.errors[name])}>
+      {options.map((o) => (
+        <option value={o} selected={v[name] === o}>
+          {name === "status" ? tr(STATUS_KEY[o as OfferStatus]) : o}
+        </option>
+      ))}
+    </select>
+  );
+  const archived = p.current === "archived";
+  return (
+    <form method="post" action={p.action} class="card">
+      <input type="hidden" name="expectedStatus" value={p.current ?? "active"} />
+      <Field id={id("programId")} label={tr("offers.f.program")} error={err("programId")}>
+        <select id={id("programId")} name="programId" {...aria(id("programId"), p.edit.errors.programId)}>
+          <option value="">{tr("offers.f.noProgram")}</option>
+          {p.programs.map((pr) => (
+            <option value={pr.id} selected={v.programId === pr.id}>
+              {pr.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field id={id("kind")} label={tr("offers.f.kind")} error={err("kind")}>
+        {select("kind", OFFER_KINDS)}
+      </Field>
+      <Field id={id("label")} label={tr("offers.f.label")} error={err("label")}>
+        {select("label", LABELS)}
+      </Field>
+      <Field id={id("destinationUrl")} label={tr("partner.field.destinationUrl")} hint={tr("offers.f.destinationHint")} error={err("destinationUrl")}>
+        <input id={id("destinationUrl")} name="destinationUrl" type="url" required maxlength={2048} value={v.destinationUrl} {...aria(id("destinationUrl"), p.edit.errors.destinationUrl)} />
+      </Field>
+      <Field id={id("trackingTemplate")} label={tr("partner.field.trackingTemplate")} hint={tr("offers.f.templateHint")} error={err("trackingTemplate")}>
+        <input id={id("trackingTemplate")} name="trackingTemplate" maxlength={2048} value={v.trackingTemplate} {...aria(id("trackingTemplate"), p.edit.errors.trackingTemplate)} />
+      </Field>
+      <Field id={id("startsAt")} label={tr("offers.f.startsAt")} hint={tr("offers.dateHint")} error={err("startsAt")}>
+        <input id={id("startsAt")} name="startsAt" placeholder="YYYY-MM-DDTHH:MM" value={v.startsAt} {...aria(id("startsAt"), p.edit.errors.startsAt)} />
+      </Field>
+      <Field id={id("endsAt")} label={tr("offers.f.endsAt")} hint={tr("offers.dateHint")} error={err("endsAt")}>
+        <input id={id("endsAt")} name="endsAt" placeholder="YYYY-MM-DDTHH:MM" value={v.endsAt} {...aria(id("endsAt"), p.edit.errors.endsAt)} />
+      </Field>
+      {archived ? (
+        <>
+          <input type="hidden" name="status" value="archived" />
+          <p class="muted">{tr("offers.archivedNote")}</p>
+        </>
+      ) : (
+        <Field id={id("status")} label={tr("offers.f.status")} error={err("status")}>
+          {select("status", OFFER_STATUSES)}
+        </Field>
+      )}
+      {p.isDefault && !archived ? (
+        <Field id={id("confirmArchive")} label={tr("offers.f.confirmArchive")} error={err("confirmArchive")}>
+          <input id={id("confirmArchive")} type="checkbox" name="confirmArchive" value="1" {...aria(id("confirmArchive"), p.edit.errors.confirmArchive)} />
+        </Field>
+      ) : null}
+      <button class="btn" type="submit">
+        {tr(p.current === null ? "offers.create" : "offers.save")}
+      </button>
+    </form>
+  );
+};
+
+function Preview(p: { locale: Locale; preview: OfferPreview; hasProgram: boolean }) {
+  const tr = translator(p.locale);
+  const link = (r: OfferPreview["tracked"]) => (r.ok ? <code>{r.url}</code> : tr("offers.preview.invalid", { code: r.error }));
+  const now = p.preview.now;
+  return (
+    <dl class="facts" data-preview>
+      <dt>{tr(p.hasProgram ? "offers.preview.tracked" : "offers.preview.own")}</dt>
+      <dd class="break">{link(p.preview.tracked)}</dd>
+      <dt>{tr("offers.preview.fallback")}</dt>
+      <dd class="break">{link(p.preview.fallback)}</dd>
+      <dt>{tr("offers.preview.now")}</dt>
+      <dd class="break" data-preview-now={now.kind}>
+        {tr(now.kind === "tracked" ? "offers.preview.kind.tracked" : now.kind === "fallback" ? "offers.preview.kind.fallback" : "offers.preview.kind.notFound")}{" "}
+        {now.kind === "tracked" ? <code>{now.url}</code> : <code>{now.reason}</code>}
+        {now.kind === "fallback" ? (
+          <>
+            {" "}
+            <code>{now.url}</code>
+          </>
+        ) : null}
+      </dd>
+    </dl>
+  );
+}
+
+type Props = {
+  locale: Locale;
+  merchantId: string;
+  defaultOfferId: string | null;
+  offers: OfferView[];
+  programs: ProgramOption[];
+  previews: Record<string, OfferPreview>;
+  edit?: OfferEdit;
+};
+
+export const OfferSection: FC<Props> = (p) => {
+  const tr = translator(p.locale);
+  const base = `/admin/merchants/${p.merchantId}`;
+  return (
+    <>
+      <h2>{tr("offers.title")}</h2>
+      <p>{tr("offers.intro")}</p>
+      {p.offers.length === 0 ? <p class="muted">{tr("offers.empty")}</p> : null}
+      {p.offers.map((o) => {
+        const isDefault = p.defaultOfferId === o.id;
+        const preview = p.previews[o.id];
+        return (
+          <section aria-label={o.id}>
+            <h3>
+              <code>{o.id}</code> · <code>{o.label}</code> · {tr(STATUS_KEY[o.status])}
+              {isDefault ? ` · ${tr("offers.isDefault")}` : ""}
+            </h3>
+            {preview ? (
+              <>
+                <h4>{tr("offers.preview.title")}</h4>
+                <Preview locale={p.locale} preview={preview} hasProgram={o.programId !== null} />
+              </>
+            ) : null}
+            {o.status !== "archived" ? (
+              <form method="post" action={localizedPath(p.locale, `${base}/default-offer`)}>
+                <input type="hidden" name="offerId" value={isDefault ? "" : o.id} />
+                <button class="btn btn-ghost" type="submit">
+                  {tr(isDefault ? "offers.clearDefault" : "offers.setDefault")}
+                </button>
+              </form>
+            ) : null}
+            <OfferForm
+              locale={p.locale}
+              action={localizedPath(p.locale, `${base}/offers/${o.id}`)}
+              edit={p.edit?.id === o.id ? p.edit : { id: o.id, values: offerValuesOf(o), errors: {} }}
+              current={o.status}
+              programs={p.programs}
+              isDefault={isDefault}
+            />
+          </section>
+        );
+      })}
+      <h3>{tr("offers.new")}</h3>
+      <OfferForm
+        locale={p.locale}
+        action={localizedPath(p.locale, `${base}/offers`)}
+        edit={p.edit?.id === "new" ? p.edit : { id: "new", values: NEW_OFFER_VALUES, errors: {} }}
+        current={null}
+        programs={p.programs}
+        isDefault={false}
+      />
+    </>
+  );
+};
+```
+
+Trong `MerchantDetailPage.tsx`: thêm props `offers: OfferView[]`, `previews: Record<string, OfferPreview>`, `offerEdit?: OfferEdit`; ngay sau khối `edit.broken` thêm
+
+```tsx
+      {m.defaultOfferId && p.offers.find((o) => o.id === m.defaultOfferId)?.status === "archived" ? (
+        <div class="notice" role="note" data-warning="default-archived">
+          <p>{tr("merchants.defaultArchived")}</p>
+          <form method="post" action={localizedPath(p.locale, `${base}/default-offer`)}>
+            <input type="hidden" name="offerId" value="" />
+            <button class="btn btn-ghost" type="submit">
+              {tr("offers.clearDefault")}
+            </button>
+          </form>
+        </div>
+      ) : null}
+```
+
+và sau khu chương trình (trước `</AdminLayout>`) thêm `<OfferSection locale={p.locale} merchantId={m.id} defaultOfferId={m.defaultOfferId} offers={p.offers} programs={p.programs.map((x) => ({ id: x.id, name: x.name }))} previews={p.previews} edit={p.offerEdit} />`.
+
+- [ ] **Step 4: Route (thêm vào `routes/admin-merchants.tsx`)**
+
+Imports thêm: `readFlags` (`../db/flags.ts`), `createOffer`, `findOfferById`, `updateOffer` (`../db/offers.ts`), `setDefaultOffer` (cùng dòng import `db/merchants.ts`), `LABELS`-không cần, `offerPreview`, `offerTransitionAllowed`, `OFFER_STATUSES`, `parseOfferForm`, `type OfferStatus` (`../domain/offer.ts`), `type OfferEdit` (`../views/admin/OfferSection.tsx`). Thêm hàm đọc form và mở rộng `detail()`:
+
+```tsx
+const offerValues = (b: Record<string, unknown>): OfferEdit["values"] => ({
+  programId: str(b.programId),
+  kind: str(b.kind),
+  label: str(b.label),
+  destinationUrl: str(b.destinationUrl),
+  trackingTemplate: str(b.trackingTemplate),
+  startsAt: str(b.startsAt),
+  endsAt: str(b.endsAt),
+  status: str(b.status),
+});
+
+type DetailExtra = { merchantEdit?: MerchantEdit; programEdit?: ProgramEdit; offerEdit?: OfferEdit };
+
+async function detail(c: Context<AppEnv>, merchant: Merchant, extra: DetailExtra = {}, status: 200 | 400 = 200) {
+  const [programs, offers, flags] = await Promise.all([listProgramsByMerchant(c.env.DB, merchant.id), listOffersByMerchant(c.env.DB, merchant.id), readFlags(c.env.DB)]);
+  const now = iso();
+  const previews = Object.fromEntries(
+    offers.map((offer) => [offer.id, offerPreview({ offer, program: programs.find((p) => p.id === offer.programId) ?? null, merchant, flags, now })]),
+  );
+  return page(
+    c,
+    <MerchantDetailPage locale={c.get("locale")} origin={requestOrigin(c)} merchant={merchant} programs={programs} offers={offers} previews={previews} done={c.req.query("done") === "1"} {...extra} />,
+    status,
+  );
+}
+```
+
+Ba route mới (trong `registerAdminMerchantRoutes`, cuối hàm):
+
+```tsx
+  /** Reads the form of an offer of `merchant` and runs the domain rules; the program is looked up, never trusted. */
+  async function offerInput(c: Context<AppEnv>, merchant: Merchant, body: Record<string, unknown>) {
+    const values = offerValues(body);
+    const program = values.programId === "" ? null : await findProgramById(c.env.DB, values.programId);
+    if (values.programId !== "" && !program) return { values, parsed: { ok: false as const, errors: { programId: "program_merchant" as const } } };
+    const parsed = parseOfferForm(values, { merchant: { id: merchant.id, allowedHosts: merchant.allowedHosts }, program: program ? { id: program.id, merchantId: program.merchantId } : null });
+    return { values, parsed };
+  }
+
+  onLocalized(app, "post", "/admin/merchants/:id/offers", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    if (!merchant) return errorResponse(c, "notFound", 404);
+    const { values, parsed } = await offerInput(c, merchant, await c.req.parseBody());
+    if (!parsed.ok) return detail(c, merchant, { offerEdit: { id: "new", values, errors: parsed.errors } }, 400);
+    const created = await createOffer(c.env.DB, { offer: parsed.offer, actorUserId: c.get("user")!.id, now: iso() });
+    return created ? back(c, merchant.id) : errorResponse(c, "notFound", 404); // null after the checks above: a race
+  });
+
+  onLocalized(app, "post", "/admin/merchants/:id/offers/:offerId", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    const offer = merchant ? await findOfferById(c.env.DB, c.req.param("offerId") ?? "") : null;
+    if (!merchant || !offer || offer.subjectType !== "merchant" || offer.subjectId !== merchant.id) return errorResponse(c, "notFound", 404);
+    const body = await c.req.parseBody();
+    const expected = str(body.expectedStatus);
+    if (!(OFFER_STATUSES as readonly string[]).includes(expected)) return c.text("Bad request", 400);
+    const { values, parsed } = await offerInput(c, merchant, body);
+    if (!parsed.ok) return detail(c, merchant, { offerEdit: { id: offer.id, values, errors: parsed.errors } }, 400);
+    if (!offerTransitionAllowed(expected as OfferStatus, parsed.offer.status)) return errorResponse(c, "conflict", 409);
+    if (parsed.offer.status === "archived" && expected !== "archived" && merchant.defaultOfferId === offer.id && body.confirmArchive !== "1") {
+      return detail(c, merchant, { offerEdit: { id: offer.id, values, errors: { confirmArchive: "confirm_archive" } } }, 400);
+    }
+    const saved = await updateOffer(c.env.DB, { id: offer.id, offer: parsed.offer, expectedStatus: expected as OfferStatus, actorUserId: c.get("user")!.id, now: iso() });
+    return saved ? back(c, merchant.id) : errorResponse(c, "conflict", 409); // changed meanwhile
+  });
+
+  onLocalized(app, "post", "/admin/merchants/:id/default-offer", requireAdmin, async (c) => {
+    const merchant = await findMerchantById(c.env.DB, c.req.param("id") ?? "");
+    if (!merchant) return errorResponse(c, "notFound", 404);
+    const offerId = str((await c.req.parseBody()).offerId);
+    if (offerId !== "") {
+      const offer = await findOfferById(c.env.DB, offerId);
+      if (!offer || offer.subjectType !== "merchant" || offer.subjectId !== merchant.id || offer.status === "archived") return errorResponse(c, "notFound", 404);
+    }
+    const saved = await setDefaultOffer(c.env.DB, { merchantId: merchant.id, offerId: offerId === "" ? null : offerId, actorUserId: c.get("user")!.id, now: iso() });
+    return saved ? back(c, merchant.id) : errorResponse(c, "notFound", 404); // null after the checks above: a race
+  });
+```
+
+Ghi chú: `findOfferById` / `createOffer` / `updateOffer` / `setDefaultOffer` đã có (2d). Chữ ký lỗi của `parsed.errors` phải khớp `OfferEdit["errors"]`; nếu TypeScript không suy ra được nhánh `{ programId: "program_merchant" }`, khai báo kiểu trả về tường minh cho `offerInput`.
+
+- [ ] **Step 5: i18n (đủ 4 locale)**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `offers.title` | Offers | Offer | 优惠 | 優惠 |
+| `offers.intro` | An offer is one button on the tool page. It may carry a program (tracked link) or not (the merchant's own link). The default offer is what /go/<slug> follows. | Offer là một nút trên trang công cụ. Có thể gắn chương trình (link tracking) hoặc không (link chính thức của merchant). Offer mặc định là đích của /go/<slug>. | 优惠是工具页上的一个按钮。可以关联合作计划（跟踪链接），也可以不关联（商家自己的链接）。默认优惠是 /go/<slug> 的跳转目标。 | 優惠是工具頁上的一個按鈕。可以關聯合作計畫（追蹤連結），也可以不關聯（商家自己的連結）。預設優惠是 /go/<slug> 的跳轉目標。 |
+| `offers.empty` | No offers yet. | Chưa có offer nào. | 还没有优惠。 | 還沒有優惠。 |
+| `offers.new` | New offer | Offer mới | 新建优惠 | 新增優惠 |
+| `offers.create` | Create offer | Tạo offer | 创建优惠 | 建立優惠 |
+| `offers.save` | Save offer | Lưu offer | 保存优惠 | 儲存優惠 |
+| `offers.isDefault` | Default offer | Offer mặc định | 默认优惠 | 預設優惠 |
+| `offers.setDefault` | Make default | Đặt làm mặc định | 设为默认 | 設為預設 |
+| `offers.clearDefault` | Clear default | Bỏ mặc định | 取消默认 | 取消預設 |
+| `offers.archivedNote` | Archived is final: the offer cannot be reactivated. Its other fields can still be edited. | Đã lưu trữ là trạng thái cuối: không kích hoạt lại offer được. Vẫn sửa được các trường khác. | 归档为最终状态：优惠无法重新启用，但其他字段仍可编辑。 | 封存為最終狀態：優惠無法重新啟用，但其他欄位仍可編輯。 |
+| `offers.f.program` | Program | Chương trình | 合作计划 | 合作計畫 |
+| `offers.f.noProgram` | No program (the merchant's own link) | Không có chương trình (link chính thức của merchant) | 无合作计划（商家自己的链接） | 無合作計畫（商家自己的連結） |
+| `offers.f.kind` | Kind | Loại | 类型 | 類型 |
+| `offers.f.label` | Button label | Nhãn nút | 按钮文字 | 按鈕文字 |
+| `offers.f.destinationHint` | The plain link without any tracking. It must differ from the tracking template and be on an allowed host. | Link thuần, không có tracking. Phải khác mẫu tracking và nằm trên host được phép. | 不含任何跟踪的普通链接。必须与跟踪模板不同，并位于允许的主机上。 | 不含任何追蹤的普通連結。必須與追蹤範本不同，並位於允許的主機上。 |
+| `offers.f.templateHint` | Required when a program is selected. Placeholders: {click_id}, {locale}, {src}. A link with no placeholder is used as typed. | Bắt buộc khi chọn chương trình. Placeholder: {click_id}, {locale}, {src}. Link không có placeholder được dùng nguyên văn. | 选择合作计划时必填。占位符：{click_id}、{locale}、{src}。不含占位符的链接按原样使用。 | 選擇合作計畫時必填。佔位符：{click_id}、{locale}、{src}。不含佔位符的連結按原樣使用。 |
+| `offers.f.startsAt` | Starts at (UTC, optional) | Bắt đầu lúc (UTC, không bắt buộc) | 开始时间（UTC，可选） | 開始時間（UTC，選填） |
+| `offers.f.endsAt` | Ends at (UTC, optional) | Kết thúc lúc (UTC, không bắt buộc) | 结束时间（UTC，可选） | 結束時間（UTC，選填） |
+| `offers.dateHint` | All times are UTC. Type YYYY-MM-DDTHH:MM or a full ISO time ending in Z. Hanoi is UTC+7: 09:00 here is 16:00 there. | Mọi giờ đều là UTC. Nhập YYYY-MM-DDTHH:MM hoặc giờ ISO đầy đủ kết thúc bằng Z. Hà Nội là UTC+7: 09:00 ở đây là 16:00 ở Hà Nội. | 所有时间均为 UTC。输入 YYYY-MM-DDTHH:MM 或以 Z 结尾的完整 ISO 时间。河内为 UTC+7：此处 09:00 即河内 16:00。 | 所有時間均為 UTC。輸入 YYYY-MM-DDTHH:MM 或以 Z 結尾的完整 ISO 時間。河內為 UTC+7：此處 09:00 即河內 16:00。 |
+| `offers.f.status` | Status | Trạng thái | 状态 | 狀態 |
+| `offers.f.confirmArchive` | Confirm: archive this default offer (the merchant's /go/ link will return 404 until another default is set) | Xác nhận: lưu trữ offer mặc định này (link /go/ của merchant sẽ trả 404 cho tới khi đặt offer mặc định khác) | 确认：归档此默认优惠（在设置新的默认优惠之前，该商家的 /go/ 链接将返回 404） | 確認：封存此預設優惠（在設定新的預設優惠之前，該商家的 /go/ 連結將回傳 404） |
+| `offers.preview.title` | Final link preview (sample values) | Xem trước link cuối (giá trị mẫu) | 最终链接预览（示例值） | 最終連結預覽（範例值） |
+| `offers.preview.tracked` | Tracked link | Link có tracking | 跟踪链接 | 追蹤連結 |
+| `offers.preview.fallback` | Fallback link (website + UTM) | Link thay thế (website + UTM) | 备用链接（网站 + UTM） | 備用連結（網站 + UTM） |
+| `offers.preview.now` | Right now | Hiện tại | 当前结果 | 目前結果 |
+| `offers.preview.kind.tracked` | Tracked: | Có tracking: | 跟踪： | 追蹤： |
+| `offers.preview.kind.fallback` | Fallback, because | Dùng link thay thế, vì | 使用备用链接，原因： | 使用備用連結，原因： |
+| `offers.preview.kind.notFound` | Not found (404), because | Không tìm thấy (404), vì | 未找到（404），原因： | 找不到（404），原因： |
+| `offers.preview.invalid` | Invalid ({code}) | Không hợp lệ ({code}) | 无效（{code}） | 無效（{code}） |
+| `merchants.defaultArchived` | The default offer is archived: the merchant's /go/ link returns 404. Pick another default offer. | Offer mặc định đã lưu trữ: link /go/ của merchant trả 404. Hãy chọn offer mặc định khác. | 默认优惠已归档：该商家的 /go/ 链接返回 404。请选择其他默认优惠。 | 預設優惠已封存：該商家的 /go/ 連結回傳 404。請選擇其他預設優惠。 |
+| `offers.err.required` | Required. | Bắt buộc. | 必填。 | 必填。 |
+| `offers.err.choice` | Pick one of the listed values. | Chọn một trong các giá trị trong danh sách. | 请选择列表中的一个值。 | 請選擇列表中的一個值。 |
+| `offers.err.date` | Use YYYY-MM-DDTHH:MM (UTC) or a full ISO time ending in Z, or leave it empty. | Dùng YYYY-MM-DDTHH:MM (UTC) hoặc giờ ISO đầy đủ kết thúc bằng Z, hoặc để trống. | 请使用 YYYY-MM-DDTHH:MM（UTC）或以 Z 结尾的完整 ISO 时间，或留空。 | 請使用 YYYY-MM-DDTHH:MM（UTC）或以 Z 結尾的完整 ISO 時間，或留空。 |
+| `offers.err.dateOrder` | The end must be after the start. | Thời điểm kết thúc phải sau thời điểm bắt đầu. | 结束时间必须晚于开始时间。 | 結束時間必須晚於開始時間。 |
+| `offers.err.programMerchant` | This program does not belong to this merchant. | Chương trình này không thuộc merchant này. | 该合作计划不属于此商家。 | 該合作計畫不屬於此商家。 |
+| `offers.err.templateRequired` | A tracking template is required when a program is selected. | Cần mẫu tracking khi đã chọn chương trình. | 选择合作计划时必须填写跟踪模板。 | 選擇合作計畫時必須填寫追蹤範本。 |
+| `offers.err.templateWithoutProgram` | A tracking template needs a program. Select one, or empty the template. | Mẫu tracking cần có chương trình. Hãy chọn chương trình hoặc xóa mẫu. | 跟踪模板需要合作计划。请选择一个，或清空模板。 | 追蹤範本需要合作計畫。請選擇一個，或清空範本。 |
+| `offers.err.programRequired` | An affiliate or referral offer needs a program. | Offer affiliate hoặc referral cần có chương trình. | 联盟或推荐类优惠需要合作计划。 | 聯盟或推薦類優惠需要合作計畫。 |
+| `offers.err.sponsored` | Sponsored offers are not available yet. | Offer tài trợ chưa dùng được. | 赞助类优惠暂不可用。 | 贊助類優惠暫不可用。 |
+| `offers.preview.own` | Merchant link (no tracking) | Link của merchant (không tracking) | 商家链接（无跟踪） | 商家連結（無追蹤） |
+| `offers.err.sameAsTemplate` | The untracked link must differ from the tracking template. | Link không tracking phải khác mẫu tracking. | 无跟踪链接必须与跟踪模板不同。 | 無追蹤連結必須與追蹤範本不同。 |
+| `offers.err.url` | Link refused ({code}). It must be https, without user info, port or IP address, on an allowed host. | Link bị từ chối ({code}). Phải là https, không có thông tin người dùng, cổng hay địa chỉ IP, và nằm trên host được phép. | 链接被拒绝（{code}）。必须是 https，不含用户信息、端口或 IP 地址，且位于允许的主机上。 | 連結被拒絕（{code}）。必須是 https，不含使用者資訊、連接埠或 IP 位址，且位於允許的主機上。 |
+| `offers.err.template` | Template refused ({code}). Use only {click_id}, {locale} and {src}, after the host, on an allowed host. | Mẫu bị từ chối ({code}). Chỉ dùng {click_id}, {locale} và {src}, đặt sau host, trên host được phép. | 模板被拒绝（{code}）。仅可使用 {click_id}、{locale} 和 {src}，且位于主机之后、允许的主机上。 | 範本被拒絕（{code}）。僅可使用 {click_id}、{locale} 和 {src}，且位於主機之後、允許的主機上。 |
+| `offers.err.confirmArchive` | Tick the confirmation to archive the default offer. | Hãy tick ô xác nhận để lưu trữ offer mặc định. | 请勾选确认以归档默认优惠。 | 請勾選確認以封存預設優惠。 |
+
+Lưu ý: chuỗi có `{click_id}` trong `offers.f.templateHint` và `offers.err.template` sẽ bị `t()` coi là tham số chưa cung cấp và giữ nguyên `{click_id}` (hàm `t` chỉ thay khi `name in params`), nên hiển thị đúng; kiểm bằng test ở Step 6.
+
+- [ ] **Step 6: Chạy test, kiểm toàn bộ và commit**
+
+```bash
+npm test -w apps/web -- test/domain/offer.test.ts test/admin/merchant-offers.test.ts test/admin/merchants.test.ts test/i18n/parity.test.ts test/architecture.test.ts test/design/layout.test.ts test/design/assets.test.ts
+npm run typecheck -w apps/web
+npm test
+grep -rniE "elevenlabs|partnerstack" apps/web/src
+git add apps/web/src/domain/offer.ts apps/web/src/routes/admin-merchants.tsx apps/web/src/views/admin/OfferSection.tsx apps/web/src/views/admin/MerchantDetailPage.tsx apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/domain/offer.test.ts apps/web/test/admin/merchant-offers.test.ts
+git commit -m "feat(web): admin offers with final-URL preview and default offer (VNX-2102b-2)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận (Task 3b):**
+- Nhập thử dữ liệu kiểu ElevenLabs (host `try.…` + host chính, `label = try_it`, template không placeholder, `destination_url` ≠ template, đặt làm mặc định) → lưu được, audit `offer.create` và `merchant.update`; nhãn của `destination_url` hiện "Untracked link".
+- Offer có host ngoài `allowed_hosts`, template có placeholder lạ hoặc host lạ, `destination_url` `http:` hoặc có userinfo, template thiếu khi có chương trình, `destination_url` trùng template, nhãn lạ, ngày sai dạng, `endsAt <= startsAt`, chương trình của merchant khác hoặc không tồn tại → 400 với lỗi cạnh trường (`offers-<id>-<field>-error`), không ghi dòng.
+- Ngày: `YYYY-MM-DDTHH:MM` lưu thành `…:00.000Z` (UTC); ISO có `Z` và `YYYY-MM-DD` vẫn nhận; dạng có khoảng trắng / `+07:00` / `T24:00` bị từ chối; nhãn và gợi ý ghi UTC.
+- `updateOffer` trả `null` (đổi trạng thái giữa chừng, `archived` cuối) → 409; offer của merchant khác → 404; `expectedStatus` lạ → 400; offer mặc định của merchant khác, `archived` hoặc không tồn tại → 404, không ghi, không audit.
+- Lưu trữ offer đang là mặc định thiếu `confirmArchive` → 400, không ghi; có → lưu được, `default_offer_id` giữ nguyên, trang merchant hiện `data-warning="default-archived"` (và không hiện trước khi lưu trữ).
+- Xem trước hiện cạnh nhau URL tracking (giá trị mẫu `01HZZZZZZZZZZZZZZZZZZZZZZZ`, `en`, `tools`) và URL fallback (`website_url` + UTM) khi cờ `affiliate` bật và khi tắt (`data-preview-now="tracked"` / `"fallback"` kèm `flag_off`); template hỏng hiện mã lỗi, không hiện link.
+- Route offer chỉ admin (403), sai Origin → 403 và không ghi; `MONEY_ALLOWED` vẫn đúng 5 file; `grep -rniE "elevenlabs|partnerstack" apps/web/src` không in dòng nào.
+- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ước tính ≈ 590 dòng không tính locale (domain 35, view 175, route 85, test ~295). Commit `feat(web): admin offers with final-URL preview and default offer (VNX-2102b-2)`.
+
+**Việc để lại cho Reviewer sau cả hai phần** (ghi vào `.ai/context/CURRENT-STATUS.md`): `kind` không bị ràng buộc với `programId` (spec im lặng); chưa có chốt chặn db cho đua giữa kiểm offer và lưu merchant (một admin); nhãn enum hiển thị mã thô; nút lưu trữ merchant dùng ô tick `confirm`, không có hộp thoại.
+
+---
+
+### Task 4: VNX-2103-1 — Bảng `outbound_clicks`, helper outbound, giữ 13 tháng, Privacy
+
+**Tách đôi:** diff gộp ≈ 900 dòng (> 600), nên Task 4 tách thành **4 (dữ liệu, cron, Privacy)** và **4b (route `/go/`, HIGH-RISK)**. Thứ tự này đúng phụ thuộc (route cần `db/clicks.ts` và `domain/outbound.ts`) và đưa câu Privacy lên trước đoạn mã bắt đầu thu thập. Mã hóa task theo roadmap vẫn là VNX-2103; commit của hai phần cùng có hậu tố `(VNX-2103-1)` / `(VNX-2103-2)`.
+
+**Điều kiện đầu vào:** Controller đã commit khối C của header vào `docs/legal/privacy.md` (dòng đầu "Bổ sung EPIC 21 (outbound, partner): APPROVED bởi Owner …"). Kiểm: `grep -c "Outbound click" docs/legal/privacy.md` ≥ 2. Nếu chưa có, dừng và báo Controller; không tự viết văn bản pháp lý.
+
+**Files:**
+- Create: `apps/web/migrations/0012_outbound_clicks.sql`
+- Create: `apps/web/src/domain/outbound.ts`, `apps/web/src/db/clicks.ts`
+- Modify: `apps/web/src/jobs/daily.ts` (bước `outbound_clicks`, cuối danh sách `STEPS`)
+- Modify: `apps/web/src/legal/content.ts` (8 dòng của khối C, `LEGAL_UPDATED_AT`)
+- Modify: `apps/web/wrangler.jsonc` (ghi chú thứ tự deploy)
+- Modify: `apps/web/test/architecture.test.ts` (`WRITERS.outbound_clicks`; danh sách cho phép thêm `db/clicks.ts`, `jobs/daily.ts`)
+- Test: `apps/web/test/domain/outbound.test.ts`, `apps/web/test/db/clicks.test.ts` (mới); `apps/web/test/jobs/daily.test.ts`, `apps/web/test/legal/content.test.ts` (mở rộng)
+
+**Interfaces:**
+- Consumes: `NotFoundReason` (`domain/offer.ts`), `localeFromPath`, `DEFAULT_LOCALE`, `Locale` (`i18n/locales.ts`), `runDaily` / `STEPS` (`jobs/daily.ts`), `ulid`, fixtures `testEnv`.
+- Produces:
+  - `domain/outbound.ts`: `OUTBOUND_SRCS` (6 giá trị), `type OutboundSrc = (typeof OUTBOUND_SRCS)[number] | "unknown"`, `parseSrc(raw: unknown): OutboundSrc`, `OFFER_ID_RE`, `OUTBOUND_CLICK_RETENTION_DAYS = 395`, `OUTBOUND_CLICK_PURGE_BATCH = 5000`, `CORRUPTION_REASONS: readonly NotFoundReason[]` (đúng 7 lý do dữ liệu hỏng), `type CfLike`, `isBotRequest(userAgent, cf)`, `referrerHost(referer)`, `localeFromReferer(referer, host)`, `countryOf(cf)`, `purgeCutoff(now: Date): string`.
+  - `db/clicks.ts`: `type ClickInput`, `recordClick(db, click): Promise<void>`, `purgeOldClicks(db, now: Date): Promise<number>`.
+  - `jobs/daily.ts`: bước `{ step: "outbound_clicks", counts: "deleted" }`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+- Bảng **không có khóa ngoại** (`product_id`, `offer_id`): đây là nhật ký chỉ thêm, cron xóa dần; không để nó chặn xóa product / offer, và M7 dùng lại bảng này không cần migration thứ hai. Phụ lục 2.2 cũng nói `offer_id` chưa có FK.
+- CHECK enum cho `link_kind`, `src`, `locale`, `is_bot` ở CSDL (cùng giá trị với code), ngoài CHECK `product_id IS NOT NULL OR offer_id IS NOT NULL` của phụ lục.
+- **Chỉ mục thứ tư `idx_clicks_created (created_at)` không có trong phụ lục:** để cron tìm dòng cũ mà không quét cả bảng. Ba chỉ mục của phụ lục giữ nguyên.
+- Cron **có chặn**: mỗi lần xóa tối đa `OUTBOUND_CLICK_PURGE_BATCH = 5000` dòng (`DELETE … WHERE id IN (SELECT id … ORDER BY created_at LIMIT ?)`), phần còn lại để ngày mai và có `console.warn`. So sánh chuỗi ISO với `<` (dòng đúng bằng ngưỡng được giữ).
+- Không có khóa i18n mới trong cả Task 4 và 4b (404 dùng `error.notFound.*` sẵn có).
+- `LEGAL_UPDATED_AT` đặt bằng ngày commit (không sớm hơn `2026-10-05`). Hằng này **dùng chung với Terms**: ngày "Last updated" của cả Terms và Privacy đổi theo; test ở Step 9 kiểm cả hai.
+
+- [ ] **Step 1: Migration**
+
+`apps/web/migrations/0012_outbound_clicks.sql`:
+
+```sql
+-- EPIC 21 outbound clicks (addendum §2.2; created here because VNX-0707 is not done, and M7 reuses this table without a second migration). Additive only.
+-- Never a column for an IP address, an e-mail address or a user id (Privacy). `visitor_hash` stays NULL until M7.
+-- No foreign keys on purpose: an append-only log that the daily job trims; it must never block deleting a product or an offer.
+CREATE TABLE outbound_clicks (
+  id            TEXT PRIMARY KEY,
+  product_id    TEXT,
+  offer_id      TEXT,
+  link_kind     TEXT NOT NULL CHECK (link_kind IN ('demo', 'site', 'offer')),
+  src           TEXT NOT NULL CHECK (src IN ('product_page', 'builder_page', 'catalog', 'home', 'article', 'tools', 'unknown')),
+  locale        TEXT NOT NULL CHECK (locale IN ('en', 'vi', 'zh-Hans', 'zh-Hant')),
+  visitor_hash  TEXT,
+  country       TEXT,
+  referrer_host TEXT,
+  is_bot        INTEGER NOT NULL CHECK (is_bot IN (0, 1)),
+  created_at    TEXT NOT NULL,
+  CHECK (product_id IS NOT NULL OR offer_id IS NOT NULL)
+);
+CREATE INDEX idx_clicks_product ON outbound_clicks (product_id, created_at);
+CREATE INDEX idx_clicks_offer ON outbound_clicks (offer_id, created_at);
+CREATE INDEX idx_clicks_visitor ON outbound_clicks (visitor_hash, product_id, link_kind, created_at);
+-- Not in the addendum: lets the retention job find old rows without scanning the table.
+CREATE INDEX idx_clicks_created ON outbound_clicks (created_at);
+```
+
+- [ ] **Step 2: Test domain (fail)**
+
+`apps/web/test/domain/outbound.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import type { NotFoundReason } from "../../src/domain/offer.ts";
+import {
+  CORRUPTION_REASONS,
+  OFFER_ID_RE,
+  OUTBOUND_CLICK_PURGE_BATCH,
+  OUTBOUND_CLICK_RETENTION_DAYS,
+  OUTBOUND_SRCS,
+  countryOf,
+  isBotRequest,
+  localeFromReferer,
+  parseSrc,
+  purgeCutoff,
+  referrerHost,
+} from "../../src/domain/outbound.ts";
+
+const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+describe("parseSrc", () => {
+  it("accepts exactly the six places and maps everything else to unknown", () => {
+    expect([...OUTBOUND_SRCS]).toEqual(["product_page", "builder_page", "catalog", "home", "article", "tools"]);
+    for (const s of OUTBOUND_SRCS) expect(parseSrc(s)).toBe(s);
+    for (const bad of ["", "TOOLS", "unknown", "https://evil.example.net", "//evil.example.net", "tools\r\nX: 1", " tools", null, undefined, ["tools"], 5]) {
+      expect(parseSrc(bad)).toBe("unknown");
+    }
+  });
+});
+
+describe("isBotRequest (Reviewer decision 12)", () => {
+  it.each([[""], [null], [undefined], ["   "], ["Googlebot/2.1 (+http://www.google.com/bot.html)"], ["curl/8.5.0"], ["Wget/1.21"], ["python-requests/2.31"], ["Mozilla/5.0 HeadlessChrome/120.0"], ["facebookexternalhit/1.1"], ["Mozilla/5.0 (compatible; Yahoo! Slurp)"], ["UptimeMonitor/1.0"]])(
+    "UA %j is a bot",
+    (ua) => {
+      expect(isBotRequest(ua, undefined)).toBe(true);
+    },
+  );
+
+  it("a browser is not, unless Cloudflare marks it a verified bot", () => {
+    expect(isBotRequest(CHROME, undefined)).toBe(false);
+    expect(isBotRequest(CHROME, { botManagement: { verifiedBot: false } })).toBe(false);
+    expect(isBotRequest(CHROME, { botManagement: { verifiedBot: true } })).toBe(true);
+  });
+});
+
+describe("referrerHost keeps the host only", () => {
+  it.each([
+    ["https://news.example.org/a/b?q=1#frag", "news.example.org"],
+    ["http://Example.COM:8080/x", "example.com"],
+    ["https://user:pw@example.org/", "example.org"],
+    ["javascript:alert(1)", null],
+    ["not a url", null],
+    ["", null],
+    [null, null],
+  ])("%j gives %j", (raw, host) => {
+    expect(referrerHost(raw)).toBe(host);
+  });
+});
+
+describe("localeFromReferer reads the locale from a same-host Referer only", () => {
+  it.each([
+    ["https://vnx.si/vi/tools/x", "vi"],
+    ["https://vnx.si/zh-hans", "zh-Hans"],
+    ["https://vnx.si/zh-hant/p/a", "zh-Hant"],
+    ["https://vnx.si/tools/x", "en"],
+    ["https://vnx.si.evil.example.net/vi/x", "en"],
+    ["https://other.example.org/vi/x", "en"],
+    ["https://vnx.si:8443/vi/x", "en"],
+    ["nonsense", "en"],
+    [null, "en"],
+  ])("%j gives %j", (referer, locale) => {
+    expect(localeFromReferer(referer, "vnx.si")).toBe(locale);
+  });
+});
+
+describe("countryOf and purgeCutoff", () => {
+  it("takes a two-letter upper-case country and nothing else", () => {
+    expect(countryOf({ country: "VN" })).toBe("VN");
+    for (const bad of [undefined, null, {}, { country: "vn" }, { country: "VNM" }, { country: 5 }, { country: "V\nN" }]) expect(countryOf(bad)).toBeNull();
+  });
+
+  it("keeps clicks for 395 days (13 months, Owner 2026-10-05)", () => {
+    expect(OUTBOUND_CLICK_RETENTION_DAYS).toBe(395);
+    expect(OUTBOUND_CLICK_PURGE_BATCH).toBe(5000);
+    expect(purgeCutoff(new Date("2026-10-05T01:00:00.000Z"))).toBe("2025-09-05T01:00:00.000Z");
+  });
+});
+
+describe("OFFER_ID_RE and CORRUPTION_REASONS", () => {
+  it("accepts a 26-character Crockford ULID only", () => {
+    expect(OFFER_ID_RE.test("01HZ8K3M5N7P9Q2R4S6T8V0WXY")).toBe(true);
+    for (const bad of ["", "01hz8k3m5n7p9q2r4s6t8v0wxy", "01HZ8K3M5N7P9Q2R4S6T8V0WX", "01HZ8K3M5N7P9Q2R4S6T8V0WXYZ", "01HZ8K3M5N7P9Q2R4S6T8V0WXU", "01HZ8K3M5N7P9Q2R4S6T8V0WXI", "../../etc", "01HZ8K3M5N7P9Q2R4S6T8V0WX\n"]) {
+      expect(OFFER_ID_RE.test(bad), bad).toBe(false);
+    }
+  });
+
+  it("logs exactly the corruption reasons of the plan; a new NotFoundReason forces a decision here", () => {
+    // The Record type fails to compile when resolveOfferRedirect gains a reason that is not classified below.
+    const kind: Record<NotFoundReason, "quiet" | "corrupt"> = {
+      offer_missing: "quiet",
+      offer_archived: "quiet",
+      merchant_missing: "quiet",
+      merchant_archived: "quiet",
+      subject_merchant: "corrupt",
+      program_missing: "corrupt",
+      program_merchant: "corrupt",
+      template_missing: "corrupt",
+      window_invalid: "corrupt",
+      invalid_url: "corrupt",
+      website_invalid: "corrupt",
+    };
+    const corrupt = Object.entries(kind).filter(([, k]) => k === "corrupt").map(([r]) => r).sort();
+    expect([...CORRUPTION_REASONS].sort()).toEqual(corrupt);
+    expect(corrupt).toEqual(["invalid_url", "program_merchant", "program_missing", "subject_merchant", "template_missing", "website_invalid", "window_invalid"]);
+  });
+});
+```
+
+Run: `npm test -w apps/web -- test/domain/outbound.test.ts` → FAIL (module `src/domain/outbound.ts` không tồn tại).
+
+- [ ] **Step 3: `domain/outbound.ts`**
+
+`apps/web/src/domain/outbound.ts`:
+
+```ts
+import { DEFAULT_LOCALE, localeFromPath, type Locale } from "../i18n/locales.ts";
+import type { NotFoundReason } from "./offer.ts";
+
+/** Pure helpers for /go/ and the outbound click log (addendum §2.1–2.2). No I/O. */
+
+/** The only `src` values /go/ reads (addendum §2.1); anything else is stored as `unknown`. */
+export const OUTBOUND_SRCS = ["product_page", "builder_page", "catalog", "home", "article", "tools"] as const;
+export type OutboundSrc = (typeof OUTBOUND_SRCS)[number] | "unknown";
+
+export function parseSrc(raw: unknown): OutboundSrc {
+  return typeof raw === "string" && (OUTBOUND_SRCS as readonly string[]).includes(raw) ? (raw as OutboundSrc) : "unknown";
+}
+
+/** An offer id is a ULID; anything else never reaches D1. */
+export const OFFER_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
+/** Owner 2026-10-05: keep clicks 13 months. 395 days, a fixed number so tests can pin it. */
+export const OUTBOUND_CLICK_RETENTION_DAYS = 395;
+/** The daily job deletes at most this many rows per run; the rest waits for the next run. */
+export const OUTBOUND_CLICK_PURGE_BATCH = 5000;
+
+/** Rows older than this ISO instant are deleted (a row exactly at the cutoff is kept). */
+export function purgeCutoff(now: Date): string {
+  return new Date(now.getTime() - OUTBOUND_CLICK_RETENTION_DAYS * 86_400_000).toISOString();
+}
+
+/** `resolveOfferRedirect` not_found reasons that mean the data is broken (not a dead link): /go/ logs them with console.error. */
+export const CORRUPTION_REASONS: readonly NotFoundReason[] = ["program_missing", "program_merchant", "template_missing", "window_invalid", "invalid_url", "website_invalid", "subject_merchant"];
+
+/** The two fields of `request.cf` that /go/ reads. */
+export type CfLike = { country?: unknown; botManagement?: { verifiedBot?: unknown } } | null | undefined;
+
+const BOT_UA = /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|curl|wget|python-requests|headlesschrome/i;
+
+/** Marks a click as `is_bot`; never blocks the redirect. M7 may replace this with the shared rule of spec 8.11. */
+export function isBotRequest(userAgent: string | null | undefined, cf: CfLike): boolean {
+  if (!userAgent || userAgent.trim() === "") return true;
+  return BOT_UA.test(userAgent) || cf?.botManagement?.verifiedBot === true;
+}
+
+/** Host only (lower case, no port, path, query or credentials); null for anything that is not an http(s) URL. */
+export function referrerHost(referer: string | null | undefined): string | null {
+  if (!referer) return null;
+  try {
+    const u = new URL(referer);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.hostname.slice(0, 253) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The locale of the page that held the link, from a Referer on this same host (`host` includes the port); `en` otherwise. */
+export function localeFromReferer(referer: string | null | undefined, host: string): Locale {
+  if (!referer) return DEFAULT_LOCALE;
+  try {
+    const u = new URL(referer);
+    return u.host === host ? localeFromPath(u.pathname).locale : DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
+export function countryOf(cf: CfLike): string | null {
+  const country = cf?.country;
+  return typeof country === "string" && /^[A-Z]{2}$/.test(country) ? country : null;
+}
+```
+
+Run: `npm test -w apps/web -- test/domain/outbound.test.ts` → PASS.
+
+- [ ] **Step 4: Test db (fail)**
+
+`apps/web/test/db/clicks.test.ts`:
+
+```ts
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { purgeOldClicks, recordClick, type ClickInput } from "../../src/db/clicks.ts";
+import { OUTBOUND_CLICK_PURGE_BATCH, purgeCutoff } from "../../src/domain/outbound.ts";
+import { ulid } from "../../src/lib/ulid.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = new Date("2026-10-05T01:00:00.000Z");
+const shifted = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+const click = (o: Partial<ClickInput> = {}): ClickInput => ({
+  id: ulid(),
+  productId: null,
+  offerId: "clicks-a",
+  linkKind: "offer",
+  src: "tools",
+  locale: "en",
+  visitorHash: null,
+  country: null,
+  referrerHost: null,
+  isBot: false,
+  createdAt: NOW.toISOString(),
+  ...o,
+});
+const rowsOf = async (offerId: string) => (await testEnv.DB.prepare("SELECT * FROM outbound_clicks WHERE offer_id = ?1 ORDER BY created_at").bind(offerId).all<Record<string, unknown>>()).results;
+const names = async (sql: string) => (await testEnv.DB.prepare(sql).all<{ name: string }>()).results.map((r) => r.name);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("outbound_clicks schema (addendum §2.2, Review Focus 7)", () => {
+  it("has exactly the columns of the addendum and none that could hold an IP address, an e-mail address or a user id", async () => {
+    const columns = await names("SELECT name FROM pragma_table_info('outbound_clicks')");
+    expect(columns).toEqual(["id", "product_id", "offer_id", "link_kind", "src", "locale", "visitor_hash", "country", "referrer_host", "is_bot", "created_at"]);
+    for (const c of columns) expect(c).not.toMatch(/ip|mail|user|uid/i);
+  });
+
+  it("has the three indexes of the addendum plus the retention index", async () => {
+    const indexes = (await names("SELECT name FROM pragma_index_list('outbound_clicks')")).filter((n) => n.startsWith("idx_"));
+    expect(indexes.sort()).toEqual(["idx_clicks_created", "idx_clicks_offer", "idx_clicks_product", "idx_clicks_visitor"]);
+  });
+
+  it("refuses a row with neither product nor offer, an unknown kind, src or locale", async () => {
+    await expect(recordClick(testEnv.DB, click({ offerId: null }))).rejects.toThrow();
+    await expect(recordClick(testEnv.DB, click({ linkKind: "other" as never }))).rejects.toThrow();
+    await expect(recordClick(testEnv.DB, click({ src: "elsewhere" as never }))).rejects.toThrow();
+    await expect(recordClick(testEnv.DB, click({ locale: "fr" as never }))).rejects.toThrow();
+  });
+});
+
+describe("recordClick", () => {
+  it("stores every field; a bot is 1; a product-only row (the M7 shape) is accepted", async () => {
+    const id = ulid();
+    await recordClick(testEnv.DB, click({ id, offerId: "clicks-b", src: "catalog", locale: "zh-Hant", country: "VN", referrerHost: "news.example.org", isBot: true, createdAt: "2026-10-05T00:00:00.000Z" }));
+    expect(await rowsOf("clicks-b")).toEqual([
+      { id, product_id: null, offer_id: "clicks-b", link_kind: "offer", src: "catalog", locale: "zh-Hant", visitor_hash: null, country: "VN", referrer_host: "news.example.org", is_bot: 1, created_at: "2026-10-05T00:00:00.000Z" },
+    ]);
+    await recordClick(testEnv.DB, click({ productId: "p-1", offerId: null, linkKind: "demo" }));
+    expect((await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM outbound_clicks WHERE product_id = 'p-1'").first<{ n: number }>())?.n).toBe(1);
+  });
+});
+
+describe("purgeOldClicks (Owner 2026-10-05: 13 months)", () => {
+  it("deletes rows older than the cutoff, keeps the one exactly at it and newer ones, and is idempotent", async () => {
+    const cutoff = purgeCutoff(NOW);
+    for (const createdAt of [shifted(cutoff, -1), cutoff, shifted(cutoff, 1), NOW.toISOString()]) await recordClick(testEnv.DB, click({ offerId: "purge-a", createdAt }));
+    expect(await purgeOldClicks(testEnv.DB, NOW)).toBe(1);
+    expect((await rowsOf("purge-a")).map((r) => r.created_at)).toEqual([cutoff, shifted(cutoff, 1), NOW.toISOString()]);
+    expect(await purgeOldClicks(testEnv.DB, NOW)).toBe(0);
+    expect(await rowsOf("purge-a")).toHaveLength(3);
+  });
+
+  it("deletes at most one batch per run, warns when it hit the cap, and finishes over the next runs", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await testEnv.DB.prepare(
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?1)
+       INSERT INTO outbound_clicks (id, product_id, offer_id, link_kind, src, locale, is_bot, created_at)
+       SELECT 'bulk-' || i, NULL, 'purge-bulk', 'offer', 'tools', 'en', 0, '2020-01-01T00:00:00.000Z' FROM n`,
+    )
+      .bind(OUTBOUND_CLICK_PURGE_BATCH + 3)
+      .run();
+    expect(await purgeOldClicks(testEnv.DB, NOW)).toBe(OUTBOUND_CLICK_PURGE_BATCH);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toEqual({ event: "clicks.purge_capped", cap: OUTBOUND_CLICK_PURGE_BATCH });
+    expect(await purgeOldClicks(testEnv.DB, NOW)).toBe(3);
+    expect(await purgeOldClicks(testEnv.DB, NOW)).toBe(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+Run: `npm test -w apps/web -- test/db/clicks.test.ts` → FAIL (module `src/db/clicks.ts` không tồn tại).
+
+- [ ] **Step 5: `db/clicks.ts`**
+
+`apps/web/src/db/clicks.ts`:
+
+```ts
+import { OUTBOUND_CLICK_PURGE_BATCH, purgeCutoff, type OutboundSrc } from "../domain/outbound.ts";
+import type { Locale } from "../i18n/locales.ts";
+
+/**
+ * The only writer of `outbound_clicks` (module `monetization`, addendum §2.2). A click row never holds an IP address, an e-mail
+ * address or a user id; this type has no field for them, and the table has no column for them.
+ */
+export type ClickInput = {
+  /** ULID. For a tracked redirect it is also the `click_id` that went to the partner. */
+  id: string;
+  productId: string | null;
+  offerId: string | null;
+  linkKind: "demo" | "site" | "offer";
+  src: OutboundSrc;
+  locale: Locale;
+  /** Always null until M7 (VNX-0707). */
+  visitorHash: string | null;
+  country: string | null;
+  referrerHost: string | null;
+  isBot: boolean;
+  createdAt: string;
+};
+
+export async function recordClick(db: D1Database, c: ClickInput): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO outbound_clicks (id, product_id, offer_id, link_kind, src, locale, visitor_hash, country, referrer_host, is_bot, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+    )
+    .bind(c.id, c.productId, c.offerId, c.linkKind, c.src, c.locale, c.visitorHash, c.country, c.referrerHost, c.isBot ? 1 : 0, c.createdAt)
+    .run();
+}
+
+/**
+ * Daily retention (Owner 2026-10-05: 13 months). Deletes at most OUTBOUND_CLICK_PURGE_BATCH rows older than the cutoff, oldest first;
+ * the rest waits for the next run. Running it again changes nothing once the table is clean. Returns the number of rows deleted.
+ */
+export async function purgeOldClicks(db: D1Database, now: Date): Promise<number> {
+  const result = await db
+    .prepare("DELETE FROM outbound_clicks WHERE id IN (SELECT id FROM outbound_clicks WHERE created_at < ?1 ORDER BY created_at LIMIT ?2)")
+    .bind(purgeCutoff(now), OUTBOUND_CLICK_PURGE_BATCH)
+    .run();
+  const deleted = result.meta.changes;
+  if (deleted >= OUTBOUND_CLICK_PURGE_BATCH) console.warn(JSON.stringify({ event: "clicks.purge_capped", cap: OUTBOUND_CLICK_PURGE_BATCH }));
+  return deleted;
+}
+```
+
+Run: `npm test -w apps/web -- test/db/clicks.test.ts` → PASS.
+
+- [ ] **Step 6: Test cron (fail)**
+
+Sửa `apps/web/test/jobs/daily.test.ts`:
+1. Import thêm: `import { recordClick } from "../../src/db/clicks.ts";`, `import { purgeCutoff } from "../../src/domain/outbound.ts";`, `import { ulid } from "../../src/lib/ulid.ts";`.
+2. Thêm hằng dưới `IDLE_ACTIVITY_STEPS`: `const CLICK_STEP = { job: "daily", step: "outbound_clicks", deleted: 0 };` (bước mới chạy **cuối cùng**, sau `sessions`).
+3. Ba mảng `toEqual` có `{ job: "daily", step: "sessions", … }` (test đầu, "is idempotent", "logs one JSON line per step") thêm `CLICK_STEP` ngay sau phần tử `sessions`; `toHaveLength(IDLE_ACTIVITY_STEPS.length + 3)` đổi thành `+ 4`.
+4. Test "keeps going when one step fails": thêm `expect(results[at + 3]).toEqual(CLICK_STEP);` sau dòng kiểm `results[at + 2]`.
+5. Test `scheduled`: danh sách tên bước cuối `"sessions"` thêm `, "outbound_clicks"`.
+6. Thêm cuối file:
+
+```ts
+describe("outbound clicks step (VNX-2103, Owner 2026-10-05: keep 13 months)", () => {
+  const clickAt = (offerId: string, createdAt: string) =>
+    recordClick(testEnv.DB, { id: ulid(), productId: null, offerId, linkKind: "offer", src: "tools", locale: "en", visitorHash: null, country: null, referrerHost: null, isBot: false, createdAt });
+  const clicksFor = (offerId: string) => count("SELECT COUNT(*) AS n FROM outbound_clicks WHERE offer_id = ?1", offerId);
+  const clickStep = (results: Awaited<ReturnType<typeof runDaily>>) => results.find((r) => r.step === "outbound_clicks");
+
+  it("deletes clicks older than 395 days, keeps the rest, and a second run deletes nothing", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const cutoff = purgeCutoff(NOW);
+    await clickAt("daily-old", new Date(Date.parse(cutoff) - 1).toISOString());
+    await clickAt("daily-edge", cutoff);
+    await clickAt("daily-new", NOW.toISOString());
+    expect(clickStep(await runDaily(testEnv, NOW))).toEqual({ job: "daily", step: "outbound_clicks", deleted: 1 });
+    expect([await clicksFor("daily-old"), await clicksFor("daily-edge"), await clicksFor("daily-new")]).toEqual([0, 1, 1]);
+    expect(clickStep(await runDaily(testEnv, NOW))).toEqual(CLICK_STEP);
+  });
+
+  it("a failing clicks step is logged and the other steps are unaffected", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const results = await runDaily({ ...testEnv, DB: brokenOn("outbound_clicks") } as Bindings, NOW);
+    expect(clickStep(results)).toEqual({ job: "daily", step: "outbound_clicks", error: "Error: boom on outbound_clicks" });
+    expect(results.filter((r) => "error" in r)).toHaveLength(1);
+    expect(error).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+Run: `npm test -w apps/web -- test/jobs/daily.test.ts` → FAIL (chưa có bước `outbound_clicks`).
+
+- [ ] **Step 7: Bước cron**
+
+`apps/web/src/jobs/daily.ts`: thêm `import { purgeOldClicks } from "../db/clicks.ts";` cạnh các import `db/` khác; sửa comment đầu file thêm một dòng "VNX-2103 (EPIC 21): deletes outbound clicks older than 13 months (OUTBOUND_CLICK_RETENTION_DAYS)."; thêm vào **cuối** `STEPS`:
+
+```ts
+  { step: "sessions", counts: "deleted", run: (env, now) => deleteExpiredSessions(env.DB, now) },
+  // Owner 2026-10-05: outbound clicks are kept 13 months (Privacy says so). Bounded per run, see purgeOldClicks.
+  { step: "outbound_clicks", counts: "deleted", run: (env, now) => purgeOldClicks(env.DB, now) },
+];
+```
+
+Run: `npm test -w apps/web -- test/jobs/daily.test.ts test/jobs/daily-inquiries.test.ts test/jobs/daily-requests.test.ts` → PASS.
+
+- [ ] **Step 8: Test kiến trúc (đỏ rồi xanh)**
+
+Run: `npm test -w apps/web -- test/architecture.test.ts` → FAIL: `jobs/daily.ts imports db/clicks` (danh sách cho phép chưa có) và `writes unknown table outbound_clicks` (`db/clicks.ts`). Sửa `apps/web/test/architecture.test.ts`:
+- `WRITERS` thêm `outbound_clicks: "../src/db/clicks.ts",` sau `offers`.
+- Comment trên `MONEY_ALLOWED` giữ nguyên (đã ghi Task 4: `db/clicks.ts`, `routes/go.ts`, `jobs/daily.ts`).
+- `MONEY_ALLOWED` thêm `"../src/db/clicks.ts"` và `"../src/jobs/daily.ts"` (`routes/go.ts` thêm ở Task 4b).
+- Đổi test "after Task 2d the allowlist is exactly the four db files" thành danh sách đúng **sau Task 4**: lấy danh sách hiện có trong test (gồm cả mục Task 3 đã thêm, ví dụ `../src/routes/admin-merchants.tsx`) rồi chèn hai đường dẫn mới đúng vị trí sắp xếp:
+
+```ts
+  it("after Task 4 the allowlist is exactly the files of Tasks 2c–4", () => {
+    expect([...MONEY_ALLOWED].sort()).toEqual([
+      "../src/db/audit.ts",
+      "../src/db/clicks.ts",
+      "../src/db/merchants.ts",
+      "../src/db/offers.ts",
+      "../src/db/programs.ts",
+      "../src/jobs/daily.ts",
+      "../src/routes/admin-merchants.tsx", // thêm/bớt theo đúng danh sách Task 3 đã chốt
+    ]);
+  });
+```
+
+Run lại: `npm test -w apps/web -- test/architecture.test.ts` → PASS (kể cả "has no partner name in src").
+
+- [ ] **Step 9: Privacy (đỏ rồi xanh)**
+
+Thêm vào `apps/web/test/legal/content.test.ts`, sau khối `describe("privacy covers the contact form …")`:
+
+```ts
+/** Plan VNX-2103 block C (Owner approved 2026-10-05): where each line starts; the whole line is compared with the source file. */
+const OUTBOUND_PRIVACY = {
+  EN: ["- **Outbound clicks:**", "- To count how often links to other companies are followed", "- When you follow a link to a partner you leave VNX.SI.", "- Outbound click records: deleted after 13 months."],
+  VI: ["- **Lượt bấm link ra ngoài:**", "- Đếm số lần các link tới công ty khác được bấm", "- Khi bạn bấm link tới một partner, bạn rời VNX.SI.", "- Bản ghi lượt bấm link ra ngoài: xóa sau 13 tháng."],
+} as const;
+const lineStarting = (part: string, start: string) => part.split("\n").find((l) => l.startsWith(start)) ?? "";
+
+describe("privacy covers outbound clicks (VNX-2103)", () => {
+  for (const [lang, prefix] of [
+    ["EN", ""],
+    ["VI", "/vi"],
+  ] as const) {
+    it(`${lang}: docs/legal/privacy.md has the four approved lines and /privacy shows each one whole`, async () => {
+      const part = partOf(sourceOf("privacy"), lang);
+      const text = textOf(mainOf(await (await get(`${prefix}/privacy`)).text()));
+      for (const start of OUTBOUND_PRIVACY[lang]) {
+        const line = lineStarting(part, start);
+        expect(line, start).not.toBe("");
+        expect(text, start).toContain(plain(line.replace(/^- /, "")));
+      }
+      // The collection line follows the waitlist line, as block C says.
+      const waitlist = part.indexOf(lang === "EN" ? "- **Waitlist:**" : "- **Danh sách chờ:**");
+      expect(part.slice(waitlist).split("\n")[1]?.startsWith(OUTBOUND_PRIVACY[lang][0])).toBe(true);
+    });
+  }
+
+  it("LEGAL_UPDATED_AT moved forward, and Terms and Privacy both show it (the constant is shared)", async () => {
+    expect(LEGAL_UPDATED_AT >= "2026-10-05").toBe(true);
+    for (const path of ["/terms", "/privacy"]) expect(textOf(mainOf(await (await get(path)).text()))).toContain(LEGAL_UPDATED_AT);
+  });
+});
+```
+
+Run: `npm test -w apps/web -- test/legal/content.test.ts` → FAIL (cả test so từng dòng của `privacy` EN / VI lẫn test mới: `src/legal/content.ts` chưa có 4 dòng).
+
+Sửa `apps/web/src/legal/content.ts`: **chép nguyên văn từng dòng từ `docs/legal/privacy.md` (khối C), bỏ "- " đầu dòng, giữ `**…**` và dấu backtick quanh `/go/`; không tự diễn đạt lại**. Chèn mỗi chuỗi vào mảng `ul` đúng vị trí nó có trong `privacy.md` (mở file đối chiếu), ngay sau dòng đứng trước:
+- `privacyEn` mục 2: sau chuỗi bắt đầu `"**Waitlist:** …` → chuỗi `"**Outbound clicks:** when you follow a button or link …`.
+- `privacyEn` mục 3: sau chuỗi bắt đầu `"To match requests with builders: …` → chuỗi `"To count how often links to other companies are followed …`.
+- `privacyEn` mục 4: sau chuỗi bắt đầu `"Builders do not see clients' email addresses. …` → chuỗi `"When you follow a link to a partner you leave VNX.SI. …`.
+- `privacyEn` mục 6: sau chuỗi bắt đầu `"Rate-limit counters (including IP addresses): …` → `"Outbound click records: deleted after 13 months.",`.
+- `privacyVi`: bốn vị trí tương ứng, sau các chuỗi bắt đầu `"**Danh sách chờ:** …`, `"Ghép nhu cầu với builder: …`, `"Builder không thấy email của client. …`, `"Bộ đếm giới hạn (gồm địa chỉ IP): …`.
+- `LEGAL_UPDATED_AT` đổi thành ngày commit (ví dụ `"2026-10-05"`), sửa comment thành "Shown as "Last updated" on Terms and Privacy; shared, so a change to either moves both."
+
+Run: `npm test -w apps/web -- test/legal/content.test.ts` → PASS.
+
+- [ ] **Step 10: Ghi chú deploy**
+
+`apps/web/wrangler.jsonc`: dòng `1. npm run db:migrate:remote …` đổi `0011_partners)` thành `0011_partners, 0012_outbound_clicks)`; dòng ghi chú EPIC 21 đổi thành:
+
+```jsonc
+  // 0010_feature_flags, 0011_partners and 0012_outbound_clicks (EPIC 21) ship with their code the same way: migrate first, then deploy.
+  // The daily cron also deletes outbound clicks older than 13 months, so it reads 0012 too.
+```
+
+- [ ] **Step 11: Kiểm tra cuối và commit**
+
+Chạy: `npm run typecheck -w apps/web`, `npm test`, `grep -rniE "elevenlabs|partnerstack" apps/web/src` (không in dòng nào). Rồi:
+
+```bash
+git add apps/web/migrations/0012_outbound_clicks.sql apps/web/src/domain/outbound.ts apps/web/src/db/clicks.ts apps/web/src/jobs/daily.ts apps/web/src/legal/content.ts apps/web/wrangler.jsonc apps/web/test/architecture.test.ts apps/web/test/domain/outbound.test.ts apps/web/test/db/clicks.test.ts apps/web/test/jobs/daily.test.ts apps/web/test/legal/content.test.ts
+git commit -m "feat(web): outbound_clicks table, 13-month retention and Privacy text (VNX-2103-1)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận (Task 4):**
+- `npm test -w apps/web -- test/domain/outbound.test.ts test/db/clicks.test.ts test/jobs/daily.test.ts test/legal/content.test.ts test/architecture.test.ts` xanh.
+- Bảng đúng 11 cột của phụ lục, không cột nào khớp `ip|mail|user|uid`; ba chỉ mục của phụ lục cộng `idx_clicks_created`; CHECK từ chối dòng không có product lẫn offer (Review Focus 7).
+- Cron: dòng cũ hơn 395 ngày bị xóa, dòng đúng ngưỡng và dòng mới giữ, chạy lại không xóa thêm, tối đa 5000 dòng mỗi lần (có `console.warn`), bước lỗi không dừng bước khác; `outbound_clicks` là bước cuối, 4 test của `daily.test.ts` đã cập nhật.
+- Privacy: `/privacy` EN và VI khớp từng dòng với `docs/legal/privacy.md` đã có khối C; `LEGAL_UPDATED_AT` ≥ `2026-10-05` và cả `/terms` lẫn `/privacy` hiện ngày đó.
+- `MONEY_ALLOWED` thêm đúng `db/clicks.ts` và `jobs/daily.ts` (xếp theo thứ tự), `WRITERS.outbound_clicks = db/clicks.ts`; không file `src` nào có `elevenlabs` / `partnerstack`.
+- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ước tính ≈ 440 dòng không tính locale (migration 22, domain 70, db 45, cron 4, test ≈ 300). Commit `feat(web): outbound_clicks table, 13-month retention and Privacy text (VNX-2103-1)`.
+
+---
+
+### Task 4b: VNX-2103-2 — `/go/:merchantSlug`, `/go/o/:offerId` (HIGH-RISK)
+
+**Lưu ý:** Task này là mã redirect: Reviewer chạy lại toàn bộ `test/monetization/go.test.ts` và đọc từng dòng `routes/go.ts`. Task 4 phải đã xong (có `db/clicks.ts`, `domain/outbound.ts`, bảng `outbound_clicks`, Privacy).
+
+**Files:**
+- Create: `apps/web/src/routes/go.ts`
+- Modify: `apps/web/src/app.ts` (đăng ký `registerGoRoutes`)
+- Modify: `apps/web/test/architecture.test.ts` (danh sách cho phép thêm `routes/go.ts`)
+- Test: `apps/web/test/monetization/go.test.ts` (mới, tên theo ADR-007); `test/seo/robots.test.ts` đã có `Disallow: /go/`, không sửa
+
+**Interfaces:**
+- Consumes: `findOfferWithContext`, `findDefaultOfferContext`, `RedirectRows` (`db/offers.ts`); `isFlagEnabled` (`db/flags.ts`); `recordClick`, `ClickInput` (`db/clicks.ts`); `resolveOfferRedirect` (`domain/offer.ts`); `RESERVED_MERCHANT_SLUGS` (`domain/merchant.ts`); `SLUG_RE` (`domain/slug.ts`); `CORRUPTION_REASONS`, `OFFER_ID_RE`, `parseSrc`, `isBotRequest`, `referrerHost`, `localeFromReferer`, `countryOf` (`domain/outbound.ts`); `ulid`; `errorResponse` (`views/error-response.tsx`).
+- Produces: `routes/go.ts`: `registerGoRoutes(app: Hono<AppEnv>): void`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+- Thứ tự khai báo: `GET /go/o/:offerId`, `GET /go/:merchantSlug`, `GET /go/*` (404, nên `/go/p/…` của M7, `/go/https://…`, `/go/x/` đều 404 mà không rơi xuống `ASSETS`), rồi `app.all("/go/*")` → 405. Hono tự chạy handler GET cho `HEAD` (cùng header, không body) nên handler tự kiểm `c.req.method === "GET"` mới ghi click.
+- Slug qua `SLUG_RE` và `RESERVED_MERCHANT_SLUGS`, offer id qua `OFFER_ID_RE` **trước** khi đọc D1 (id / slug sai dạng, `%2F`, `%0d%0a`, `\` đều dừng ở đây).
+- Mọi 404 của `/go/` thêm `Cache-Control: no-store` và `X-Robots-Tag: noindex, nofollow` (không đổi trang lỗi: `errorResponse` ở locale mặc định vì đường dẫn không có tiền tố). `Referrer-Policy: origin` chỉ trên 302.
+- `Location` được dựng bằng `new Response(null, { status: 302, headers })` (không qua `c.redirect`), giá trị = `result.url` đã được `resolveOfferRedirect` kiểm lại, không nối chuỗi nào khác.
+- Ghi click qua `defer`: `c.executionCtx.waitUntil(work)`; khi không có `ExecutionContext` (Hono ném lỗi khi đọc `executionCtx`: test, local) thì `await work`. `work` tự bắt lỗi nên không bao giờ từ chối; lỗi chỉ `console.error` `go.click_failed`.
+- Log hỏng dữ liệu: một dòng JSON `{ event: "go.corrupt_data", reason, offerId, merchantId, requestId }`, không URL, không IP, không UA, không Referer.
+- Cờ đọc tuần tự (`affiliate` rồi `partner_referral`): lần đọc đầu nạp cache, lần hai trúng cache; lỗi đọc D1 là cờ tắt (đã xử lý trong `isFlagEnabled`), tức là `fallback`.
+- `{locale}` của template và cột `locale` của click dùng chung một giá trị: locale của `Referer` cùng host, không thì `en`.
+- Không tới được qua HTTP (CHECK / FK / phép nối của CSDL chặn), nên chỉ có test domain (Task 2b): `template_missing`, `program_missing`, `subject_merchant`, `program_direct`. Test ở đây bao phủ `invalid_url`, `window_invalid`, `program_merchant`, `website_invalid`.
+
+- [ ] **Step 1: Test route (fail)**
+
+`apps/web/test/monetization/go.test.ts` (ADR-007 "Được bảo đảm bởi"; Review Focus 1, 2, 3, 7):
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { setDefaultOffer } from "../../src/db/merchants.ts";
+import type { Bindings } from "../../src/env.ts";
+import { ulid } from "../../src/lib/ulid.ts";
+import { ensureUser, makeMerchant, makeOffer, makeProgram, signIn } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const UTM = "utm_source=vnx.si&utm_medium=referral";
+const EVIL = "evil.example.net";
+const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+type ClickRow = { id: string; product_id: string | null; offer_id: string | null; link_kind: string; src: string; locale: string; visitor_hash: string | null; country: string | null; referrer_host: string | null; is_bot: number; created_at: string };
+type Seeded = Awaited<ReturnType<typeof seed>>;
+type Call = { method?: string; headers?: Record<string, string>; cf?: Record<string, unknown>; env?: Bindings; ctx?: ExecutionContext };
+
+/** One request through the real app. `cf` is set on the Request itself, as Cloudflare does. */
+async function call(path: string, o: Call = {}): Promise<Response> {
+  const req = new Request(`https://vnx.si${path}`, { method: o.method ?? "GET", headers: o.headers });
+  if (o.cf) Object.defineProperty(req, "cf", { value: o.cf });
+  return await createApp().request(req, undefined, o.env ?? testEnv, o.ctx);
+}
+
+const run = (sql: string, ...binds: unknown[]) => testEnv.DB.prepare(sql).bind(...binds).run();
+const clicksOf = async (offerId: string) => (await testEnv.DB.prepare("SELECT * FROM outbound_clicks WHERE offer_id = ?1 ORDER BY id").bind(offerId).all<ClickRow>()).results;
+const totalClicks = async () => (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM outbound_clicks").first<{ n: number }>())?.n ?? 0;
+
+async function setFlags(on: { affiliate?: boolean; partner_referral?: boolean }) {
+  const admin = await ensureUser("go-admin@vnx.si");
+  for (const key of ["affiliate", "partner_referral"] as const) await setFlag(testEnv.DB, { key, enabled: on[key] ?? false, actorUserId: admin.id, now: new Date().toISOString() });
+  resetFlagCache();
+}
+
+/** A merchant on example.com with (by default) an active program, its offer, and that offer as the merchant's default. */
+async function seed(o: { merchant?: Parameters<typeof makeMerchant>[0]; program?: Parameters<typeof makeProgram>[1] | null; offer?: Parameters<typeof makeOffer>[2] } = {}) {
+  const merchant = await makeMerchant(o.merchant);
+  const program = o.program === null ? null : await makeProgram(merchant, o.program);
+  const offer = await makeOffer(merchant, program, o.offer);
+  const admin = await ensureUser("go-admin@vnx.si");
+  await setDefaultOffer(testEnv.DB, { merchantId: merchant.id, offerId: offer.id, actorUserId: admin.id, now: new Date().toISOString() });
+  return { merchant, program, offer };
+}
+
+const tracked = (clickId: string) => `https://example.com/r?c=${clickId}`;
+function expectRedirectHeaders(res: Response) {
+  expect(res.headers.get("cache-control")).toBe("no-store");
+  expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  expect(res.headers.get("referrer-policy")).toBe("origin");
+}
+const goLogs = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>).filter((l) => String(l.event).startsWith("go."));
+
+beforeEach(async () => {
+  await setFlags({ affiliate: true });
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("/go/o/:offerId and /go/:merchantSlug: the redirect truth table over HTTP", () => {
+  it("tracked: flag on, everything active → 302 to the filled template; the click row id is the click_id", async () => {
+    const { offer, merchant } = await seed();
+    const res = await call(`/go/o/${offer.id}?src=tools`);
+    expect(res.status).toBe(302);
+    expectRedirectHeaders(res);
+    const rows = await clicksOf(offer.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toMatch(ULID_RE);
+    expect(res.headers.get("location")).toBe(tracked(rows[0]?.id ?? ""));
+    // The same offer through the merchant's slug.
+    const bySlug = await call(`/go/${merchant.slug}`);
+    expect(bySlug.status).toBe(302);
+    expectRedirectHeaders(bySlug);
+    expect(bySlug.headers.get("location")).toBe(tracked((await clicksOf(offer.id)).find((r) => r.id !== rows[0]?.id)?.id ?? ""));
+  });
+
+  it("fills {src} and {locale} from the enum and the Referer, never from raw input", async () => {
+    const { offer } = await seed({ offer: { trackingTemplate: "https://example.com/r?c={click_id}&s={src}&l={locale}" } });
+    const a = await call(`/go/o/${offer.id}?src=tools`, { headers: { referer: "https://vnx.si/vi/tools/x" } });
+    const b = await call(`/go/o/${offer.id}?src=${encodeURIComponent(`https://${EVIL}`)}`, { headers: { referer: `https://${EVIL}/vi/x` } });
+    const ids = (await clicksOf(offer.id)).map((r) => r.id);
+    expect(ids).toHaveLength(2);
+    expect([a.headers.get("location"), b.headers.get("location")].map((l) => l?.replace(/c=[0-9A-Z]{26}/, "c=ID")).sort()).toEqual(["https://example.com/r?c=ID&s=tools&l=vi", "https://example.com/r?c=ID&s=unknown&l=en"]);
+  });
+
+  const FALLBACKS: [string, () => Promise<Seeded>][] = [
+    ["merchant_paused", () => seed({ merchant: { status: "paused" } })],
+    ["offer_paused", () => seed({ offer: { status: "paused" } })],
+    ["offer_not_started", () => seed({ offer: { startsAt: "2999-01-01T00:00:00.000Z" } })],
+    ["offer_ended", () => seed({ offer: { endsAt: "2000-01-01T00:00:00.000Z" } })],
+    ["program_not_active (draft)", () => seed({ program: { status: "draft" } })],
+    ["program_not_active (paused)", () => seed({ program: { status: "paused" } })],
+    [
+      "flag_off",
+      async () => {
+        const s = await seed();
+        await setFlags({});
+        return s;
+      },
+    ],
+  ];
+
+  it.each(FALLBACKS)("fallback (%s): 302 to the merchant website with utm, no click id, one click row", async (_reason, build) => {
+    const { offer } = await build();
+    const res = await call(`/go/o/${offer.id}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(`https://example.com/?${UTM}`);
+    expectRedirectHeaders(res);
+    const rows = await clicksOf(offer.id);
+    expect(rows).toHaveLength(1);
+    expect(res.headers.get("location")).not.toContain(rows[0]?.id ?? "?");
+  });
+
+  const SILENT: [string, () => Promise<string>][] = [
+    ["offer unknown", async () => ulid()],
+    [
+      "offer archived",
+      async () => {
+        const s = await seed();
+        await run("UPDATE offers SET status = 'archived' WHERE id = ?1", s.offer.id);
+        return s.offer.id;
+      },
+    ],
+    [
+      "merchant archived",
+      async () => {
+        const s = await seed();
+        await run("UPDATE merchants SET status = 'archived' WHERE id = ?1", s.merchant.id);
+        return s.offer.id;
+      },
+    ],
+  ];
+
+  it.each(SILENT)("not found (%s): 404 in the default locale, no click, no error log", async (_what, build) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const offerId = await build();
+    const res = await call(`/go/o/${offerId}`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(await clicksOf(offerId)).toHaveLength(0);
+    expect(goLogs(error)).toEqual([]);
+  });
+
+  const CORRUPT: [string, () => Promise<Seeded>][] = [
+    [
+      "invalid_url",
+      async () => {
+        const s = await seed();
+        await run("UPDATE offers SET tracking_template = ?1 WHERE id = ?2", `https://${EVIL}/r?c={click_id}`, s.offer.id);
+        return s;
+      },
+    ],
+    [
+      "window_invalid",
+      async () => {
+        const s = await seed();
+        await run("UPDATE offers SET starts_at = 'not-a-date' WHERE id = ?1", s.offer.id);
+        return s;
+      },
+    ],
+    [
+      "program_merchant",
+      async () => {
+        const s = await seed();
+        const foreign = await makeProgram(await makeMerchant());
+        await run("UPDATE offers SET program_id = ?1 WHERE id = ?2", foreign.id, s.offer.id);
+        return s;
+      },
+    ],
+    [
+      "website_invalid",
+      async () => {
+        const s = await seed();
+        await setFlags({});
+        await run("UPDATE merchants SET website_url = ?1 WHERE id = ?2", `https://${EVIL}/`, s.merchant.id);
+        return s;
+      },
+    ],
+  ];
+
+  it.each(CORRUPT)("corrupt data (%s): 404, no click, one error log without personal data", async (reason, build) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const s = await build();
+    const res = await call(`/go/o/${s.offer.id}`, { headers: { "cf-connecting-ip": "203.0.113.9", "user-agent": CHROME, referer: "https://news.example.org/secret?q=1" } });
+    expect(res.status).toBe(404);
+    expect(await clicksOf(s.offer.id)).toHaveLength(0);
+    expect(goLogs(error)).toEqual([{ event: "go.corrupt_data", reason, offerId: s.offer.id, merchantId: s.merchant.id, requestId: expect.any(String) }]);
+    const line = String(error.mock.calls[0]?.[0]);
+    for (const secret of [EVIL, "203.0.113.9", CHROME, "news.example.org"]) expect(line).not.toContain(secret);
+  });
+
+  it("an offer without a program needs no flag, redirects to its destination with utm, and records the click", async () => {
+    await setFlags({});
+    const { offer } = await seed({ program: null, offer: { destinationUrl: "https://example.com/pricing" } });
+    const res = await call(`/go/o/${offer.id}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(`https://example.com/pricing?${UTM}`);
+    expect(await clicksOf(offer.id)).toHaveLength(1);
+    const kept = await seed({ program: null, offer: { destinationUrl: "https://example.com/pricing?utm_campaign=x" } });
+    expect((await call(`/go/o/${kept.offer.id}`)).headers.get("location")).toBe("https://example.com/pricing?utm_campaign=x");
+  });
+});
+
+describe("/go/:merchantSlug: which merchants answer", () => {
+  it("a paused merchant, a merchant without a default offer, an unknown slug, an archived default offer: 404 and no click", async () => {
+    const paused = await seed({ merchant: { status: "paused" } });
+    const bare = await makeMerchant();
+    const archivedOffer = await seed();
+    await run("UPDATE offers SET status = 'archived' WHERE id = ?1", archivedOffer.offer.id);
+    for (const slug of [paused.merchant.slug, bare.slug, "no-such-merchant", archivedOffer.merchant.slug]) {
+      const res = await call(`/go/${slug}`);
+      expect(res.status, slug).toBe(404);
+      expect(res.headers.get("location"), slug).toBeNull();
+    }
+    expect(await clicksOf(paused.offer.id)).toHaveLength(0);
+    expect(await clicksOf(archivedOffer.offer.id)).toHaveLength(0);
+  });
+});
+
+describe("open redirect and URL tricks (Review Focus 1 and 2)", () => {
+  it.each([
+    `/go/https://${EVIL}`,
+    `/go/%2F%2F${EVIL}`,
+    `/go/%5C${EVIL}`,
+    `/go//${EVIL}`,
+    `/go/x%0d%0aLocation:%20https://${EVIL}`,
+    `/go/..%2F..%2Fevil`,
+    `/go/o/%2F%2F${EVIL}`,
+    `/go/o/https://${EVIL}`,
+  ])("%s is a 404 with no Location", async (path) => {
+    const res = await call(path);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("query parameters other than src are ignored; a hostile src becomes unknown; no header is injected", async () => {
+    const { merchant, offer } = await seed();
+    const query = `src=${encodeURIComponent(`https://${EVIL}`)}&url=https://${EVIL}&next=//${EVIL}&redirect=%5C%5C${EVIL}&to=${encodeURIComponent(`tools\r\nX-Injected: 1`)}`;
+    const res = await call(`/go/${merchant.slug}?${query}`);
+    const [row] = await clicksOf(offer.id);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(tracked(row?.id ?? ""));
+    expect(res.headers.get("x-injected")).toBeNull();
+    expect(row?.src).toBe("unknown");
+  });
+
+  const BAD_TEMPLATES = [
+    `https://${EVIL}/r?c={click_id}`,
+    `https://example.com@${EVIL}/r?c={click_id}`,
+    `https://example.com.${EVIL}/{click_id}`,
+    "https://evilexample.com/{click_id}",
+    "http://example.com/r?c={click_id}",
+    "https://127.0.0.1/{click_id}",
+    "https://2130706433/{click_id}",
+    "https://[::1]/{click_id}",
+    "https://{src}/x",
+    "https://example.com:8443/{click_id}",
+    "https://example.com/{click_id}{x}",
+  ];
+  it.each(BAD_TEMPLATES)("a stored template %s is never followed: 404 on both routes, no click", async (template) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { offer, merchant } = await seed();
+    await run("UPDATE offers SET tracking_template = ?1 WHERE id = ?2", template, offer.id);
+    for (const path of [`/go/o/${offer.id}`, `/go/${merchant.slug}`]) {
+      const res = await call(path);
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get("location"), path).toBeNull();
+    }
+    expect(await clicksOf(offer.id)).toHaveLength(0);
+  });
+
+  const BAD_URLS = ["http://example.com/", `https://${EVIL}/`, "https://user:pw@example.com/", "https://127.0.0.1/", "javascript:alert(1)", `//${EVIL}`, `https:${EVIL}`, `https://example.com\\@${EVIL}/`, "https://example.com/\r\n"];
+  it.each(BAD_URLS)("a stored destination_url %j on an offer without a program is never followed", async (destinationUrl) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { offer } = await seed({ program: null, offer: { destinationUrl } });
+    const res = await call(`/go/o/${offer.id}`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+    expect(goLogs(error).map((l) => l.reason)).toEqual(["invalid_url"]);
+    expect(await clicksOf(offer.id)).toHaveLength(0);
+  });
+
+  it.each(BAD_URLS)("a stored website_url %j is never a fallback target: 404, no click", async (websiteUrl) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { offer, merchant } = await seed();
+    await setFlags({});
+    await run("UPDATE merchants SET website_url = ?1 WHERE id = ?2", websiteUrl, merchant.id);
+    const res = await call(`/go/o/${offer.id}`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+    expect(goLogs(error).map((l) => l.reason)).toEqual(["website_invalid"]);
+    expect(await clicksOf(offer.id)).toHaveLength(0);
+  });
+});
+
+describe("what never reaches D1", () => {
+  /** A D1 whose every entry point throws and counts: a request that gets this far read the database. */
+  function untouchableDb() {
+    const state = { calls: 0 };
+    const DB = new Proxy(testEnv.DB, {
+      get(target, prop) {
+        if (prop === "prepare" || prop === "batch" || prop === "exec") {
+          return () => {
+            state.calls++;
+            throw new Error("D1 must not be called");
+          };
+        }
+        const value = Reflect.get(target, prop) as unknown;
+        return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    return { env: { ...testEnv, DB } as Bindings, state };
+  }
+
+  const NOT_ULIDS = ["01hz8k3m5n7p9q2r4s6t8v0wxy", "01HZ8K3M5N7P9Q2R4S6T8V0WX", "01HZ8K3M5N7P9Q2R4S6T8V0WXYZ", "01HZ8K3M5N7P9Q2R4S6T8V0WXU", "..", "%00", "abc"];
+  it.each(NOT_ULIDS)("/go/o/%s is a 404 before any D1 read", async (id) => {
+    const { env, state } = untouchableDb();
+    const res = await call(`/go/o/${id}`, { env });
+    expect(res.status).toBe(404);
+    expect(state.calls).toBe(0);
+  });
+
+  it.each(["/go/p", "/go/o", "/go/ab", "/go/UPPER", "/go/-x-", "/go/p/some-product/demo", "/go/p/some-product/site", "/go/o/", "/go/some-slug/"])("%s is a 404 before any D1 read (reserved or malformed slug, /go/p/ stays M7's)", async (path) => {
+    const { env, state } = untouchableDb();
+    const res = await call(path, { env });
+    expect(res.status).toBe(404);
+    expect(state.calls).toBe(0);
+  });
+});
+
+describe("methods", () => {
+  it.each(["POST", "PUT", "PATCH", "DELETE"])("%s on /go/ with a valid Origin is 405 with Allow: GET, HEAD, and writes nothing", async (method) => {
+    const { offer, merchant } = await seed();
+    const before = await totalClicks();
+    for (const path of [`/go/o/${offer.id}`, `/go/${merchant.slug}`, "/go/p/x/demo"]) {
+      const res = await call(path, { method, headers: { origin: "https://vnx.si" } });
+      expect(res.status, `${method} ${path}`).toBe(405);
+      expect(res.headers.get("allow")).toBe("GET, HEAD");
+      expect(res.headers.get("location")).toBeNull();
+    }
+    expect(await totalClicks()).toBe(before);
+  });
+
+  it("OPTIONS is 405; a POST from another Origin is stopped earlier (403)", async () => {
+    expect((await call("/go/some-slug", { method: "OPTIONS" })).status).toBe(405);
+    expect((await call("/go/some-slug", { method: "POST", headers: { origin: `https://${EVIL}` } })).status).toBe(403);
+  });
+
+  it("HEAD redirects with the same headers and records no click, tracked and fallback alike", async () => {
+    const { offer } = await seed();
+    const head = await call(`/go/o/${offer.id}`, { method: "HEAD" });
+    expect(head.status).toBe(302);
+    expectRedirectHeaders(head);
+    expect(head.headers.get("location")).toContain("https://example.com/r?c=");
+    await setFlags({});
+    expect((await call(`/go/o/${offer.id}`, { method: "HEAD" })).headers.get("location")).toBe(`https://example.com/?${UTM}`);
+    expect(await clicksOf(offer.id)).toHaveLength(0);
+  });
+});
+
+describe("the click row (Review Focus 7)", () => {
+  it("one GET records one row: kind offer, src, locale from a same-host Referer, country, referrer host only, no visitor hash, nothing personal", async () => {
+    const { offer } = await seed();
+    const { user, cookie } = await signIn("go-click@vnx.si");
+    const res = await call(`/go/o/${offer.id}?src=tools`, {
+      headers: { referer: "https://vnx.si/vi/tools/x?utm=1", "user-agent": CHROME, "cf-connecting-ip": "203.0.113.9", cookie },
+      cf: { country: "VN" },
+    });
+    expect(res.status).toBe(302);
+    const rows = await clicksOf(offer.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ product_id: null, offer_id: offer.id, link_kind: "offer", src: "tools", locale: "vi", visitor_hash: null, country: "VN", referrer_host: "vnx.si", is_bot: 0 });
+    expect(Math.abs(Date.now() - Date.parse(rows[0]?.created_at ?? ""))).toBeLessThan(60_000);
+    const stored = JSON.stringify(rows[0]);
+    for (const secret of ["203.0.113.9", CHROME, user.id, "go-click@vnx.si", cookie, "utm=1"]) expect(stored).not.toContain(secret);
+  });
+
+  it.each([
+    ["https://vnx.si/zh-hant/tools/x", "zh-Hant", "vnx.si"],
+    ["https://news.example.org/a/b?q=1", "en", "news.example.org"],
+    ["https://vnx.si.evil.example.net/vi/x", "en", "vnx.si.evil.example.net"],
+    [undefined, "en", null],
+  ])("Referer %j gives locale %s and referrer_host %s; no cf gives no country", async (referer, locale, host) => {
+    const { offer } = await seed();
+    await call(`/go/o/${offer.id}?src=zzz`, { headers: referer ? { referer, "user-agent": CHROME } : { "user-agent": CHROME } });
+    expect((await clicksOf(offer.id))[0]).toMatchObject({ src: "unknown", locale, referrer_host: host, country: null, is_bot: 0 });
+  });
+
+  it.each([[""], ["Googlebot/2.1 (+http://www.google.com/bot.html)"], ["curl/8.5.0"]])("a bot (User-Agent %j) is redirected and its click is recorded with is_bot = 1", async (ua) => {
+    const { offer } = await seed();
+    const res = await call(`/go/o/${offer.id}`, { headers: { "user-agent": ua } });
+    expect(res.status).toBe(302);
+    expect((await clicksOf(offer.id))[0]?.is_bot).toBe(1);
+  });
+
+  it("a verified bot reported by Cloudflare is marked, and each GET is its own row", async () => {
+    const { offer } = await seed();
+    await call(`/go/o/${offer.id}`, { headers: { "user-agent": CHROME }, cf: { botManagement: { verifiedBot: true } } });
+    await call(`/go/o/${offer.id}`, { headers: { "user-agent": CHROME } });
+    const rows = await clicksOf(offer.id);
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+    expect(rows.map((r) => r.is_bot).sort()).toEqual([0, 1]);
+  });
+});
+
+describe("the click is written through waitUntil", () => {
+  /** Wraps the INSERT into outbound_clicks (and only it) so a test can delay or break it. */
+  function dbWithInsert(wrap: (run: () => Promise<unknown>) => Promise<unknown>): Bindings {
+    const DB = new Proxy(testEnv.DB, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop) as unknown;
+        if (prop !== "prepare") return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+        return (sql: string) => {
+          const stmt = target.prepare(sql);
+          if (!sql.includes("INSERT INTO outbound_clicks")) return stmt;
+          return { bind: (...args: unknown[]) => { const bound = stmt.bind(...args); return { run: () => wrap(() => bound.run()) }; } } as unknown as D1PreparedStatement;
+        };
+      },
+    });
+    return { ...testEnv, DB } as Bindings;
+  }
+  const fakeCtx = () => {
+    const pending: Promise<unknown>[] = [];
+    const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p), passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
+    return { ctx, pending };
+  };
+
+  it("the response is returned before the write finishes, and the click is stored once the registered promise settles", async () => {
+    const { offer } = await seed();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { ctx, pending } = fakeCtx();
+    const res = await call(`/go/o/${offer.id}`, { env: dbWithInsert(async (insert) => { await gate; return insert(); }), ctx });
+    expect(res.status).toBe(302);
+    expect(pending).toHaveLength(1);
+    expect(await clicksOf(offer.id)).toHaveLength(0);
+    release();
+    await Promise.all(pending);
+    expect(await clicksOf(offer.id)).toHaveLength(1);
+  });
+
+  it("a failing write is logged and does not change the redirect", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { offer } = await seed();
+    const { ctx, pending } = fakeCtx();
+    const res = await call(`/go/o/${offer.id}`, { env: dbWithInsert(async () => { throw new Error("boom"); }), ctx });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    await expect(Promise.all(pending)).resolves.toBeDefined();
+    expect(goLogs(error)).toEqual([{ event: "go.click_failed", clickId: new URL(location).searchParams.get("c"), error: "Error: boom" }]);
+    expect(await clicksOf(offer.id)).toHaveLength(0);
+  });
+
+  it("HEAD registers no write; without an ExecutionContext the write is awaited", async () => {
+    const { offer } = await seed();
+    const { ctx, pending } = fakeCtx();
+    await call(`/go/o/${offer.id}`, { method: "HEAD", ctx });
+    expect(pending).toHaveLength(0);
+    expect((await call(`/go/o/${offer.id}`)).status).toBe(302);
+    expect(await clicksOf(offer.id)).toHaveLength(1);
+  });
+});
+
+describe("flag cache (Review Focus 3, 60 s)", () => {
+  it("a change made straight in D1 is not seen until the cache is reset; setFlag clears it at once", async () => {
+    const { offer } = await seed();
+    const kind = async () => ((await call(`/go/o/${offer.id}`)).headers.get("location") ?? "").includes("/r?c=") ? "tracked" : "fallback";
+    expect(await kind()).toBe("tracked");
+    await run("UPDATE feature_flags SET enabled = 0 WHERE key = 'affiliate'");
+    expect(await kind()).toBe("tracked");
+    resetFlagCache();
+    expect(await kind()).toBe("fallback");
+    await run("UPDATE feature_flags SET enabled = 1 WHERE key = 'affiliate'");
+    expect(await kind()).toBe("fallback");
+    await setFlags({ affiliate: true });
+    expect(await kind()).toBe("tracked");
+  });
+});
+
+describe("the rest of the site keeps its own headers", () => {
+  it.each(["/", "/products", "/vi/products"])("%s does not get Referrer-Policy: origin (only /go/ sets it)", async (path) => {
+    const res = await call(path);
+    expect(res.headers.get("referrer-policy")).not.toBe("origin");
+  });
+});
+```
+
+Run: `npm test -w apps/web -- test/monetization/go.test.ts` → FAIL (chưa có route: các `/go/…` rơi xuống `notFound` của app; test redirect đỏ).
+
+- [ ] **Step 2: `routes/go.ts` và nối vào app**
+
+`apps/web/src/routes/go.ts`:
+
+```ts
+import type { Context, Hono } from "hono";
+import { recordClick, type ClickInput } from "../db/clicks.ts";
+import { isFlagEnabled } from "../db/flags.ts";
+import { findDefaultOfferContext, findOfferWithContext, type RedirectRows } from "../db/offers.ts";
+import { RESERVED_MERCHANT_SLUGS } from "../domain/merchant.ts";
+import { resolveOfferRedirect } from "../domain/offer.ts";
+import { CORRUPTION_REASONS, OFFER_ID_RE, countryOf, isBotRequest, localeFromReferer, parseSrc, referrerHost } from "../domain/outbound.ts";
+import { SLUG_RE } from "../domain/slug.ts";
+import type { AppEnv } from "../env.ts";
+import { ulid } from "../lib/ulid.ts";
+import { errorResponse } from "../views/error-response.tsx";
+
+/**
+ * /go/:merchantSlug and /go/o/:offerId (addendum §2.1, §3.3; ADR-007). HIGH-RISK: the destination comes only from the database through
+ * resolveOfferRedirect, and `Location` is the href that function re-validated. Nothing from the path or query ever reaches `Location`:
+ * the query is read for `src` only, and only as an enum.
+ */
+
+const NO_INDEX = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } as const;
+
+/** The default-locale 404 page (these paths have no locale prefix), never cached or indexed. */
+function notFound(c: Context<AppEnv>): Promise<Response> {
+  for (const [name, value] of Object.entries(NO_INDEX)) c.header(name, value);
+  return errorResponse(c, "notFound", 404);
+}
+
+function redirectTo(url: string): Response {
+  return new Response(null, { status: 302, headers: { Location: url, ...NO_INDEX, "Referrer-Policy": "origin" } });
+}
+
+/** Never rejects: a failed write is logged and must not touch the redirect. */
+async function saveClick(db: D1Database, click: ClickInput): Promise<void> {
+  try {
+    await recordClick(db, click);
+  } catch (err) {
+    console.error(JSON.stringify({ event: "go.click_failed", clickId: click.id, error: String(err) }));
+  }
+}
+
+/** waitUntil when the runtime has an ExecutionContext (Hono throws when it has none: tests, local), else wait for the write. */
+async function defer(c: Context<AppEnv>, work: Promise<void>): Promise<void> {
+  let ctx: ExecutionContext | null = null;
+  try {
+    ctx = c.executionCtx;
+  } catch {
+    ctx = null;
+  }
+  if (ctx) ctx.waitUntil(work);
+  else await work;
+}
+
+async function respond(c: Context<AppEnv>, rows: RedirectRows | null): Promise<Response> {
+  if (!rows?.offer) return notFound(c);
+  const now = new Date();
+  const clickId = ulid(now.getTime());
+  const affiliate = await isFlagEnabled(c.env.DB, "affiliate", now.getTime());
+  const partnerReferral = await isFlagEnabled(c.env.DB, "partner_referral", now.getTime());
+  const url = new URL(c.req.url);
+  const referer = c.req.header("referer");
+  const locale = localeFromReferer(referer, url.host);
+  const src = parseSrc(url.searchParams.get("src"));
+
+  const result = resolveOfferRedirect({ ...rows, flags: { affiliate, partner_referral: partnerReferral }, now: now.toISOString(), clickId, locale, src });
+  if (result.kind === "not_found") {
+    if (CORRUPTION_REASONS.includes(result.reason)) {
+      console.error(JSON.stringify({ event: "go.corrupt_data", reason: result.reason, offerId: rows.offer.id, merchantId: rows.merchant?.id ?? null, requestId: c.get("requestId") }));
+    }
+    return notFound(c);
+  }
+
+  // HEAD is answered by the GET handler (Hono); it must not count as a click.
+  if (c.req.method === "GET") {
+    const cf = c.req.raw.cf;
+    await defer(
+      c,
+      saveClick(c.env.DB, {
+        id: clickId,
+        productId: null,
+        offerId: rows.offer.id,
+        linkKind: "offer",
+        src,
+        locale,
+        visitorHash: null,
+        country: countryOf(cf),
+        referrerHost: referrerHost(referer),
+        isBot: isBotRequest(c.req.header("user-agent"), cf),
+        createdAt: now.toISOString(),
+      }),
+    );
+  }
+  return redirectTo(result.url);
+}
+
+export function registerGoRoutes(app: Hono<AppEnv>) {
+  app.get("/go/o/:offerId", async (c) => {
+    const id = c.req.param("offerId");
+    if (!OFFER_ID_RE.test(id)) return notFound(c);
+    return respond(c, await findOfferWithContext(c.env.DB, id));
+  });
+
+  app.get("/go/:merchantSlug", async (c) => {
+    const slug = c.req.param("merchantSlug");
+    if (RESERVED_MERCHANT_SLUGS.has(slug) || !SLUG_RE.test(slug)) return notFound(c);
+    const rows = await findDefaultOfferContext(c.env.DB, slug);
+    // A paused or archived merchant has no public /go/ (addendum §3.3), unlike /go/o/ where its offers fall back.
+    return respond(c, rows !== null && rows.merchant.status === "active" ? rows : null);
+  });
+
+  // Everything else under /go/ that is not matched above (including /go/p/…, which is M7's) is a 404, never a static asset.
+  app.get("/go/*", (c) => notFound(c));
+  app.all("/go/*", (c) => c.body("Method Not Allowed", 405, { Allow: "GET, HEAD", "Cache-Control": "no-store" }));
+}
+```
+
+`apps/web/src/app.ts`: thêm `import { registerGoRoutes } from "./routes/go.ts";` cạnh các import route khác, và `registerGoRoutes(app);` ngay trước `registerSeoRoutes(app);`.
+
+Nếu `npm run typecheck` báo `c.req.raw.cf` không gán được cho `CfLike`, ép kiểu tại chỗ gọi (`as CfLike`, import type từ `domain/outbound.ts`); không nới `CfLike`.
+
+Run: `npm test -w apps/web -- test/monetization/go.test.ts` → PASS. Nếu test `cf` báo `country` null do `Request` không giữ `cf`, giữ nguyên helper `Object.defineProperty` (đã dùng) và kiểm lại `c.req.raw` là chính request đó; không đổi mã production để chiều test.
+
+- [ ] **Step 3: Test kiến trúc**
+
+Run: `npm test -w apps/web -- test/architecture.test.ts` → FAIL (`routes/go.ts` import `db/clicks`, `db/offers` mà chưa trong danh sách cho phép). Sửa `apps/web/test/architecture.test.ts`: `MONEY_ALLOWED` thêm `"../src/routes/go.ts"`, và danh sách đúng của test "after Task 4" thêm `"../src/routes/go.ts"` sau `"../src/jobs/daily.ts"` (giữ các mục của Task 3); đổi tên test thành "after Task 4b the allowlist is exactly the files of Tasks 2c–4b". Run lại → PASS (kể cả "has no partner name in src").
+
+- [ ] **Step 4: Kiểm tra cuối và commit**
+
+Chạy: `npm run typecheck -w apps/web`, `npm test`, `grep -rniE "elevenlabs|partnerstack" apps/web/src` (không in dòng nào), và `npm test -w apps/web -- test/seo/robots.test.ts` (vẫn có `Disallow: /go/`). Kiểm tay (không thuộc CI, ghi vào báo cáo): `npm run dev`, `curl -sI http://localhost:8787/go/o/00000000000000000000000000` → 404 kèm `cache-control: no-store`. Rồi:
+
+```bash
+git add apps/web/src/routes/go.ts apps/web/src/app.ts apps/web/test/architecture.test.ts apps/web/test/monetization/go.test.ts
+git commit -m "feat(web): /go/ redirects with click logging (VNX-2103-2)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận (Task 4b; `npm test -w apps/web -- test/monetization/go.test.ts` bao phủ danh sách ADR-007 "Được bảo đảm bởi" và Review Focus 1, 2, 3, 7):**
+- Bảng chân lý qua HTTP: `tracked` (`Location` = template điền, `id` dòng click = `click_id`, cả `/go/o/` lẫn `/go/:slug`); `fallback` cho từng lý do (`merchant_paused`, `offer_paused`, `offer_not_started`, `offer_ended`, `program_not_active` với `draft` và `paused`, `flag_off`) tới `website_url` + UTM, không `click_id` trong `Location`, **có** một dòng click; `not_found` cho offer không tồn tại, offer `archived`, merchant `archived` (không log, không click). `program_direct` không tới được qua HTTP (CHECK của CSDL), do test domain Task 2b bao phủ.
+- Dữ liệu hỏng `invalid_url`, `window_invalid`, `program_merchant`, `website_invalid` → 404, không click, đúng một dòng `console.error` `go.corrupt_data` (JSON, có `reason`, `offerId`, `merchantId`, `requestId`; không có host lạ, IP, UA, Referer). Tập lý do được log đúng bảy mục (test domain Task 4).
+- Open redirect và mánh URL: mọi đường dẫn `/go/https://…`, `%2F%2F`, `%5C`, `//`, CR/LF, `..` → 404 không `Location`; query ngoài `src` bị bỏ qua, `src` lạ → `unknown`, không chèn header; mười một template, chín `destination_url` và chín `website_url` hỏng → 404, không click.
+- ULID sai dạng, slug `p` / `o` / sai dạng, `/go/p/…` → 404 trước khi đọc D1 (DB giả đếm số lần gọi = 0).
+- Header: `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: origin` trên mọi 302 (tracked, fallback, slug, HEAD); 404 có `no-store` và `noindex`; trang `/`, `/products`, `/vi/products` không có `Referrer-Policy: origin`.
+- Phương thức: POST / PUT / PATCH / DELETE có Origin hợp lệ → 405 kèm `Allow: GET, HEAD`, không ghi click; OPTIONS → 405; POST khác Origin → 403; `HEAD` redirect không ghi click và không gọi `waitUntil`.
+- Click: một dòng mỗi GET `tracked` / `fallback`, `link_kind = 'offer'`, `offer_id` đặt và `product_id` null, `src` ngoài enum → `unknown`, `locale` từ Referer cùng host (host giả `vnx.si.evil…` → `en`), `referrer_host` chỉ host, `country` từ `request.cf.country`, `visitor_hash` null, bot (UA rỗng, Googlebot, curl, `verifiedBot`) → `is_bot = 1` vẫn redirect và vẫn ghi; dòng không chứa IP, UA, cookie, user id, email hay query của Referer (kể cả khi đăng nhập).
+- `waitUntil`: response trả về khi ghi chưa xong, click có mặt sau khi `await` promise đã đăng ký; ghi lỗi chỉ `console.error` `go.click_failed` và không đổi redirect; không có `ExecutionContext` thì `await` ghi.
+- Cache cờ 60 s: đổi thẳng trong D1 không đổi hành vi tới khi `resetFlagCache`; `setFlag` xóa cache ngay (cả hai chiều bật và tắt).
+- Test kiến trúc: `MONEY_ALLOWED` thêm đúng `routes/go.ts` (danh sách đúng, có sắp xếp); không file `src` nào có `elevenlabs` / `partnerstack`.
+- `npm run typecheck -w apps/web` và `npm test` xanh. Diff ước tính ≈ 600 dòng không tính locale (route 100, app 2, test kiến trúc 4, `go.test.ts` ≈ 495, phần lớn là bảng dữ liệu `it.each`; chấp nhận vì HIGH-RISK, không tách thêm). Commit `feat(web): /go/ redirects with click logging (VNX-2103-2)`.
+
+Ghi chú cho Reviewer: `test/monetization/conversions.test.ts` của ADR-007 hoãn tới VNX-2105+ (lát mỏng không có conversion); ghi vào `CURRENT-STATUS.md` cùng các nghĩa vụ M7 đã nêu cuối Task 6.
 
 ---
 
