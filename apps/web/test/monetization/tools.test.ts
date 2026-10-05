@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
 import { setDefaultOffer } from "../../src/db/merchants.ts";
@@ -22,6 +22,8 @@ const past = "2020-01-01T00:00:00.000Z";
 const future = "2099-01-01T00:00:00.000Z";
 
 beforeEach(() => resetFlagCache());
+// The flag is global to the file's database: always leave it off, even when an assertion above failed.
+afterEach(() => setIndexing(false));
 
 describe("/tools/:slug availability", () => {
   it("answers 404 in every locale for an unknown, paused or archived merchant, and for a malformed slug", async () => {
@@ -134,6 +136,20 @@ describe("/tools/:slug with offers (Review Focus 4)", () => {
     expect(anchor(main, "/go/o/")).toContain('rel="sponsored noopener"');
   });
 
+  it("shows no disclosure and no sponsored link when the only program offers are paused or out of window", async () => {
+    const m = await makeMerchant();
+    const program = await makeProgram(m);
+    await makeOffer(m, null);
+    await makeOffer(m, program, { status: "paused" });
+    await makeOffer(m, program, { endsAt: past });
+    await makeOffer(m, program, { startsAt: future });
+    const main = mainOf(await (await get(`/tools/${m.slug}`)).text());
+    expect(main).toContain("/go/o/");
+    expect(main).not.toContain("data-disclosure");
+    expect(main).not.toContain("sponsored");
+    expect(main).not.toContain("/disclosure");
+  });
+
   it("escapes the merchant name and description", async () => {
     const m = await makeMerchant({ name: "<script>alert(1)</script>", description: "<img src=x onerror=alert(1)>" });
     const html = await (await get(`/tools/${m.slug}`)).text();
@@ -169,5 +185,26 @@ describe("/tools/:slug indexing (Owner 2026-10-05)", () => {
       }
     }
     await setIndexing(false);
+  });
+});
+
+describe("Owner-approved wording, pinned literally (plan block A)", () => {
+  const BLOCK_A = {
+    en: "VNX.SI may earn a commission when you sign up or buy through some links on this page. This never changes how products are ranked.",
+    vi: "VNX.SI có thể nhận hoa hồng khi bạn đăng ký hoặc mua qua một số liên kết trên trang này. Điều này không bao giờ thay đổi cách xếp hạng sản phẩm.",
+    "zh-Hans": "当您通过本页的部分链接注册或购买时，VNX.SI 可能获得佣金。这绝不会影响产品的排名方式。",
+    "zh-Hant": "當您透過本頁的部分連結註冊或購買時，VNX.SI 可能獲得佣金。這絕不會影響產品的排名方式。",
+  } as const;
+  const LEARN_MORE = { en: "Learn more", vi: "Tìm hiểu thêm", "zh-Hans": "了解更多", "zh-Hant": "瞭解更多" } as const;
+
+  it("has the four disclosure sentences and Learn more labels word for word", () => {
+    for (const locale of LOCALES) {
+      expect(t(locale, "disclosure.note"), locale).toBe(BLOCK_A[locale]);
+      expect(t(locale, "disclosure.learnMore"), locale).toBe(LEARN_MORE[locale]);
+    }
+  });
+
+  it("labels the default offer Try {name} in English", () => {
+    expect(t("en", "offer.label.try_it", { name: "X" })).toBe("Try X");
   });
 });

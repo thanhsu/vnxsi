@@ -1,5 +1,5 @@
 import type { MerchantStatus } from "../domain/merchant.ts";
-import type { ListedOffer, OfferInput, OfferKind, OfferLabel,OfferStatus, ProgramStatus, ProgramType, RedirectInput, RedirectMerchant, RedirectOffer, RedirectProgram } from "../domain/offer.ts";
+import type { ListedOffer, OfferInput, OfferKind, OfferLabel, OfferStatus, ProgramStatus, ProgramType, RedirectInput, RedirectMerchant, RedirectOffer, RedirectProgram } from "../domain/offer.ts";
 import { ulid } from "../lib/ulid.ts";
 import { runAudited } from "./audit.ts";
 import { parseStoredHosts } from "./merchants.ts";

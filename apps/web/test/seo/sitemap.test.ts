@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { setBuilderStatus } from "../../src/db/builders.ts";
 import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
@@ -93,6 +93,8 @@ describe("/sitemap.xml tool pages (VNX-2104a, Owner 2026-10-05)", () => {
     await setFlag(testEnv.DB, { key: "content_indexing", enabled, actorUserId: admin.id, now: new Date().toISOString() });
     resetFlagCache();
   };
+  // Always leave the flag off, even when an assertion below failed.
+  afterEach(() => setIndexing(false));
   const html = async (path: string) => (await createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv)).text();
 
   it("lists /tools/:slug only when the merchant is active AND indexable AND content_indexing is on, with 4 locales and hreflang", async () => {
