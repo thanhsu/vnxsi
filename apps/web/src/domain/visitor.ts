@@ -6,16 +6,16 @@
 
 export const VISITOR_COOKIE = "__Host-vnx_vid";
 export const VISITOR_ID_RE = /^[0-9a-f]{32}$/;
-/** Floor for Max-Age so a cookie set a moment before 00:00 UTC is still sent back at least once. */
-export const VISITOR_COOKIE_MIN_AGE = 60;
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const encoder = new TextEncoder();
+/** Domain separation for the day key. */
+const DAY_KEY_PREFIX = "vnx.si/visitor/v1|";
 
-/** Seconds until the next 00:00 UTC (86400 at exactly 00:00:00), never below VISITOR_COOKIE_MIN_AGE. */
+/** Seconds until the next 00:00 UTC (86400 at exactly 00:00:00); always >= 1, so the cookie ends with the UTC day. */
 export function visitorCookieMaxAge(now: Date): number {
   const nextMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  return Math.max(VISITOR_COOKIE_MIN_AGE, Math.ceil((nextMidnight - now.getTime()) / 1000));
+  return Math.ceil((nextMidnight - now.getTime()) / 1000);
 }
 
 /** The id when it has exactly the shape newVisitorId makes, else null (never trust a cookie). */
@@ -29,9 +29,9 @@ export function newVisitorId(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** True for `Sec-GPC: 1` only (Global Privacy Control). */
+/** True when any comma-separated member of `Sec-GPC` is `1` (Global Privacy Control; repeated headers are folded by the runtime). */
 export function hasGpc(headers: { get(name: string): string | null }): boolean {
-  return headers.get("Sec-GPC")?.trim() === "1";
+  return (headers.get("Sec-GPC") ?? "").split(",").some((v) => v.trim() === "1");
 }
 
 async function hmac(key: BufferSource, message: string): Promise<ArrayBuffer> {
@@ -39,15 +39,21 @@ async function hmac(key: BufferSource, message: string): Promise<ArrayBuffer> {
   return crypto.subtle.sign("HMAC", k, encoder.encode(message));
 }
 
+/** The salt when it is set and not blank, else null. Use it for `hasSalt` too. */
+export function usableSalt(salt: string | undefined): string | null {
+  return typeof salt === "string" && salt.trim() !== "" ? salt : null;
+}
+
 /**
- * `hex(HMAC-SHA256(dayKey, visitorId))` with `dayKey = HMAC-SHA256(salt, day)`; `day` is the UTC date `YYYY-MM-DD` (see `utcDay`).
+ * `hex(HMAC-SHA256(dayKey, visitorId))` with `dayKey = HMAC-SHA256(salt, "vnx.si/visitor/v1|" + day)`; `day` is the UTC date `YYYY-MM-DD` (see `utcDay`).
  * Null when there is no salt (unset, empty or blank) or the id is not a valid cookie value: the caller then does not count.
  * Throws on a malformed `day`.
  */
 export async function visitorHash(salt: string | undefined, day: string, visitorId: string): Promise<string | null> {
   if (!DAY_RE.test(day)) throw new Error(`invalid day: ${day}`);
-  if (!salt || salt.trim() === "" || !VISITOR_ID_RE.test(visitorId)) return null;
-  const dayKey = await hmac(encoder.encode(salt), day);
+  const key = usableSalt(salt);
+  if (key === null || !VISITOR_ID_RE.test(visitorId)) return null;
+  const dayKey = await hmac(encoder.encode(key), DAY_KEY_PREFIX + day);
   return [...new Uint8Array(await hmac(dayKey, visitorId))].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -59,7 +65,7 @@ export interface CountContext {
   isOwnBuilder: boolean;
   /** The request carries `Sec-GPC: 1`. */
   isGpc: boolean;
-  /** `ANALYTICS_SALT` is set and not blank. */
+  /** `usableSalt(env.ANALYTICS_SALT) !== null`. */
   hasSalt: boolean;
 }
 
