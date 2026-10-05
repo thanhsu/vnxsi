@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { purgeOldClicks, recordClick, type ClickInput } from "../../src/db/clicks.ts";
+import { CLICK_TODAY_SQL, hasClickToday, purgeOldClicks, recordClick, type ClickInput } from "../../src/db/clicks.ts";
 import { OUTBOUND_CLICK_PURGE_BATCH, OUTBOUND_CLICK_PURGE_MAX_BATCHES, purgeCutoff } from "../../src/domain/outbound.ts";
 import { ulid } from "../../src/lib/ulid.ts";
 import { testEnv } from "../helpers.ts";
@@ -93,5 +93,37 @@ describe("purgeOldClicks (Owner 2026-10-05: 13 months)", () => {
     expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toEqual({ event: "jobs.daily.capped", step: "outbound_clicks", cap: 2 * OUTBOUND_CLICK_PURGE_MAX_BATCHES });
     expect(await purgeOldClicks(testEnv.DB, NOW, 2)).toBe(5);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+describe("hasClickToday (VNX-0707b: one count per visitor, product, kind, UTC day)", () => {
+  const H = (c: string) => c.repeat(64);
+  const key = { visitorHash: H("a"), productId: "clicks-prod-a", linkKind: "demo" as const, day: "2026-10-05" };
+  const seed = (o: Partial<ClickInput>) => recordClick(testEnv.DB, click({ offerId: null, productId: key.productId, linkKind: "demo", visitorHash: key.visitorHash, ...o }));
+
+  it("is false with no row, true with a row that day, false for the day before and after", async () => {
+    expect(await hasClickToday(testEnv.DB, key)).toBe(false);
+    await seed({ createdAt: "2026-10-05T00:00:00.000Z" });
+    expect(await hasClickToday(testEnv.DB, key)).toBe(true);
+    expect(await hasClickToday(testEnv.DB, { ...key, day: "2026-10-04" })).toBe(false);
+    expect(await hasClickToday(testEnv.DB, { ...key, day: "2026-10-06" })).toBe(false);
+  });
+  it("includes the last millisecond of the day and excludes the first of the next", async () => {
+    await seed({ visitorHash: H("b"), createdAt: "2026-10-05T23:59:59.999Z" });
+    expect(await hasClickToday(testEnv.DB, { ...key, visitorHash: H("b") })).toBe(true);
+    await seed({ visitorHash: H("c"), createdAt: "2026-10-06T00:00:00.000Z" });
+    expect(await hasClickToday(testEnv.DB, { ...key, visitorHash: H("c") })).toBe(false);
+  });
+  it("is keyed by visitor, product and link kind", async () => {
+    await seed({ visitorHash: H("d"), createdAt: "2026-10-05T10:00:00.000Z" });
+    const k = { ...key, visitorHash: H("d") };
+    expect(await hasClickToday(testEnv.DB, k)).toBe(true);
+    expect(await hasClickToday(testEnv.DB, { ...k, linkKind: "site" })).toBe(false);
+    expect(await hasClickToday(testEnv.DB, { ...k, productId: "other" })).toBe(false);
+    expect(await hasClickToday(testEnv.DB, { ...k, visitorHash: H("e") })).toBe(false);
+  });
+  it("uses idx_clicks_visitor", async () => {
+    const plan = await testEnv.DB.prepare(`EXPLAIN QUERY PLAN ${CLICK_TODAY_SQL}`)
+      .bind("x", "y", "demo", "2026-10-05", "2026-10-06").all<{ detail: string }>();
+    expect(plan.results.map((r) => r.detail).join(" ")).toContain("idx_clicks_visitor");
   });
 });

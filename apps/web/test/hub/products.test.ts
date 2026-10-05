@@ -82,6 +82,8 @@ describe("product editor text steps", () => {
     expect((await post("audience", { targetUsers: "Spa owners" })).status).toBe(303);
     expect((await post("features", { features: "Calendar\nReminders", techStack: "Hono, D1" })).status).toBe(303);
     expect((await post("demo", { demoUrl: "http://insecure.example", websiteUrl: "" })).status).toBe(400);
+    expect((await post("demo", { demoUrl: "https://127.0.0.1/", websiteUrl: "" })).status).toBe(400);
+    expect((await post("demo", { demoUrl: "", websiteUrl: "https://u@evil.com/" })).status).toBe(400);
     expect((await post("demo", { demoUrl: "https://demo.example", websiteUrl: "" })).status).toBe(303);
     expect((await post("customization", { customizable: "on", customizationNotes: "Branding" })).status).toBe(303);
     expect((await post("support", { supportPolicy: "Email within 48h" })).status).toBe(303);

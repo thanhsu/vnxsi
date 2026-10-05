@@ -1,5 +1,6 @@
-import { isHttpsUrl, splitCsv } from "./builder-input.ts";
+import { splitCsv } from "./builder-input.ts";
 import { CATEGORIES, DELIVERY_MODELS, LICENSES, PRODUCT_LANGS, type Product, type ReadinessGap } from "./product.ts";
+import { validatePublicUrl } from "./product-url.ts";
 import { SLUG_RE } from "./slug.ts";
 
 /** The 9 editor steps in display order (spec §5.3). */
@@ -123,7 +124,7 @@ function parseField(spec: FieldSpec, raw: string): FieldResult {
     case "url":
       if (v === "") return { ok: true, value: null };
       if (v.length > spec.max) return { ok: false, error: "too_long" };
-      return isHttpsUrl(v) ? { ok: true, value: v } : { ok: false, error: "url" };
+      return validatePublicUrl(v).ok ? { ok: true, value: v } : { ok: false, error: "url" };
     case "select":
       if (v === "") return spec.required ? { ok: false, error: "choice" } : { ok: true, value: null };
       return spec.options?.includes(v) ? { ok: true, value: v } : { ok: false, error: "choice" };
