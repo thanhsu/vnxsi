@@ -1,8 +1,8 @@
 # ADR-010: Ops console, role và ngoại lệ ngôn ngữ
 
-- **Trạng thái:** Accepted cho phạm vi và quyết định authorization; yêu cầu visual UI là acceptance criteria của spec, cần mockup review trước khi code.
+- **Trạng thái:** Accepted (Owner duyệt 2026-10-05 sau review `.ai/reviews/OPS-DESIGN-review.md`). Yêu cầu visual UI là acceptance criteria của spec, cần mockup review trước khi code.
 - **Ngày:** 2026-10-05
-- **Người quyết định:** Owner (các quyết định quyền ngày 2026-10-05), Reviewer (Codex)
+- **Người quyết định:** Owner (2026-10-05); bản nháp do Codex soạn, Claude (Reviewer) review
 - **Spec:** [VNX.SI Ops Console — Design Spec](../superpowers/specs/2026-10-05-vnxsi-ops-console-design.md)
 
 ## Bối cảnh
@@ -15,7 +15,7 @@ Khu vực `/admin/...` hiện dùng khái niệm admin chung và có nhiều mà
 
 - Console canonical là `/ops` và các route con tiếng Anh; không tạo `/vi/ops`, `/zh-hans/ops` hoặc `/zh-hant/ops`.
 - Các route admin cũ và locale-prefixed admin được mapping về English `/ops` theo allowlist. GET legacy có thể redirect an toàn; POST legacy phải internal-delegate hoặc dùng 307/308 mapping tĩnh đã test, không 301/302 mù.
-- Ops dùng `t()` với locale `en`. Theo quy tắc parity hiện tại, key mới vẫn có trong cả bốn locale file cho tới khi Owner đổi chính sách i18n. Đây là ngoại lệ route/language của Ops; public pages vẫn theo ADR-003.
+- Ops dùng `t()` với locale `en`. **Khóa `ops.*` chỉ cần có trong `en.ts`** (Owner 2026-10-05); test parity i18n bỏ qua tiền tố `ops.`. Mọi khóa khác vẫn theo parity bốn locale. Đây là ngoại lệ route/language của Ops; public pages vẫn theo ADR-003.
 
 ### 2. Nguồn quyền
 
@@ -47,14 +47,14 @@ Chỉ Owner gốc được quản lý membership. UI không cấp role Owner. Mo
 
 ### 5. Audit
 
-Grant/change/remove membership và pending invite lifecycle phải ghi audit nguyên tử cùng mutation. Audit hiện có của user suspension và các hành động quản trị khác được giữ và hiển thị qua projection an toàn; O1 không retrofit atomic audit cho toàn bộ mutation legacy. Root-protection denial không làm thay đổi dữ liệu nên record bảo mật là tùy chọn. Audit log là read-only và mọi role trong bảng được xem.
+Grant/change/remove membership và pending invite lifecycle phải ghi audit nguyên tử cùng mutation. Audit hiện có của user suspension và các hành động quản trị khác được giữ và hiển thị qua projection an toàn; O1 không retrofit atomic audit cho toàn bộ mutation legacy. Mọi lần từ chối do bảo vệ Owner gốc (hạ quyền, xóa, khóa) **luôn ghi một dòng audit** (actor, hành động bị chặn, đối tượng, thời điểm) (Owner 2026-10-05). Audit log là read-only và mọi role trong bảng được xem.
 
 Projection tối thiểu của UI chỉ gồm thời điểm, actor ID, action, entity và entity ID. Không hiển thị raw JSON arbitrary, nội dung riêng tư, token, cookie, API key hoặc secret; không link tới detail mà role hiện tại không có quyền. Chính sách field visibility mở rộng và retention phải chốt trước O1.
 
 ## Phạm vi thay thế các ADR trước
 
 - **ADR-002:** chỉ thay phần xác định quyền admin và route/response của Ops. Magic link, token purpose, session cookie và luồng đăng nhập vẫn giữ nguyên ADR-002.
-- **ADR-003:** chỉ thêm ngoại lệ canonical English/no-locale-prefix cho `/ops` và yêu cầu dùng `t()`/parity key. Public URL locale, fallback EN và bốn locale vẫn giữ nguyên ADR-003.
+- **ADR-003:** chỉ thêm ngoại lệ canonical English/no-locale-prefix cho `/ops` và miễn parity cho khóa `ops.*` (chỉ có trong `en.ts`). Public URL locale, fallback EN và parity bốn locale cho mọi khóa khác vẫn giữ nguyên ADR-003.
 
 ADR-004 và các ADR monetization không bị thay đổi. Quy tắc Monetization Owner-only ở giai đoạn đầu là capability boundary của Ops, không thay đổi mô hình monetization.
 
@@ -65,7 +65,8 @@ ADR-004 và các ADR monetization không bị thay đổi. Quy tắc Monetizatio
 | Dùng nguyên `requireAdmin` và `/admin` | Không biểu đạt role matrix; guard hiện tại có redirect/403 không phù hợp yêu cầu 404 kín của Ops. |
 | Cấp quyền từ menu hoặc session cũ | Có thể bị bỏ qua bằng URL/POST; authorization phải kiểm tra mỗi request. |
 | Cấp quyền ngay khi Owner nhập email | Chưa chứng minh người nhận sở hữu email; permission intent phải chờ magic-link verification. |
-| Duy trì bốn UI locale cho Ops | Tăng số route và surface cần bảo vệ; Ops được chốt là canonical English, còn parity key vẫn bảo đảm theo ADR-003. |
+| Duy trì bốn UI locale cho Ops | Tăng số route và surface cần bảo vệ; Ops được chốt là canonical English. |
+| Giữ parity bốn locale cho khóa `ops.*` | Phải chép chuỗi tiếng Anh vào ba file không dùng; Owner chọn miễn parity cho `ops.*`. |
 | Redirect mọi POST legacy bằng 301/302 | Có thể đổi method/mất body hoặc bỏ qua Origin/capability; chỉ delegate hoặc 307/308 mapping tĩnh. |
 
 ## Hệ quả
@@ -73,7 +74,7 @@ ADR-004 và các ADR monetization không bị thay đổi. Quy tắc Monetizatio
 - Có thêm resolver role và bảng membership/pending intent; đổi quyền phải có audit transaction.
 - UI sidebar phải feature-aware và role-aware. Module chưa làm không xuất hiện, nên không có dead link.
 - Root Owner vẫn phụ thuộc `active` để tránh quyền của user bị khóa tiếp tục chạy; `ADMIN_EMAILS` chỉ bảo vệ vai trò khỏi demote/remove.
-- `/ops` English-only đơn giản hóa route và email, nhưng các key phải giữ parity bốn locale cho tới quyết định mới.
+- `/ops` English-only đơn giản hóa route, email và i18n: khóa `ops.*` chỉ ở `en.ts`.
 - Audit projection an toàn làm giảm dữ liệu hiển thị trực tiếp; field visibility không được tự mở rộng khi thêm module.
 
 ## Được bảo đảm bởi
@@ -81,8 +82,9 @@ ADR-004 và các ADR monetization không bị thay đổi. Quy tắc Monetizatio
 Plan O1 phải thêm test cho:
 
 - role matrix và 404 kín cho unauth/no-role/suspended/insufficient role;
-- root Owner không thể demote/remove; Operator không suspend root Owner;
+- root Owner không thể demote/remove; Operator không suspend root Owner; mỗi lần bị chặn ghi một dòng audit;
 - pending email chỉ activate sau magic-link verification khớp email chuẩn hóa;
 - audit atomic với membership mutation và projection không lộ secret/private payload;
 - no-store/noindex cho thành công và denied, Origin check, legacy GET allowlist và POST mapping an toàn;
-- menu không render route chưa sẵn sàng và canonical English redirect.
+- menu không render route chưa sẵn sàng và canonical English redirect;
+- test parity i18n bỏ qua đúng tiền tố `ops.` và vẫn bắt lỗi mọi khóa khác.
