@@ -1562,6 +1562,7 @@ describe("counting truth table (spec 8.11, M3, L4)", { timeout: 30_000 }, () => 
     ["no cookie", { headers: { "user-agent": CHROME } }],
     ["a malformed cookie", { headers: { "user-agent": CHROME, cookie: "__Host-vnx_vid=not-hex" } }],
   ] as [string, Call][])("%s: the click row is written with a null hash, product_daily_stats is untouched", async (_name, o) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { product, slug } = await live();
     const before = await count("product_daily_stats");
     expect((await call(`/go/p/${slug}/demo`, o)).status).toBe(302);
@@ -1570,6 +1571,8 @@ describe("counting truth table (spec 8.11, M3, L4)", { timeout: 30_000 }, () => 
     expect(rows[0]?.visitor_hash).toBeNull();
     expect(await stat(product.id)).toEqual(ZERO);
     expect(await count("product_daily_stats")).toBe(before);
+    // M3: a missing or blank salt warns exactly once per isolate (the warning is reset in beforeEach).
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes("visitor.no_salt"))).toHaveLength(_name.includes("ANALYTICS_SALT") ? 1 : 0);
   });
 
   it("marks bot rows is_bot = 1", async () => {
@@ -1945,8 +1948,10 @@ WITH u AS (
   SELECT id, slug, status, 'website_url', website_url FROM products WHERE website_url IS NOT NULL AND website_url <> ''
 ), r AS (
   SELECT *, substr(url, 9) AS rest FROM u
+), a0 AS (
+  SELECT *, substr(rest, 1, min(instr(rest || '/', '/'), instr(rest || '?', '?'), instr(rest || '#', '#')) - 1) AS raw_authority FROM r
 ), a AS (
-  SELECT *, substr(rest, 1, min(instr(rest || '/', '/'), instr(rest || '?', '?'), instr(rest || '#', '#')) - 1) AS authority FROM r
+  SELECT *, CASE WHEN raw_authority LIKE '%:443' AND instr(raw_authority, '[') = 0 THEN substr(raw_authority, 1, length(raw_authority) - 4) ELSE raw_authority END AS authority FROM a0
 )
 SELECT id, slug, status, col, url,
   CASE
@@ -1954,7 +1959,6 @@ SELECT id, slug, status, col, url,
     WHEN url GLOB '*[^!-~]*' OR instr(url, char(92)) > 0 THEN 'chars'
     WHEN substr(url, 1, 8) <> 'https://' THEN 'scheme'
     WHEN authority = '' OR instr(authority, '@') > 0 OR instr(authority, '%') > 0 OR instr(authority, '{') > 0 OR instr(authority, '}') > 0 THEN 'authority'
-    WHEN authority LIKE '%:443' AND instr(authority, '[') = 0 THEN NULL
     WHEN instr(authority, ':') > 0 THEN 'port_or_ipv6'
     WHEN instr(authority, '.') = 0 OR substr(authority, -1) = '.' THEN 'host'
     WHEN lower(authority) = 'localhost' OR lower(authority) LIKE '%.localhost' THEN 'host'

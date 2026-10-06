@@ -169,6 +169,7 @@ describe("counting truth table (spec 8.11, M3, L4)", { timeout: 30_000 }, () => 
     ["no cookie", { headers: { "user-agent": CHROME } }],
     ["a malformed cookie", { headers: { "user-agent": CHROME, cookie: "__Host-vnx_vid=not-hex" } }],
   ] as [string, Call][])("%s: the click row is written with a null hash, product_daily_stats is untouched", async (_name, o) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { product, slug } = await live();
     const before = await count("product_daily_stats");
     expect((await call(`/go/p/${slug}/demo`, o)).status).toBe(302);
@@ -177,6 +178,8 @@ describe("counting truth table (spec 8.11, M3, L4)", { timeout: 30_000 }, () => 
     expect(rows[0]?.visitor_hash).toBeNull();
     expect(await stat(product.id)).toEqual(ZERO);
     expect(await count("product_daily_stats")).toBe(before);
+    // M3: a missing or blank salt warns exactly once per isolate (the warning is reset in beforeEach).
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes("visitor.no_salt"))).toHaveLength(_name.includes("ANALYTICS_SALT") ? 1 : 0);
   });
 
   it("marks bot rows is_bot = 1", async () => {
