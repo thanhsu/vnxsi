@@ -35,3 +35,19 @@
 - Test CSP của `security-headers.test.ts` chỉ quét `/tools/nope` (404); tôi thêm kiểm `style=`/script inline trên trang tool đầy đủ trong test mới.
 - Commit CSP đầu tiên vô tình dùng regex sai (`sstyle`); đã sửa ngay trong commit kế (test vẫn xanh).
 - Ngoài phạm vi, không làm: `og:image`, `?tool=` công khai, bí danh merchant, đo nguồn, `/tools`, index.
+
+## Lượt sửa (review)
+
+Commit: test `test: VNX-2105 fix round tests`, sửa `fix(web): VNX-2105 review fixes F2-F6`.
+
+| # | Đã đổi | Test | Kết quả |
+|---|---|---|---|
+| F1 | Thêm test: builder approved dùng "Cursor" (không phải Claude Code) kèm product; `/builders?q=<k>&tool=Claude%20Code` phải chứa handle và giống hệt `/builders?q=<k>`; `/products?q=<k>&tool=...` phải chứa slug | `tools-bridge.test.ts` (AC6, F1) | Pass (đúng dự kiến: đây là sửa độ mạnh của test) |
+| F2 | `db/directory.ts`, `db/catalog.ts`: `if (query.tool)` thành `if (query.tool !== undefined)` | `tool: ""` cho `searchBuilders`/`searchProducts` trả total 0 | Trước sửa fail (18), sau sửa pass |
+| F3 | `ToolPage.tsx`: bỏ `aria-label` của `section.tool-cta` | test AC4/AC5 hiện có | Pass |
+| F4 | `app.css`: `.cards h3 { font-family: var(--font-display); letter-spacing: -0.015em; }` | không có test CSS | Typecheck và test pass |
+| F5 | `app.css`: `.tool-cta .card { max-width: none; ... }` | không có test CSS | như trên |
+| F6 | `routes/tools.tsx`: hai lượt tìm bằng `Promise.all`; ba lần đọc cờ giữ tuần tự | test bridge hiện có | Pass |
+| F7 | Thêm assertion `<h3><a href=` trong `section.tool-products` và `section.tool-builders` | `tools-bridge.test.ts` (F7) | Pass ngay từ đầu (markup đã đúng; test chỉ khóa hành vi) |
+
+Kiểm: typecheck sạch; `monetization catalog architecture i18n security-headers` 11 file, 179 test pass; `npm test` đầy đủ 136 file, 1445 test pass. AC9 (xem giao diện) để Reviewer.
