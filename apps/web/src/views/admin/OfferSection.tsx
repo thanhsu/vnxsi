@@ -12,7 +12,7 @@ import {
   type OfferStatus,
 } from "../../domain/offer.ts";
 import type { UrlError } from "../../domain/offer-url.ts";
-import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import type { Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator } from "../../i18n/t.ts";
 import { aria, Field, STATUS_KEY } from "./partner-fields.tsx";
@@ -163,7 +163,8 @@ function Preview(p: { locale: Locale; preview: OfferPreview; hasProgram: boolean
 
 type Props = {
   locale: Locale;
-  merchantId: string;
+  /** Builds a link under this merchant's page: "/offers", "/default-offer". */
+  href: (sub: string) => string;
   defaultOfferId: string | null;
   offers: OfferView[];
   programs: ProgramOption[];
@@ -173,7 +174,6 @@ type Props = {
 
 export const OfferSection: FC<Props> = (p) => {
   const tr = translator(p.locale);
-  const base = `/admin/merchants/${p.merchantId}`;
   return (
     <>
       <h2>{tr("offers.title")}</h2>
@@ -195,7 +195,7 @@ export const OfferSection: FC<Props> = (p) => {
               </>
             ) : null}
             {o.status !== "archived" ? (
-              <form method="post" action={localizedPath(p.locale, `${base}/default-offer`)}>
+              <form method="post" action={p.href("/default-offer")}>
                 <input type="hidden" name="offerId" value={isDefault ? "" : o.id} />
                 <button class="btn btn-ghost" type="submit">
                   {tr(isDefault ? "offers.clearDefault" : "offers.setDefault")}
@@ -204,7 +204,7 @@ export const OfferSection: FC<Props> = (p) => {
             ) : null}
             <OfferForm
               locale={p.locale}
-              action={localizedPath(p.locale, `${base}/offers/${o.id}`)}
+              action={p.href(`/offers/${o.id}`)}
               edit={p.edit?.id === o.id ? p.edit : { id: o.id, values: offerValuesOf(o), errors: {} }}
               current={o.status}
               programs={p.programs}
@@ -216,7 +216,7 @@ export const OfferSection: FC<Props> = (p) => {
       <h3>{tr("offers.new")}</h3>
       <OfferForm
         locale={p.locale}
-        action={localizedPath(p.locale, `${base}/offers`)}
+        action={p.href("/offers")}
         edit={p.edit?.id === "new" ? p.edit : { id: "new", values: NEW_OFFER_VALUES, errors: {} }}
         current={null}
         programs={p.programs}

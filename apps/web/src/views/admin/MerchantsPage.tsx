@@ -87,14 +87,16 @@ export const MerchantFields: FC<FieldsProps> = (p) => {
   );
 };
 
-type Props = { locale: Locale; origin: string; merchants: MerchantView[]; create: Pick<MerchantEdit, "values" | "errors"> & { status: "active" | "paused" } };
+type BodyProps = { locale: Locale; /** Builds a link under the merchants root: "" is the list, "/<id>" a detail page. */ link: (sub: string) => string; merchants: MerchantView[]; create: Pick<MerchantEdit, "values" | "errors"> & { status: "active" | "paused" } };
+type Props = Omit<BodyProps, "link"> & { origin: string };
 
 export const NEW_MERCHANT_VALUES: MerchantFormValues = { name: "", slug: "", websiteUrl: "", allowedHosts: "", description: "", indexable: false };
 
-export const MerchantsPage: FC<Props> = (p) => {
+/** The list and the create form, without a layout: /admin wraps it in AdminLayout, /ops in OpsLayout (VNX-2508a). */
+export const MerchantsBody: FC<BodyProps> = (p) => {
   const tr = translator(p.locale);
   return (
-    <AdminLayout locale={p.locale} origin={p.origin} title={tr("merchants.title")} rest="/admin/merchants" active="merchants">
+    <>
       <h1>{tr("merchants.title")}</h1>
       <p>{tr("merchants.intro")}</p>
       {p.merchants.length === 0 ? (
@@ -113,7 +115,7 @@ export const MerchantsPage: FC<Props> = (p) => {
               {p.merchants.map((m) => (
                 <tr>
                   <td>
-                    <a href={localizedPath(p.locale, `/admin/merchants/${m.id}`)}>{m.name}</a>
+                    <a href={p.link(`/${m.id}`)}>{m.name}</a>
                   </td>
                   <td>
                     <code>{m.slug}</code>
@@ -126,7 +128,7 @@ export const MerchantsPage: FC<Props> = (p) => {
         </div>
       )}
       <h2>{tr("merchants.new")}</h2>
-      <form method="post" action={localizedPath(p.locale, "/admin/merchants")} class="card">
+      <form method="post" action={p.link("")} class="card">
         <MerchantFields locale={p.locale} prefix="merchants" values={p.create.values} errors={p.create.errors} slugReadonly={false} />
         <div class="field">
           <label for="merchants-status">{tr("merchants.col.status")}</label>
@@ -144,6 +146,15 @@ export const MerchantsPage: FC<Props> = (p) => {
           {tr("merchants.create")}
         </button>
       </form>
+    </>
+  );
+};
+
+export const MerchantsPage: FC<Props> = ({ origin, ...p }) => {
+  const tr = translator(p.locale);
+  return (
+    <AdminLayout locale={p.locale} origin={origin} title={tr("merchants.title")} rest="/admin/merchants" active="merchants">
+      <MerchantsBody {...p} link={(sub) => localizedPath(p.locale, `/admin/merchants${sub}`)} />
     </AdminLayout>
   );
 };

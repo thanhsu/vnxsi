@@ -169,9 +169,10 @@ const ProgramForm: FC<ProgramFormProps> = (p) => {
   );
 };
 
-type Props = {
+type BodyProps = {
   locale: Locale;
-  origin: string;
+  /** Builds a link under the merchants root: "" is the list, "/<id>" this merchant, "/<id>/status" an action. */
+  link: (sub: string) => string;
   merchant: MerchantView;
   programs: ProgramView[];
   offers: OfferView[];
@@ -181,18 +182,20 @@ type Props = {
   programEdit?: ProgramEdit;
   offerEdit?: OfferEdit;
 };
+type Props = Omit<BodyProps, "link"> & { origin: string };
 
-export const MerchantDetailPage: FC<Props> = (p) => {
+/** The merchant page without a layout: /admin wraps it in AdminLayout, /ops in OpsLayout (VNX-2508a). */
+export const MerchantDetailBody: FC<BodyProps> = (p) => {
   const tr = translator(p.locale);
   const m = p.merchant;
-  const base = `/admin/merchants/${m.id}`;
+  const at = (sub: string) => p.link(`/${m.id}${sub}`);
   const shared = multiTenantHosts(m.allowedHosts);
   const edit = p.merchantEdit ?? { values: merchantValuesOf(m), errors: {}, broken: [] };
   const targets = MERCHANT_STATUSES.filter((to) => to !== m.status && merchantTransitionAllowed(m.status, to));
   return (
-    <AdminLayout locale={p.locale} origin={p.origin} title={m.name} rest={base} active="merchants">
+    <>
       <p>
-        <a href={localizedPath(p.locale, "/admin/merchants")}>{tr("merchants.back")}</a>
+        <a href={p.link("")}>{tr("merchants.back")}</a>
       </p>
       <h1>{m.name}</h1>
       <p>
@@ -224,7 +227,7 @@ export const MerchantDetailPage: FC<Props> = (p) => {
       {m.defaultOfferId && p.offers.find((o) => o.id === m.defaultOfferId)?.status === "archived" ? (
         <div class="notice" role="note" data-warning="default-archived">
           <p>{tr("merchants.defaultArchived")}</p>
-          <form method="post" action={localizedPath(p.locale, `${base}/default-offer`)}>
+          <form method="post" action={at("/default-offer")}>
             <input type="hidden" name="offerId" value="" />
             <button class="btn btn-ghost" type="submit">
               {tr("offers.clearDefault")}
@@ -233,7 +236,7 @@ export const MerchantDetailPage: FC<Props> = (p) => {
         </div>
       ) : null}
 
-      <form method="post" action={localizedPath(p.locale, base)} class="card">
+      <form method="post" action={at("")} class="card">
         <MerchantFields locale={p.locale} prefix="merchant" values={edit.values} errors={edit.errors} slugReadonly />
         <button class="btn" type="submit">
           {tr("merchants.save")}
@@ -245,7 +248,7 @@ export const MerchantDetailPage: FC<Props> = (p) => {
       ) : (
         <div class="row-actions">
           {targets.map((to) => (
-            <form method="post" action={localizedPath(p.locale, `${base}/status`)}>
+            <form method="post" action={at("/status")}>
               <input type="hidden" name="to" value={to} />
               {to === "archived" ? (
                 <label>
@@ -270,7 +273,7 @@ export const MerchantDetailPage: FC<Props> = (p) => {
           </h3>
           <ProgramForm
             locale={p.locale}
-            action={localizedPath(p.locale, `${base}/programs/${program.id}`)}
+            action={at(`/programs/${program.id}`)}
             edit={p.programEdit?.id === program.id ? p.programEdit : { id: program.id, values: programValuesOf(program), errors: {} }}
             current={program.status}
           />
@@ -279,20 +282,26 @@ export const MerchantDetailPage: FC<Props> = (p) => {
       <h3>{tr("programs.new")}</h3>
       <ProgramForm
         locale={p.locale}
-        action={localizedPath(p.locale, `${base}/programs`)}
+        action={at("/programs")}
         edit={p.programEdit?.id === "new" ? p.programEdit : { id: "new", values: NEW_PROGRAM_VALUES, errors: {} }}
         current={null}
       />
 
       <OfferSection
         locale={p.locale}
-        merchantId={m.id}
+        href={at}
         defaultOfferId={m.defaultOfferId}
         offers={p.offers}
         programs={p.programs.map((x) => ({ id: x.id, name: x.name }))}
         previews={p.previews}
         edit={p.offerEdit}
       />
-    </AdminLayout>
+    </>
   );
 };
+
+export const MerchantDetailPage: FC<Props> = ({ origin, ...p }) => (
+  <AdminLayout locale={p.locale} origin={origin} title={p.merchant.name} rest={`/admin/merchants/${p.merchant.id}`} active="merchants">
+    <MerchantDetailBody {...p} link={(sub) => localizedPath(p.locale, `/admin/merchants${sub}`)} />
+  </AdminLayout>
+);
