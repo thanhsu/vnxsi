@@ -58,3 +58,27 @@ Chạy trong `apps/web` của worktree.
 - Feature flags trong Ops (`/ops/settings/feature-flags`) chưa có, đúng như plan.
 - `/admin/merchants*` vẫn chạy song song, chưa chuyển hướng (phần còn lại của VNX-2508).
 - Nhánh `feat/ops-o1` cũng sửa `ops/menu.ts`, `OpsLayout.tsx`, `en.ts`, `app.css`, `app.ts`; các thay đổi của tôi ở những file này chỉ thêm dòng (menu: 1 mục + 1 kiểu icon trong union, nên có thể xung đột nhỏ khi gộp).
+
+## Lượt sửa (review)
+
+Chỉ sửa test; không đổi code production. Các mục duyệt: M1, L1, L2, L3.
+
+| Mục | Thay đổi | Test | Kết quả |
+|---|---|---|---|
+| M1 | `test/architecture.test.ts`: thêm `routes/ops-monetization.tsx` vào `MONEY_ALLOWED` và danh sách pin (kèm comment lý do: mặt Ops của cùng module monetization, tái dùng action của admin-merchants). Thêm 2 assertion: (a) không file `RANKING_FILES` nào import module nào trong `MONEY_ALLOWED`; (b) không file ngoài `MONEY_ALLOWED` import `routes/admin-merchants.tsx`. | `architecture.test.ts` 13/13 | Đạt |
+| L1 | `test/ops/layout.test.ts`: tìm mục menu merchants bằng `OPS_MENU.find(i => i.path === "/ops/monetization/merchants")` thay cho `OPS_MENU[4]`. `src/ops/menu.ts` không đổi. | `ops/layout.test.ts` | Đạt |
+| L2 | `test/ops/monetization-merchants.test.ts`: 400 do thiếu tick archive, `expectedStatus` lạ của program và của offer đều render trong OpsLayout (`<aside class="ops-side">`) và chứa thông điệp `ops.merchants.badRequest`; archive offer mặc định không `confirmArchive` render lỗi "Tick the confirmation to archive the default offer.". | cùng file | Đạt |
+| L3 | Role-matrix: POST cũng so sánh headers với phản hồi tham chiếu, như GET. | cùng file | Đạt |
+
+Ghi chú M1:
+- (a) bỏ qua `db/audit.ts`: đây là bộ ghi audit dùng chung của mọi route admin (`admin-requests.tsx` import hợp lệ), nằm trong allowlist chỉ vì đọc `write_id` của dòng tiền; không đọc giá trị tiền. Có comment trong test. Không phải lỗi production.
+- (b) cho phép thêm `src/app.ts` (nơi đăng ký route), kèm comment.
+
+Chứng minh assertion bắt được vi phạm (import tạm, đã hoàn nguyên bằng `git checkout`, không commit):
+- `admin-requests.tsx` thêm `import ... from "./ops-monetization.tsx"` -> assertion (a) đỏ.
+- `directory.tsx` thêm `import ... from "./go.ts"` -> (a) đỏ.
+- `catalog.tsx` thêm `import ... from "../db/clicks.ts"` -> (a) và 2 test sẵn có đỏ.
+- `catalog.tsx` thêm `import ... from "./admin-merchants.tsx"` -> (b) đỏ.
+Lần thử đầu dùng `import "./x.tsx"` (không có `from`) không bị bắt vì regex neo vào `from`; đã chuyển sang dạng có `from` khi chứng minh. Regex (a) lần đầu cũng bỏ sót import anh em `./name.tsx`, đã sửa để khớp `./name` và `/routes/name`.
+
+Kiểm tra: typecheck sạch; vitest các nhóm yêu cầu 11 file, 178 test đạt; `npm test` đầy đủ 136 file, 1447 test đạt.
