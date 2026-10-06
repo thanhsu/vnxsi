@@ -1520,13 +1520,1005 @@ Owner 2026-10-06: ba key zh-Hans và zh-Hant được duyệt nguyên văn đún
 
 ---
 
+### Task 3p: VNX-0701b — Privacy theo phiên bản (câu chữ (b), cổng `PRIVACY_NOTICE_GO_LIVE`)
+
+**Thứ tự: Task 3p chạy TRƯỚC Task 3** (chính sách có trước khi bật đếm). Hai task tách để mỗi commit xanh và ≲ 600 dòng không kể văn bản pháp lý. Task 3p độc lập với việc đếm: không cookie, không migration, không `db/`.
+
+**Scope (Review Focus 8; Owner 2026-10-06 phương án (i) và (C)).** Trang `/privacy` có HAI phiên bản; phiên bản chọn theo `PRIVACY_NOTICE_GO_LIVE` (biến của Task 3c).
+- `docs/legal/privacy.md` và `LEGAL_UPDATED_AT = "2026-10-05"` giữ NGUYÊN: đó vẫn là văn bản đang chạy cho tới khi cửa sổ thông báo mở, và là ngày của Terms và Disclosure.
+- Thêm `docs/legal/privacy-m7.md` (toàn văn EN và VI mới = văn bản cũ + các dòng Owner đã duyệt) và `privacyEnM7`, `privacyViM7` trong `src/legal/content.ts`.
+- `privacyVersion(goLive, now)` (hàm thuần, thêm vào `domain/privacy-notice.ts` của 3c) trả `"m7"` từ ĐẦU cửa sổ thông báo (`goLive − 14 ngày UTC`, tính cả mốc đó) và mãi mãi sau đó; trước mốc, hoặc khi biến rỗng/sai dạng, trả `"current"`.
+- `routes/legal.tsx` và `LegalPage` nhận bộ văn bản và ngày cập nhật đã chọn. Khi phiên bản mới hiện, ngày của Privacy là ngày go-live (dùng lại nhãn có sẵn `legal.updated` = "Last updated", KHÔNG thêm nhãn mới); Terms và Disclosure vẫn hiện `LEGAL_UPDATED_AT`.
+
+**Ngoại lệ tài liệu pháp lý (Controller cấp cho TASK NÀY).** Implementer được tạo `docs/legal/privacy-m7.md` bằng cách chép CHỈ phần thân EN và VI mà plan cho nguyên văn bên dưới (copy hai mục `## EN`, `## VI` của `privacy.md` rồi áp đúng danh sách sửa). Phần đầu tệp ("Trạng thái", "Đối chiếu code M7") do Reviewer thêm sau. `privacy.md` KHÔNG được sửa. Hai tệp `privacy-m7.md` và `content.ts` đổi trong CÙNG commit.
+
+**Files:**
+- Create: `docs/legal/privacy-m7.md`; `apps/web/test/legal/privacy-version.test.ts`
+- Modify: `apps/web/src/domain/privacy-notice.ts` (`privacyVersion`); `apps/web/src/legal/content.ts` (`privacyEnM7`, `privacyViM7`, `PRIVACY_M7`); `apps/web/src/routes/legal.tsx`; `apps/web/src/views/LegalPage.tsx`; `apps/web/wrangler.jsonc` (chỉ chú thích `PRIVACY_NOTICE_GO_LIVE`); `apps/web/test/legal/content.test.ts`; `apps/web/test/domain/privacy-notice.test.ts`
+- Không đổi: `docs/legal/privacy.md`, `LEGAL_UPDATED_AT`, 4 file i18n, `Layout`, `render.ts`.
+
+**Interfaces:**
+- Consumes: `parsePrivacyNoticeDate` (`domain/privacy-notice.ts`, 3c); `LEGAL`, `LEGAL_UPDATED_AT`, `LegalDoc` (`legal/content.ts`); `LegalPage` props (`locale, origin, signedIn, id, extras`); `c.env.PRIVACY_NOTICE_GO_LIVE`.
+- Produces: `type PrivacyVersion = "current" | "m7"`; `privacyVersion(goLive: string | undefined, now: Date): PrivacyVersion`; `PRIVACY_M7: { en: LegalDoc; vi: LegalDoc }`; `LegalPage` props thêm `docs?: { en: LegalDoc; vi: LegalDoc }` và `updatedAt?: string`.
+
+**Quyết định kỹ thuật** (Reviewer kiểm):
+1. **Mốc bắt đầu = mốc bắt đầu cửa sổ thông báo** (`goLive − 14 ngày`, nửa mở bên trái đóng), cùng công thức `shouldShowPrivacyNotice`; mốc kết thúc không có: `privacyVersion` không bao giờ quay về `"current"` sau go-live. Vì vậy `PRIVACY_NOTICE_GO_LIVE` KHÔNG BAO GIỜ được xóa sau go-live (nó chọn phiên bản Privacy VÀ bật đếm ở Task 3). Một task dọn dẹp sau này gấp phiên bản cũ vào `privacy.md`.
+2. **Route tự lấy `now = new Date()`** (không dùng context của `page()`; `LegalPage` chỉ nhận kết quả). Privacy là trang public, không cache riêng người dùng.
+3. **Ngày hiện trên trang** là chuỗi ISO `YYYY-MM-DD` của go-live (cùng dạng `LEGAL_UPDATED_AT`), qua nhãn sẵn `legal.updated`. Hệ quả cần Owner biết (không phải câu hỏi mới): trong khoảng từ đầu cửa sổ tới ngày go-live, nhãn "Last updated" của Privacy hiện một ngày TƯƠNG LAI (ngày hiệu lực). Không thêm nhãn "Effective" vì không có chuỗi giao diện được duyệt.
+4. **Hai bản văn song song, không dẫn xuất.** `privacyEnM7`/`privacyViM7` là bản sao của `privacyEn`/`privacyVi` đã áp danh sách sửa (nhân đôi có chủ ý để xóa bản cũ về sau chỉ là xóa một hằng). zh-Hans/zh-Hant tiếp tục hiện văn bản EN của phiên bản được chọn.
+5. **Con trỏ trong dòng "Visit counting" (Owner C)** đã được sửa so với câu duyệt gốc: "the random code above" → "the random code described in section 5 (Cookies)"; "mã ngẫu nhiên nói trên" → "mã ngẫu nhiên nêu ở mục 5 (Cookie)". Mọi dòng khác nguyên văn như đã duyệt.
+
+- [ ] **Step 1: `privacyVersion` (RED → GREEN).** Trong `apps/web/test/domain/privacy-notice.test.ts` thêm `privacyVersion` vào import và khối:
+
+  ```ts
+  describe("privacyVersion", () => {
+    it.each([
+      ["before the window", "2026-10-05T23:59:59.999Z", "current"],
+      ["start of the window (go-live - 14 days), inclusive", "2026-10-06T00:00:00.000Z", "m7"],
+      ["go-live", "2026-10-20T00:00:00.000Z", "m7"],
+      ["long after the notice window ends", "2027-03-01T00:00:00.000Z", "m7"],
+    ] as const)("%s", (_label, iso, expected) => expect(privacyVersion(LIVE, at(iso))).toBe(expected));
+    it("is current for an unset, empty or malformed go-live and for an invalid now", () => {
+      for (const bad of [undefined, "", "2026-02-30", "20-10-2026", "2026-10-20T00:00:00Z"]) expect(privacyVersion(bad, at("2026-10-20T00:00:00Z"))).toBe("current");
+      expect(privacyVersion(LIVE, new Date(Number.NaN))).toBe("current");
+    });
+    it("starts exactly when the notice starts", () => {
+      for (const iso of ["2026-10-05T23:59:59.999Z", "2026-10-06T00:00:00.000Z"]) expect(privacyVersion(LIVE, at(iso)) === "m7").toBe(shouldShowPrivacyNotice(LIVE, at(iso)));
+    });
+  });
+  ```
+
+  `npm test -w apps/web -- test/domain/privacy-notice.test.ts` → FAIL. Thêm vào `apps/web/src/domain/privacy-notice.ts`:
+
+  ```ts
+  export type PrivacyVersion = "current" | "m7";
+
+  /** `"m7"` from the start of the notice window (go-live - 14 UTC days, inclusive) for ever after; `"current"` before it, or for an unset or malformed value. Never go back: the value is not cleared after go-live. */
+  export function privacyVersion(goLive: string | undefined, now: Date): PrivacyVersion {
+    const date = parsePrivacyNoticeDate(goLive);
+    const at = now.getTime();
+    if (!date || !Number.isFinite(at)) return "current";
+    return at >= date.getTime() - 14 * DAY_MS ? "m7" : "current";
+  }
+  ```
+
+  Chạy lại → PASS.
+
+- [ ] **Step 2: Test trang và so khớp từng dòng (RED).**
+
+  Sửa `apps/web/test/legal/content.test.ts`: (a) `import type { Bindings } from "../../src/env.ts";`; (b) `expectedLines(part: string, date: string = LEGAL_UPDATED_AT)` và `.replace("{date}", date)` thay `.replace("{date}", LEGAL_UPDATED_AT)`; (c) `const get = (path: string, env: Bindings = testEnv) => createApp().request(new Request(\`https://vnx.si${path}\`), undefined, env);`; (d) trước `CASES`:
+
+  ```ts
+  // privacy-m7.md is what /privacy shows once the notice window has opened (go-live minus 14 days = 2026-10-06; the real clock is past it).
+  const M7_GO_LIVE = "2026-10-20"; // pinned, same as privacy-version.test.ts; the real clock is already past 2026-10-06, so the M7 text shows
+  const M7_ENV = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: M7_GO_LIVE } as Bindings;
+  ```
+
+  (e) mỗi phần tử `CASES` thêm `env: testEnv, date: LEGAL_UPDATED_AT`, và thêm `{ name: "privacy-m7", path: "/privacy", min: 11, env: M7_ENV, date: M7_GO_LIVE }`; (g) ca "leaves out the notes for the Owner and the draft header": bọc vòng trong thêm lượt chạy với `M7_ENV` (`for (const env of [testEnv, M7_ENV])`, `get(prefix + path, env)`) cho `/privacy` và `/vi/privacy`; (f) trong vòng `for (const { name, path, min } of CASES)` đổi thành `{ name, path, min, env, date }`, dùng `expectedLines(partOf(sourceOf(name), lang), date)` và `get(prefix + path, env)`.
+
+  Tạo `apps/web/test/legal/privacy-version.test.ts`:
+
+  ```ts
+  import { afterEach, describe, expect, it, vi } from "vitest";
+  import { createApp } from "../../src/app.ts";
+  import { LEGAL_UPDATED_AT } from "../../src/legal/content.ts";
+  import type { Bindings } from "../../src/env.ts";
+  import { testEnv } from "../helpers.ts";
+
+  const GO_LIVE = "2026-10-20";
+  const ENV = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: GO_LIVE } as Bindings;
+  const SOURCES = import.meta.glob("../../../../docs/legal/*.md", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+  const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const text = async (path: string, env: Bindings = ENV) =>
+    decode(/<main[^>]*>([\s\S]*)<\/main>/.exec(await (await createApp().request(new Request(`https://vnx.si${path}`), undefined, env)).text())?.[1] ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ");
+  const freeze = (iso: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+  };
+  const OLD_EN = "for now we do not link it to any visitor identifier";
+  const OLD_VI = "hiện chưa gắn nó với bất kỳ mã nhận diện người xem nào";
+
+  afterEach(() => vi.useRealTimers());
+
+  describe("/privacy version (Owner 2026-10-06 (i); Review Focus 8)", { timeout: 30_000 }, () => {
+    it("before the notice window: the old text and the old date", async () => {
+      freeze("2026-10-05T23:59:59.999Z");
+      const en = await text("/privacy");
+      expect(en).toContain(OLD_EN);
+      expect(en).toContain(`Last updated: ${LEGAL_UPDATED_AT}`);
+      expect(en).not.toContain("Visit counting");
+      expect(en).not.toContain("__Host-vnx_vid");
+      expect(await text("/vi/privacy")).toContain(OLD_VI);
+    });
+
+    it("from the first instant of the window: the new text with the go-live date, in EN, VI and the EN-only locales", async () => {
+      freeze("2026-10-06T00:00:00.000Z");
+      const en = await text("/privacy");
+      for (const must of ["Visit counting", "__Host-vnx_vid", "Daily de-duplication records: deleted after 2 days.", "the random code described in section 5 (Cookies)", `Last updated: ${GO_LIVE}`]) expect(en, must).toContain(must);
+      for (const gone of [OLD_EN, "the random code above", "We use only cookies that the site needs to work:"]) expect(en, gone).not.toContain(gone);
+      const vi_ = await text("/vi/privacy");
+      for (const must of ["Đếm lượt truy cập", "__Host-vnx_vid", "Bản ghi chống đếm trùng theo ngày: xóa sau 2 ngày.", "mã ngẫu nhiên nêu ở mục 5 (Cookie)", GO_LIVE]) expect(vi_, must).toContain(must);
+      expect(vi_).not.toContain(OLD_VI);
+      for (const path of ["/zh-hans/privacy", "/zh-hant/privacy"]) expect(await text(path), path).toContain("Visit counting");
+    });
+
+    it("stays on the new text long after go-live (the value is never cleared)", async () => {
+      freeze("2027-06-01T00:00:00.000Z");
+      expect(await text("/privacy")).toContain("Visit counting");
+    });
+
+    it("an unset, empty or malformed PRIVACY_NOTICE_GO_LIVE (and testEnv) keeps the old text", async () => {
+      freeze("2026-10-20T00:00:00.000Z");
+      for (const value of [undefined, "", "2026-02-30", "soon"]) {
+        const out = await text("/privacy", { ...testEnv, PRIVACY_NOTICE_GO_LIVE: value } as Bindings);
+        expect(out, String(value)).toContain(OLD_EN);
+        expect(out, String(value)).toContain(`Last updated: ${LEGAL_UPDATED_AT}`);
+      }
+      expect(await text("/privacy", testEnv)).toContain(OLD_EN);
+    });
+
+    it("Terms and Disclosure keep LEGAL_UPDATED_AT while the new Privacy shows", async () => {
+      freeze("2026-10-20T00:00:00.000Z");
+      for (const path of ["/terms", "/disclosure", "/vi/terms"]) expect(await text(path), path).toContain(LEGAL_UPDATED_AT);
+      expect(LEGAL_UPDATED_AT).toBe("2026-10-05");
+    });
+
+    it("docs/legal/privacy.md is the live text and still has the old sentence; privacy-m7.md has the new one and not the old", () => {
+      const file = (name: string) => Object.entries(SOURCES).find(([f]) => f.endsWith(`/docs/legal/${name}.md`))?.[1] ?? "";
+      expect(file("privacy")).toContain(OLD_EN);
+      expect(file("privacy")).not.toContain("Visit counting");
+      expect(file("privacy-m7")).toContain("Visit counting");
+      expect(file("privacy-m7")).not.toContain(OLD_EN);
+      expect(file("privacy-m7")).not.toContain(OLD_VI);
+    });
+  });
+  ```
+
+  `npm test -w apps/web -- test/legal` → FAIL (chưa có tệp m7, route, phiên bản).
+
+- [ ] **Step 3: Văn bản, route, view (GREEN).**
+
+  *`docs/legal/privacy-m7.md`:* tạo với đúng khung sau, trong đó phần thân EN và VI là bản chép NGUYÊN VĂN hai mục `## EN` và `## VI` hiện có của `docs/legal/privacy.md` (từ `### Privacy Policy` / `### Chính sách quyền riêng tư` tới trước `---`) rồi áp danh sách sửa dưới đây:
+
+  ```
+  # Privacy Policy — phiên bản M7 (câu chữ Owner đã duyệt 2026-10-05, câu hỏi (b) B1; con trỏ "Visit counting" sửa theo Owner 2026-10-06)
+
+  Hiện thay cho `privacy.md` từ đầu cửa sổ thông báo (`PRIVACY_NOTICE_GO_LIVE` − 14 ngày UTC). Phần đầu tệp (Trạng thái, Đối chiếu code) do Reviewer thêm sau.
+
+  ---
+
+  ## EN
+
+  (thân EN)
+
+  ---
+
+  ## VI
+
+  (thân VI)
+  ```
+
+  *Danh sách sửa EN (chỉ các dòng này khác `privacy.md`):*
+
+  - Mục 2, dòng "Outbound clicks" thành dòng dưới, rồi THÊM dòng "Visit counting" ngay sau nó:
+
+    ```
+    - **Outbound clicks:** when you follow a button or link that goes to another company's website through our `/go/` address, we record the time, which link it was, which kind of page it was on, the language of the page you were on, your country (detected by our hosting provider), the website you came from (domain only) and whether the visit looks like an automated bot. We record the click even when the link carries no tracking code. We do not store your IP address, your email address or your account with that record. The record may hold the day-specific code described under "Visit counting", which cannot be matched across days.
+    - **Visit counting:** when you open a product page, we store the random code described in section 5 (Cookies) in a cookie. We combine it with a secret that changes every day, so each product page, and each of its demo or website links, is counted at most once per visitor per day, and the result cannot be matched from one day to the next. We do not count visits that look like automated bots, visits by the product's own builder, or visits by our team. If your browser blocks the cookie, the page works the same, but each visit may be counted.
+    ```
+
+  - Mục 3: THÊM sau dòng "To count how often links to other companies are followed …":
+
+    ```
+    - To count visits to product pages and clicks on a product's demo and website links, so that we can show public statistics (for example which products are trending).
+    ```
+
+  - Mục 3, đoạn "We rely on your consent …": giữ câu hiện có, NỐI vào cuối đoạn (cùng đoạn, cách một dấu cách):
+
+    ```
+    For counting visits we rely on our legitimate interest in measuring how the site is used. You can object at any time by turning on the Global Privacy Control signal in your browser: we then set no cookie and count nothing.
+    ```
+
+  - Mục 5:
+
+    ```
+    We use only cookies that the site needs to work, and one cookie to count visits.
+    - `__Host-vnx_session`: keeps you signed in, for up to 30 days.
+    - `__Host-vnx_invite`: remembers a builder invite link for 1 hour.
+    - `__Host-vnx_vid`: a random code, not linked to your name, e-mail address or account, used only to count visits to product pages. It expires at the end of the current day (UTC). We do not set it if your browser sends the Global Privacy Control signal (`Sec-GPC: 1`).
+    ```
+
+  - Mục 6: THÊM ngay dưới "Outbound click records: deleted after 13 months.":
+
+    ```
+    - Daily de-duplication records: deleted after 2 days.
+    ```
+
+  *Danh sách sửa VI:*
+
+  - Mục 2, dòng "Lượt bấm link ra ngoài" thành dòng dưới, rồi THÊM dòng "Đếm lượt truy cập" ngay sau nó:
+
+    ```
+    - **Lượt bấm link ra ngoài:** khi bạn bấm một nút hoặc link dẫn tới website của công ty khác qua địa chỉ `/go/` của chúng tôi, chúng tôi ghi lại thời điểm, đó là link nào, nằm trên loại trang nào, ngôn ngữ của trang bạn đang xem, quốc gia của bạn (do nhà cung cấp hosting nhận diện), trang web bạn đến từ đó (chỉ tên miền) và việc lượt truy cập có giống bot tự động không. Chúng tôi ghi lượt bấm cả khi link không mang mã theo dõi nào. Chúng tôi không lưu địa chỉ IP, email hay tài khoản của bạn cùng bản ghi đó. Bản ghi có thể chứa mã theo ngày nêu ở "Đếm lượt truy cập", mã này không thể đối chiếu giữa các ngày.
+    - **Đếm lượt truy cập:** khi bạn mở trang một product, chúng tôi lưu mã ngẫu nhiên nêu ở mục 5 (Cookie) trong cookie. Chúng tôi kết hợp mã đó với một khóa bí mật đổi mỗi ngày, nên mỗi trang product, và mỗi link demo hay website của nó, được đếm tối đa một lần cho mỗi người mỗi ngày, và kết quả không thể đối chiếu từ ngày này sang ngày khác. Chúng tôi không đếm lượt truy cập giống bot tự động, lượt của chính builder của product, hay của đội ngũ chúng tôi. Nếu trình duyệt chặn cookie, trang vẫn hoạt động như cũ, nhưng mỗi lượt truy cập có thể bị đếm.
+    ```
+
+  - Mục 3: THÊM sau dòng "Đếm số lần các link tới công ty khác được bấm …":
+
+    ```
+    - Đếm lượt truy cập trang product và lượt bấm link demo, website của product, để hiện thống kê công khai (ví dụ product nào đang trending).
+    ```
+
+  - Mục 3, đoạn "Căn cứ của chúng tôi …": NỐI vào cuối đoạn:
+
+    ```
+    Với việc đếm lượt truy cập, chúng tôi dựa trên lợi ích chính đáng trong việc đo lường cách trang được sử dụng. Bạn có thể phản đối bất cứ lúc nào bằng cách bật tín hiệu Global Privacy Control trong trình duyệt: khi đó chúng tôi không đặt cookie và không đếm gì.
+    ```
+
+  - Mục 5:
+
+    ```
+    Chúng tôi chỉ dùng cookie cần thiết để trang hoạt động, và một cookie để đếm lượt truy cập.
+    - `__Host-vnx_session`: giữ bạn đăng nhập, tối đa 30 ngày.
+    - `__Host-vnx_invite`: ghi nhớ link mời builder trong 1 giờ.
+    - `__Host-vnx_vid`: một mã ngẫu nhiên, không gắn với tên, email hay tài khoản của bạn, chỉ dùng để đếm lượt truy cập trang product. Cookie hết hạn vào cuối ngày hiện tại (UTC). Chúng tôi không đặt cookie này nếu trình duyệt của bạn gửi tín hiệu Global Privacy Control (`Sec-GPC: 1`).
+    ```
+
+  - Mục 6: THÊM ngay dưới "Bản ghi lượt bấm link ra ngoài: xóa sau 13 tháng.":
+
+    ```
+    - Bản ghi chống đếm trùng theo ngày: xóa sau 2 ngày.
+    ```
+
+  *`apps/web/src/legal/content.ts`:* sao chép hằng `privacyEn` thành `const privacyEnM7: LegalDoc` và `privacyVi` thành `privacyViM7` (ngay sau chúng), áp CÙNG danh sách sửa (EN: mục 2 `ul` hai chuỗi, mục 3 `ul` một chuỗi và đoạn `p`, mục 5 `p` và `ul`, mục 6 `ul`; VI tương ứng; chuỗi TS bỏ tiền tố `- `, dấu `"` thành `\"`), rồi thêm sau `LEGAL`: `export const PRIVACY_M7: { en: LegalDoc; vi: LegalDoc } = { en: privacyEnM7, vi: privacyViM7 };`. Không đổi `LEGAL`, `LEGAL_UPDATED_AT`, `privacyEn`, `privacyVi`.
+
+  *`apps/web/src/views/LegalPage.tsx`:* import `type LegalDoc`; `Props` thêm `docs?: { en: LegalDoc; vi: LegalDoc }; updatedAt?: string;`; trong thân: `const source = docs ?? page;` `const doc = locale === "vi" ? source.vi : source.en;` và `tr("legal.updated", { date: updatedAt ?? LEGAL_UPDATED_AT })`.
+
+  *`apps/web/src/routes/legal.tsx`:* import `privacyVersion` (`../domain/privacy-notice.ts`) và `PRIVACY_M7`; trong handler:
+
+  ```tsx
+  const goLive = c.env.PRIVACY_NOTICE_GO_LIVE;
+  const m7 = id === "privacy" && privacyVersion(goLive, new Date()) === "m7";
+  return page(c, <LegalPage locale={locale} origin={siteOrigin(c)} signedIn={c.get("user") !== null} id={id} extras={extras} docs={m7 ? PRIVACY_M7 : undefined} updatedAt={m7 ? goLive : undefined} />);
+  ```
+
+  *`apps/web/wrangler.jsonc`:* thay chú thích ngay trên `PRIVACY_NOTICE_GO_LIVE` bằng: "Privacy go-live (YYYY-MM-DD, UTC). Empty = the old Privacy text, no notice, and (Task VNX-0701b) no view counting. From go-live minus 14 days /privacy shows the M7 text and the notice appears; counting starts at go-live 00:00 UTC. NEVER clear it after go-live: it selects the Privacy version and enables counting. The production date is committed here in a chore: commit before the VNX-0701c deploy; never via --var or the dashboard."
+
+  Chạy `npm test -w apps/web -- test/legal test/domain/privacy-notice.test.ts test/design` → PASS.
+
+- [ ] **Step 4: Typecheck, test đầy đủ, commit.**
+
+  ```
+  npm run typecheck -w apps/web
+  npm test
+  git add docs/legal/privacy-m7.md apps/web/src/domain/privacy-notice.ts apps/web/src/legal/content.ts apps/web/src/routes/legal.tsx apps/web/src/views/LegalPage.tsx apps/web/wrangler.jsonc apps/web/test/legal/content.test.ts apps/web/test/legal/privacy-version.test.ts apps/web/test/domain/privacy-notice.test.ts
+  git commit -m "feat(web): versioned Privacy text gated on PRIVACY_NOTICE_GO_LIVE (VNX-0701b)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  ```
+
+  Diff ước tính ~200 dòng mã và test, cộng bản văn pháp lý (excluded).
+
+**Tiêu chí chấp nhận → cách kiểm:**
+
+| # | Tiêu chí | Kiểm bằng |
+|---|---|---|
+| P1 | `privacy.md` và `LEGAL_UPDATED_AT` không đổi; `git diff` rỗng cho chúng | `git diff --name-only -- docs/legal/privacy.md`; `grep -n 'LEGAL_UPDATED_AT = "2026-10-05"' apps/web/src/legal/content.ts` |
+| P2 | Trước đầu cửa sổ, hoặc biến rỗng/sai dạng/`testEnv`: văn bản cũ và ngày cũ; từ đầu cửa sổ (kể cả sau go-live rất lâu): văn bản mới và ngày go-live; Terms và Disclosure giữ ngày cũ | `npm test -w apps/web -- test/legal/privacy-version.test.ts test/domain/privacy-notice.test.ts` |
+| P3 | `privacy-m7.md` so từng dòng với `/privacy` EN và VI; câu cũ "for now we do not link it…" biến mất khỏi bản mới; con trỏ mục 5 đã sửa | `npm test -w apps/web -- test/legal` ; `grep -n "random code above\|nói trên" docs/legal/privacy-m7.md` (không khớp) |
+| P4 | Một commit chứa cả `privacy-m7.md` và `content.ts` | `git diff --cached --name-only` ở Step 4 |
+| P5 | Typecheck sạch, toàn bộ test xanh | `npm run typecheck -w apps/web`; `npm test` |
+
+**Câu hỏi mở cho Owner:** không. (Nhãn ngày dùng lại "Last updated"; Privacy hiện ngày go-live tương lai trong khoảng 14 ngày trước go-live: ghi nhận ở quyết định 3.)
+
+---
+
 ### Task 3: VNX-0701b — Cookie người xem và đếm lượt xem
 
-**Scope:** (chặn bởi (b)). Migration `0015_view_dedupe.sql`: `product_view_dedupe (day TEXT NOT NULL, visitor_hash TEXT NOT NULL, product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE, PRIMARY KEY (day, visitor_hash, product_id)) WITHOUT ROWID`. `db/stats.ts` thêm `recordProductView(db, { productId, visitorHash, now }): Promise<boolean>` (`INSERT OR IGNORE … RETURNING` → nếu có dòng thì `bumpProductStatStatement` `views: 1`, một `db.batch`; trả `true` khi cộng), `purgeViewDedupe(db, now)` (xóa `day < ngày − 2`) và bước `view_dedupe` trong `STEPS` của `jobs/daily.ts` (`counts: "deleted"`): bảng, retention và câu Privacy "xóa sau 2 ngày" đi cùng một task. Middleware/helper `http/visitor.ts` đọc cookie, sinh nếu thiếu (không cho bot, không khi thiếu salt, không khi GPC, không cho builder chủ/đội nội bộ, không cho `/admin`, `/ops`, `/hub`, `/me`; chỉ `GET /p/:slug` trả 200 mới đặt; `Max-Age` = `visitorCookieMaxAge`; phản hồi có `Set-Cookie` kèm `Cache-Control: private`), tính `visitorHash`. `routes/product-page.tsx` chỉ gọi sau khi biết product `published`, gói `waitUntil`, lỗi chỉ log; không đếm bot/builder chủ product/đội nội bộ/GPC (`shouldCount`). Privacy: chép nguyên văn câu (b) vào `docs/legal/privacy.md` (Reviewer) và `src/legal/content.ts` (Implementer), tăng `LEGAL_UPDATED_AT`, thêm dòng Cookie `__Host-vnx_vid` vào mục 5 và dòng dedupe vào mục 6; sửa câu "for now we do not link it…" của "Outbound clicks".
+**Điều kiện đầu vào:** Task 1, 2, 4, 5, 6, 3c và 3p đã commit (thứ tự thực thi 1 → 2 → 5 → 4 → 6 → 3c → 3p → 3).
 
-**Files:** Create `migrations/0015_view_dedupe.sql`; Modify `src/http/visitor.ts` (tạo bởi Task 4: `readVisitorCookie`, `warnNoSaltOnce`), `src/db/stats.ts`, `src/jobs/daily.ts`, `src/routes/product-page.tsx`, `src/legal/content.ts`, `docs/legal/privacy.md`, 4 file i18n nếu cần (cookie mục Privacy là văn bản `legal/`, không `t()`), `test/architecture.test.ts` (`WRITERS.product_view_dedupe`), `wrangler.jsonc` (ghi chú); Test `test/db/view-dedupe.test.ts`, `test/jobs/daily.test.ts` (bước `view_dedupe`), `test/product-page-views.test.ts`, `test/legal/content.test.ts`.
+**Scope (Review Focus 1, 2; Owner (b) B1; (f) F1).** `GET /p/:slug` (và bốn tiền tố locale) đếm `views` mỗi trình duyệt một lần mỗi product mỗi ngày UTC và là NƠI DUY NHẤT đặt cookie `__Host-vnx_vid`. Gồm: migration `0015_view_dedupe`; `recordProductView` và `purgeViewDedupe` trong `db/stats.ts`; bước `view_dedupe` trong `STEPS` của `jobs/daily.ts`; `http/visitor.ts` mở rộng (`decideViewVisit`, `setVisitorCookie`); `http/defer.ts`; nối vào `routes/product-page.tsx`; **cổng đếm `isCountingLive`** (chỉ đếm khi `PRIVACY_NOTICE_GO_LIVE` hợp lệ và `now ≥ go-live 00:00Z`). Privacy (văn bản) đã xong ở Task 3p; Task này không đụng `docs/legal/*` hay `content.ts`. Không có chuỗi giao diện mới.
 
-**Acceptance:** lượt xem đầu → `views = 1` và `Set-Cookie` đủ thuộc tính (`__Host-`, `Secure`, `HttpOnly`, `SameSite=Lax`, `Max-Age` = giây tới 00:00 UTC kế tiếp, `Cache-Control: private`); lượt hai cùng cookie cùng ngày → vẫn 1; qua 00:00 UTC → 2; hai product khác nhau cùng cookie → mỗi cái 1; bot (UA `curl`, `Googlebot`, UA rỗng), builder chủ product, đội nội bộ, request `Sec-GPC: 1` → 0, không `Set-Cookie`, không dòng dedupe; `Set-Cookie` chỉ có trên `GET /p/:slug` 200 (không trên 404, không trên `/go/p/`); thiếu `ANALYTICS_SALT` → 0 views, không cookie, trang 200, `console.warn` một lần; product `draft`, builder bị khóa → 404, không đếm; `HEAD` không đếm; không có `Set-Cookie` trên `/admin`, `/hub`, `/me`; test `legal/content` so từng dòng xanh và câu cũ biến mất (`grep -n "for now we do not link" apps/web/src/legal/content.ts` rỗng); `product_view_dedupe` không có IP/email/user id; `purgeViewDedupe` xóa đúng dòng cũ hơn 2 ngày và chạy lại không đổi gì. Diff ~420 dòng (không tính văn bản pháp lý).
+**Files:**
+- Create: `apps/web/migrations/0015_view_dedupe.sql`; `apps/web/src/http/defer.ts`; `apps/web/test/db/view-dedupe.test.ts`; `apps/web/test/product-page-views.test.ts`
+- Modify: `apps/web/src/domain/privacy-notice.ts` (`isCountingLive`); `apps/web/src/db/stats.ts` (`recordProductView`, `purgeViewDedupe`); `apps/web/src/jobs/daily.ts` (bước `view_dedupe`); `apps/web/src/http/visitor.ts` (mở rộng file Task 4); `apps/web/src/routes/go.ts` (bỏ hàm `defer` cục bộ và import từ `http/defer.ts`; thêm cổng `isCountingLive` vào `trackProductClick`, xem Step 4); `apps/web/src/routes/product-page.tsx`; `apps/web/wrangler.jsonc` (chú thích ANALYTICS_SALT và danh sách migration); `apps/web/test/architecture.test.ts`; `apps/web/test/domain/privacy-notice.test.ts`; `apps/web/test/jobs/daily.test.ts`; `apps/web/test/monetization/go-product.test.ts` (chỉ `ENV` thêm `PRIVACY_NOTICE_GO_LIVE: "2026-01-01"`, vì click giờ cũng qua cổng)
+- Không đổi: `domain/visitor.ts`, `domain/bot.ts`, `domain/stats.ts`, `auth/staff.ts` (chỉ GỌI `isStaff`), `db/clicks.ts`, `db/products.ts`, `views/ProductPage.tsx`, `docs/legal/*`, `src/legal/content.ts`, 4 file i18n, `src/index.ts`.
+- Ngoài phạm vi: click (Task 4), số liệu đọc (Task 5/6), commit `chore:` đặt `PRIVACY_NOTICE_GO_LIVE`, `/admin`, `/ops`, `/hub`, `/me`.
+
+**Interfaces:**
+- Consumes (tên thật): `findPublicProductBySlug`, `onLocalized`, `page`; `VISITOR_COOKIE`, `newVisitorId`, `hasGpc`, `usableSalt`, `visitorHash`, `visitorCookieMaxAge`, `shouldCount` (`domain/visitor.ts`); `isBotRequest`, `CfLike` (`domain/bot.ts`); `isStaff(env, user)`; `readVisitorCookie`, `warnNoSaltOnce`, `resetNoSaltWarning` (`http/visitor.ts`); `parsePrivacyNoticeDate` (`domain/privacy-notice.ts`); `utcDay` (`domain/stats.ts`); `c.get("user")`; `makeLiveProduct`, `makeBuilder`, `makeDraft`, `signIn`, `setCookieValue`.
+- Produces:
+  - `domain/privacy-notice.ts`: `isCountingLive(goLive: string | undefined, now: Date): boolean`.
+  - `db/stats.ts`: `recordProductView(db, { productId; visitorHash; now: Date }): Promise<boolean>`; `purgeViewDedupe(db, now: Date): Promise<number>`.
+  - `http/defer.ts`: `defer(c, work): Promise<void>`.
+  - `http/visitor.ts`: `type ViewVisit`; `decideViewVisit(c, builderId: string, now: Date): Promise<ViewVisit>`; `setVisitorCookie(c, visitorId, now): void`.
+
+**Quyết định kỹ thuật** (Reviewer kiểm):
+1. **Cổng đếm đứng ĐẦU `decideViewVisit`.** `isCountingLive(c.env.PRIVACY_NOTICE_GO_LIVE, now)` sai (biến rỗng, sai dạng, hoặc `now` trước 00:00Z ngày go-live) → `{ count: false }`: không cookie, không đếm, và KHÔNG cảnh báo thiếu salt (cổng đóng là trạng thái bình thường). Lý do: câu Privacy mô tả cookie hiện từ `goLive − 14 ngày`, nhưng cookie và đếm chỉ bắt đầu đúng ngày go-live (người đã đăng nhập được báo trước, đúng mục 10 của Privacy). Click `/go/p/` (Task 4) CŨNG qua cổng: trong `routes/go.ts` `trackProductClick` chỉ tính `visitor_hash` khi `isCountingLive(env.PRIVACY_NOTICE_GO_LIVE, t.now)` đúng; nếu không thì `visitor_hash = null` và không cộng gì (dòng `outbound_clicks` vẫn ghi). Lý do: một cookie có sẵn (hoặc do người dùng tự gửi) cùng salt đã đặt trước go-live không được làm click có hash hay được đếm.
+2. **Một `db.batch` hai câu, đúng thứ tự, không dùng `changes()`.** Câu 1 cộng `views` bằng `INSERT … SELECT … WHERE NOT EXISTS (dòng dedupe) ON CONFLICT DO UPDATE`; câu 2 là `INSERT INTO product_view_dedupe … ON CONFLICT (day, visitor_hash, product_id) DO NOTHING RETURNING 1`. `db.batch` chạy tuần tự trong một giao dịch nên câu 1 đọc trạng thái TRƯỚC câu 2. Lượt đầu: câu 1 cộng, câu 2 chèn (`RETURNING` ra một dòng). Lượt lặp: câu 1 không cộng, câu 2 không làm gì (`RETURNING` rỗng). Trả về `results[1].results.length === 1`. D1 tuần tự hóa hai batch đồng thời nên không đếm đôi (test 5 lời gọi song song). Không dùng `INSERT OR IGNORE`.
+3. **Quyết định đếm TRƯỚC render, ghi SAU qua `waitUntil`** (chỉ log lỗi: `product.view_failed`). Nếu `page()` ném lỗi sau đó (500) lượt xem vẫn có thể được ghi: hiếm, ghi nhận.
+4. **Cookie chỉ đặt khi chưa có cookie hợp lệ**; `Cache-Control: private` chỉ khi đang đặt. Không bao giờ xóa cookie (kể cả khi GPC bật sau đó).
+5. **Thứ tự kiểm rẻ → đắt:** cổng go-live; thiếu salt (cảnh báo một lần); bot, GPC; builder chủ; `isStaff` chỉ cho người đăng nhập không phải chủ. Toàn bộ trong `try/catch`: lỗi → `product.view_decide_failed` và `{ count: false }`.
+6. **Chỉ `GET`.** HEAD không gọi `decideViewVisit`. Bốn locale cùng một khóa dedupe. 404 và 301 (slug hoa) xảy ra trước điểm đếm.
+7. **Dọn dedupe: xóa mọi dòng có `day` < ngày UTC của `now`** (`DELETE … WHERE day < utcDay(now)`). Hash đổi theo ngày nên dòng của ngày trước vô dụng; job chạy 01:00 UTC nên mỗi dòng sống tối đa khoảng 25 giờ, và "2 ngày" trong Privacy là cận trên đúng. Không có hằng retention. `day` là cột đầu PK nên truy vấn dùng PK. Không giới hạn lô (vài nghìn dòng mỗi ngày); đếm bằng `meta.changes` (bảng không có trigger).
+8. **Bước `view_dedupe` cuối `STEPS`.** 9. **`defer` chuyển sang `http/defer.ts`** (test Task 4 là rào chắn). 10. **Test kiến trúc:** regex quét ghi SQL mở rộng để thấy `INSERT OR … INTO` và `REPLACE INTO` (đã kiểm: `src/` không có), kèm đối chứng dương. 11. **Hợp đồng Ops:** chỉ gọi `isStaff`; task merge Ops thêm test `ops_members` không được đếm.
+12. **D1 dùng chung giữa mọi test và file:** test chỉ khẳng định THEO product, không đếm cả bảng. Mọi test purge dùng một mốc `NOW = 2026-10-04T01:00:00Z` (cutoff `2026-10-04`) và đặt dòng riêng ở các ngày < `2026-10-04`, dưới mọi ngày mà file khác khẳng định (≥ `2026-10-06`).
+
+**Câu hỏi mở cho Owner:** không. **Ghi nhận (ngoài phạm vi, đưa vào mục "Ghi nhận" của `CURRENT-STATUS.md`):** `test/monetization/go-product.test.ts:180` so sánh `count("product_daily_stats")` của CẢ bảng nên mong manh khi test khác ghi cùng lúc (sửa ở task riêng thành so theo product); thông báo Privacy của 3c không phủ `/ops`; `product_view_dedupe` không dọn theo lô nếu vượt vài nghìn dòng mỗi ngày.
+
+**TDD steps:**
+
+- [ ] **Step 1: Cổng đếm (RED → GREEN).** Trong `apps/web/test/domain/privacy-notice.test.ts` thêm `isCountingLive` vào import và:
+
+  ```ts
+  describe("isCountingLive (counting gate)", () => {
+    it.each([
+      ["before go-live", "2026-10-19T23:59:59.999Z", false],
+      ["go-live 00:00Z", "2026-10-20T00:00:00.000Z", true],
+      ["long after go-live (never switches off)", "2027-06-01T00:00:00.000Z", true],
+    ] as const)("%s", (_l, iso, expected) => expect(isCountingLive(LIVE, at(iso))).toBe(expected));
+    it("is false for an unset, empty or malformed go-live and for an invalid now", () => {
+      for (const bad of [undefined, "", "2026-02-30", "20-10-2026"]) expect(isCountingLive(bad, at("2026-10-21T00:00:00Z"))).toBe(false);
+      expect(isCountingLive(LIVE, new Date(Number.NaN))).toBe(false);
+    });
+  });
+  ```
+
+  → FAIL. Thêm vào `domain/privacy-notice.ts`:
+
+  ```ts
+  /** The counting gate (Owner 2026-10-06): view counting and the visitor cookie start at go-live 00:00 UTC and never switch off. False for an unset or malformed value. */
+  export function isCountingLive(goLive: string | undefined, now: Date): boolean {
+    const date = parsePrivacyNoticeDate(goLive);
+    const at = now.getTime();
+    return date !== null && Number.isFinite(at) && at >= date.getTime();
+  }
+  ```
+
+  → PASS.
+
+- [ ] **Step 2: Migration và `db/stats.ts` (RED → GREEN).** Tạo `apps/web/test/db/view-dedupe.test.ts`:
+
+  ```ts
+  import { describe, expect, it } from "vitest";
+  import { purgeViewDedupe, recordProductView } from "../../src/db/stats.ts";
+  import { addLiveProduct, makeBuilder } from "../fixtures.ts";
+  import { testEnv } from "../helpers.ts";
+
+  const H1 = "a".repeat(64);
+  const H2 = "b".repeat(64);
+  const AT = new Date("2026-10-06T10:00:00Z");
+
+  const views = async (productId: string, day: string) =>
+    (await testEnv.DB.prepare("SELECT views FROM product_daily_stats WHERE product_id = ?1 AND day = ?2").bind(productId, day).first<{ views: number }>())?.views ?? 0;
+  const dedupe = async (productId: string) =>
+    (await testEnv.DB.prepare("SELECT day, visitor_hash, product_id FROM product_view_dedupe WHERE product_id = ?1 ORDER BY day, visitor_hash").bind(productId).all<Record<string, string>>()).results;
+
+  async function product(tag: string) {
+    return addLiveProduct(await makeBuilder(`${tag}@vnx.si`, tag, "approved"), `${tag} product`);
+  }
+
+  describe("recordProductView (VNX-0701b)", () => {
+    it("counts a visitor once per product per day: first true, repeat false, views stays 1", async () => {
+      const p = await product("vd-once");
+      expect(await recordProductView(testEnv.DB, { productId: p.id, visitorHash: H1, now: AT })).toBe(true);
+      expect(await recordProductView(testEnv.DB, { productId: p.id, visitorHash: H1, now: new Date("2026-10-06T23:59:59Z") })).toBe(false);
+      expect(await views(p.id, "2026-10-06")).toBe(1);
+      expect(await dedupe(p.id)).toEqual([{ day: "2026-10-06", visitor_hash: H1, product_id: p.id }]);
+    });
+
+    it("counts another visitor, another day and another product separately", async () => {
+      const a = await product("vd-a");
+      const b = await product("vd-b");
+      expect(await recordProductView(testEnv.DB, { productId: a.id, visitorHash: H1, now: AT })).toBe(true);
+      expect(await recordProductView(testEnv.DB, { productId: a.id, visitorHash: H2, now: AT })).toBe(true);
+      expect(await recordProductView(testEnv.DB, { productId: a.id, visitorHash: H1, now: new Date("2026-10-07T00:00:00Z") })).toBe(true);
+      expect(await recordProductView(testEnv.DB, { productId: b.id, visitorHash: H1, now: AT })).toBe(true);
+      expect(await views(a.id, "2026-10-06")).toBe(2);
+      expect(await views(a.id, "2026-10-07")).toBe(1);
+      expect(await views(b.id, "2026-10-06")).toBe(1);
+    });
+
+    it("never double counts under concurrency", async () => {
+      const p = await product("vd-race");
+      const results = await Promise.all(Array.from({ length: 5 }, () => recordProductView(testEnv.DB, { productId: p.id, visitorHash: H1, now: AT })));
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(await views(p.id, "2026-10-06")).toBe(1);
+      expect(await dedupe(p.id)).toHaveLength(1);
+    });
+
+    it("refuses a hash that is not 64 lower-case hex characters and writes nothing", async () => {
+      const p = await product("vd-bad");
+      for (const bad of ["", "x", "A".repeat(64), "a".repeat(63), "a".repeat(65), "visitor@example.com", "203.0.113.9"]) {
+        await expect(recordProductView(testEnv.DB, { productId: p.id, visitorHash: bad, now: AT })).rejects.toThrow();
+      }
+      expect(await views(p.id, "2026-10-06")).toBe(0);
+      expect(await dedupe(p.id)).toHaveLength(0);
+    });
+  });
+
+  describe("product_view_dedupe schema (Review Focus 2)", () => {
+    it("has exactly day, visitor_hash, product_id: no IP, e-mail or user id", async () => {
+      const cols = (await testEnv.DB.prepare("PRAGMA table_info(product_view_dedupe)").all<{ name: string }>()).results.map((r) => r.name);
+      expect(cols).toEqual(["day", "visitor_hash", "product_id"]);
+    });
+
+    it("cascades with the product and the table itself rejects a non-hash value", async () => {
+      const fks = (await testEnv.DB.prepare("PRAGMA foreign_key_list(product_view_dedupe)").all<{ table: string; on_delete: string }>()).results;
+      expect(fks).toEqual([expect.objectContaining({ table: "products", on_delete: "CASCADE" })]);
+      const p = await product("vd-check");
+      await expect(testEnv.DB.prepare("INSERT INTO product_view_dedupe (day, visitor_hash, product_id) VALUES ('2026-10-06', 'someone@example.com', ?1)").bind(p.id).run()).rejects.toThrow();
+      await expect(testEnv.DB.prepare("INSERT INTO product_view_dedupe (day, visitor_hash, product_id) VALUES ('yesterday', ?1, ?2)").bind(H1, p.id).run()).rejects.toThrow();
+    });
+  });
+
+  describe("purgeViewDedupe (VNX-0701b)", () => {
+    it("deletes every row of an earlier UTC day, keeps today's, and a rerun changes nothing", async () => {
+      const p = await product("vd-purge");
+      for (const day of ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]) await recordProductView(testEnv.DB, { productId: p.id, visitorHash: H1, now: new Date(`${day}T12:00:00Z`) });
+      const now = new Date("2026-10-04T01:00:00Z"); // the one purge clock of the suite: cutoff day 2026-10-04
+      expect(await purgeViewDedupe(testEnv.DB, now)).toEqual(expect.any(Number)); // D1 is shared: rely on the per-product rows below, not the count
+      expect((await dedupe(p.id)).map((r) => r.day)).toEqual(["2026-10-04"]);
+      await purgeViewDedupe(testEnv.DB, now);
+      expect((await dedupe(p.id)).map((r) => r.day)).toEqual(["2026-10-04"]);
+      expect(await views(p.id, "2026-10-01")).toBe(1); // the counters are never purged
+    });
+  });
+  ```
+
+  → FAIL. Tạo `apps/web/migrations/0015_view_dedupe.sql`:
+
+  ```sql
+  -- M7 VNX-0701b (spec §8.11): one row per (UTC day, day-specific visitor hash, product) so a product view counts once per visitor per day.
+  -- visitor_hash = HMAC(dayKey, cookie id): it changes every UTC day, cannot be joined across days, and holds no IP, e-mail or user id.
+  -- The daily job deletes every row of an earlier UTC day (so "deleted after 2 days" in the Privacy text is an upper bound). Written only by
+  -- src/db/stats.ts. Additive only; 0016 is public_stats.
+  CREATE TABLE product_view_dedupe (
+    day          TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    visitor_hash TEXT NOT NULL CHECK (length(visitor_hash) = 64 AND visitor_hash NOT GLOB '*[^0-9a-f]*'),
+    product_id   TEXT NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+    PRIMARY KEY (day, visitor_hash, product_id)
+  ) WITHOUT ROWID;
+  ```
+
+  Thêm vào `apps/web/src/db/stats.ts` (import `utcDay` từ `../domain/stats.ts`):
+
+  ```ts
+  /**
+   * Counts a product view once per (visitor hash, product, UTC day) and says whether this call counted. One db.batch, run in order inside
+   * one transaction: statement 1 adds the view only when no dedupe row exists yet (it reads the state BEFORE statement 2 inserts), statement 2
+   * inserts the row and RETURNING tells a fresh row from a duplicate. Two simultaneous calls are serialized by D1, so they cannot both count.
+   * The hash must be the 64 lower-case hex of `visitorHash()`; anything else throws (the table also CHECKs it). Callers run this in waitUntil.
+   */
+  export async function recordProductView(db: D1Database, input: { productId: string; visitorHash: string; now: Date }): Promise<boolean> {
+    if (!/^[0-9a-f]{64}$/.test(input.visitorHash)) throw new Error("invalid visitor hash");
+    const day = utcDay(input.now);
+    const [, inserted] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO product_daily_stats (product_id, day, views, demo_clicks, outbound_clicks, inquiries)
+           SELECT ?1, ?2, 1, 0, 0, 0
+           WHERE NOT EXISTS (SELECT 1 FROM product_view_dedupe WHERE day = ?2 AND visitor_hash = ?3 AND product_id = ?1)
+           ON CONFLICT (product_id, day) DO UPDATE SET views = views + excluded.views`,
+        )
+        .bind(input.productId, day, input.visitorHash),
+      db
+        .prepare("INSERT INTO product_view_dedupe (day, visitor_hash, product_id) VALUES (?1, ?2, ?3) ON CONFLICT (day, visitor_hash, product_id) DO NOTHING RETURNING 1 AS counted")
+        .bind(day, input.visitorHash, input.productId),
+    ]);
+    return (inserted?.results.length ?? 0) === 1;
+  }
+
+  /** Daily retention: deletes every dedupe row of an earlier UTC day (the hash changes daily, so they are useless). Idempotent. Returns the rows deleted. */
+  export async function purgeViewDedupe(db: D1Database, now: Date): Promise<number> {
+    const result = await db.prepare("DELETE FROM product_view_dedupe WHERE day < ?1").bind(utcDay(now)).run();
+    return result.meta.changes;
+  }
+  ```
+
+  → PASS. Nếu D1 báo lỗi cú pháp ở câu 1 (`ON CONFLICT` sau `SELECT … WHERE`), đổi thành `SELECT ?1, ?2, 1, 0, 0, 0 WHERE true AND NOT EXISTS (…)` (cách chống nhập nhằng của SQLite), không đổi thứ tự hai câu.
+
+- [ ] **Step 3: Bước `view_dedupe` của job ngày (RED → GREEN).** Sửa `apps/web/test/jobs/daily.test.ts`:
+  1. Sau `const CLICK_STEP = …` thêm `const VIEW_STEP = { job: "daily", step: "view_dedupe", deleted: expect.any(Number) };` (D1 dùng chung, số dòng bị xóa phụ thuộc file khác).
+  2. Ba mảng `toEqual` có `CLICK_STEP` ở cuối: thêm `VIEW_STEP,` sau `CLICK_STEP,`.
+  3. `toHaveLength(IDLE_ACTIVITY_STEPS.length + 4)` → `+ 5`.
+  4. Ca "keeps going when one step fails": thêm `expect(results[at + 4]).toEqual(VIEW_STEP);`.
+  5. Ca scheduled: danh sách tên bước thêm `"view_dedupe"` ở cuối.
+  6. Thêm import `recordProductView`, `addLiveProduct`, `makeBuilder`; thêm khối cuối file:
+
+  ```ts
+  describe("view dedupe step (VNX-0701b: Privacy says 2 days)", () => {
+    const dedupeDays = async (productId: string) =>
+      (await testEnv.DB.prepare("SELECT day FROM product_view_dedupe WHERE product_id = ?1 ORDER BY day").bind(productId).all<{ day: string }>()).results.map((r) => r.day);
+
+    it("deletes every earlier UTC day, keeps today, and a second run changes nothing for this product", async () => {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      const p = await addLiveProduct(await makeBuilder("daily-vd@vnx.si", "daily-vd", "approved"), "daily-vd product");
+      // NOW is 2026-10-04 (the one purge clock): the cutoff day is 2026-10-04; these rows sit below every day other files assert on.
+      for (const day of ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]) await recordProductView(testEnv.DB, { productId: p.id, visitorHash: "c".repeat(64), now: new Date(`${day}T12:00:00Z`) });
+      const step = (await runDaily(testEnv, NOW)).find((r) => r.step === "view_dedupe");
+      expect(step).toEqual({ job: "daily", step: "view_dedupe", deleted: expect.any(Number) });
+      expect(await dedupeDays(p.id)).toEqual(["2026-10-04"]);
+      await runDaily(testEnv, NOW);
+      expect(await dedupeDays(p.id)).toEqual(["2026-10-04"]);
+    });
+
+    it("is the last step, and a failing dedupe purge is logged without touching the earlier steps", async () => {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const results = await runDaily({ ...testEnv, DB: brokenOn("product_view_dedupe") } as Bindings, NOW);
+      expect(results.at(-1)).toEqual({ job: "daily", step: "view_dedupe", error: "Error: boom on product_view_dedupe" });
+      expect(results.at(-2)).toEqual(CLICK_STEP);
+      expect(error).toHaveBeenCalledTimes(1);
+    });
+  });
+  ```
+
+  → FAIL. Trong `apps/web/src/jobs/daily.ts`: import `purgeViewDedupe` từ `../db/stats.ts`; thêm cuối `STEPS`:
+
+  ```ts
+  // M7: de-duplication rows for product views of an earlier UTC day are useless (the visitor hash changes daily); Privacy says "deleted after 2 days".
+  { step: "view_dedupe", counts: "deleted", run: (env, now) => purgeViewDedupe(env.DB, now) },
+  ```
+
+  và thêm vào chú thích đầu file một dòng "VNX-0701b (M7): deletes product-view de-duplication rows of earlier UTC days." → PASS.
+
+- [ ] **Step 4: Cookie, `decideViewVisit`, route (RED → GREEN).** Tạo `apps/web/test/product-page-views.test.ts`:
+
+  ```ts
+  import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+  import { createApp } from "../src/app.ts";
+  import { setBuilderStatus } from "../src/db/builders.ts";
+  import { visitorCookieMaxAge, visitorHash } from "../src/domain/visitor.ts";
+  import type { Bindings } from "../src/env.ts";
+  import { resetNoSaltWarning } from "../src/http/visitor.ts";
+  import { makeBuilder, makeDraft, makeLiveProduct, signIn } from "./fixtures.ts";
+  import { setCookieValue, testEnv } from "./helpers.ts";
+
+  const SALT = "product-views-test-salt-0000000000";
+  // The counting gate (Owner 2026-10-06): a valid go-live in the past. Every counting test needs it.
+  const ENV = { ...testEnv, ANALYTICS_SALT: SALT, PRIVACY_NOTICE_GO_LIVE: "2026-10-01" } as Bindings;
+  const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+  const VID = "0123456789abcdef0123456789abcdef";
+  const COOKIE = "__Host-vnx_vid";
+
+  type Call = { method?: string; headers?: Record<string, string>; cf?: Record<string, unknown>; env?: Bindings };
+  async function call(path: string, o: Call = {}): Promise<Response> {
+    const req = new Request(`https://vnx.si${path}`, { method: o.method ?? "GET", headers: o.headers });
+    if (o.cf) Object.defineProperty(req, "cf", { value: o.cf });
+    return await createApp().request(req, undefined, o.env ?? ENV);
+  }
+  const browser = (extra: Record<string, string> = {}) => ({ "user-agent": CHROME, ...extra });
+  const withVid = (vid = VID, extra: Record<string, string> = {}) => browser({ cookie: `${COOKIE}=${vid}`, ...extra });
+  const vidLine = (res: Response) => res.headers.getSetCookie().find((l) => l.startsWith(`${COOKIE}=`));
+  const hasVid = (res: Response) => vidLine(res) !== undefined;
+
+  let seq = 0;
+  /** The demo URL lets the /go/p/ test redirect (as go-product.test.ts does). */
+  async function live() {
+    const n = ++seq;
+    const email = `pv${n}@vnx.si`;
+    const { builder, product } = await makeLiveProduct(email, `pv${n}`, `pv${n} product`, { fields: { demoUrl: "https://demo.example.com/" } });
+    return { email, builder, product, slug: product.slug };
+  }
+  const views = async (productId: string) =>
+    (await testEnv.DB.prepare("SELECT COALESCE(SUM(views), 0) AS n FROM product_daily_stats WHERE product_id = ?1").bind(productId).first<{ n: number }>())?.n ?? 0;
+  const viewsOn = async (productId: string, day: string) =>
+    (await testEnv.DB.prepare("SELECT views FROM product_daily_stats WHERE product_id = ?1 AND day = ?2").bind(productId, day).first<{ views: number }>())?.views ?? 0;
+  const dedupeRows = async (productId: string) => (await testEnv.DB.prepare("SELECT day, visitor_hash, product_id FROM product_view_dedupe WHERE product_id = ?1 ORDER BY day").bind(productId).all<Record<string, string>>()).results;
+
+  beforeEach(() => resetNoSaltWarning());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  describe("first view sets the cookie and counts (Review Focus 1, 2)", { timeout: 30_000 }, () => {
+    it("200, views = 1, one dedupe row with the day hash, and a __Host- cookie that ends at 00:00 UTC", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-06T10:30:00Z"));
+      const { product, slug } = await live();
+      const res = await call(`/p/${slug}`, { headers: browser() });
+      expect(res.status).toBe(200);
+      const line = vidLine(res) ?? "";
+      const id = setCookieValue(res, COOKIE) ?? "";
+      expect(id).toMatch(/^[0-9a-f]{32}$/);
+      expect(line).toContain("; Max-Age=48600"); // 13.5 h to 00:00 UTC
+      expect(visitorCookieMaxAge(new Date("2026-10-06T10:30:00Z"))).toBe(48600);
+      expect(line).toMatch(/; Path=\/(;|$)/);
+      expect(line).toMatch(/; HttpOnly(;|$)/);
+      expect(line).toMatch(/; Secure(;|$)/);
+      expect(line).toMatch(/; SameSite=Lax(;|$)/);
+      expect(line).not.toMatch(/Domain=/i);
+      expect(res.headers.get("cache-control")).toBe("private");
+      expect(await views(product.id)).toBe(1);
+      expect(await dedupeRows(product.id)).toEqual([{ day: "2026-10-06", visitor_hash: (await visitorHash(SALT, "2026-10-06", id))!, product_id: product.id }]);
+    });
+
+    it("a second view with the cookie the same day: still 1, no new Set-Cookie", async () => {
+      const { product, slug } = await live();
+      const first = await call(`/p/${slug}`, { headers: browser() });
+      const id = setCookieValue(first, COOKIE) ?? "";
+      const second = await call(`/p/${slug}`, { headers: withVid(id) });
+      expect(second.status).toBe(200);
+      expect(hasVid(second)).toBe(false);
+      expect(await views(product.id)).toBe(1);
+      expect(await dedupeRows(product.id)).toHaveLength(1);
+    });
+
+    it("counts again after 00:00 UTC for the same cookie, with a different hash", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-06T23:59:58Z"));
+      const { product, slug } = await live();
+      const first = await call(`/p/${slug}`, { headers: browser() });
+      const id = setCookieValue(first, COOKIE) ?? "";
+      expect(vidLine(first)).toContain("; Max-Age=2");
+      vi.setSystemTime(new Date("2026-10-06T23:59:59.500Z"));
+      await call(`/p/${slug}`, { headers: withVid(id) });
+      expect(await viewsOn(product.id, "2026-10-06")).toBe(1);
+      vi.setSystemTime(new Date("2026-10-07T00:00:00Z"));
+      const next = await call(`/p/${slug}`, { headers: withVid(id) });
+      expect(hasVid(next)).toBe(false);
+      expect(await viewsOn(product.id, "2026-10-06")).toBe(1);
+      expect(await viewsOn(product.id, "2026-10-07")).toBe(1);
+      const rows = await dedupeRows(product.id);
+      expect(rows.map((r) => r.day)).toEqual(["2026-10-06", "2026-10-07"]);
+      expect(rows[0]?.visitor_hash).not.toBe(rows[1]?.visitor_hash);
+    });
+
+    it("two products with the same cookie count once each", async () => {
+      const a = await live();
+      const b = await live();
+      const first = await call(`/p/${a.slug}`, { headers: browser() });
+      const id = setCookieValue(first, COOKIE) ?? "";
+      await call(`/p/${b.slug}`, { headers: withVid(id) });
+      await call(`/p/${a.slug}`, { headers: withVid(id) });
+      expect(await views(a.product.id)).toBe(1);
+      expect(await views(b.product.id)).toBe(1);
+    });
+
+    it("another visitor counts separately; a locale prefix shares the same daily count", async () => {
+      const { product, slug } = await live();
+      await call(`/p/${slug}`, { headers: withVid(VID) });
+      await call(`/vi/p/${slug}`, { headers: withVid(VID) });
+      expect(await views(product.id)).toBe(1);
+      await call(`/zh-hans/p/${slug}`, { headers: withVid("fedcba9876543210fedcba9876543210") });
+      expect(await views(product.id)).toBe(2);
+    });
+
+    it("a malformed cookie value is ignored: a fresh cookie is set and one view counted", async () => {
+      const { product, slug } = await live();
+      for (const bad of ["x", "0123456789ABCDEF0123456789ABCDEF", "0123456789abcdef0123456789abcde"]) {
+        const res = await call(`/p/${slug}`, { headers: withVid(bad) });
+        expect(setCookieValue(res, COOKIE)).toMatch(/^[0-9a-f]{32}$/);
+      }
+      expect(await views(product.id)).toBe(3);
+    });
+  });
+
+  describe("the counting gate: PRIVACY_NOTICE_GO_LIVE (Owner 2026-10-06)", { timeout: 30_000 }, () => {
+    it.each([undefined, "", "2026-02-30", "20-10-2026"])("go-live %j: page 200, no cookie, no rows, no warning, even with a salt", async (goLive) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { product, slug } = await live();
+      const res = await call(`/p/${slug}`, { headers: browser(), env: { ...ENV, PRIVACY_NOTICE_GO_LIVE: goLive } as Bindings });
+      expect(res.status).toBe(200);
+      expect(hasVid(res)).toBe(false);
+      expect(await views(product.id)).toBe(0);
+      expect(await dedupeRows(product.id)).toHaveLength(0);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("nothing counts before go-live 00:00Z, and counting starts at that instant", async () => {
+      const env = { ...ENV, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" } as Bindings;
+      const { product, slug } = await live();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-19T23:59:59.999Z"));
+      const before = await call(`/p/${slug}`, { headers: browser(), env });
+      expect([before.status, hasVid(before)]).toEqual([200, false]);
+      expect(await views(product.id)).toBe(0);
+      vi.setSystemTime(new Date("2026-10-20T00:00:00.000Z"));
+      const at = await call(`/p/${slug}`, { headers: browser(), env });
+      expect([at.status, hasVid(at)]).toEqual([200, true]);
+      expect(await viewsOn(product.id, "2026-10-20")).toBe(1);
+    });
+
+    it("a /go/p/ click with a valid cookie and a salt, before go-live: visitor_hash null and no stats (N1)", async () => {
+      const env = { ...ENV, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" } as Bindings;
+      const { product, slug } = await live();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-19T23:59:59.999Z"));
+      const res = await call(`/go/p/${slug}/demo`, { headers: withVid(), env });
+      expect(res.status).toBe(302);
+      const rows = (await testEnv.DB.prepare("SELECT visitor_hash FROM outbound_clicks WHERE product_id = ?1").bind(product.id).all<{ visitor_hash: string | null }>()).results;
+      expect(rows.map((r) => r.visitor_hash)).toEqual([null]);
+      expect((await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM product_daily_stats WHERE product_id = ?1").bind(product.id).first<{ n: number }>())?.n).toBe(0);
+    });
+  });
+
+  describe("who is never counted: no row, no dedupe, no cookie", { timeout: 30_000 }, () => {
+    const cases: [string, Call][] = [
+      ["curl user agent", { headers: { "user-agent": "curl/8.4.0" } }],
+      ["Googlebot", { headers: { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" } }],
+      ["empty user agent", { headers: { "user-agent": "" } }],
+      ["Cloudflare verified bot", { headers: browser(), cf: { botManagement: { verifiedBot: true } } }],
+      ["Sec-GPC: 1", { headers: browser({ "sec-gpc": "1" }) }],
+      ["Sec-GPC: 1 with an existing valid cookie", { headers: withVid(VID, { "sec-gpc": "1" }) }],
+    ];
+    it.each(cases)("%s", async (_name, o) => {
+      const { product, slug } = await live();
+      const res = await call(`/p/${slug}`, o);
+      expect(res.status).toBe(200);
+      expect(hasVid(res)).toBe(false);
+      expect(res.headers.get("cache-control") ?? "").not.toContain("private");
+      expect(await views(product.id)).toBe(0);
+      expect(await dedupeRows(product.id)).toHaveLength(0);
+    });
+
+    it("the product's own builder, and staff (admin in ADMIN_EMAILS), are not counted; an ordinary signed-in user is", async () => {
+      const { product, slug, email } = await live();
+      const own = await signIn(email);
+      const ownRes = await call(`/p/${slug}`, { headers: browser({ cookie: own.cookie }) });
+      expect([ownRes.status, hasVid(ownRes)]).toEqual([200, false]);
+      const admin = await signIn("owner@vnx.si", { admin: true });
+      const staffRes = await call(`/p/${slug}`, { headers: browser({ cookie: `${admin.cookie}; ${COOKIE}=${VID}` }) });
+      expect([staffRes.status, hasVid(staffRes)]).toEqual([200, false]);
+      expect(await views(product.id)).toBe(0);
+      const plain = await signIn("pv-plain@vnx.si");
+      const plainRes = await call(`/p/${slug}`, { headers: browser({ cookie: plain.cookie }) });
+      expect(hasVid(plainRes)).toBe(true);
+      expect(await views(product.id)).toBe(1);
+    });
+
+    it("HEAD neither counts nor sets a cookie", async () => {
+      const { product, slug } = await live();
+      const res = await call(`/p/${slug}`, { method: "HEAD", headers: browser() });
+      expect(res.status).toBe(200);
+      expect(hasVid(res)).toBe(false);
+      expect(await views(product.id)).toBe(0);
+    });
+  });
+
+  describe("no salt: nothing is counted and no cookie is set (Global Constraints, Review Focus 2)", { timeout: 30_000 }, () => {
+    it.each([undefined, "", "   "])("ANALYTICS_SALT %j: page 200, no cookie, no rows, one warning per isolate", async (salt) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { product, slug } = await live();
+      const env = { ...ENV, ANALYTICS_SALT: salt } as Bindings;
+      for (let i = 0; i < 2; i++) {
+        const res = await call(`/p/${slug}`, { headers: browser(), env });
+        expect(res.status).toBe(200);
+        expect(hasVid(res)).toBe(false);
+      }
+      expect(await views(product.id)).toBe(0);
+      expect(await dedupeRows(product.id)).toHaveLength(0);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(warn.mock.calls[0]?.[0] as string).event).toBe("visitor.no_salt");
+    });
+  });
+
+  describe("the cookie exists only on GET /p/:slug 200", { timeout: 30_000 }, () => {
+    it("404 (unknown, malformed, draft, builder not approved) and the 301 for an upper-case slug set nothing", async () => {
+      const { slug, builder, product } = await live();
+      const draft = await makeDraft("pv-draft@vnx.si", "pv-draft", "pv draft");
+      for (const path of ["/p/does-not-exist", "/p/-x-", `/p/${draft.product.slug}`]) {
+        const res = await call(path, { headers: browser() });
+        expect([path, res.status]).toEqual([path, 404]);
+        expect(hasVid(res)).toBe(false);
+      }
+      const upper = await call(`/p/${slug.toUpperCase()}`, { headers: browser() });
+      expect(upper.status).toBe(301);
+      expect(hasVid(upper)).toBe(false);
+      await setBuilderStatus(testEnv.DB, { userId: builder.userId, from: "approved", to: "suspended", reviewNote: null, now: new Date().toISOString() });
+      const suspended = await call(`/p/${slug}`, { headers: browser() });
+      expect([suspended.status, hasVid(suspended)]).toEqual([404, false]);
+      expect(await dedupeRows(product.id)).toHaveLength(0);
+      expect(await dedupeRows(draft.product.id)).toHaveLength(0);
+    });
+
+    it("/go/p/, /admin, /hub and /me never set it, even for a counted visitor", async () => {
+      const { slug } = await live();
+      await makeBuilder("pv-hub@vnx.si", "pv-hub", "approved");
+      const user = await signIn("pv-hub@vnx.si");
+      const admin = await signIn("owner@vnx.si", { admin: true });
+      const go = await call(`/go/p/${slug}/demo`, { headers: browser() });
+      expect([go.status, hasVid(go)]).toEqual([302, false]);
+      for (const [path, cookie] of [["/hub", user.cookie], ["/me", user.cookie], ["/admin", admin.cookie]] as const) {
+        const res = await call(path, { headers: browser({ cookie }) });
+        expect([path, hasVid(res)]).toEqual([path, false]);
+      }
+    });
+  });
+
+  describe("privacy and failure", { timeout: 30_000 }, () => {
+    it("a signed-in visitor leaves no IP, e-mail or user id in this product's dedupe or stats rows", async () => {
+      const { product, slug } = await live();
+      const user = await signIn("pv-privacy@vnx.si");
+      await call(`/p/${slug}`, { headers: browser({ cookie: user.cookie, "cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "203.0.113.9" }) });
+      expect(await views(product.id)).toBe(1);
+      const dump = JSON.stringify([
+        ...(await testEnv.DB.prepare("SELECT * FROM product_view_dedupe WHERE product_id = ?1").bind(product.id).all()).results,
+        ...(await testEnv.DB.prepare("SELECT * FROM product_daily_stats WHERE product_id = ?1").bind(product.id).all()).results,
+      ]);
+      for (const secret of ["203.0.113.9", "pv-privacy@vnx.si", user.user.id]) expect(dump).not.toContain(secret);
+    });
+
+    it("a failing write is logged and never breaks the page (the cookie is still set)", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { slug } = await live();
+      const db = new Proxy(testEnv.DB, {
+        get(target, prop) {
+          if (prop === "prepare") return (sql: string) => (sql.includes("product_view_dedupe") ? (() => { throw new Error("boom"); })() : target.prepare(sql));
+          const value = Reflect.get(target, prop) as unknown;
+          return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+        },
+      });
+      const res = await call(`/p/${slug}`, { headers: browser(), env: { ...ENV, DB: db } as Bindings });
+      expect(res.status).toBe(200);
+      expect(hasVid(res)).toBe(true);
+      expect(error.mock.calls.map((c) => JSON.parse(c[0] as string).event)).toContain("product.view_failed");
+    });
+
+    it("a throwing staff lookup is logged and the page still renders without a cookie", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { slug } = await live();
+      const admin = await signIn("pv-staff-throws@vnx.si", { admin: true });
+      const env = { ...ENV };
+      Object.defineProperty(env, "ADMIN_EMAILS", { get() { throw new Error("staff lookup failed"); } });
+      const res = await call(`/p/${slug}`, { headers: browser({ cookie: admin.cookie }), env: env as Bindings });
+      expect(res.status).toBe(200);
+      expect(hasVid(res)).toBe(false);
+      expect(error.mock.calls.map((c) => JSON.parse(c[0] as string).event)).toContain("product.view_decide_failed");
+    });
+  });
+  ```
+
+  → FAIL. Tạo `apps/web/src/http/defer.ts` (chuyển NGUYÊN VĂN từ `routes/go.ts`):
+
+  ```ts
+  import type { Context } from "hono";
+  import type { AppEnv } from "../env.ts";
+
+  /** waitUntil when the runtime has an ExecutionContext (Hono throws when it has none: tests, local), else wait for the write. */
+  export async function defer(c: Context<AppEnv>, work: Promise<void>): Promise<void> {
+    let ctx: { waitUntil(promise: Promise<unknown>): void } | null = null;
+    try {
+      ctx = c.executionCtx;
+    } catch {
+      ctx = null;
+    }
+    if (ctx) ctx.waitUntil(work);
+    else await work;
+  }
+  ```
+
+  Trong `routes/go.ts`: xóa hàm `defer` cục bộ (và chú thích trên nó), thêm `import { defer } from "../http/defer.ts";` và `import { isCountingLive } from "../domain/privacy-notice.ts";`. Trong `trackProductClick` đổi điều kiện tính hash thành `hash = salt !== null && !t.isBot && !t.isGpc && t.visitorId !== null && isCountingLive(env.PRIVACY_NOTICE_GO_LIVE, t.now) ? await visitorHash(salt, day, t.visitorId) : null;` (cổng đóng thì `hash = null`: dòng click vẫn ghi, không cộng thống kê). Trong `test/monetization/go-product.test.ts` đổi `const ENV = { ...testEnv, ANALYTICS_SALT: SALT } as Bindings;` thành `{ ...testEnv, ANALYTICS_SALT: SALT, PRIVACY_NOTICE_GO_LIVE: "2026-01-01" } as Bindings;` (nếu một ca dùng đồng hồ giả trước ngày đó, đổi ngày về trước nó).
+
+  Mở rộng `apps/web/src/http/visitor.ts` (giữ `readVisitorCookie`, `warnNoSaltOnce`, `resetNoSaltWarning`; thêm import `setCookie` từ `hono/cookie`, `isStaff` từ `../auth/staff.ts`, `isBotRequest`/`CfLike` từ `../domain/bot.ts`, `isCountingLive` từ `../domain/privacy-notice.ts`, và các tên còn thiếu từ `../domain/visitor.ts`):
+
+  ```ts
+  export type ViewVisit = { count: false } | { count: true; visitorId: string; isNew: boolean };
+
+  /**
+   * Whether this `GET /p/:slug` counts as a product view, and under which visitor id (a fresh one when the cookie is missing or malformed).
+   * The go-live gate first (Owner 2026-10-06), then the cheap checks (no salt, bot, GPC), then the product's own builder, and `isStaff` last,
+   * only for a signed-in non-owner. Never rejects: on any error it logs and says "do not count". It does NOT touch the response.
+   */
+  export async function decideViewVisit(c: Context<AppEnv>, builderId: string, now: Date): Promise<ViewVisit> {
+    try {
+      if (!isCountingLive(c.env.PRIVACY_NOTICE_GO_LIVE, now)) return { count: false };
+      if (usableSalt(c.env.ANALYTICS_SALT) === null) {
+        warnNoSaltOnce();
+        return { count: false };
+      }
+      const cf = c.req.raw.cf as CfLike;
+      const isBot = isBotRequest(c.req.header("user-agent"), cf);
+      const isGpc = hasGpc(c.req.raw.headers);
+      if (isBot || isGpc) return { count: false };
+      const user = c.get("user");
+      const own = user?.id === builderId;
+      const staff = !own && user ? await isStaff(c.env, user) : false;
+      if (!shouldCount({ isBot, isStaff: staff, isOwnBuilder: own, isGpc, hasSalt: true })) return { count: false };
+      const existing = readVisitorCookie(c);
+      return existing !== null ? { count: true, visitorId: existing, isNew: false } : { count: true, visitorId: newVisitorId(), isNew: true };
+    } catch (err) {
+      console.error(JSON.stringify({ event: "product.view_decide_failed", error: String(err) }));
+      return { count: false };
+    }
+  }
+
+  /** `__Host-vnx_vid`: random id, ends at the next 00:00 UTC. `private` keeps a shared cache from handing one visitor's Set-Cookie to another. */
+  export function setVisitorCookie(c: Context<AppEnv>, visitorId: string, now: Date): void {
+    setCookie(c, VISITOR_COOKIE, visitorId, { path: "/", secure: true, httpOnly: true, sameSite: "Lax", maxAge: visitorCookieMaxAge(now) });
+    c.header("Cache-Control", "private");
+  }
+  ```
+
+  Sửa `apps/web/src/routes/product-page.tsx`: thêm import `recordProductView` (`../db/stats.ts`), `utcDay` (`../domain/stats.ts`), `visitorHash` (`../domain/visitor.ts`), `Bindings` (`../env.ts`), `defer` (`../http/defer.ts`), `decideViewVisit`, `setVisitorCookie` (`../http/visitor.ts`). Thêm trên `registerProductPageRoutes`:
+
+  ```ts
+  /** Never rejects: a failed write is logged and must not touch the page. The hash is computed here, off the request path. */
+  async function countView(env: Bindings, input: { productId: string; visitorId: string; now: Date }): Promise<void> {
+    try {
+      const hash = await visitorHash(env.ANALYTICS_SALT, utcDay(input.now), input.visitorId);
+      if (hash === null) return;
+      await recordProductView(env.DB, { productId: input.productId, visitorHash: hash, now: input.now });
+    } catch (err) {
+      console.error(JSON.stringify({ event: "product.view_failed", productId: input.productId, error: String(err) }));
+    }
+  }
+  ```
+
+  và trong handler, ngay trước `return page(c, <ProductPage … />)`:
+
+  ```tsx
+    // M7 (Owner (b) B1): one view per visitor per product per UTC day. Only GET (HEAD is answered by this handler and must not count).
+    if (c.req.method === "GET") {
+      const now = new Date();
+      const visit = await decideViewVisit(c, item.product.builderId, now);
+      if (visit.count) {
+        if (visit.isNew) setVisitorCookie(c, visit.visitorId, now);
+        await defer(c, countView(c.env, { productId: item.product.id, visitorId: visit.visitorId, now }));
+      }
+    }
+  ```
+
+  → `npm test -w apps/web -- test/product-page-views.test.ts test/monetization test/public/product-page.test.ts` PASS.
+
+- [ ] **Step 5: Test kiến trúc và ghi chú triển khai.** Trong `apps/web/test/architecture.test.ts`: thêm `product_view_dedupe: "../src/db/stats.ts",` vào `WRITERS` (sau `product_daily_stats`); thay regex ghi SQL bằng hằng dùng chung và đối chứng dương:
+
+  ```ts
+  /** Table names behind a write: INSERT, INSERT OR IGNORE/REPLACE, REPLACE INTO, UPDATE, DELETE (VNX-0701b). */
+  const WRITE_SQL = /\b(?:INSERT(?: OR [A-Z]+)? INTO|REPLACE INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g;
+  ```
+
+  (ca `table ownership` dùng `src.matchAll(WRITE_SQL)`), và trong cùng `describe`:
+
+  ```ts
+  it("sees INSERT OR IGNORE/REPLACE and REPLACE INTO, so product_view_dedupe cannot be written from another file unnoticed", () => {
+    for (const sql of ["INSERT OR IGNORE INTO product_view_dedupe (day) VALUES (1)", "INSERT OR REPLACE INTO product_view_dedupe (day) VALUES (1)", "REPLACE INTO product_view_dedupe (day) VALUES (1)"]) {
+      expect([...sql.matchAll(WRITE_SQL)][0]?.[1], sql).toBe("product_view_dedupe");
+    }
+    expect(WRITERS.product_view_dedupe).toBe("../src/db/stats.ts");
+  });
+  ```
+
+  Trong `apps/web/wrangler.jsonc`: (a) thêm `, 0015_view_dedupe` vào danh sách migration của bước 1 ("applies … 0014_product_stats, 0015_view_dedupe, 0016_public_stats"); (b) thêm dòng `// 0015_view_dedupe (M7) ships with its code the same way: migrate first, then deploy.` sau dòng 0014; (c) trong chú thích ANALYTICS_SALT thay câu "do NOT set it in production until Task 3 and the Privacy update go live (until then each isolate logs visitor.no_salt once, which is expected)" bằng: "set it in production any time after PRIVACY_NOTICE_GO_LIVE is committed and deployed: counting of both views and clicks starts only at go-live 00:00 UTC (and PRIVACY_NOTICE_GO_LIVE must NEVER be cleared afterwards). Until the salt is set each isolate logs visitor.no_salt once, which is expected." → `npm test -w apps/web -- test/architecture.test.ts` PASS.
+
+- [ ] **Step 6: Typecheck, test đầy đủ, commit.**
+
+  ```
+  npm run typecheck -w apps/web
+  npm test
+  git add apps/web/migrations/0015_view_dedupe.sql apps/web/src/domain/privacy-notice.ts apps/web/src/db/stats.ts apps/web/src/jobs/daily.ts apps/web/src/http/defer.ts apps/web/src/http/visitor.ts apps/web/src/routes/go.ts apps/web/src/routes/product-page.tsx apps/web/wrangler.jsonc apps/web/test/architecture.test.ts apps/web/test/domain/privacy-notice.test.ts apps/web/test/db/view-dedupe.test.ts apps/web/test/jobs/daily.test.ts apps/web/test/product-page-views.test.ts
+  git commit -m "feat(web): count product views with a daily visitor cookie behind the go-live gate (VNX-0701b)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  ```
+
+  Không chứa `.ai/tasks/*-report.md`. Diff ước tính ~430 dòng (mã ~110, test ~320), không có văn bản pháp lý.
+
+**Ghi chú triển khai cho Owner:**
+1. Áp migration `0014`, `0015`, `0016` trên D1 production TRƯỚC khi deploy code M7.
+2. Chuỗi go-live: (a) commit `chore:` đặt `PRIVACY_NOTICE_GO_LIVE` (3c) và deploy 3c ít nhất 14 ngày trước go-live; (b) từ `go-live − 14 ngày`, `/privacy` hiện văn bản M7 và thông báo xuất hiện (3p, 3c); (c) từ `go-live 00:00Z`, cookie và đếm bật (Task này) NẾU `ANALYTICS_SALT` đã đặt (`wrangler secret put`, 32+ ký tự). Thiếu salt thì không đếm dù qua go-live.
+3. **KHÔNG BAO GIỜ xóa `PRIVACY_NOTICE_GO_LIVE` sau go-live:** nó chọn phiên bản Privacy và bật đếm; xóa là tắt đếm và đưa văn bản cũ trở lại. Một task dọn dẹp sau này gấp phiên bản cũ vào `privacy.md`.
+4. Rate limit Cloudflare cho `/p/*` và `/go/p/*` (Owner (f) F1): cấu hình ở dashboard.
+
+**Tiêu chí chấp nhận → cách kiểm:**
+
+| # | Tiêu chí | Kiểm bằng |
+|---|---|---|
+| AC1 | Lượt xem đầu: 200, `views = 1`, một dòng dedupe có hash đúng của ngày, `Set-Cookie` `__Host-vnx_vid` đủ `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax`, không `Domain`, `Max-Age` tới 00:00 UTC (48600 lúc 10:30Z), `Cache-Control: private` | `npm test -w apps/web -- test/product-page-views.test.ts` |
+| AC2 | Lượt hai cùng cookie cùng ngày: vẫn 1, không `Set-Cookie`; sang 00:00 UTC: đếm lại hash khác; hai product cùng cookie: mỗi cái 1; các locale chung một lần; cookie sai dạng bị bỏ qua; 5 lời gọi song song chỉ đếm 1 | `npm test -w apps/web -- test/product-page-views.test.ts test/db/view-dedupe.test.ts` |
+| AC3 | Không đếm, không dedupe, không cookie: bot (UA `curl`, `Googlebot`, rỗng, `verifiedBot`), `Sec-GPC: 1` (kể cả khi đã có cookie), builder chủ, staff; người dùng thường vẫn được đếm | `npm test -w apps/web -- test/product-page-views.test.ts` (nhóm "who is never counted") |
+| AC4 | HEAD, 404, 301 slug hoa không cookie; `/go/p/`, `/admin`, `/hub`, `/me` không đặt cookie | `npm test -w apps/web -- test/product-page-views.test.ts` (nhóm "only on GET /p/:slug 200") |
+| AC5 | Thiếu/rỗng/trắng salt: 200, không cookie, không dòng, đúng một `console.warn` `visitor.no_salt` | `npm test -w apps/web -- test/product-page-views.test.ts` (nhóm "no salt") |
+| AC6 | **Cổng đếm:** go-live rỗng/sai dạng, hoặc `now` < go-live 00:00Z: không cookie, không đếm, không cảnh báo, click `/go/p/` có cookie hợp lệ ghi `visitor_hash` null và không cộng; từ 00:00Z đếm; `isCountingLive` đúng biên | `npm test -w apps/web -- test/product-page-views.test.ts test/domain/privacy-notice.test.ts` (nhóm "counting gate") |
+| AC7 | Riêng tư: bảng chỉ có `day`, `visitor_hash`, `product_id`; từ chối giá trị không phải hash 64 hex; không IP/email/user id trong dedupe và stats của product; hash khác nhau giữa hai ngày | `npm test -w apps/web -- test/db/view-dedupe.test.ts test/product-page-views.test.ts` |
+| AC8 | Lỗi ghi hoặc lỗi kiểm staff chỉ log, trang vẫn 200 | `npm test -w apps/web -- test/product-page-views.test.ts` (nhóm "privacy and failure") |
+| AC9 | `purgeViewDedupe` xóa mọi dòng của ngày UTC trước, giữ hôm nay, chạy lại không đổi; là bước cuối của `STEPS`; bước lỗi không dừng bước khác; counters không bị dọn | `npm test -w apps/web -- test/db/view-dedupe.test.ts test/jobs/daily.test.ts` |
+| AC10 | Chỉ `db/stats.ts` ghi `product_view_dedupe` (kể cả `INSERT OR …`, `REPLACE INTO`); `db/stats.ts` không import `db/clicks.ts` | `npm test -w apps/web -- test/architecture.test.ts` |
+| AC11 | Không đổi hành vi click sau khi chuyển `defer` | `npm test -w apps/web -- test/monetization` |
+| AC12 | Task không chạm `docs/legal/*`, `legal/content.ts`; `0015_view_dedupe` có trong danh sách migration của `wrangler.jsonc` | `git diff --cached --name-only` (không có hai tệp đó); `grep -n "0015_view_dedupe" apps/web/wrangler.jsonc` |
+| AC13 | Typecheck sạch, toàn bộ test xanh, diff trong ngân sách | `npm run typecheck -w apps/web`; `npm test`; `git diff --cached --stat` |
+
+**Nghĩa vụ để lại:** (1) Task merge Ops: mở rộng `isStaff` và thêm test `ops_members` không được đếm ở `/p/:slug` và `/go/p/`. (2) Sau khi Task 3 lên production và qua go-live, click của khách có cookie bắt đầu được cộng thống kê (Task 4). (3) Task dọn dẹp sau go-live: gấp `privacy-m7.md` vào `privacy.md`, bỏ `privacyEn`/`privacyVi` cũ và `privacyVersion`. 
+
+**Quyết định kỹ thuật cần Reviewer kiểm:** cổng đếm đứng đầu và khóa luôn click `/go/p/` gián tiếp (1); batch `NOT EXISTS` + `ON CONFLICT DO NOTHING RETURNING` (2); đếm trước render, ghi sau qua `waitUntil` (3); cookie chỉ đặt khi chưa có (4); dọn mọi `day` < hôm nay (7); `defer` chuyển sang `http/defer.ts` (9); regex quét ghi SQL mở rộng (10); test chỉ khẳng định theo product, một mốc purge chung (12).
 
 ---
 
@@ -3857,13 +4849,1184 @@ Expected: typecheck and full `npm test` pass; `rg -n '"crons"' apps/web/wrangler
 
 ---
 
-### Task 7: VNX-0703 — Homepage SSR các khối kèm ngưỡng
+### Task 7a: VNX-0703a — Khối dữ liệu homepage (Con số, Live, Trending hoặc Founding products)
 
-**Scope:** (A2, Owner 2026-10-05: các khối nằm DƯỚI landing 0708 ở `/`, landing giữ nguyên.) `views/home/*.tsx` cho từng khối (Hero, Con số, Live, Trending hoặc "Founding products", Market pulse bảng-trước, Top builders, Top products theo category, "4 ways", huy hiệu, khối builder, CTA cuối), `routes/home.tsx` (hoặc mở rộng `routes/landing.tsx` nếu A2) đọc MỘT truy vấn `readPublicStats`, truyền xuống; khối ẩn khi `null` hoặc stale. Chuỗi qua `t()` 4 locale; ghi nhãn "cập nhật mỗi giờ" chỉ khi có `computed_at`. Không số nào hard-code; tên builder/product chỉ từ dữ liệu; Top builders ghi tiêu chí và "không ai trả tiền để có mặt ở đây". Thẻ hero, sparkline, bảng thay cho chart ở bước này (không JS). hreflang cho 4 locale; sitemap giữ `/`.
+**Trạng thái:** bản nháp, CHƯA review, TẠM GIỮ — chờ Owner quyết về execution plan marketing/designer (2026-10-06).
 
-**Files (dự kiến):** Create `src/views/home/{Hero,Numbers,Live,Trending,MarketPulse,TopBuilders,TopProducts}.tsx`, `src/routes/home.tsx`; Modify `test/architecture.test.ts` (thêm `jobs/hourly.ts`, `routes/home.tsx`, `views/home/{Trending,TopBuilders,TopProducts}.tsx` vào `RANKING_FILES`); Modify `src/app.ts`, `src/routes/landing.tsx` (theo (a)), 4 file i18n; Test `test/home/home.test.tsx` (mọi khối ẩn ở ngưỡng n−1, hiện ở n; chỉ một truy vấn `public_stats`; stale ẩn; không `<script>` ở bước này; không chữ "Sponsored"/giá trị trả tiền; 4 locale đủ key; hreflang).
+**Tách 7a / 7b:** một Task 7 ước ~1100 dòng (mã ~650 + test ~450) vượt trần 600. 7a làm đường ống (route, `LandingPage` nhận khối dưới, `HomeBlocks`, helper định dạng, CSS nền, test chung) và ba khối đầu; 7b (Task 7b ngay sau) thêm Market pulse bảng-trước, Top builders, Top products. Mỗi bên ≲ 600 dòng không tính locale.
 
-**Acceptance:** cổng ra M7 "mọi khối homepage ẩn đúng khi dưới ngưỡng" bằng test từng khối; "không có số liệu nào không truy được": test grep view không chứa chữ số hard-code ngoài ngưỡng/định dạng; `GET /` p95 chỉ đọc `public_stats` (đếm số `prepare` bằng spy). Diff ~600 dòng; tách 7a (Hero, Con số, Live, Trending) / 7b (Market pulse, Top builders, Top products, khối tĩnh) nếu vượt.
+**Scope:** (A2, Owner 2026-10-05) các khối dữ liệu nằm DƯỚI landing VNX-0708 ở `/`, landing giữ nguyên chữ và thứ tự. `routes/home.tsx#homeBlocks(c)` đọc đúng MỘT truy vấn `readPublicStats`, truyền xuống `views/home/HomeBlocks.tsx`; mỗi khối chỉ hiện khi key của nó còn tươi (≤ 3 giờ) và khác `null`; không khối nào hiện thì không in ra gì (landing y nguyên từng byte của phần `<main>`). 7a có ba khối:
+- **Con số** (4 ô theo `NUMBER_KEYS`, ẩn ô dưới ngưỡng, ẩn cả hàng nếu còn < 2 ô, nhãn "cập nhật mỗi giờ" chỉ khi hàng hiện, tức có `computed_at` thật).
+- **Live** (danh sách tĩnh các sự kiện công khai kèm thời gian tương đối; dải chạy ngang là Task 8).
+- **Trending this week** (6 thẻ: số thứ hạng bằng CSS counter, sparkline SVG 14 ngày, % thay đổi) hoặc, khi Trending ẩn, **Founding products** (6 product có `first_published_at` mới nhất, mới trước).
+
+**Hero và 4 khối tĩnh (4 ways, huy hiệu, khối builder, CTA cuối): KHÔNG làm gì.** Landing 0708 đã có đủ và Owner chọn A2. Hero của landing đã là "3 product nổi bật theo thứ tự mặc định của catalogue" (`firstPublicProducts` = `searchProducts(parseCatalogQuery({}))`, huy hiệu cao nhất rồi mới nhất, spec §8.7), đúng Owner Q1; test ở 7a chỉ KHÓA hành vi đó (không viết lại, không nhân đôi truy vấn). Thẻ "Your product here" của spec §5.9 vẫn là thẻ category của deck (đã duyệt ở 0708).
+
+**Files:**
+- Create: `apps/web/src/routes/home.tsx`, `apps/web/src/views/home/HomeBlocks.tsx`, `apps/web/src/views/home/Numbers.tsx`, `apps/web/src/views/home/Live.tsx`, `apps/web/src/views/home/Trending.tsx` (Trending và Founding).
+- Modify: `apps/web/src/domain/public-stats.ts` (thêm `NUMBER_KEYS`, `MIN_NUMBER_TILES`, `FOUNDING_LIMIT`, `FOUNDING_MIN`, `numberTiles`), `apps/web/src/db/catalog.ts` (`ITEM_COLUMNS`, `foundingProducts`), `apps/web/src/views/format.ts` (`formatCount`, `formatChange`, `relativeTime`, `SPARK_VIEWBOX`, `sparkPoints`), `apps/web/src/views/labels.ts` (`NUMBER_LABEL`), `apps/web/src/views/LandingPage.tsx` (prop `below`), `apps/web/src/routes/landing.tsx` (gọi `homeBlocks` ở GET), `apps/web/public/assets/app.css`, 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`, `apps/web/test/architecture.test.ts`, `apps/web/test/domain/public-stats.test.ts`.
+- Test (create): `apps/web/test/home/blocks.ts` (helper dùng chung, 7b mở rộng), `apps/web/test/home/home.test.ts`, `apps/web/test/home/founding.test.ts`.
+- Rerun only: `test/landing/*`, `test/catalog/*`, `test/design/assets.test.ts`, `test/i18n/parity.test.ts`.
+
+**Interfaces:**
+- Consumes (thật): `readPublicStats(db, now): Promise<PublicSnapshot>`, `PublicSnapshot`, `MIN`, `REQUEST_DAYS`, `SPARK_DAYS`, `STALE_AFTER_MS`, `TrendingItem`, `PublicLiveEvent`, `LIVE_MAX`, `writePublicStat`, `countStat`, `rankTrending`, `liveEvents` (`domain|db/public-stats.ts`); `CatalogItem`, `topBadge`, `BADGE_SCORE` (`domain/catalog.ts`); `PUBLIC_PRODUCT`, `JOINS`, `COVER_SQL`, `MIN_PRICE_SQL`, `BADGE_SCORE_SQL`, `ItemRow`, `toItem` (`db/catalog.ts`, nội bộ); `BADGE_KEY`, `CATEGORY_KEY`, `LANGUAGE_KEY` (`views/labels.ts`); `page`, `localizedPath`, `translator`; `makeLiveProduct`, `testEnv`.
+- Produces: `NUMBER_KEYS`, `type NumberKey`, `MIN_NUMBER_TILES`, `FOUNDING_LIMIT = 6`, `FOUNDING_MIN = 1`, `type NumberTile`, `numberTiles(snapshot): NumberTile[] | null`; `foundingProducts(db, limit): Promise<CatalogItem[]>`; `homeBlocks(c): Promise<Child>`; `HomeBlocks`, `Numbers`, `Live`, `Trending`, `Founding`; `formatCount`, `formatChange`, `relativeTime`, `SPARK_VIEWBOX`, `sparkPoints`; section ids `home-numbers`, `home-live`, `home-trending`, `home-founding`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Ngưỡng chỉ áp ở domain, view không tự quyết.** View chỉ hỏi "key còn trong snapshot không". Mọi con số đến từ `public_stats` (hoặc `MIN`/`*_DAYS` của domain, chỉ để điền tham số nhãn); view không có chữ số nào. Test grep mã `views/home/*.tsx` (không chữ số trừ thẻ `h1`–`h6`; tên khóa i18n, class và id không có chữ số; chú thích bị loại trước khi grep nên không cần tránh chữ số trong chú thích). Sparkline, tỉ lệ phần trăm, thời gian tương đối và định dạng số nằm trong `views/format.ts`; ánh xạ khóa thống kê sang nhãn (`count_requests_30d` có chữ số) nằm ở `views/labels.ts#NUMBER_LABEL`. Cả hai ngoài thư mục `home/`, nơi chữ số được phép. Không viết chú thích `//` cuối dòng trong `views/home/*.tsx` (grep chỉ bỏ chú thích đứng riêng một dòng và `/* */`).
+2. **Founding products là truy vấn trực tiếp, không phải key `public_stats`** (Task 5 không tạo key; spec §8.11 không có). Nó chỉ chạy khi Trending ẩn, `LIMIT 6`, trên `PUBLIC_PRODUCT` đã có chỉ mục; không có tham số trả tiền, không đọc bảng tiền (file `db/catalog.ts` đã nằm trong `RANKING_FILES`). Số `public_stats` vẫn đọc đúng một lần.
+3. **Trending cũ (stale) cũng nhường chỗ cho Founding** (key vắng thì cùng nhánh với "dưới 6 product đủ điểm"). Giá trị "trending chỉ ẩn khi stale" không có truy vấn tự tính lại.
+4. **Founding hiện khi có ≥ `FOUNDING_MIN` (1) product** (xem câu hỏi mở). Hằng số nằm ở domain để đổi một dòng.
+5. **Lỗi đọc thống kê không làm sập landing:** `homeBlocks` bọc `try/catch`, log một dòng JSON `home_blocks_failed` rồi trả `null` (landing là trang chủ; thiếu migration `0016` hay D1 lỗi không được kéo theo 500). Test dùng proxy ném lỗi khi `prepare` chứa `public_stats`.
+6. **`LandingPage` nhận `below?: Child | null`** và in nó sau khối `#ask`, trong cùng `<main class="page-full">`; chỉ `GET /` truyền `below` (POST `/waitlist` lỗi vẫn dựng lại landing không có khối dữ liệu, tránh thêm truy vấn ở đường POST).
+7. **Không `<script>`, không `style=`, không `on*=`** (CSP; Task 8 mới có JS). Thứ hạng là `<ol>` + CSS counter; sparkline là `<svg role="img">` với `<polyline points>`; nét vẽ nằm trong CSS.
+8. **`HomeBlocks` là component trả `null`** khi không khối nào hiện (hono `FC` cho phép). Các khối con nhận dữ liệu ĐÃ được quyết là hiện, nên không khối nào tự trả `null`.
+9. **Thời gian tương đối tính ở server theo `now` của request** (`Intl.RelativeTimeFormat`); `<time datetime>` giữ thời điểm thật. Chữ số trong nhãn đến từ `Intl`, là định dạng.
+
+**Câu hỏi mở cho Owner (7a):**
+- **Q-F:** khối "Founding products" có hiện khi mới có 1 đến 5 product published (mặc định của plan: hiện, `FOUNDING_MIN = 1`), hay chỉ hiện khi đủ 6 (`FOUNDING_MIN = FOUNDING_LIMIT`)? Spec chỉ nói "Founding products (product mới published)", không nêu số tối thiểu.
+
+**Nhãn mới (nhãn dữ liệu trung tính, không có câu quảng bá):** 15 khóa `home.*` ở Step 3; "Updated hourly" là chữ spec §5.9 ("cập nhật mỗi giờ"), các tiêu đề là tên khối spec §5.9.
+
+- [ ] **Step 1: Failing tests first (domain, helpers, route)**
+
+Append to `apps/web/test/domain/public-stats.test.ts` (add `numberTiles`, `type NumberKey`, `type PublicSnapshot` to its import from `domain/public-stats.ts`):
+
+```ts
+describe("numberTiles (spec §5.9): the numbers row needs two tiles", () => {
+  const snap = (keys: NumberKey[]): PublicSnapshot => Object.fromEntries(keys.map((k) => [k, { value: 12, computedAt: NOW }]));
+  it("is null under MIN_NUMBER_TILES tiles; otherwise the tiles in NUMBER_KEYS order", () => {
+    expect(numberTiles(snap([]))).toBeNull();
+    expect(numberTiles(snap(["count_countries"]))).toBeNull();
+    expect(numberTiles(snap(["count_countries", "count_products"]))?.map((x) => x.key)).toEqual(["count_products", "count_countries"]);
+  });
+});
+```
+
+Create `apps/web/test/home/blocks.ts` (shared with 7b, which extends `seedSnapshot`):
+
+```ts
+import { createApp } from "../../src/app.ts";
+import { writePublicStat } from "../../src/db/public-stats.ts";
+import { MIN, NUMBER_KEYS, liveEvents, rankTrending, type LiveEvent, type NumberKey, type TrendingCandidate } from "../../src/domain/public-stats.ts";
+import { utcDay } from "../../src/domain/stats.ts";
+import type { Bindings } from "../../src/env.ts";
+import { testEnv } from "../helpers.ts";
+
+export const DB = testEnv.DB;
+/** A snapshot time that is fresh now (the route reads the real clock). */
+export const fresh = (minutesAgo = 1): string => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+export const clearStats = () => DB.prepare("DELETE FROM public_stats").run();
+export const getHome = async (path = "/", env: Bindings = testEnv): Promise<string> => (await createApp().request(new Request(`https://vnx.si${path}`), undefined, env)).text();
+/** One block: the whole <section id="…">…</section>, or "" when it is not on the page. */
+export const block = (html: string, id: string): string => new RegExp(`<section[^>]*id="${id}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? "";
+
+export const COUNT_MIN: Record<NumberKey, number> = { count_products: MIN.products, count_builders: MIN.builders, count_requests_30d: MIN.requests30d, count_countries: MIN.countries };
+export const eventList = (n: number): LiveEvent[] =>
+  Array.from({ length: n }, (_, i) => ({ id: `e${i}`, at: new Date(Date.now() - (i + 1) * 60_000).toISOString(), kind: "product_published" as const, productName: `Live product ${i}`, slug: `live-${i}` }));
+export const trendingCandidates = (n: number, views: number = MIN.trendingScore): TrendingCandidate[] =>
+  Array.from({ length: n }, (_, i) => ({ productId: `t${i}`, slug: `trend-${i}`, name: `Trend ${i}`, tagline: "Tagline", category: "crm" as const, builderHandle: `tb${i}`, builderName: `TB ${i}`, daily: { [utcDay(new Date())]: { views } } }));
+
+/** Every key written exactly at its threshold: all blocks shown. 7b adds the remaining keys. */
+export async function seedSnapshot(at = fresh()): Promise<void> {
+  await clearStats();
+  for (const key of NUMBER_KEYS) await writePublicStat(DB, key, COUNT_MIN[key], at);
+  await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents), new Date()), at);
+  await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems), new Date()), at);
+}
+
+/** A D1 that records every prepared SQL, and throws on a statement containing `failOn`. */
+export function spyDb(sink: string[], failOn?: string): D1Database {
+  return new Proxy(DB, {
+    get(db, prop) {
+      if (prop === "prepare") return (sql: string) => { if (failOn && sql.includes(failOn)) throw new Error(`boom on ${failOn}`); sink.push(sql); return db.prepare(sql); };
+      const value = Reflect.get(db, prop) as unknown;
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(db) : value;
+    },
+  }) as D1Database;
+}
+```
+
+Create `apps/web/test/home/home.test.ts`:
+
+```ts
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { writePublicStat } from "../../src/db/public-stats.ts";
+import { testEnv } from "../helpers.ts";
+import { LIVE_MAX, MIN, NUMBER_KEYS, STALE_AFTER_MS, countStat, liveEvents, rankTrending } from "../../src/domain/public-stats.ts";
+import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
+import { en, type MessageKey } from "../../src/i18n/messages/en.ts";
+import { t } from "../../src/i18n/t.ts";
+import { formatChange, relativeTime, sparkPoints, SPARK_VIEWBOX } from "../../src/views/format.ts";
+import { COUNT_MIN, DB, block, clearStats, eventList, fresh, getHome, seedSnapshot, spyDb, trendingCandidates } from "./blocks.ts";
+
+afterEach(() => vi.restoreAllMocks());
+const tile = (key: string) => `data-stat="${key}"`;
+const count = (html: string, needle: string) => html.split(needle).length - 1;
+
+describe("format helpers", () => {
+  it("relativeTime picks the largest whole unit; formatChange signs; sparkPoints is one point per value", () => {
+    const now = new Date("2026-10-05T12:00:00.000Z");
+    expect(relativeTime("en", "2026-10-05T10:00:00.000Z", now)).toBe("2 hours ago");
+    expect(relativeTime("en", "2026-10-02T12:00:00.000Z", now)).toBe("3 days ago");
+    expect(formatChange("en", 25)).toBe("+25%");
+    expect(formatChange("en", -10)).toMatch(/^[-−]10%$/);
+    const points = sparkPoints([0, 5, 10]).split(" ");
+    expect(points).toHaveLength(3);
+    const ys = (s: string) => s.split(" ").map((p) => p.split(",")[1]);
+    expect(new Set(ys(sparkPoints([0, 0, 0]))).size).toBe(1); // a flat series is one horizontal line
+    expect(ys(sparkPoints([0, 5, 10]))[2]).not.toBe(ys(sparkPoints([0, 5, 10]))[0]);
+    expect(SPARK_VIEWBOX).toMatch(/^0 0 \d+ \d+$/);
+  });
+});
+
+describe("homepage blocks under the landing (VNX-0703a)", () => {
+  it("prints nothing of its own when no snapshot is fresh, and the landing is intact", async () => {
+    await clearStats();
+    const html = await getHome();
+    expect(html).not.toContain("home-block");
+    expect(html).toContain('<section id="ask"');
+  });
+
+  it("puts the data blocks after the #ask block, inside <main>", async () => {
+    await seedSnapshot();
+    const html = await getHome();
+    expect(html.indexOf('<section id="ask"')).toBeGreaterThan(0);
+    expect(html.indexOf('id="home-numbers"')).toBeGreaterThan(html.indexOf('<section id="ask"'));
+    expect(html.indexOf("</main>")).toBeGreaterThan(html.indexOf('id="home-trending"'));
+  });
+
+  it("Numbers: each tile hides at n-1 and shows at n; the others stay", async () => {
+    for (const key of NUMBER_KEYS) {
+      await seedSnapshot();
+      await writePublicStat(DB, key, countStat(COUNT_MIN[key] - 1, COUNT_MIN[key]), fresh());
+      const under = await getHome();
+      expect(under, key).not.toContain(tile(key));
+      for (const other of NUMBER_KEYS.filter((k) => k !== key)) expect(under, `${key}/${other}`).toContain(tile(other));
+      await writePublicStat(DB, key, countStat(COUNT_MIN[key], COUNT_MIN[key]), fresh());
+      expect(await getHome(), key).toContain(tile(key));
+    }
+  });
+
+  it("Numbers: one tile left hides the row, two tiles show it; 'Updated hourly' only with the row", async () => {
+    const at = fresh();
+    await clearStats();
+    await writePublicStat(DB, "count_products", MIN.products, at);
+    let html = await getHome();
+    expect(block(html, "home-numbers")).toBe("");
+    expect(html).not.toContain(t("en", "home.updatedHourly"));
+    await writePublicStat(DB, "count_countries", MIN.countries, at);
+    html = await getHome();
+    expect(count(block(html, "home-numbers"), "data-stat=")).toBe(2);
+    expect(block(html, "home-numbers")).toContain(t("en", "home.updatedHourly"));
+  });
+
+  it("Live: 4 events hide it, 5 show it, and it never lists more than LIVE_MAX", async () => {
+    const now = new Date();
+    await clearStats();
+    await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents - 1), now), fresh());
+    expect(block(await getHome(), "home-live")).toBe("");
+    await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents), now), fresh());
+    expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(MIN.liveEvents);
+    await writePublicStat(DB, "live", liveEvents(eventList(LIVE_MAX + 1), now), fresh());
+    expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(LIVE_MAX);
+  });
+
+  it("Live: a new request shows its category and languages, nothing else of it", async () => {
+    const at = new Date(Date.now() - 60_000).toISOString();
+    const events = [...eventList(MIN.liveEvents - 1), { id: "r", at, kind: "request_new" as const, category: "crm" as const, languages: ["vi" as const] }];
+    await clearStats();
+    await writePublicStat(DB, "live", liveEvents(events, new Date()), fresh());
+    const live = block(await getHome(), "home-live");
+    expect(live).toContain(t("en", "home.live.requestNew"));
+    expect(live).toContain(t("en", "product.category.crm"));
+    expect(live).toContain(t("en", "builder.lang.vi"));
+  });
+
+  it("Trending: 5 products at the score threshold hide it, 6 show it; one point under the score hides it", async () => {
+    const now = new Date();
+    await clearStats();
+    await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems - 1), now), fresh());
+    expect(block(await getHome(), "home-trending")).toBe("");
+    await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems, MIN.trendingScore - 1), now), fresh());
+    expect(block(await getHome(), "home-trending")).toBe("");
+    await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems), now), fresh());
+    const html = block(await getHome(), "home-trending");
+    expect(count(html, '<li class="home-tile"')).toBe(MIN.trendingItems);
+    expect(count(html, "<polyline")).toBe(MIN.trendingItems);
+    expect(html).toContain("<ol");
+  });
+
+  it("a snapshot older than 3 hours hides every block; a fresh one shows them", async () => {
+    await seedSnapshot(new Date(Date.now() - STALE_AFTER_MS - 60_000).toISOString());
+    let html = await getHome();
+    expect(html).not.toContain("home-block");
+    expect(html).not.toContain(t("en", "home.updatedHourly"));
+    await seedSnapshot();
+    html = await getHome();
+    for (const id of ["home-numbers", "home-live", "home-trending"]) expect(block(html, id), id).not.toBe("");
+  });
+
+  it("reads public_stats exactly once per request, with and without Trending", async () => {
+    for (const seed of [true, false]) {
+      if (seed) await seedSnapshot(); else await clearStats();
+      const sql: string[] = [];
+      await getHome("/", { ...testEnv, DB: spyDb(sql) });
+      expect(sql.filter((s) => /\bpublic_stats\b/.test(s))).toHaveLength(1);
+    }
+  });
+
+  it("a failing public_stats read never breaks the landing", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const html = await getHome("/", { ...testEnv, DB: spyDb([], "public_stats") });
+    expect(html).toContain('<section id="ask"');
+    expect(html).not.toContain("home-block");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("home_blocks_failed"));
+  });
+
+  it("adds no <script>, no inline style and no inline handler (CSP; scripts are Task 8)", async () => {
+    await clearStats();
+    const scripts = (h: string) => h.match(/<script\b/g)?.length ?? 0;
+    const empty = await getHome();
+    await seedSnapshot();
+    const full = await getHome();
+    expect(scripts(full)).toBe(scripts(empty));
+    const region = full.slice(full.indexOf('class="lp-section home-block'), full.indexOf("</main>"));
+    expect(region).not.toMatch(/<script|\sstyle=|\son[a-z]+=/i);
+  });
+
+  it("has no sponsored or paid wording in any locale", async () => {
+    await seedSnapshot();
+    for (const locale of LOCALES) {
+      const html = await getHome(localizedPath(locale, "/"));
+      const region = html.slice(html.indexOf('class="lp-section home-block'), html.indexOf("</main>")).replace(/<[^>]*>/g, " ").replace(String(t(locale, "home.builders.noPay" as MessageKey)), "");
+      expect(region.length, locale).toBeGreaterThan(0);
+      expect(region, locale).not.toMatch(/sponsor|advert|promot|paid|quảng cáo|trả tiền|赞助|贊助|广告|廣告|付费|付費/i);
+    }
+  });
+
+  it("every home.* key is used by a view, and the home views hold no digit (no invented number)", () => {
+    const views = import.meta.glob("../../src/views/home/*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+    const files = Object.entries(views);
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/<\/?h[1-6]\b/g, "");
+    for (const [file, src] of files) expect(code(src), file).not.toMatch(/\d/);
+    const shared = import.meta.glob("../../src/views/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+    const all = Object.values(shared).join("\n");
+    for (const key of Object.keys(en).filter((k) => k.startsWith("home."))) expect(all, key).toContain(`"${key}"`);
+  });
+});
+```
+
+(`home.builders.noPay` arrives in 7b: until then `t` returns `undefined` for it and `String(...)` makes the `replace` a no-op; 7b Step 1 turns the cast into a plain typed call. The "no sponsored or paid wording" rule is not weakened for the rest of the region.)
+
+Create `apps/web/test/home/founding.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { parseCatalogQuery } from "../../src/domain/catalog.ts";
+import { searchProducts } from "../../src/db/catalog.ts";
+import { FOUNDING_LIMIT } from "../../src/domain/public-stats.ts";
+import { DECK_SIZE } from "../../src/views/landing/Deck.tsx";
+import { makeLiveProduct } from "../fixtures.ts";
+import { DB, block, clearStats, getHome } from "./blocks.ts";
+
+const at = (i: number) => new Date(Date.UTC(2026, 9, 1, i)).toISOString();
+const names = (html: string) => [...html.matchAll(/Founding p(\d)/g)].map((m) => Number(m[1]));
+
+describe("Founding products and the hero (Owner Q1, 2026-10-05)", () => {
+  it("Founding shows the FOUNDING_LIMIT newest first publications, newest first, when Trending is hidden", async () => {
+    await clearStats();
+    // p0 is the OLDEST and carries a badge: a badge must not lift it into Founding.
+    for (let i = 0; i <= FOUNDING_LIMIT; i++) await makeLiveProduct(`fnd${i}@vnx.si`, `fnd-${i}`, `Founding p${i}`, { at: at(i), badges: i === 0 ? ["demo_verified"] : [] });
+    const html = await getHome();
+    const founding = block(html, "home-founding");
+    expect(founding).not.toBe("");
+    expect([...new Set(names(founding))]).toEqual([6, 5, 4, 3, 2, 1]);
+    expect(founding).not.toContain("Founding p0");
+    expect(block(html, "home-trending")).toBe("");
+  });
+
+  it("a product that is no longer published leaves Founding", async () => {
+    await DB.prepare("UPDATE products SET status = 'unlisted' WHERE name = 'Founding p6'").run();
+    expect(block(await getHome(), "home-founding")).not.toContain("Founding p6");
+  });
+
+  it("the landing hero keeps the catalogue default order (badge first, then newest) and Task 7 adds no hero", async () => {
+    const expected = (await searchProducts(DB, parseCatalogQuery({}))).items.slice(0, DECK_SIZE).map((i) => i.slug);
+    const html = await getHome();
+    const hero = html.slice(html.indexOf('<section class="lp-hero"'), html.indexOf('<section class="lp-principles"'));
+    const slugs = [...new Set([...hero.matchAll(/href="\/p\/([^"]+)"/g)].map((m) => m[1]))];
+    expect(slugs).toEqual(expected);
+    expect(html.match(/<section class="lp-hero"/g)).toHaveLength(1);
+  });
+});
+```
+
+Run `npm test -w apps/web -- test/domain/public-stats.test.ts test/home` → expected RED: `numberTiles`, `views/format.ts` exports, `FOUNDING_LIMIT` and `home.*` keys do not exist, no `home-*` sections on `GET /`.
+
+- [ ] **Step 2: Domain and catalogue query**
+
+In `apps/web/src/domain/public-stats.ts`, after `countStat`, add:
+
+```ts
+// ---- Homepage "Numbers" and "Founding products" (VNX-0703) ----
+export const NUMBER_KEYS = ["count_products", "count_builders", "count_requests_30d", "count_countries"] as const satisfies readonly PublicStatKey[];
+export type NumberKey = (typeof NUMBER_KEYS)[number];
+/** Spec §5.9: the numbers row hides when fewer than two tiles are left. */
+export const MIN_NUMBER_TILES = 2;
+/** Owner Q1 (2026-10-05): the Founding products block shows the 6 newest first publications. */
+export const FOUNDING_LIMIT = 6;
+/** Not in the spec (question Q-F): products needed before the Founding block shows. */
+export const FOUNDING_MIN = 1;
+export type NumberTile = { key: NumberKey; value: number; computedAt: string };
+
+/** The tiles whose key is fresh and not null, in NUMBER_KEYS order; null when fewer than MIN_NUMBER_TILES. */
+export function numberTiles(snapshot: PublicSnapshot): NumberTile[] | null {
+  const tiles = NUMBER_KEYS.flatMap((key): NumberTile[] => {
+    const hit = snapshot[key];
+    return hit ? [{ key, value: hit.value, computedAt: hit.computedAt }] : [];
+  });
+  return tiles.length >= MIN_NUMBER_TILES ? tiles : null;
+}
+```
+(`PublicSnapshot` is declared further down the file; a type reference before its declaration is fine in TypeScript.)
+
+In `apps/web/src/db/catalog.ts`, extract the select list shared by the browse query and the new one (a 4-line, behaviour-preserving change guarded by `test/catalog/*`):
+
+```ts
+const ITEM_COLUMNS = `p.id, p.slug, p.name, p.tagline, p.category, b.handle AS builder_handle, b.name AS builder_name,
+  ${COVER_SQL} AS cover_key, ${MIN_PRICE_SQL} AS min_price_cents, ${BADGE_SCORE_SQL} AS badge_score`;
+```
+In `searchProducts` replace the inline column list with `SELECT ${ITEM_COLUMNS}`. Then add, after `searchProducts`:
+
+```ts
+/**
+ * Homepage "Founding products" (Owner Q1): the newest first publications, newest first. Not a ranking: no badge, view or
+ * inquiry count reaches the order (ADR-004).
+ */
+export async function foundingProducts(db: D1Database, limit: number): Promise<CatalogItem[]> {
+  const { results } = await db
+    .prepare(`SELECT ${ITEM_COLUMNS} FROM products p ${JOINS} WHERE ${PUBLIC_PRODUCT} ORDER BY p.first_published_at DESC, p.id DESC LIMIT ?1`)
+    .bind(limit)
+    .all<ItemRow>();
+  return results.map(toItem);
+}
+```
+
+Run `npm test -w apps/web -- test/domain/public-stats.test.ts test/catalog` → expected GREEN.
+
+- [ ] **Step 3: Locale keys (15, all four locales)**
+
+Append before the closing brace of each of `en.ts`, `vi.ts`, `zh-hans.ts`, `zh-hant.ts` (placeholders `{days}` are identical in every locale; no apostrophes, quotes or `&` in any value):
+
+| Key | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `home.updatedHourly` | Updated hourly | Cập nhật mỗi giờ | 每小时更新 | 每小時更新 |
+| `home.numbers.title` | Numbers | Con số | 数据 | 數據 |
+| `home.numbers.products` | Products published | Sản phẩm đã đăng | 已发布的产品 | 已發佈的產品 |
+| `home.numbers.builders` | Builders approved | Builder đã được duyệt | 已通过审核的 Builder | 已通過審核的 Builder |
+| `home.numbers.requests` | Requests in the last {days} days | Nhu cầu trong {days} ngày qua | 过去 {days} 天的需求 | 過去 {days} 天的需求 |
+| `home.numbers.countries` | Builder countries | Quốc gia của builder | Builder 所在国家 | Builder 所在國家 |
+| `home.live.title` | Live | Trực tiếp | 实时动态 | 即時動態 |
+| `home.live.productPublished` | Product published | Sản phẩm mới đăng | 产品已发布 | 產品已發佈 |
+| `home.live.badgeGranted` | Badge granted | Huy hiệu mới | 已授予徽章 | 已授予徽章 |
+| `home.live.builderApproved` | Builder approved | Builder được duyệt | Builder 已通过审核 | Builder 已通過審核 |
+| `home.live.requestNew` | New request | Nhu cầu mới | 新需求 | 新需求 |
+| `home.trending.title` | Trending this week | Thịnh hành tuần này | 本周热门 | 本週熱門 |
+| `home.trending.vsPrevious` | vs previous week | so với tuần trước | 较上周 | 較上週 |
+| `home.trending.spark` | Activity, last {days} days | Hoạt động {days} ngày qua | 过去 {days} 天的活跃度 | 過去 {days} 天的活躍度 |
+| `home.founding.title` | Founding products | Sản phẩm sáng lập | 创始产品 | 創始產品 |
+
+Run `npm test -w apps/web -- test/i18n/parity.test.ts` → GREEN (the `home.*` "used by a view" check in `home.test.ts` stays red until Step 5).
+
+- [ ] **Step 4: Format helpers**
+
+Append to `apps/web/src/views/labels.ts` (add `import type { NumberKey } from "../domain/public-stats.ts";`):
+
+```ts
+export const NUMBER_LABEL: Record<NumberKey, MessageKey> = {
+  count_products: "home.numbers.products",
+  count_builders: "home.numbers.builders",
+  count_requests_30d: "home.numbers.requests",
+  count_countries: "home.numbers.countries",
+};
+```
+
+Append to `apps/web/src/views/format.ts` (this file, not `views/home/`, may hold digits):
+
+```ts
+const PERCENT = 100;
+const MS = { day: 86_400_000, hour: 3_600_000, minute: 60_000 } as const;
+const round = (n: number): number => Math.round(n * 10) / 10;
+
+export const formatCount = (locale: Locale, n: number): string => new Intl.NumberFormat(locale).format(n);
+/** A whole percent change with its sign ("+25%"); zero has none. */
+export const formatChange = (locale: Locale, pct: number): string => new Intl.NumberFormat(locale, { style: "percent", signDisplay: "exceptZero" }).format(pct / PERCENT);
+
+/** "2 hours ago": the largest whole unit between `iso` and `now` (the viewer's locale). */
+export function relativeTime(locale: Locale, iso: string, now: Date): string {
+  const diff = Date.parse(iso) - now.getTime();
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  for (const unit of ["day", "hour", "minute"] as const) if (Math.abs(diff) >= MS[unit]) return rtf.format(Math.trunc(diff / MS[unit]), unit);
+  return rtf.format(0, "minute");
+}
+
+/** A 14-day sparkline drawn as one polyline in a fixed box; the stroke lives in CSS. */
+const SPARK = { width: 112, height: 32, pad: 2 } as const;
+export const SPARK_VIEWBOX = `0 0 ${SPARK.width} ${SPARK.height}`;
+export function sparkPoints(values: readonly number[]): string {
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? (SPARK.width - 2 * SPARK.pad) / (values.length - 1) : 0;
+  return values.map((v, i) => `${round(SPARK.pad + i * step)},${round(SPARK.height - SPARK.pad - (v / max) * (SPARK.height - 2 * SPARK.pad))}`).join(" ");
+}
+```
+
+- [ ] **Step 5: Views, route, landing wiring, CSS**
+
+`apps/web/src/views/home/HomeBlocks.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import type { CatalogItem } from "../../domain/catalog.ts";
+import { FOUNDING_MIN, numberTiles, type PublicSnapshot } from "../../domain/public-stats.ts";
+import type { Locale } from "../../i18n/locales.ts";
+import { Live } from "./Live.tsx";
+import { Numbers } from "./Numbers.tsx";
+import { Founding, Trending } from "./Trending.tsx";
+
+export type HomeBlocksProps = { locale: Locale; snapshot: PublicSnapshot; founding: readonly CatalogItem[]; now: Date };
+
+/** The data blocks under the landing (Owner A2). A block shows only when its fresh snapshot value exists; with none, nothing prints. */
+export const HomeBlocks: FC<HomeBlocksProps> = ({ locale, snapshot, founding, now }) => {
+  const tiles = numberTiles(snapshot);
+  const live = snapshot.live?.value;
+  const trending = snapshot.trending?.value;
+  const blocks = [
+    tiles ? <Numbers locale={locale} tiles={tiles} /> : null,
+    live ? <Live locale={locale} events={live} now={now} /> : null,
+    trending ? <Trending locale={locale} items={trending} /> : founding.length >= FOUNDING_MIN ? <Founding locale={locale} items={founding} /> : null,
+  ].filter((b) => b !== null);
+  return blocks.length === 0 ? null : <>{blocks}</>;
+};
+```
+
+`apps/web/src/views/home/Numbers.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import { REQUEST_DAYS, type NumberTile } from "../../domain/public-stats.ts";
+import type { Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { formatCount } from "../format.ts";
+import { NUMBER_LABEL } from "../labels.ts";
+
+/** The tiles are already known to be fresh, non-null and at least two (numberTiles), so "Updated hourly" is true. */
+export const Numbers: FC<{ locale: Locale; tiles: readonly NumberTile[] }> = ({ locale, tiles }) => {
+  const tr = translator(locale);
+  return (
+    <section id="home-numbers" class="lp-section home-block" aria-labelledby="home-numbers-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-numbers-title">{tr("home.numbers.title")}</h2>
+          <p class="section-sub">{tr("home.updatedHourly")}</p>
+        </div>
+        <ul class="home-numbers">
+          {tiles.map((tile) => (
+            <li data-stat={tile.key}>
+              <strong>{formatCount(locale, tile.value)}</strong>
+              <span>{tr(NUMBER_LABEL[tile.key], { days: REQUEST_DAYS })}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+};
+```
+
+`apps/web/src/views/home/Live.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import type { PublicLiveEvent } from "../../domain/public-stats.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { relativeTime } from "../format.ts";
+import { BADGE_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "../labels.ts";
+
+const LiveItem: FC<{ locale: Locale; e: PublicLiveEvent }> = ({ locale, e }) => {
+  const tr = translator(locale);
+  switch (e.kind) {
+    case "product_published":
+      return <><strong>{tr("home.live.productPublished")}</strong> <a href={localizedPath(locale, `/p/${e.slug}`)}>{e.productName}</a></>;
+    case "badge_granted":
+      return <><strong>{tr("home.live.badgeGranted")}</strong> <span class={`chip chip-${e.badge}`}>{tr(BADGE_KEY[e.badge])}</span> <a href={localizedPath(locale, `/p/${e.slug}`)}>{e.productName}</a></>;
+    case "builder_approved":
+      return <><strong>{tr("home.live.builderApproved")}</strong> <a href={localizedPath(locale, `/b/${e.handle}`)}>{e.builderName}</a></>;
+    case "request_new":
+      return <><strong>{tr("home.live.requestNew")}</strong> <span>{tr(CATEGORY_KEY[e.category])}</span> <span class="muted">{e.languages.map((l) => tr(LANGUAGE_KEY[l])).join(" · ")}</span></>;
+  }
+};
+
+/** A static list for now (the marquee is Task 8). Only what the snapshot holds: no request title, no client, no e-mail. */
+export const Live: FC<{ locale: Locale; events: readonly PublicLiveEvent[]; now: Date }> = ({ locale, events, now }) => {
+  const tr = translator(locale);
+  return (
+    <section id="home-live" class="lp-section home-block" aria-labelledby="home-live-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-live-title">{tr("home.live.title")}</h2>
+        </div>
+        <ul class="home-live">
+          {events.map((e) => (
+            <li class="home-live-item">
+              <time datetime={e.at}>{relativeTime(locale, e.at, now)}</time>
+              <LiveItem locale={locale} e={e} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+};
+```
+
+`apps/web/src/views/home/Trending.tsx` (this file goes into `RANKING_FILES`; its comments must not contain the words listed in the architecture test of Step 6):
+
+```tsx
+import type { FC } from "hono/jsx";
+import { topBadge, type CatalogItem } from "../../domain/catalog.ts";
+import { SPARK_DAYS, type TrendingItem } from "../../domain/public-stats.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { formatChange, SPARK_VIEWBOX, sparkPoints } from "../format.ts";
+import { BADGE_KEY, CATEGORY_KEY } from "../labels.ts";
+
+type TileMeta = { slug: string; name: string; tagline: string; category: CatalogItem["category"]; builderName: string };
+
+const Meta: FC<{ locale: Locale; item: TileMeta }> = ({ locale, item }) => {
+  const tr = translator(locale);
+  return (
+    <>
+      <h3><a href={localizedPath(locale, `/p/${item.slug}`)}>{item.name}</a></h3>
+      <p>{item.tagline}</p>
+      <p class="muted">
+        {item.category ? `${tr(CATEGORY_KEY[item.category])} · ` : null}
+        {tr("catalog.by", { name: item.builderName })}
+      </p>
+    </>
+  );
+};
+
+/** Rank = CSS counter on the <ol>; the score itself is not shown, only its 14-day shape and the change on the week before. */
+export const Trending: FC<{ locale: Locale; items: readonly TrendingItem[] }> = ({ locale, items }) => {
+  const tr = translator(locale);
+  return (
+    <section id="home-trending" class="lp-section home-block" aria-labelledby="home-trending-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-trending-title">{tr("home.trending.title")}</h2>
+        </div>
+        <ol class="home-tiles home-ranked">
+          {items.map((item) => (
+            <li class="home-tile">
+              <Meta locale={locale} item={item} />
+              <p class="home-trend">
+                <svg class="home-spark" viewBox={SPARK_VIEWBOX} role="img" aria-label={tr("home.trending.spark", { days: SPARK_DAYS })}>
+                  <polyline points={sparkPoints(item.sparkline)} />
+                </svg>
+                {item.changePct !== null ? (
+                  <span>
+                    <strong>{formatChange(locale, item.changePct)}</strong> <span class="muted">{tr("home.trending.vsPrevious")}</span>
+                  </span>
+                ) : null}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+};
+
+/** Shown in place of Trending: the newest first publications, newest first. */
+export const Founding: FC<{ locale: Locale; items: readonly CatalogItem[] }> = ({ locale, items }) => {
+  const tr = translator(locale);
+  return (
+    <section id="home-founding" class="lp-section home-block" aria-labelledby="home-founding-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-founding-title">{tr("home.founding.title")}</h2>
+        </div>
+        <ul class="home-tiles">
+          {items.map((item) => {
+            const badge = topBadge(item.badgeScore);
+            return (
+              <li class="home-tile">
+                <Meta locale={locale} item={item} />
+                {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
+  );
+};
+```
+
+`apps/web/src/routes/home.tsx` (no word from the architecture test's money list in comments):
+
+```tsx
+import type { Context } from "hono";
+import type { Child } from "hono/jsx";
+import { foundingProducts } from "../db/catalog.ts";
+import { readPublicStats } from "../db/public-stats.ts";
+import { FOUNDING_LIMIT } from "../domain/public-stats.ts";
+import type { AppEnv } from "../env.ts";
+import { HomeBlocks } from "../views/home/HomeBlocks.tsx";
+
+/**
+ * The data blocks under the landing at `/` (Owner A2). One public_stats read; the newest-products query runs only while
+ * Trending is hidden. A failure here must never take the landing down.
+ */
+export async function homeBlocks(c: Context<AppEnv>): Promise<Child> {
+  const now = new Date();
+  try {
+    const snapshot = await readPublicStats(c.env.DB, now);
+    const founding = snapshot.trending ? [] : await foundingProducts(c.env.DB, FOUNDING_LIMIT);
+    return <HomeBlocks locale={c.get("locale")} snapshot={snapshot} founding={founding} now={now} />;
+  } catch (err) {
+    console.error(JSON.stringify({ event: "home_blocks_failed", error: String(err) }));
+    return null;
+  }
+}
+```
+
+`apps/web/src/views/LandingPage.tsx`: add `import type { Child } from "hono/jsx";` (merge with the existing `FC` import), the prop `/** The data blocks under the landing (VNX-0703, Owner A2); null/absent prints nothing. */ below?: Child | null;`, destructure `below`, and render `{below}` right after the `#ask` `</section>`, before `</Layout>`.
+
+`apps/web/src/routes/landing.tsx`: import `homeBlocks` from `./home.tsx` and `type { Child } from "hono/jsx"`; add `below?: Child` to `RenderOpts`; pass `below={opts.below}` to `<LandingPage>`; make the GET handler `async (c) => renderLanding(c, { joined: …, asked: …, utm: …, referrer: …, below: await homeBlocks(c) })`. The POST `/waitlist` renders stay without `below`.
+
+Append to `apps/web/public/assets/app.css` (tokens only, so dark mode follows; no animation, Task 8 adds it):
+
+```css
+/* VNX-0703: data blocks under the landing (public_stats). */
+.home-block { padding: 56px 0; background: var(--bg); border-top: 1px solid var(--border); }
+.home-block + .home-block { background: var(--surface); }
+.home-numbers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 16px; }
+.home-numbers li { display: flex; flex-direction: column; gap: 4px; padding: 20px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.home-numbers strong { font: 700 clamp(32px, 4vw, 44px)/1.1 var(--font-display); }
+.home-numbers span { color: var(--text-2); }
+.home-live { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.home-live-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.home-live-item time { color: var(--muted); font: 400 13px/1.4 var(--font-mono); }
+.home-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; counter-reset: rank; }
+.home-tile { display: flex; flex-direction: column; gap: 8px; padding: 20px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.home-tile h3, .home-tile h4 { margin: 0; font-size: 18px; }
+.home-tile p { margin: 0; }
+.home-ranked > .home-tile { counter-increment: rank; }
+.home-ranked > .home-tile::before { content: counter(rank); color: var(--muted); font: 400 13px/1.4 var(--font-mono); }
+.home-trend { display: flex; align-items: center; gap: 12px; }
+.home-spark { width: 112px; height: 32px; flex: none; color: var(--primary); }
+.home-spark polyline { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+```
+
+Run `npm test -w apps/web -- test/home test/domain/public-stats.test.ts test/landing test/design test/i18n` → expected GREEN. If `test/home/home.test.ts` "every home.* key is used" or the digits grep fails, fix the VIEW (move the digit into `views/format.ts` or a domain constant), never weaken the grep.
+
+- [ ] **Step 6: Architecture guard**
+
+In `apps/web/test/architecture.test.ts` add to `RANKING_FILES` (after the `jobs/hourly.ts` line):
+
+```ts
+  // VNX-0703a: homepage data blocks (Trending, Founding products).
+  "../src/routes/home.tsx",
+  "../src/views/home/Trending.tsx",
+```
+and, after the "public statistics files are ranking files and mention no money" test, add:
+
+```ts
+  it("the homepage ranking files are listed and mention no money (VNX-0703)", () => {
+    for (const file of ["../src/routes/home.tsx", "../src/views/home/Trending.tsx"]) {
+      expect(RANKING_FILES, file).toContain(file);
+      expect(sources[file] ?? "", file).not.toMatch(/sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|outbound_clicks/i);
+    }
+  });
+```
+Run `npm test -w apps/web -- test/architecture.test.ts` → GREEN (the existing "lists only files that exist", import and SQL checks now cover both files). Keep those words out of the two files' comments too.
+
+- [ ] **Step 7: Focused acceptance, typecheck, full test, commit**
+
+`npm test -w apps/web -- test/home test/domain test/catalog test/landing test/design test/i18n test/architecture.test.ts`, then:
+
+```text
+npm run typecheck -w apps/web && npm test
+git add apps/web/src/domain/public-stats.ts apps/web/src/db/catalog.ts apps/web/src/views/format.ts apps/web/src/views/LandingPage.tsx apps/web/src/views/home/HomeBlocks.tsx apps/web/src/views/home/Numbers.tsx apps/web/src/views/home/Live.tsx apps/web/src/views/home/Trending.tsx apps/web/src/routes/home.tsx apps/web/src/routes/landing.tsx apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/blocks.ts apps/web/test/home/home.test.ts apps/web/test/home/founding.test.ts apps/web/test/domain/public-stats.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): add Numbers, Live and Trending blocks under the landing (VNX-0703a)
+
+Read one public_stats snapshot per request and show each block only when its
+fresh value exists; Founding products (newest first publications) replaces a
+hidden Trending. The landing and its hero are unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Acceptance (mỗi dòng kiểm được bằng một lệnh):**
+- Con số: từng ô ẩn ở n−1 và hiện ở n; ẩn hàng khi còn 1 ô; "Updated hourly" chỉ khi có hàng: `npm test -w apps/web -- test/home/home.test.ts -t "Numbers"`; `numberTiles`: `test/domain/public-stats.test.ts`.
+- Live ẩn ở 4, hiện ở 5, tối đa `LIVE_MAX`, request chỉ category và ngôn ngữ: `-t "Live"`. Trending ẩn ở 5 product và ở điểm 19, hiện ở 6: `-t "Trending"`. Quá 3 giờ ẩn hết: `-t "older than 3 hours"`.
+- Founding: 6 product mới nhất trước, không bị huy hiệu đẩy lên, product bỏ published thì rời: `test/home/founding.test.ts`. Hero của landing giữ thứ tự catalogue mặc định, không có hero thứ hai: cùng file.
+- Đúng một truy vấn `public_stats` mỗi request, và lỗi đọc không làm sập landing: `-t "exactly once"`, `-t "never breaks the landing"`.
+- Không `<script>`/`style=`/`on*=` thêm, không chữ "Sponsored"/trả tiền ở 4 locale: `-t "adds no <script>"`, `-t "sponsored or paid"`.
+- Không chữ số cứng trong `views/home/*.tsx`, mọi khóa `home.*` được dùng: `-t "no invented number"`; `grep -nE "[0-9]" apps/web/src/views/home/*.tsx` chỉ còn thẻ `h1`-`h6` và chú thích.
+- Xếp hạng không đọc tiền: `npm test -w apps/web -- test/architecture.test.ts` xanh; `grep -n "views/home/Trending\|routes/home" apps/web/test/architecture.test.ts` thấy cả hai trong `RANKING_FILES`.
+- Landing nguyên vẹn khi không có dữ liệu: `npm test -w apps/web -- test/landing` xanh không sửa test; `git diff --stat -- apps/web/migrations` rỗng; `git diff package.json` rỗng.
+- `npm run typecheck -w apps/web` và `npm test` xanh.
+
+Diff ước ~560 dòng không tính locale (mã ~315, test ~245; locale +60 dòng). Nếu vượt 600 khi làm, chuyển khối Live (view, test, 5 khóa locale) sang đầu 7b, không cắt test.
+
+---
+
+### Task 7b: VNX-0703b — Market pulse (bảng), Top builders, Top products
+
+**Trạng thái:** bản nháp, CHƯA review, TẠM GIỮ — chờ Owner quyết về execution plan marketing/designer (2026-10-06).
+
+**Scope:** thêm ba khối vào `HomeBlocks` của 7a, cùng quy tắc: hiện chỉ khi key còn tươi và khác `null`, không chữ số cứng, không JS. Phụ thuộc: Task 7a đã commit.
+- **Market pulse:** chart 1 thay bằng bảng "request và product đang listed theo category" (category dưới 3 request đã gộp "Other" ở domain), kèm một dòng nhãn+giá trị "category thiếu supply nhất"; chart 2 thay bằng bảng product và builder cộng dồn theo tuần ISO. Mỗi bảng ẩn riêng khi key của nó vắng; cả khối ẩn khi cả hai vắng. (Task 8 thêm chart SVG, legend, tooltip; bảng trở thành `<details>` tương đương.)
+- **Top builders:** ba bảng (được chọn, trả lời nhanh, nhiều product được xác minh), mỗi bảng chỉ hiện khi tab có ≥ 3 builder đủ điều kiện (domain đã trả `null` cho tab đó); mỗi bảng ghi tiêu chí của nó, và cả khối ghi "no one pays to appear here". Không còn tab nào thì ẩn khối. (Chuyển tab bằng JS là Task 8; ở 7b ba bảng xếp dọc.)
+- **Top products theo category:** hàng nút neo category (chỉ category có ≥ 1 product) và, mỗi category, tối đa 3 product theo huy hiệu rồi Inquiry 30 ngày rồi mới nhất (đã xếp ở domain; view chỉ in đúng thứ tự đó).
+
+**Files:**
+- Create: `apps/web/src/views/home/MarketPulse.tsx`, `apps/web/src/views/home/TopBuilders.tsx` (xuất `TopBuildersBlock`), `apps/web/src/views/home/TopProducts.tsx` (xuất `TopProductsBlock`), `apps/web/test/home/blocks-b.test.ts`.
+- Modify: `apps/web/src/views/home/HomeBlocks.tsx`, `apps/web/src/views/format.ts` (`formatDuration`), `apps/web/public/assets/app.css`, 4 file i18n, `apps/web/test/home/blocks.ts` (`seedSnapshot` ghi nốt 5 key), `apps/web/test/home/home.test.ts` (đổi hai chỗ, xem Step 1), `apps/web/test/architecture.test.ts`.
+- Rerun only: `test/home/*`, `test/landing/*`, `test/design/assets.test.ts`, `test/i18n/parity.test.ts`.
+
+**Interfaces:**
+- Consumes (thật): `CategoryRow`, `ScarcestCategory`, `GrowthPoint`, `TopBuilders` (type), `TopProductsByCategory`, `MIN`, `BUILDER_DAYS`, `REQUEST_DAYS`, `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `type BuilderTally`, `type ProductCandidate` (`domain/public-stats.ts`); `CATEGORIES` (`domain/product.ts`); `topBadge`, `BADGE_SCORE` (`domain/catalog.ts`); `formatCount`, `HomeBlocks`, `block`, `fresh`, `DB`, `getHome`, `seedSnapshot` (7a).
+- Produces: `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`, `formatDuration`; section ids `home-pulse`, `home-builders`, `home-products`; `data-tab="selected|fast|verified"`; chip anchors `#home-top-<category>`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Tab Top builders là ba bảng, không tab giả bằng CSS.** Không JS thì mọi tiêu chí hiện cùng lúc, đúng "ghi rõ tiêu chí". Task 8 có thể bọc thành tab.
+2. **Tiêu chí lấy tham số từ domain** (`BUILDER_DAYS`, `MIN.selected|fastSamples|verified`), không viết số vào chuỗi hay view: đổi ngưỡng ở domain thì chữ đổi theo.
+3. **"Category thiếu supply" nằm trong khung của bảng 1** (cùng điều kiện tổng ≥ 10 ở domain, nên không bao giờ hiện khi bảng 1 ẩn).
+4. **Tên category "Other" dùng nhãn category sẵn có** (`product.category.other`); view không biết "Other" là gộp hay thật (domain đã gộp).
+5. **`MarketPulse` nhận `categories`, `scarcest`, `growth` dạng `null` được**, vì chúng là ba key độc lập; `HomeBlocks` hiện khối khi `categories || growth`.
+6. **Mọi chuỗi mới tránh dấu nháy đơn, `&`, `<`** (để test so chuỗi với HTML đã escape).
+
+**Câu hỏi mở cho Owner (7b), chặn merge 7b, không chặn viết code:** duyệt chữ của năm câu dưới đây (EN, rồi VI/zh-Hans/zh-Hant ở bảng Step 2). Spec §5.9 yêu cầu "ghi rõ tiêu chí" và "không ai trả tiền để có mặt ở đây" nhưng không cho câu chữ.
+- `home.builders.noPay` = "No one pays to appear here."
+- `home.builders.criteria.selected` = "Proposals chosen by clients plus inquiries answered, last {days} days. At least {min} to qualify."
+- `home.builders.criteria.fast` = "Median time to a first reply, last {days} days. At least {min} replies to qualify."
+- `home.builders.criteria.verified` = "Products with a Demo verified or In production badge. At least {min} to qualify."
+- `home.products.order` = "Ordered by badge, then inquiries in the last {days} days, then newest."
+
+- [ ] **Step 1: Failing tests first**
+
+Extend `apps/web/test/home/blocks.ts` `seedSnapshot` (add imports `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `type BuilderTally`, `type ProductCandidate` from `domain/public-stats.ts`) and export the builders the tests use:
+
+```ts
+export const tally = (i: number, over: Partial<BuilderTally> = {}): BuilderTally => ({ userId: `u${i}`, handle: `tb-${i}`, name: `Top builder ${i}`, selected: 0, answered: 0, replyMinutes: [], verified: 0, ...over });
+export const candidate = (i: number, over: Partial<ProductCandidate> = {}): ProductCandidate => ({ id: `p${i}`, slug: `tp-${i}`, name: `Top product ${i}`, category: "crm", builderHandle: "tb", builderName: "TB", badgeScore: 1, inquiries30d: 0, publishedAt: `2026-10-0${i + 1}T00:00:00.000Z`, ...over });
+const WEEKS = { products: { "2026-09-14": 1, "2026-09-21": 1, "2026-09-28": 1, "2026-10-05": 1 }, builders: {} };
+```
+and, at the end of `seedSnapshot`, write: `request_by_category` from `requestByCategory({ crm: 4, ecommerce: 3, booking: 3 }, { crm: 1 })`, `scarcest_category` from `scarcestCategory(same)`, `growth` from `weeklyGrowth(WEEKS, new Date("2026-10-05T12:05:00.000Z"))`, `top_builders` from `topBuilders([0, 1, 2].map((i) => tally(i, { selected: MIN.selected, replyMinutes: Array(MIN.fastSamples).fill(10), verified: MIN.verified })))`, `top_products` from `topProductsByCategory([candidate(0)])`. In `home.test.ts`: (a) the stale/fresh test lists `["home-numbers", "home-live", "home-trending", "home-pulse", "home-builders", "home-products"]`; (b) the "sponsored or paid" strip becomes the typed `.replace(t(locale, "home.builders.noPay"), "")`; (c) the digit grep expects `files.length` ≥ 7.
+
+Create `apps/web/test/home/blocks-b.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { writePublicStat } from "../../src/db/public-stats.ts";
+import { BADGE_SCORE } from "../../src/domain/catalog.ts";
+import { BUILDER_DAYS, MIN, REQUEST_DAYS, requestByCategory, scarcestCategory, topBuilders, topProductsByCategory, weeklyGrowth } from "../../src/domain/public-stats.ts";
+import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
+import { t } from "../../src/i18n/t.ts";
+import { formatDuration } from "../../src/views/format.ts";
+import { CATEGORY_KEY } from "../../src/views/labels.ts";
+import { DB, block, candidate, clearStats, fresh, getHome, tally } from "./blocks.ts";
+
+const label = (c: keyof typeof CATEGORY_KEY) => t("en", CATEGORY_KEY[c]);
+const rowsOf = (html: string) => [...html.matchAll(/<th scope="row">([^<]*)<\/th>/g)].map((m) => m[1]);
+const NOW = new Date("2026-10-05T12:05:00.000Z");
+// total = 2 * categoryRequests + (categoryRequests - 1) + finance; finance = REST at the threshold, REST - 1 one under
+const REST = MIN.categoryTotal - 3 * MIN.categoryRequests + 1;
+const requests = (finance: number) => ({ crm: MIN.categoryRequests, ecommerce: MIN.categoryRequests, booking: MIN.categoryRequests - 1, finance });
+
+describe("Market pulse (VNX-0703b)", () => {
+  it("chart 1 hides under the request total and folds categories under the minimum into Other", async () => {
+    await clearStats();
+    await writePublicStat(DB, "request_by_category", requestByCategory(requests(REST - 1), { crm: 1 }), fresh());
+    expect(block(await getHome(), "home-pulse")).toBe("");
+    await writePublicStat(DB, "request_by_category", requestByCategory(requests(REST), { crm: 1 }), fresh());
+    expect(rowsOf(block(await getHome(), "home-pulse"))).toEqual([label("crm"), label("ecommerce"), label("other")]);
+  });
+
+  it("the scarcest line needs a category at the request minimum; a table without it still shows", async () => {
+    const flat = { crm: 2, ecommerce: 2, booking: 2, finance: 2, hr: 2 }; // total at the threshold, nobody at the minimum
+    await clearStats();
+    await writePublicStat(DB, "request_by_category", requestByCategory(flat, {}), fresh());
+    await writePublicStat(DB, "scarcest_category", scarcestCategory(flat, {}), fresh());
+    let html = block(await getHome(), "home-pulse");
+    expect(html).not.toBe("");
+    expect(html).not.toContain(t("en", "home.pulse.scarcest"));
+    const some = requests(REST);
+    await writePublicStat(DB, "scarcest_category", scarcestCategory(some, { crm: 1 }), fresh());
+    html = block(await getHome(), "home-pulse");
+    expect(html).toContain(t("en", "home.pulse.scarcest"));
+    expect(html).toContain(`<strong>${label("ecommerce")}</strong>`); // 3 requests and no product beat 3 requests and one product
+  });
+
+  it("chart 2 needs the minimum number of ISO weeks", async () => {
+    const weeks = (n: number) => ({ products: Object.fromEntries(["2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05"].slice(4 - n).map((d) => [d, 1])), builders: {} });
+    await clearStats();
+    await writePublicStat(DB, "growth", weeklyGrowth(weeks(MIN.growthWeeks - 1), NOW), fresh());
+    expect(block(await getHome(), "home-pulse")).toBe("");
+    await writePublicStat(DB, "growth", weeklyGrowth(weeks(MIN.growthWeeks), NOW), fresh());
+    expect(rowsOf(block(await getHome(), "home-pulse"))).toHaveLength(MIN.growthWeeks);
+  });
+});
+
+describe("Top builders (VNX-0703b)", () => {
+  const qualifies = { selected: { selected: MIN.selected }, fast: { replyMinutes: Array<number>(MIN.fastSamples).fill(10) }, verified: { verified: MIN.verified } } as const;
+  const under = { selected: { selected: MIN.selected - 1 }, fast: { replyMinutes: Array<number>(MIN.fastSamples - 1).fill(10) }, verified: { verified: MIN.verified - 1 } } as const;
+
+  for (const tab of ["selected", "fast", "verified"] as const) {
+    it(`${tab}: two qualifying builders hide it, three show it (builder under the minimum does not count)`, async () => {
+      await clearStats();
+      const two = [tally(0, qualifies[tab]), tally(1, qualifies[tab]), tally(2, under[tab])];
+      await writePublicStat(DB, "top_builders", topBuilders(two), fresh());
+      expect(block(await getHome(), "home-builders"), tab).toBe("");
+      const three = [...two.slice(0, 2), tally(2, qualifies[tab])];
+      await writePublicStat(DB, "top_builders", topBuilders(three), fresh());
+      const html = block(await getHome(), "home-builders");
+      expect(html, tab).toContain(`data-tab="${tab}"`);
+      for (const other of (["selected", "fast", "verified"] as const).filter((x) => x !== tab)) expect(html, `${tab}/${other}`).not.toContain(`data-tab="${other}"`);
+    });
+  }
+
+  it("shows each tab criteria and 'no one pays to appear here' in every locale; the fastest tab shows a duration", async () => {
+    await clearStats();
+    const all = [0, 1, 2].map((i) => tally(i, { ...qualifies.selected, ...qualifies.fast, ...qualifies.verified }));
+    await writePublicStat(DB, "top_builders", topBuilders(all), fresh());
+    for (const locale of LOCALES) {
+      const html = block(await getHome(localizedPath(locale, "/")), "home-builders");
+      expect(html, locale).toContain(t(locale, "home.builders.noPay"));
+      expect(html, locale).toContain(t(locale, "home.builders.criteria.selected", { days: BUILDER_DAYS, min: MIN.selected }));
+      expect(html, locale).toContain(t(locale, "home.builders.criteria.fast", { days: BUILDER_DAYS, min: MIN.fastSamples }));
+      expect(html, locale).toContain(t(locale, "home.builders.criteria.verified", { min: MIN.verified }));
+    }
+    expect(block(await getHome(), "home-builders")).toContain(formatDuration("en", 10));
+    expect(formatDuration("en", 90)).not.toBe(formatDuration("en", 30)); // 90 minutes is shown in hours
+  });
+});
+
+describe("Top products by category (VNX-0703b)", () => {
+  it("hides with no product, shows a chip only for a category that has one, and lists at most three in the domain order", async () => {
+    await clearStats();
+    await writePublicStat(DB, "top_products", topProductsByCategory([]), fresh());
+    expect(block(await getHome(), "home-products")).toBe("");
+    const four = [candidate(0), candidate(1, { badgeScore: BADGE_SCORE.in_production }), candidate(2, { badgeScore: BADGE_SCORE.demo_verified }), candidate(3)];
+    await writePublicStat(DB, "top_products", topProductsByCategory(four), fresh());
+    const html = block(await getHome(), "home-products");
+    expect(html).toContain('href="#home-top-crm"');
+    expect(html).not.toContain('href="#home-top-ecommerce"');
+    const names = [...html.matchAll(/Top product (\d)/g)].map((m) => Number(m[1]));
+    expect([...new Set(names)]).toEqual([1, 2, 3]); // in production, demo verified, then the newer of the two listed
+    expect(html).toContain(t("en", "home.products.order", { days: REQUEST_DAYS }));
+  });
+});
+```
+
+Run `npm test -w apps/web -- test/home` → expected RED (no `home-pulse|builders|products`, no `formatDuration`, no new keys).
+
+- [ ] **Step 2: Locale keys (22, all four locales)**
+
+| Key | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `home.pulse.title` | Market pulse | Nhịp thị trường | 市场脉搏 | 市場脈搏 |
+| `home.pulse.requestsTitle` | Requests and listed products by category | Nhu cầu và sản phẩm đang đăng theo danh mục | 按类别统计的需求与已上架产品 | 按類別統計的需求與已上架產品 |
+| `home.pulse.category` | Category | Danh mục | 类别 | 類別 |
+| `home.pulse.requests` | Requests (last {days} days) | Nhu cầu ({days} ngày qua) | 需求（过去 {days} 天） | 需求（過去 {days} 天） |
+| `home.pulse.products` | Listed products | Sản phẩm đang đăng | 已上架产品 | 已上架產品 |
+| `home.pulse.scarcest` | Most requests per listed product | Nhiều nhu cầu nhất trên mỗi sản phẩm đang đăng | 每个已上架产品对应需求最多 | 每個已上架產品對應需求最多 |
+| `home.pulse.growthTitle` | Products and builders, cumulative by week | Sản phẩm và builder, cộng dồn theo tuần | 产品与 Builder，按周累计 | 產品與 Builder，按週累計 |
+| `home.pulse.week` | Week | Tuần | 周 | 週 |
+| `home.builders.title` | Top builders | Builder nổi bật | 优秀 Builder | 優秀 Builder |
+| `home.builders.noPay` | No one pays to appear here. | Không ai trả tiền để có mặt ở đây. | 没有人能付钱出现在这里。 | 沒有人能付錢出現在這裡。 |
+| `home.builders.name` | Builder | Builder | Builder | Builder |
+| `home.builders.selected` | Most selected | Được chọn nhiều nhất | 入选最多 | 入選最多 |
+| `home.builders.fast` | Fastest to reply | Trả lời nhanh nhất | 回复最快 | 回覆最快 |
+| `home.builders.verified` | Most verified products | Nhiều sản phẩm được xác minh nhất | 已验证产品最多 | 已驗證產品最多 |
+| `home.builders.value.selected` | Chosen + answered | Được chọn + đã trả lời | 入选 + 已回复 | 入選 + 已回覆 |
+| `home.builders.value.fast` | Median first reply | Trung vị lần trả lời đầu | 首次回复中位时间 | 首次回覆中位時間 |
+| `home.builders.value.verified` | Verified products | Sản phẩm đã xác minh | 已验证产品 | 已驗證產品 |
+| `home.builders.criteria.selected` | Proposals chosen by clients plus inquiries answered, last {days} days. At least {min} to qualify. | Đề xuất được khách chọn cộng số yêu cầu đã trả lời trong {days} ngày qua. Cần ít nhất {min} để đủ điều kiện. | 客户选中的提案加上已回复的咨询，过去 {days} 天。至少 {min} 才符合资格。 | 客戶選中的提案加上已回覆的詢問，過去 {days} 天。至少 {min} 才符合資格。 |
+| `home.builders.criteria.fast` | Median time to a first reply, last {days} days. At least {min} replies to qualify. | Trung vị thời gian đến lần trả lời đầu tiên trong {days} ngày qua. Cần ít nhất {min} lượt trả lời để đủ điều kiện. | 首次回复所需时间的中位数，过去 {days} 天。至少 {min} 次回复才符合资格。 | 首次回覆所需時間的中位數，過去 {days} 天。至少 {min} 次回覆才符合資格。 |
+| `home.builders.criteria.verified` | Products with a Demo verified or In production badge. At least {min} to qualify. | Sản phẩm có huy hiệu Demo verified hoặc In production. Cần ít nhất {min} để đủ điều kiện. | 拥有 Demo verified 或 In production 徽章的产品。至少 {min} 个才符合资格。 | 擁有 Demo verified 或 In production 徽章的產品。至少 {min} 個才符合資格。 |
+| `home.products.title` | Top products by category | Sản phẩm nổi bật theo danh mục | 各类别热门产品 | 各類別熱門產品 |
+| `home.products.order` | Ordered by badge, then inquiries in the last {days} days, then newest. | Xếp theo huy hiệu, rồi số yêu cầu trong {days} ngày qua, rồi mới nhất. | 按徽章排序，其次为过去 {days} 天的咨询数，再其次为最新。 | 按徽章排序，其次為過去 {days} 天的詢問數，再其次為最新。 |
+
+(`{min}` and `{days}` are the only placeholders; vi uses "yêu cầu" for inquiry and "nhu cầu" for request, as elsewhere.) Run `npm test -w apps/web -- test/i18n/parity.test.ts` → GREEN.
+
+- [ ] **Step 3: `formatDuration`**
+
+Append to `apps/web/src/views/format.ts`:
+
+```ts
+/** A median reply time given in minutes, shown in the largest whole unit ("10 min", "2 hr", "3 days"). */
+export function formatDuration(locale: Locale, minutes: number): string {
+  const unit = minutes * MS.minute >= MS.day ? "day" : minutes * MS.minute >= MS.hour ? "hour" : "minute";
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short" }).format(Math.floor((minutes * MS.minute) / MS[unit]));
+}
+```
+
+- [ ] **Step 4: Views, wiring, CSS**
+
+`apps/web/src/views/home/MarketPulse.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import { REQUEST_DAYS, type CategoryRow, type GrowthPoint } from "../../domain/public-stats.ts";
+import type { Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { formatCount } from "../format.ts";
+import { CATEGORY_KEY } from "../labels.ts";
+
+type Props = { locale: Locale; categories: readonly CategoryRow[] | null; scarcest: CategoryRow | null; growth: readonly GrowthPoint[] | null };
+
+/** Tables for now (Task 8 draws the charts and keeps these as the equivalent data). */
+export const MarketPulse: FC<Props> = ({ locale, categories, scarcest, growth }) => {
+  const tr = translator(locale);
+  return (
+    <section id="home-pulse" class="lp-section home-block" aria-labelledby="home-pulse-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-pulse-title">{tr("home.pulse.title")}</h2>
+        </div>
+        <div class="home-pulse-grid">
+          {categories ? (
+            <div class="table-wrap">
+              <table class="data" data-chart="requests-by-category">
+                <caption>{tr("home.pulse.requestsTitle")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tr("home.pulse.category")}</th>
+                    <th scope="col">{tr("home.pulse.requests", { days: REQUEST_DAYS })}</th>
+                    <th scope="col">{tr("home.pulse.products")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map((row) => (
+                    <tr>
+                      <th scope="row">{tr(CATEGORY_KEY[row.category])}</th>
+                      <td>{formatCount(locale, row.requests)}</td>
+                      <td>{formatCount(locale, row.products)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {scarcest ? (
+                <p class="home-scarcest">
+                  <span class="muted">{tr("home.pulse.scarcest")}</span> <strong>{tr(CATEGORY_KEY[scarcest.category])}</strong>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {growth ? (
+            <div class="table-wrap">
+              <table class="data" data-chart="growth">
+                <caption>{tr("home.pulse.growthTitle")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tr("home.pulse.week")}</th>
+                    <th scope="col">{tr("home.numbers.products")}</th>
+                    <th scope="col">{tr("home.numbers.builders")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {growth.map((point) => (
+                    <tr>
+                      <th scope="row">{point.week}</th>
+                      <td>{formatCount(locale, point.products)}</td>
+                      <td>{formatCount(locale, point.builders)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+};
+```
+(The growth test counts `<th scope="row">` rows: the week cells; the category test counts category names. Both tables never appear together in those two tests.)
+
+`apps/web/src/views/home/TopBuilders.tsx` (ranking file; no word from the architecture money list in comments):
+
+```tsx
+import type { FC } from "hono/jsx";
+import { BUILDER_DAYS, MIN, type TopBuilders } from "../../domain/public-stats.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import type { MessageKey } from "../../i18n/messages/en.ts";
+import { translator } from "../../i18n/t.ts";
+import { formatCount, formatDuration } from "../format.ts";
+
+const TABS = [
+  { key: "selected", title: "home.builders.selected", value: "home.builders.value.selected", criteria: "home.builders.criteria.selected", min: MIN.selected },
+  { key: "fast", title: "home.builders.fast", value: "home.builders.value.fast", criteria: "home.builders.criteria.fast", min: MIN.fastSamples },
+  { key: "verified", title: "home.builders.verified", value: "home.builders.value.verified", criteria: "home.builders.criteria.verified", min: MIN.verified },
+] as const satisfies readonly { key: keyof TopBuilders; title: MessageKey; value: MessageKey; criteria: MessageKey; min: number }[];
+
+/** One table per tab that has enough builders (the domain returns null for the others); each states its own criteria. */
+export const TopBuildersBlock: FC<{ locale: Locale; data: TopBuilders }> = ({ locale, data }) => {
+  const tr = translator(locale);
+  return (
+    <section id="home-builders" class="lp-section home-block" aria-labelledby="home-builders-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-builders-title">{tr("home.builders.title")}</h2>
+          <p class="section-sub">{tr("home.builders.noPay")}</p>
+        </div>
+        {TABS.map((tab) => {
+          const rows = data[tab.key];
+          return rows ? (
+            <div class="table-wrap home-group" data-tab={tab.key}>
+              <h3>{tr(tab.title)}</h3>
+              <p class="home-criteria">{tr(tab.criteria, { days: BUILDER_DAYS, min: tab.min })}</p>
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th scope="col">{tr("home.builders.name")}</th>
+                    <th scope="col">{tr(tab.value)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr>
+                      <th scope="row"><a href={localizedPath(locale, `/b/${row.handle}`)}>{row.name}</a></th>
+                      <td>{tab.key === "fast" ? formatDuration(locale, row.value) : formatCount(locale, row.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null;
+        })}
+      </div>
+    </section>
+  );
+};
+```
+
+`apps/web/src/views/home/TopProducts.tsx` (ranking file):
+
+```tsx
+import type { FC } from "hono/jsx";
+import { topBadge } from "../../domain/catalog.ts";
+import { CATEGORIES } from "../../domain/product.ts";
+import { REQUEST_DAYS, type TopProductsByCategory } from "../../domain/public-stats.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { BADGE_KEY, CATEGORY_KEY } from "../labels.ts";
+
+/** Per category, in the order the domain already fixed (badge, then recent inquiries, then newest); only categories with a product. */
+export const TopProductsBlock: FC<{ locale: Locale; data: TopProductsByCategory }> = ({ locale, data }) => {
+  const tr = translator(locale);
+  const present = CATEGORIES.filter((c) => (data[c]?.length ?? 0) > 0);
+  return (
+    <section id="home-products" class="lp-section home-block" aria-labelledby="home-products-title">
+      <div class="container">
+        <div class="section-head">
+          <h2 id="home-products-title">{tr("home.products.title")}</h2>
+          <p class="section-sub">{tr("home.products.order", { days: REQUEST_DAYS })}</p>
+        </div>
+        <ul class="home-chips" aria-label={tr("home.products.title")}>
+          {present.map((c) => (
+            <li><a class="btn btn-ghost btn-sm" href={`#home-top-${c}`}>{tr(CATEGORY_KEY[c])}</a></li>
+          ))}
+        </ul>
+        {present.map((c) => (
+          <div class="home-group" id={`home-top-${c}`}>
+            <h3>{tr(CATEGORY_KEY[c])}</h3>
+            <ul class="home-tiles">
+              {(data[c] ?? []).map((p) => {
+                const badge = topBadge(p.badgeScore);
+                return (
+                  <li class="home-tile">
+                    <h4><a href={localizedPath(locale, `/p/${p.slug}`)}>{p.name}</a></h4>
+                    <p class="muted">{tr("catalog.by", { name: p.builderName })}</p>
+                    {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+```
+
+`HomeBlocks.tsx`: import `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`; add after the Trending/Founding entry of `blocks`:
+
+```tsx
+    snapshot.request_by_category || snapshot.growth ? (
+      <MarketPulse locale={locale} categories={snapshot.request_by_category?.value ?? null} scarcest={snapshot.scarcest_category?.value ?? null} growth={snapshot.growth?.value ?? null} />
+    ) : null,
+    snapshot.top_builders ? <TopBuildersBlock locale={locale} data={snapshot.top_builders.value} /> : null,
+    snapshot.top_products ? <TopProductsBlock locale={locale} data={snapshot.top_products.value} /> : null,
+```
+
+Append to `apps/web/public/assets/app.css`:
+
+```css
+.home-pulse-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start; }
+.home-pulse-grid caption { caption-side: top; text-align: left; font-weight: 600; padding: 0 0 8px; }
+.home-scarcest { margin: 12px 0 0; }
+.home-criteria { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
+.home-group + .home-group { margin-top: 32px; }
+.home-group h3 { margin: 0 0 8px; }
+.home-chips { list-style: none; margin: 0 0 24px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+```
+
+Run `npm test -w apps/web -- test/home test/landing test/design test/i18n` → GREEN.
+
+- [ ] **Step 5: Architecture guard**
+
+In `apps/web/test/architecture.test.ts` add to `RANKING_FILES`:
+
+```ts
+  // VNX-0703b: Top builders and Top products.
+  "../src/views/home/TopBuilders.tsx",
+  "../src/views/home/TopProducts.tsx",
+```
+and extend the 7a test's file list to `["../src/routes/home.tsx", "../src/views/home/Trending.tsx", "../src/views/home/TopBuilders.tsx", "../src/views/home/TopProducts.tsx"]`. Run `npm test -w apps/web -- test/architecture.test.ts` → GREEN. Check by hand that the three view files and their comments avoid `sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|outbound_clicks` (the criteria wording lives in the locale files, which are not ranking files).
+
+- [ ] **Step 6: Focused acceptance, typecheck, full test, commit**
+
+`npm test -w apps/web -- test/home test/domain test/landing test/design test/i18n test/architecture.test.ts`, then:
+
+```text
+npm run typecheck -w apps/web && npm test
+git add apps/web/src/views/home/MarketPulse.tsx apps/web/src/views/home/TopBuilders.tsx apps/web/src/views/home/TopProducts.tsx apps/web/src/views/home/HomeBlocks.tsx apps/web/src/views/format.ts apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/blocks.ts apps/web/test/home/blocks-b.test.ts apps/web/test/home/home.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): add Market pulse tables, Top builders and Top products (VNX-0703b)
+
+Each block reads a fresh public_stats value and hides under its threshold;
+Top builders states its criteria and that no one pays to appear.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Acceptance (mỗi dòng kiểm được bằng một lệnh):**
+- Market pulse: bảng 1 ẩn ở tổng n−1 và hiện ở n với category dưới 3 request gộp "Other"; dòng thiếu supply cần ≥ 3 request; bảng 2 ẩn ở 3 tuần, hiện ở 4: `npm test -w apps/web -- test/home/blocks-b.test.ts -t "Market pulse"`.
+- Top builders: mỗi tab ẩn với 2 builder đủ điều kiện (kể cả một builder dưới ngưỡng 2/5/1) và hiện với 3; ghi tiêu chí và "no one pays to appear here" ở 4 locale; thời gian hiện bằng đơn vị: `-t "Top builders"`.
+- Top products: ẩn khi không có product, chip chỉ cho category có product, tối đa 3 theo thứ tự huy hiệu rồi mới nhất: `-t "Top products"`.
+- Toàn trang: stale ẩn cả 6 khối, một truy vấn `public_stats`, không `<script>`, không chữ trả tiền/Sponsored, không chữ số cứng trong 7 file `views/home/*.tsx`: `npm test -w apps/web -- test/home/home.test.ts`.
+- `RANKING_FILES` có đủ `routes/home.tsx`, `views/home/{Trending,TopBuilders,TopProducts}.tsx` và không file nào trong đó đọc bảng tiền: `npm test -w apps/web -- test/architecture.test.ts`.
+- `git diff --stat -- apps/web/migrations apps/web/package.json` rỗng; `npm run typecheck -w apps/web` và `npm test` xanh.
+
+Diff ước ~330 dòng không tính locale (mã ~185, test ~145; locale +90 dòng).
 
 ---
 
