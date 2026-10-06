@@ -53,8 +53,9 @@ describe("menu registry (spec §2.1, AC2)", () => {
       ["marketplace", "/ops/marketplace/requests", "marketplace.view"],
       ["monetization", "/ops/monetization/merchants", "monetization.view"],
     ]);
-    expect(OPS_MENU[4]).toMatchObject({ labelKey: "ops.nav.merchants", icon: "merchants" });
-    expect(OPS_MENU[4]?.count).toBeUndefined();
+    const merchants = OPS_MENU.find((i) => i.path === "/ops/monetization/merchants");
+    expect(merchants).toMatchObject({ labelKey: "ops.nav.merchants", icon: "merchants" });
+    expect(merchants?.count).toBeUndefined();
     expect(OPS_MENU[1]?.count).toBe("builders");
     expect(OPS_MENU[2]?.count).toBe("products");
     expect(OPS_MENU[3]?.count).toBe("requests");

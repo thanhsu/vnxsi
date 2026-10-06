@@ -50,6 +50,7 @@ const get = async (path: string, cookie: string, bindings: Bindings = env) => {
   return { res, html: await res.text() };
 };
 const post = (path: string, cookie: string, form: Record<string, string> = {}) => send(path, { cookie, form });
+const BAD_REQUEST_TEXT = "That request was not valid, so nothing was saved.";
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
 
 const mfields = (o: Record<string, string> = {}) => ({ name: "Acme Tools", slug: `acme-${tag()}`, websiteUrl: "https://example.com/", allowedHosts: "example.com", description: "Plain.", status: "paused", ...o });
@@ -156,6 +157,7 @@ describe("who may open Merchants (AC2)", () => {
         const got = await sealed(path, { cookie, form });
         expect(got.status, `${name} POST ${path}`).toBe(404);
         expect(got.body, `${name} POST ${path}`).toBe(reference.body);
+        expect(got.headers, `${name} POST ${path}`).toEqual(reference.headers);
       }
     }
     expect(await snapshot()).toEqual(before);
@@ -292,6 +294,9 @@ describe("the Owner manages merchants through Ops (AC1)", () => {
     expect((await findMerchantById(testEnv.DB, m.id))?.status).toBe("paused");
     const noConfirm = await post(`${BASE}/${m.id}/status`, cookie, { to: "archived" });
     expect(noConfirm.status).toBe(400);
+    const noConfirmHtml = await noConfirm.text();
+    expect(noConfirmHtml).toMatch(/<aside class="ops-side">/);
+    expect(noConfirmHtml).toContain(BAD_REQUEST_TEXT);
     expect((await findMerchantById(testEnv.DB, m.id))?.status).toBe("paused");
     expect((await post(`${BASE}/${m.id}/status`, cookie, { to: "archived", confirm: "1" })).status).toBe(303);
     const after = await auditActions(m.id);
@@ -391,6 +396,19 @@ describe("errors render in OpsLayout (AC3)", () => {
     await post(`${BASE}/${m.id}/default-offer`, cookie, { offerId: o.id });
     const archive = await post(`${BASE}/${m.id}/offers/${o.id}`, cookie, ofields({ status: "archived" }));
     expect(archive.status).toBe(400);
+    const archiveHtml = await archive.text();
+    expect(archiveHtml).toMatch(/<aside class="ops-side">/);
+    expect(archiveHtml).toContain("Tick the confirmation to archive the default offer.");
+    const badStatusProgram = await post(`${BASE}/${m.id}/programs/${p.id}`, cookie, pfields({ expectedStatus: "bogus" }));
+    expect(badStatusProgram.status).toBe(400);
+    const badStatusProgramHtml = await badStatusProgram.text();
+    expect(badStatusProgramHtml).toMatch(/<aside class="ops-side">/);
+    expect(badStatusProgramHtml).toContain(BAD_REQUEST_TEXT);
+    const badStatusOffer = await post(`${BASE}/${m.id}/offers/${o.id}`, cookie, ofields({ expectedStatus: "bogus" }));
+    expect(badStatusOffer.status).toBe(400);
+    const badStatusOfferHtml = await badStatusOffer.text();
+    expect(badStatusOfferHtml).toMatch(/<aside class="ops-side">/);
+    expect(badStatusOfferHtml).toContain(BAD_REQUEST_TEXT);
     expect((await listOffersByMerchant(testEnv.DB, m.id))[0]?.status).toBe("active");
     expect(p.id).not.toBe("");
   });
