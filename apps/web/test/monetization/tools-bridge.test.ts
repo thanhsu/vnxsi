@@ -81,6 +81,17 @@ describe("/tools/:slug builders block (AC2)", { timeout: 60_000 }, () => {
   });
 });
 
+describe("/tools/:slug card headings (F7)", { timeout: 60_000 }, () => {
+  it("renders card titles as h3 links inside both blocks", async () => {
+    const k = tag();
+    const m = await makeMerchant({ name: `Head ${k}` });
+    const bld = await makeBuilder(`${k}-h@vnx.si`, `${k}-h`, "approved", { aiTools: m.name });
+    await addLiveProduct(bld, `Head item ${k}`, { fields: { techStack: [m.name] } });
+    const html = await (await get(toolPath("en", m.slug))).text();
+    for (const cls of ["tool-products", "tool-builders"]) expect(section(html, cls), cls).toContain("<h3><a href=");
+  });
+});
+
 describe("/tools/:slug ordering and limits (AC3)", { timeout: 60_000 }, () => {
   it("orders builders as /builders does and shows at most 6", async () => {
     const k = tag();
@@ -186,6 +197,22 @@ describe("the tool filter is internal only (AC6)", { timeout: 60_000 }, () => {
     }
     expect((parseDirectoryQuery({ tool: "x" }) as { tool?: string }).tool).toBeUndefined();
     expect((parseCatalogQuery({ tool: "x" }) as { tool?: string }).tool).toBeUndefined();
+  });
+
+  it("ignores ?tool= for a builder and a product that do not use the tool (F1)", async () => {
+    const k = tag();
+    const bld = await makeBuilder(`${k}-o@vnx.si`, `${k}-o`, "approved", { name: `Other ${k}`, aiTools: "Cursor" });
+    const prod = await addLiveProduct(bld, `Other item ${k}`, { fields: { techStack: ["Cursor"] } });
+    const builders = await (await get(`/builders?q=${k}&tool=Claude%20Code`)).text();
+    expect(handlesIn(builders)).toContain(`${k}-o`);
+    expect(builders).toBe(await (await get(`/builders?q=${k}`)).text());
+    const products = await (await get(`/products?q=${k}&tool=Claude%20Code`)).text();
+    expect(slugsIn(products)).toContain(prod.slug);
+  });
+
+  it("a tool name of '' matches nothing (F2)", async () => {
+    expect((await searchBuilders(testEnv.DB, { ...parseDirectoryQuery({}), tool: "" })).total).toBe(0);
+    expect((await searchProducts(testEnv.DB, { ...parseCatalogQuery({}), tool: "" })).total).toBe(0);
   });
 
   it("binds the tool value: a hostile name matches nothing and breaks nothing", async () => {
