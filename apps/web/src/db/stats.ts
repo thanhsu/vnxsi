@@ -1,4 +1,4 @@
-import { STAT_FIELDS, type StatDelta, type StatField } from "../domain/stats.ts";
+import { STAT_FIELDS, type StatDelta, type StatField, utcDay } from "../domain/stats.ts";
 
 /** `YYYY-MM-DD` that is a real calendar date (rejects 2026-13-45 and 2026-02-30). */
 function isRealDay(day: string): boolean {
@@ -52,4 +52,35 @@ export function inquiryOpenedStatement(db: D1Database, input: { inquiryId: strin
        ON CONFLICT (product_id, day) DO UPDATE SET inquiries = inquiries + excluded.inquiries`,
     )
     .bind(input.inquiryId, input.openedAt);
+}
+
+/**
+ * Counts a product view once per (visitor hash, product, UTC day) and says whether this call counted. One db.batch, run in order inside
+ * one transaction: statement 1 adds the view only when no dedupe row exists yet (it reads the state BEFORE statement 2 inserts), statement 2
+ * inserts the row and RETURNING tells a fresh row from a duplicate. Two simultaneous calls are serialized by D1, so they cannot both count.
+ * The hash must be the 64 lower-case hex of `visitorHash()`; anything else throws (the table also CHECKs it). Callers run this in waitUntil.
+ */
+export async function recordProductView(db: D1Database, input: { productId: string; visitorHash: string; now: Date }): Promise<boolean> {
+  if (!/^[0-9a-f]{64}$/.test(input.visitorHash)) throw new Error("invalid visitor hash");
+  const day = utcDay(input.now);
+  const [, inserted] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO product_daily_stats (product_id, day, views, demo_clicks, outbound_clicks, inquiries)
+         SELECT ?1, ?2, 1, 0, 0, 0
+         WHERE NOT EXISTS (SELECT 1 FROM product_view_dedupe WHERE day = ?2 AND visitor_hash = ?3 AND product_id = ?1)
+         ON CONFLICT (product_id, day) DO UPDATE SET views = views + excluded.views`,
+      )
+      .bind(input.productId, day, input.visitorHash),
+    db
+      .prepare("INSERT INTO product_view_dedupe (day, visitor_hash, product_id) VALUES (?1, ?2, ?3) ON CONFLICT (day, visitor_hash, product_id) DO NOTHING RETURNING 1 AS counted")
+      .bind(day, input.visitorHash, input.productId),
+  ]);
+  return (inserted?.results.length ?? 0) === 1;
+}
+
+/** Daily retention: deletes every dedupe row of an earlier UTC day (the hash changes daily, so they are useless). Idempotent. Returns the rows deleted. */
+export async function purgeViewDedupe(db: D1Database, now: Date): Promise<number> {
+  const result = await db.prepare("DELETE FROM product_view_dedupe WHERE day < ?1").bind(utcDay(now)).run();
+  return result.meta.changes;
 }

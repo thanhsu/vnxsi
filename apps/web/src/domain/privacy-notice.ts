@@ -28,6 +28,13 @@ export function privacyVersion(goLive: string | undefined, now: Date): PrivacyVe
   return at >= date.getTime() - 14 * DAY_MS ? "m7" : "current";
 }
 
+/** The counting gate (Owner 2026-10-06): view counting and the visitor cookie start at go-live 00:00 UTC and never switch off. False for an unset or malformed value. */
+export function isCountingLive(goLive: string | undefined, now: Date): boolean {
+  const date = parsePrivacyNoticeDate(goLive);
+  const at = now.getTime();
+  return date !== null && Number.isFinite(at) && at >= date.getTime();
+}
+
 export function formatPrivacyNoticeDate(goLive: string | undefined, locale: Locale): string | null {
   const date = parsePrivacyNoticeDate(goLive);
   return date

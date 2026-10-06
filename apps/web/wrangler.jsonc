@@ -43,7 +43,7 @@
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
   //   0. wrangler r2 bucket create vnxsi-media      (once)
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags, 0011_partners, 0012_outbound_clicks, 0014_product_stats, 0016_public_stats)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags, 0011_partners, 0012_outbound_clicks, 0014_product_stats, 0015_view_dedupe, 0016_public_stats)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy
@@ -54,6 +54,7 @@
   // 0008_requests (M6) ships with the M6 code the same way: migrate first, then deploy (the daily cron reads 0008 too).
   // 0010_feature_flags, 0011_partners and 0012_outbound_clicks (EPIC 21) ship with their code the same way: migrate first, then deploy.
   // 0014_product_stats (M7) ships with its code the same way: migrate first, then deploy. 0013 is Ops O1 (ops_members).
+  // 0015_view_dedupe (M7) ships with its code the same way: migrate first, then deploy.
   // 0016_public_stats (M7, hourly snapshot table) ships the same way.
   // The daily cron also deletes outbound clicks older than 13 months, so it reads 0012 too.
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
@@ -65,6 +66,7 @@
   // ANALYTICS_SALT (M7): `wrangler secret put ANALYTICS_SALT` with a random value of 32+ characters (e.g. `openssl rand -hex 32`). Local dev:
   // add ANALYTICS_SALT=<any random string> to apps/web/.dev.vars (git-ignored). Never put it in "vars". While it is unset the Worker counts
   // no views or clicks and sets no visitor cookie. Rotating it only restarts de-duplication for that day.
-  // ANALYTICS_SALT is the production on-switch for counting: do NOT set it in production until Task 3 and the Privacy update go live (until
-  // then each isolate logs visitor.no_salt once, which is expected).
+  // ANALYTICS_SALT: set it in production any time after PRIVACY_NOTICE_GO_LIVE is committed and deployed: counting of both views and clicks
+  // starts only at go-live 00:00 UTC (and PRIVACY_NOTICE_GO_LIVE must NEVER be cleared afterwards). Until the salt is set each isolate logs
+  // visitor.no_salt once, which is expected.
 }

@@ -47,19 +47,30 @@ const WRITERS: Record<string, string> = {
   offers: "../src/db/offers.ts",
   outbound_clicks: "../src/db/clicks.ts",
   product_daily_stats: "../src/db/stats.ts",
+  product_view_dedupe: "../src/db/stats.ts",
   public_stats: "../src/db/public-stats.ts",
 };
+
+/** Table names behind a write: INSERT, INSERT OR IGNORE/REPLACE, REPLACE INTO, UPDATE, DELETE (VNX-0701b). */
+const WRITE_SQL = /\b(?:INSERT(?: OR [A-Z]+)? INTO|REPLACE INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g;
 
 describe("table ownership (VNX-0201)", () => {
   it("writes each table only from its owning module", () => {
     for (const [file, src] of Object.entries(sources)) {
       // SQL keywords are upper case and table names lower case by convention, so prose does not match.
-      for (const match of src.matchAll(/\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g)) {
+      for (const match of src.matchAll(WRITE_SQL)) {
         const table = match[1] ?? "";
         expect(WRITERS[table], `${file} writes unknown table ${table}`).toBeDefined();
         expect(file, `${table} is written outside its module`).toBe(WRITERS[table]);
       }
     }
+  });
+
+  it("sees INSERT OR IGNORE/REPLACE and REPLACE INTO, so product_view_dedupe cannot be written from another file unnoticed", () => {
+    for (const sql of ["INSERT OR IGNORE INTO product_view_dedupe (day) VALUES (1)", "INSERT OR REPLACE INTO product_view_dedupe (day) VALUES (1)", "REPLACE INTO product_view_dedupe (day) VALUES (1)"]) {
+      expect([...sql.matchAll(WRITE_SQL)][0]?.[1], sql).toBe("product_view_dedupe");
+    }
+    expect(WRITERS.product_view_dedupe).toBe("../src/db/stats.ts");
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPrivacyNoticeDate, parsePrivacyNoticeDate, privacyVersion, shouldShowPrivacyNotice } from "../../src/domain/privacy-notice.ts";
+import { formatPrivacyNoticeDate, isCountingLive, parsePrivacyNoticeDate, privacyVersion, shouldShowPrivacyNotice } from "../../src/domain/privacy-notice.ts";
 
 const LIVE = "2026-10-20";
 const at = (iso: string) => new Date(iso);
@@ -52,5 +52,17 @@ describe("privacyVersion", () => {
   });
   it("starts exactly when the notice starts", () => {
     for (const iso of ["2026-10-05T23:59:59.999Z", "2026-10-06T00:00:00.000Z"]) expect(privacyVersion(LIVE, at(iso)) === "m7").toBe(shouldShowPrivacyNotice(LIVE, at(iso)));
+  });
+});
+
+describe("isCountingLive (counting gate)", () => {
+  it.each([
+    ["before go-live", "2026-10-19T23:59:59.999Z", false],
+    ["go-live 00:00Z", "2026-10-20T00:00:00.000Z", true],
+    ["long after go-live (never switches off)", "2027-06-01T00:00:00.000Z", true],
+  ] as const)("%s", (_l, iso, expected) => expect(isCountingLive(LIVE, at(iso))).toBe(expected));
+  it("is false for an unset, empty or malformed go-live and for an invalid now", () => {
+    for (const bad of [undefined, "", "2026-02-30", "20-10-2026"]) expect(isCountingLive(bad, at("2026-10-21T00:00:00Z"))).toBe(false);
+    expect(isCountingLive(LIVE, new Date(Number.NaN))).toBe(false);
   });
 });

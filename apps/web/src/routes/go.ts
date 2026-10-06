@@ -10,11 +10,13 @@ import { type CfLike, isBotRequest } from "../domain/bot.ts";
 import { RESERVED_MERCHANT_SLUGS } from "../domain/merchant.ts";
 import { resolveOfferRedirect } from "../domain/offer.ts";
 import { CORRUPTION_REASONS, OFFER_ID_RE, type OutboundSrc, countryOf, localeFromReferer, parseSrc, referrerHost } from "../domain/outbound.ts";
+import { isCountingLive } from "../domain/privacy-notice.ts";
 import { type ProductLinkKind, resolveProductLink } from "../domain/product-url.ts";
 import { SLUG_RE } from "../domain/slug.ts";
 import { utcDay } from "../domain/stats.ts";
 import { hasGpc, shouldCount, usableSalt, visitorHash } from "../domain/visitor.ts";
 import type { AppEnv, Bindings } from "../env.ts";
+import { defer } from "../http/defer.ts";
 import { readVisitorCookie, warnNoSaltOnce } from "../http/visitor.ts";
 import type { Locale } from "../i18n/locales.ts";
 import { ulid } from "../lib/ulid.ts";
@@ -45,18 +47,6 @@ async function saveClick(db: D1Database, click: ClickInput): Promise<void> {
   } catch (err) {
     console.error(JSON.stringify({ event: "go.click_failed", clickId: click.id, error: String(err) }));
   }
-}
-
-/** waitUntil when the runtime has an ExecutionContext (Hono throws when it has none: tests, local), else wait for the write. */
-async function defer(c: Context<AppEnv>, work: Promise<void>): Promise<void> {
-  let ctx: { waitUntil(promise: Promise<unknown>): void } | null = null;
-  try {
-    ctx = c.executionCtx;
-  } catch {
-    ctx = null;
-  }
-  if (ctx) ctx.waitUntil(work);
-  else await work;
 }
 
 async function respond(c: Context<AppEnv>, rows: RedirectRows | null): Promise<Response> {
@@ -134,7 +124,7 @@ async function trackProductClick(env: Bindings, t: ProductClick): Promise<void> 
   let key: string | null = null;
   try {
     const salt = usableSalt(env.ANALYTICS_SALT);
-    hash = salt !== null && !t.isBot && !t.isGpc && t.visitorId !== null ? await visitorHash(salt, day, t.visitorId) : null;
+    hash = salt !== null && !t.isBot && !t.isGpc && t.visitorId !== null && isCountingLive(env.PRIVACY_NOTICE_GO_LIVE, t.now) ? await visitorHash(salt, day, t.visitorId) : null;
     if (hash !== null) {
       const own = t.user?.id === t.builderId;
       const staff = !own && t.user ? await isStaff(env, t.user) : false;

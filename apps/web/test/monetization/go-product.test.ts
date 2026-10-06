@@ -11,7 +11,7 @@ import { testEnv } from "../helpers.ts";
 
 const UTM = "utm_source=vnx.si&utm_medium=referral";
 const SALT = "go-product-test-salt-00000000000000";
-const ENV = { ...testEnv, ANALYTICS_SALT: SALT } as Bindings;
+const ENV = { ...testEnv, ANALYTICS_SALT: SALT, PRIVACY_NOTICE_GO_LIVE: "2026-01-01" } as Bindings;
 const VID = "0123456789abcdef0123456789abcdef";
 const VID2 = "fedcba9876543210fedcba9876543210";
 const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";

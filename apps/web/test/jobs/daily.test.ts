@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSession, getSessionUser } from "../../src/auth/sessions.ts";
 import { consumeLoginToken, createLoginToken, LOGIN_TOKEN_TTL_MS } from "../../src/auth/tokens.ts";
 import { recordClick } from "../../src/db/clicks.ts";
+import { recordProductView } from "../../src/db/stats.ts";
 import { createUser } from "../../src/db/users.ts";
 import { purgeCutoff } from "../../src/domain/outbound.ts";
 import { ulid } from "../../src/lib/ulid.ts";
@@ -9,6 +10,7 @@ import { hitRateLimit } from "../../src/http/rate-limit.ts";
 import worker from "../../src/index.ts";
 import { runDaily } from "../../src/jobs/daily.ts";
 import type { Bindings } from "../../src/env.ts";
+import { addLiveProduct, makeBuilder } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -33,6 +35,7 @@ const IDLE_ACTIVITY_STEPS = [
   { job: "daily", step: "ghost_users", deleted: 0 },
 ];
 const CLICK_STEP = { job: "daily", step: "outbound_clicks", deleted: 0 };
+const VIEW_STEP = { job: "daily", step: "view_dedupe", deleted: expect.any(Number) };
 
 /** A DB whose statements on one table throw, to show one failing step does not stop the others. */
 function brokenOn(table: string): D1Database {
@@ -86,6 +89,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
       { job: "daily", step: "login_tokens", deleted: expected.login_tokens },
       { job: "daily", step: "sessions", deleted: expected.sessions },
       CLICK_STEP,
+      VIEW_STEP,
     ]);
 
     expect(await rateWindow("daily:old")).toBe(0);
@@ -112,6 +116,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
       { job: "daily", step: "login_tokens", deleted: 0 },
       { job: "daily", step: "sessions", deleted: 0 },
       CLICK_STEP,
+      VIEW_STEP,
     ]);
   });
 
@@ -119,13 +124,14 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     await runDaily(testEnv, NOW);
     const lines = log.mock.calls.map((call) => call[0] as string);
-    expect(lines).toHaveLength(IDLE_ACTIVITY_STEPS.length + 4);
+    expect(lines).toHaveLength(IDLE_ACTIVITY_STEPS.length + 5);
     expect(lines.map((l) => JSON.parse(l))).toEqual([
       ...IDLE_ACTIVITY_STEPS,
       { job: "daily", step: "rate_limits", deleted: 0 },
       { job: "daily", step: "login_tokens", deleted: 0 },
       { job: "daily", step: "sessions", deleted: 0 },
       CLICK_STEP,
+      VIEW_STEP,
     ]);
     for (const line of lines) expect(line).not.toContain("\n");
   });
@@ -142,6 +148,7 @@ describe("daily clean-up job (VNX-0705a AC8)", () => {
     expect(results[at + 1]).toEqual({ job: "daily", step: "login_tokens", deleted: 1 });
     expect(results[at + 2]).toEqual({ job: "daily", step: "sessions", deleted: 0 });
     expect(results[at + 3]).toEqual(CLICK_STEP);
+    expect(results[at + 4]).toEqual(VIEW_STEP);
     expect(error).toHaveBeenCalledTimes(1);
     expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual({ job: "daily", step: "rate_limits", error: "Error: boom on rate_limits" });
   });
@@ -159,7 +166,7 @@ describe("scheduled handler (VNX-0705a AC9)", () => {
     expect(pending).toHaveLength(1);
     await Promise.all(pending);
     expect(await rateWindow("daily:scheduled")).toBe(0);
-    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual([...IDLE_ACTIVITY_STEPS.map((r) => r.step), "rate_limits", "login_tokens", "sessions", "outbound_clicks"]);
+    expect(log.mock.calls.map((c) => JSON.parse(c[0] as string).step)).toEqual([...IDLE_ACTIVITY_STEPS.map((r) => r.step), "rate_limits", "login_tokens", "sessions", "outbound_clicks", "view_dedupe"]);
   });
 });
 
@@ -186,6 +193,32 @@ describe("outbound clicks step (VNX-2103, Owner 2026-10-05: keep 13 months)", ()
     const results = await runDaily({ ...testEnv, DB: brokenOn("outbound_clicks") } as Bindings, NOW);
     expect(clickStep(results)).toEqual({ job: "daily", step: "outbound_clicks", error: "Error: boom on outbound_clicks" });
     expect(results.filter((r) => "error" in r)).toHaveLength(1);
+    expect(error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("view dedupe step (VNX-0701b: Privacy says 2 days)", () => {
+  const dedupeDays = async (productId: string) =>
+    (await testEnv.DB.prepare("SELECT day FROM product_view_dedupe WHERE product_id = ?1 ORDER BY day").bind(productId).all<{ day: string }>()).results.map((r) => r.day);
+
+  it("deletes every earlier UTC day, keeps today, and a second run changes nothing for this product", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const p = await addLiveProduct(await makeBuilder("daily-vd@vnx.si", "daily-vd", "approved"), "daily-vd product");
+    // NOW is 2026-10-04 (the one purge clock): the cutoff day is 2026-10-04; these rows sit below every day other files assert on.
+    for (const day of ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]) await recordProductView(testEnv.DB, { productId: p.id, visitorHash: "c".repeat(64), now: new Date(`${day}T12:00:00Z`) });
+    const step = (await runDaily(testEnv, NOW)).find((r) => r.step === "view_dedupe");
+    expect(step).toEqual({ job: "daily", step: "view_dedupe", deleted: expect.any(Number) });
+    expect(await dedupeDays(p.id)).toEqual(["2026-10-04"]);
+    await runDaily(testEnv, NOW);
+    expect(await dedupeDays(p.id)).toEqual(["2026-10-04"]);
+  });
+
+  it("is the last step, and a failing dedupe purge is logged without touching the earlier steps", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const results = await runDaily({ ...testEnv, DB: brokenOn("product_view_dedupe") } as Bindings, NOW);
+    expect(results.at(-1)).toEqual({ job: "daily", step: "view_dedupe", error: "Error: boom on product_view_dedupe" });
+    expect(results.at(-2)).toEqual(CLICK_STEP);
     expect(error).toHaveBeenCalledTimes(1);
   });
 });
