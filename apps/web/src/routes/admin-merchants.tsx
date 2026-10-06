@@ -67,6 +67,7 @@ const offerValues = (b: Record<string, unknown>): OfferEdit["values"] => ({
   status: str(b.status),
 });
 
+export type { Merchant };
 export type DetailExtra = { merchantEdit?: MerchantEdit; programEdit?: ProgramEdit; offerEdit?: OfferEdit };
 export type CreateEdit = { values: MerchantFormValues; errors: MerchantErrors; status: "active" | "paused" };
 

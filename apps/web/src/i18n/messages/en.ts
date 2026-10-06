@@ -1090,6 +1090,9 @@ export const en = {
   "ops.requests.removeHelp": "Removes the request. The client is not told. Builders with an open invitation or a proposal get an e-mail that it ended.",
   "ops.requests.removeConfirm": "Remove request",
   "ops.requests.noHistory": "No audit entries for this request yet.",
+  "ops.nav.merchants": "Merchants",
+  "ops.merchants.noHistory": "No audit entries for this merchant yet.",
+  "ops.merchants.badRequest": "That request was not valid, so nothing was saved. Check the form and try again.",
 } as const;
 
 export type MessageKey = keyof typeof en;

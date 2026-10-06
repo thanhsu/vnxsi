@@ -722,3 +722,10 @@ textarea.ops-in { width: 100%; min-height: 76px; padding: 8px 10px; resize: vert
   .ops-bar .ops-btn, .ops-actions .ops-btn { min-height: 44px; }
   .ops-tl li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* Merchants (VNX-2508a): the partner forms and tables of /admin, reused inside an Ops page; the site's .card, .field and .btn apply. */
+.ops-legacy { max-width: 880px; min-width: 0; }
+.ops-legacy h1 { margin: 0 0 8px; font: 600 24px/1.25 var(--font-display); letter-spacing: -0.015em; }
+.ops-legacy h2 { margin: 24px 0 8px; font: 600 18px/1.3 var(--font-display); letter-spacing: 0; }
+.ops-legacy .table-wrap { overflow-x: auto; }
+.ops-legacy-after { max-width: 880px; }
