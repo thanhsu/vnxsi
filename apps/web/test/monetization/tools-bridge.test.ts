@@ -169,8 +169,8 @@ describe("/tools/:slug bridge links stay clear of the money (AC5)", { timeout: 6
     }
     expect(html).toContain('name="robots"');
     // CSP (VNX-0803): no inline style attribute, no inline script on the full page.
-    expect(html).not.toMatch(/sstyle=/);
-    expect(html).not.toMatch(/<script(?![^>]*ssrc=)[^>]*>/);
+    expect(html).not.toMatch(/\sstyle=/);
+    expect(html).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/);
   });
 });
 
