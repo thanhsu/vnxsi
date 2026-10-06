@@ -1108,13 +1108,415 @@ Diff ước tính ~430 dòng (gồm test; code sản xuất ~110). Không có ch
 
 ### Task 3c: VNX-0701c — Thông báo thay đổi Privacy cho người dùng đã đăng nhập
 
-**Scope (Owner 2026-10-05: thay đổi quan trọng, báo trước khi cookie đếm ra mắt):** một thông báo có thể đóng, chỉ hiện cho người dùng đã đăng nhập, kèm link `/privacy`, trong một khoảng thời gian cố định. Tối thiểu: một banner trong `Layout` khi `user !== null` và `now < NOTICE_UNTIL`; đóng bằng nút (cookie hoặc cột `users`?) là câu hỏi kỹ thuật mở: cách ít xâm lấn nhất là `localStorage`/cookie phiên không định danh, không cột DB mới; Implementer nêu phương án và hỏi Reviewer nếu cần cột `users.privacy_notice_ack_at` (migration `0014`+ đánh số lại). Cửa sổ hiển thị (`NOTICE_UNTIL`) do Owner chọn. **Không tự viết câu pháp lý.** Bản nháp dưới đây chờ Owner duyệt câu chữ:
+**Scope (chặn bởi (b), M7 Review Focus 4, 7, 8):** Thêm một thông báo SSR trong `Layout` cho mọi response được render qua `views/render.ts#page` mà `Layout` có `signedIn` (trang public khi signed-in, `/hub`, `/me`, `/admin`). `/ops` (Ops O1 `OpsLayout`, trên `origin/main`, không dùng `Layout`) nằm ngoài phạm vi: đây là lựa chọn kỹ thuật. Thông báo chỉ tồn tại trong cửa sổ UTC đã chốt, có link `/privacy` theo locale, đóng được bằng `<details>` native cộng một cờ `localStorage` thuần chức năng. Không thêm migration, cột D1, cookie mới, tracking, IP/email/user id, legal copy, hay inline script/style. Cả bốn locale dưới đây là câu chữ Owner đã duyệt nguyên văn (zh được duyệt 2026-10-06).
 
-- **en (chờ Owner duyệt câu chữ):** "We are updating our Privacy Policy: from {date} we count visits to product pages using a cookie that expires at the end of each day. Read the changes."
-- **vi (chờ Owner duyệt câu chữ):** "Chúng tôi cập nhật Chính sách quyền riêng tư: từ {date}, chúng tôi đếm lượt truy cập trang product bằng một cookie hết hạn vào cuối mỗi ngày. Xem thay đổi."
-- zh-Hans, zh-Hant: bản dịch sau khi en/vi được duyệt.
+**Cách truyền dữ liệu (thay thế prop theo route/view):** `page()` là điểm render duy nhất (`c.html(` chỉ xuất hiện trong `render.ts`). `page()` bọc node vào một `hono/jsx` context mang `{ goLive, now }`; `Layout` đọc context đó. Không có prop `privacyNotice`, không sửa route hay view nào, không sửa `HubLayout`/`AdminLayout`.
 
-Files, test, acceptance: viết chi tiết ngay trước khi làm, sau khi Owner duyệt câu chữ. Ràng buộc: thông báo chỉ hiện cho user đã đăng nhập, có link `/privacy`, đóng được, không hiện sau `NOTICE_UNTIL`, không đặt cookie theo dõi.
+**Files:**
+
+- Create: `apps/web/src/domain/privacy-notice.ts`; `apps/web/src/views/privacy-notice.tsx` (`.tsx` vì có JSX; chứa context, `PrivacyNotice`, hằng script); `apps/web/public/assets/privacy-notice.js`; `apps/web/test/domain/privacy-notice.test.ts`; `apps/web/test/design/privacy-notice.test.ts`.
+- Modify: `apps/web/src/env.ts` (`Bindings.PRIVACY_NOTICE_GO_LIVE?: string`); `apps/web/wrangler.jsonc` (thêm var `PRIVACY_NOTICE_GO_LIVE: ""`, giữ nguyên `triggers` của Task 6); `apps/web/src/views/render.ts`; `apps/web/src/views/Layout.tsx`; `apps/web/public/assets/app.css`; `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts` (ba key `privacyNotice.*`; `test/i18n/parity.test.ts` chạy lại, không sửa); `apps/web/test/design/assets.test.ts`; `apps/web/test/design/layout.test.ts`; `apps/web/test/architecture.test.ts`.
+- Không đụng: route, view khác, `HubLayout`, `AdminLayout`, `src/legal/content.ts`, `docs/legal/privacy.md`, migration, `src/db`, `src/jobs`.
+
+**Interfaces (đã đối chiếu code thật):** `Translate` (`src/i18n/t.ts`, `ReturnType<typeof translator>`), `Locale` và `localizedPath(locale, path)` (`src/i18n/locales.ts`), `createContext`/`useContext`/`Child`/`FC` (xuất từ `hono/jsx`; `Context.Provider` có sẵn), `page(c, node, status)` (`views/render.ts`, chữ ký giữ nguyên), `LayoutProps.signedIn?: boolean` (cổng hiện có).
+
+- `Bindings.PRIVACY_NOTICE_GO_LIVE?: string`: biến non-secret, trong `vars` của `wrangler.jsonc` giá trị mặc định `""` (ẩn thông báo). Ngày production được COMMIT vào đúng chỗ này (xem "Ghi chú deploy cho Owner"); không dùng `wrangler secret`, `--var` hay dashboard.
+- `src/domain/privacy-notice.ts` (không import Hono/D1/env; chỉ `type Locale`):
+
+  ```ts
+  export function parsePrivacyNoticeDate(raw: string | undefined): Date | null;
+  export function shouldShowPrivacyNotice(goLive: string | undefined, now: Date): boolean;
+  export function formatPrivacyNoticeDate(goLive: string | undefined, locale: Locale): string | null;
+  ```
+
+- `src/views/privacy-notice.tsx` produces `PrivacyNoticeRequest`, `withPrivacyNoticeRequest`, `privacyNoticeDate`, `PRIVACY_NOTICE_SCRIPT`, `PrivacyNotice` (mã đầy đủ ở Step 4).
+- i18n dùng đúng ba key `privacyNotice.message`, `privacyNotice.readChanges`, `privacyNotice.dismiss`; mọi chữ hiển thị (kể cả nút đóng) qua `tr()`.
+- Asset `/assets/privacy-notice.js`: chỉ được nạp khi SSR đã render thông báo, `defer`, same-origin, không import, không fetch/XHR/beacon, không inline code. `app.css` giữ toàn bộ style.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+
+1. **Binding và dữ liệu không hợp lệ.** `PRIVACY_NOTICE_GO_LIVE` tùy chọn, đúng `YYYY-MM-DD`, không tự trim. `parsePrivacyNoticeDate` từ chối unset, rỗng, có giờ/offset, không phải chữ số, ngày không tồn tại (round-trip UTC phải trả đúng chuỗi gốc). Malformed hoặc unset: không có markup lẫn script.
+2. **Cửa sổ UTC, biên rõ ràng.** Ngày go-live hiểu là `00:00:00.000Z`. Khoảng nửa mở `[goLive − 14 ngày, goLive + 31 ngày)`: ngày go-live và ngày thứ +30 (đến `23:59:59.999Z`) còn hiện, đúng `+31 ngày` thì ẩn. `now` không hữu hạn thì ẩn.
+3. **Domain thuần.** Không Hono, D1, binding, đồng hồ toàn cục, DOM hay storage. `formatPrivacyNoticeDate` dùng `Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })`.
+4. **Dữ liệu request tới `Layout` qua `hono/jsx` context đặt trong `page()`.** `page()` `await node` trước, rồi bọc `withPrivacyNoticeRequest({ goLive: c.env.PRIVACY_NOTICE_GO_LIVE, now: new Date() }, resolved)`. `now` lấy một lần mỗi request. Context mặc định là `null`: `Layout` render ngoài `page()` (test đơn vị, đường đi tương lai) không bao giờ hiện thông báo. Phương án không chọn: (a) `contextStorage()` cần `node:async_hooks`, trong khi pool test ghim `compatibilityDate` 2026-08-01, trước khi `nodejs_compat` bật mặc định; (c) HTML rewriting vì mong manh. Không cần ADR: dùng API có sẵn của stack đã khóa, không thêm dependency hay flag.
+5. **Cổng hiển thị = `signedIn` hiện có.** `Layout` tính `noticeDate = privacyNoticeDate(locale, isSignedIn)`; `null` thì không có markup, không có script. Thông báo là con đầu tiên của `<main>`. Khi `fullWidth` (landing, `main.page-full { padding: 0 }`) thông báo được bọc `<div class="container">` để có lề ngang 24px; `main.container` vốn đã có padding nên không bọc, tránh double padding.
+6. **Chữ và link.** Câu EN/VI là đúng chuỗi đã duyệt; `{date}` là ngày go-live định dạng theo locale; link chỉ dùng `localizedPath(locale, "/privacy")`.
+7. **Đóng thông báo không cần cookie mới.** `<details class="privacy-notice" open>` với `<summary>` là nút đóng. Khi đóng, CSS `.privacy-notice:not([open]) { display: none; }` ẩn cả khối (không để lại chữ "Dismiss" lẻ loi). Có JS: đóng lưu `localStorage` key `vnxsi:privacy-notice-dismissed:v1` = `1`; trang sau script đóng thông báo nếu cờ tồn tại. Không có JS: đóng native chỉ có hiệu lực trên trang đó. Cả hai lời gọi storage nằm trong `try/catch`. Không có cookie nên không đổi Privacy §5. Quyết định của Owner 2026-10-06: cờ localStorage này KHÔNG cần thêm câu nào vào Privacy §5.
+8. **CSP.** Không có `<script>`/`<style>` inline mới; script là file tĩnh same-origin, CSS ở `app.css`. SSR không đọc được localStorage nên người đã đóng có thể nhận HTML thông báo thêm một lần rồi script đóng lại (ranh giới SSR/client có chủ đích).
+9. **Không tác dụng phụ pháp lý/dữ liệu.** Thông báo mô tả cookie người xem mà Task 3 sẽ làm; Task 3 giữ cookie, dedupe và thay đổi legal. Task 3c không cookie, không event, không ghi DB, không migration.
+10. **Script trang.** `pageScripts` = `scripts` đã khử trùng cộng `PRIVACY_NOTICE_SCRIPT` chỉ khi `noticeDate !== null`. Landing vẫn có `landing.js` đúng một lần.
+11. **Rủi ro đã chặn.** Một `c.html(` ngoài `render.ts` sẽ âm thầm làm mất thông báo; test kiến trúc ở Step 1 khóa việc này.
+
+**Approved copy (chép đúng; cả 4 locale đã duyệt):**
+
+| key | en — **APPROVED VERBATIM** | vi — **ĐÃ DUYỆT NGUYÊN VĂN** | zh-Hans — **ĐÃ DUYỆT NGUYÊN VĂN (Owner 2026-10-06)** | zh-Hant — **ĐÃ DUYỆT NGUYÊN VĂN (Owner 2026-10-06)** |
+|---|---|---|---|---|
+| `privacyNotice.message` | `We are updating our Privacy Policy: from {date} we count visits to product pages using a cookie that expires at the end of each day.` | `Chúng tôi cập nhật Chính sách quyền riêng tư: từ {date}, chúng tôi đếm lượt truy cập trang product bằng một cookie hết hạn vào cuối mỗi ngày.` | `我们正在更新隐私政策：从 {date} 起，我们会使用一个在每天结束时到期的 Cookie 来统计产品页面访问量。` | `我們正在更新隱私權政策：自 {date} 起，我們會使用一個在每天結束時到期的 Cookie 來統計產品頁面瀏覽次數。` |
+| `privacyNotice.readChanges` | `Read the changes.` | `Xem thay đổi.` | `查看更改。` | `查看變更。` |
+| `privacyNotice.dismiss` | `Dismiss` | `Đóng` | `关闭` | `關閉` |
+
+Owner 2026-10-06: ba key zh-Hans và zh-Hant được duyệt nguyên văn đúng như bảng.
+
+**Mã tĩnh (chép nguyên):**
+
+`apps/web/public/assets/privacy-notice.js`:
+
+```js
+(() => {
+  const KEY = "vnxsi:privacy-notice-dismissed:v1";
+  const read = () => {
+    try {
+      return window.localStorage.getItem(KEY) === "1";
+    } catch {
+      return false;
+    }
+  };
+  const remember = () => {
+    try {
+      window.localStorage.setItem(KEY, "1");
+    } catch {
+      // Storage denied: the native <details> close still works for this page.
+    }
+  };
+  document.querySelectorAll('details[data-privacy-notice="true"]').forEach((notice) => {
+    if (read()) notice.open = false;
+    notice.addEventListener("toggle", () => {
+      if (!notice.open) remember();
+    });
+  });
+})();
+```
+
+`apps/web/public/assets/app.css` (thêm, không animation mới):
+
+```css
+.privacy-notice { position: relative; margin: 0 0 24px; padding: 16px 96px 16px 18px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.privacy-notice:not([open]) { display: none; }
+.privacy-notice p { margin: 0; }
+.privacy-notice-close { position: absolute; top: 8px; right: 10px; min-height: 44px; padding: 8px; color: var(--primary); cursor: pointer; font-weight: 600; }
+.privacy-notice-close:hover { color: var(--primary-hover); }
+.privacy-notice-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.page-full > .container > .privacy-notice { margin-top: 16px; }
+```
+
+**TDD steps:**
+
+- [ ] **Step 1: Test domain và khóa kiến trúc (RED).** Tạo `apps/web/test/domain/privacy-notice.test.ts`:
+
+  ```ts
+  import { describe, expect, it } from "vitest";
+  import { formatPrivacyNoticeDate, parsePrivacyNoticeDate, shouldShowPrivacyNotice } from "../../src/domain/privacy-notice.ts";
+
+  const LIVE = "2026-10-20";
+  const at = (iso: string) => new Date(iso);
+
+  describe("parsePrivacyNoticeDate", () => {
+    it.each([undefined, "", "2026-10-20T00:00:00Z", "2026-02-29", "2026-04-31", "20-10-2026"])("rejects %j", (raw) => {
+      expect(parsePrivacyNoticeDate(raw)).toBeNull();
+    });
+    it("round-trips a valid ISO calendar date at UTC midnight", () => {
+      expect(parsePrivacyNoticeDate(LIVE)?.toISOString()).toBe("2026-10-20T00:00:00.000Z");
+    });
+  });
+
+  describe("shouldShowPrivacyNotice", () => {
+    it.each([
+      ["before start", "2026-10-05T23:59:59.999Z", false],
+      ["start inclusive", "2026-10-06T00:00:00.000Z", true],
+      ["go-live midnight", "2026-10-20T00:00:00.000Z", true],
+      ["last visible instant", "2026-11-19T23:59:59.999Z", true],
+      ["after end", "2026-11-20T00:00:00.000Z", false],
+    ] as const)("%s", (_label, iso, expected) => expect(shouldShowPrivacyNotice(LIVE, at(iso))).toBe(expected));
+    it("hides unset, malformed and invalid now", () => {
+      expect(shouldShowPrivacyNotice(undefined, at("2026-10-20T00:00:00Z"))).toBe(false);
+      expect(shouldShowPrivacyNotice("2026-02-30", at("2026-10-20T00:00:00Z"))).toBe(false);
+      expect(shouldShowPrivacyNotice(LIVE, new Date(Number.NaN))).toBe(false);
+    });
+  });
+
+  describe("formatPrivacyNoticeDate", () => {
+    it("pins EN exactly", () => expect(formatPrivacyNoticeDate(LIVE, "en")).toBe("October 20, 2026"));
+    it.each(["vi", "zh-Hans", "zh-Hant"] as const)("%s keeps the UTC day and is not the raw ISO string", (locale) => {
+      const out = formatPrivacyNoticeDate(LIVE, locale) ?? "";
+      expect(out).toContain("2026");
+      expect(out).toContain("20");
+      expect(out).not.toBe(LIVE);
+    });
+    it("is null for a malformed date", () => expect(formatPrivacyNoticeDate("2026-02-30", "en")).toBeNull());
+  });
+  ```
+
+  Thêm vào `apps/web/test/architecture.test.ts`, sau khai báo `const sources = import.meta.glob("../src/**/*.{ts,tsx}", ...)` đã có (cùng kiểu quét nguồn `?raw`):
+
+  ```ts
+  describe("single render choke point (VNX-0701c)", () => {
+    it("only views/render.ts calls c.html( — a direct call would silently drop the privacy notice", () => {
+      for (const [file, src] of Object.entries(sources)) {
+        if (file === "../src/views/render.ts") continue;
+        expect(src, file).not.toMatch(/\bc\.html\(/);
+      }
+    });
+  });
+  ```
+
+  Chạy `npm test -w apps/web -- test/domain/privacy-notice.test.ts test/architecture.test.ts` → domain RED (module chưa có); khối kiến trúc xanh ngay (khóa trạng thái hiện có; đã kiểm: chỉ `render.ts:8` có `c.html(`).
+
+- [ ] **Step 2: Domain module (GREEN).** Tạo `apps/web/src/domain/privacy-notice.ts`:
+
+  ```ts
+  import type { Locale } from "../i18n/locales.ts";
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+  export function parsePrivacyNoticeDate(raw: string | undefined): Date | null {
+    if (!raw || !DATE.test(raw)) return null;
+    const time = Date.parse(`${raw}T00:00:00.000Z`);
+    if (!Number.isFinite(time)) return null;
+    const date = new Date(time);
+    return date.toISOString().slice(0, 10) === raw ? date : null;
+  }
+
+  export function shouldShowPrivacyNotice(goLive: string | undefined, now: Date): boolean {
+    const date = parsePrivacyNoticeDate(goLive);
+    const at = now.getTime();
+    if (!date || !Number.isFinite(at)) return false;
+    return at >= date.getTime() - 14 * DAY_MS && at < date.getTime() + 31 * DAY_MS;
+  }
+
+  export function formatPrivacyNoticeDate(goLive: string | undefined, locale: Locale): string | null {
+    const date = parsePrivacyNoticeDate(goLive);
+    return date
+      ? new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(date)
+      : null;
+  }
+  ```
+
+  Chạy lệnh Step 1 → GREEN.
+
+- [ ] **Step 3: Test SSR (RED).** Tạo `apps/web/test/design/privacy-notice.test.ts`. Đồng hồ chỉ fake `Date` (`toFake: ["Date"]`) để không làm treo timer của workerd/D1:
+
+  ```ts
+  import { jsx } from "hono/jsx";
+  import { afterEach, describe, expect, it, vi } from "vitest";
+  import { createApp } from "../../src/app.ts";
+  import type { Bindings } from "../../src/env.ts";
+  import { localizedPath } from "../../src/i18n/locales.ts";
+  import { Layout } from "../../src/views/Layout.tsx";
+  import { withPrivacyNoticeRequest } from "../../src/views/privacy-notice.tsx";
+  import { makeBuilder, signIn } from "../fixtures.ts";
+  import { getReq, testEnv } from "../helpers.ts";
+
+  const app = createApp();
+  const LIVE_ENV = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" } as Bindings;
+  const get = (path: string, cookie?: string, env: Bindings = LIVE_ENV) => app.request(getReq(path, cookie), undefined, env);
+  const page = async (path: string, cookie?: string, env: Bindings = LIVE_ENV) => (await get(path, cookie, env)).text();
+  const NOTICE = 'data-privacy-notice="true"';
+  const NOTICE_SCRIPT = '<script src="/assets/privacy-notice.js" defer=""></script>'; // hono renders boolean attributes as defer="" (re-review M1)
+  const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+  const freeze = (iso: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+  };
+
+  afterEach(() => vi.useRealTimers());
+
+  describe("SSR visibility", () => {
+    it("shows the notice only for signed-in pages in the inclusive window", async () => {
+      freeze("2026-10-20T00:00:00Z");
+      const { cookie } = await signIn("privacy-notice-layout@vnx.si");
+      const signedOut = await page("/products");
+      const signedIn = await page("/vi/products", cookie);
+      expect(signedOut).not.toContain(NOTICE);
+      expect(signedOut).not.toContain("privacy-notice.js");
+      expect(signedIn).toContain(NOTICE);
+      expect(signedIn).toContain(`href="${localizedPath("vi", "/privacy")}"`);
+      expect(count(signedIn, NOTICE_SCRIPT)).toBe(1);
+    });
+
+    it.each(["2026-10-05T23:59:59.999Z", "2026-11-20T00:00:00Z"])("hides outside the window at %s", async (iso) => {
+      freeze(iso);
+      const { cookie } = await signIn(`privacy-notice-edge-${iso.replace(/\D/g, "")}@vnx.si`);
+      const html = await page("/products", cookie);
+      expect(html).not.toContain(NOTICE);
+      expect(html).not.toContain("privacy-notice.js");
+    });
+
+    it("covers /me, /hub, /admin through the one choke point and hides for unset/malformed bindings", async () => {
+      freeze("2026-10-20T00:00:00Z");
+      await makeBuilder("privacy-notice-builder@vnx.si", "privacy-notice-builder");
+      const { cookie } = await signIn("privacy-notice-builder@vnx.si");
+      const { cookie: adminCookie } = await signIn("privacy-notice-admin@vnx.si", { admin: true });
+      expect(await page("/me", cookie)).toContain(NOTICE);
+      expect(await page("/hub", cookie)).toContain(NOTICE);
+      expect(await page("/admin/builders", adminCookie)).toContain(NOTICE);
+      const bad = { ...LIVE_ENV, PRIVACY_NOTICE_GO_LIVE: "2026-02-30" } as Bindings;
+      expect(await page("/products", cookie, bad)).not.toContain(NOTICE);
+      expect(await page("/products", cookie, { ...LIVE_ENV, PRIVACY_NOTICE_GO_LIVE: undefined } as Bindings)).not.toContain(NOTICE);
+    });
+
+    it("landing keeps landing.js once, adds the notice script once, and wraps the notice in .container", async () => {
+      freeze("2026-10-20T00:00:00Z");
+      const { cookie } = await signIn("privacy-notice-landing@vnx.si");
+      const html = await page("/", cookie);
+      expect(count(html, '<script src="/assets/landing.js" defer=""></script>')).toBe(1);
+      expect(count(html, NOTICE_SCRIPT)).toBe(1);
+      expect(html).toMatch(/<main id="main" class="page-full"><div class="container"><details class="privacy-notice"/);
+    });
+
+    it("keeps the SSR notice open, first in <main>, with a native close and a locale link", async () => {
+      freeze("2026-10-20T00:00:00Z");
+      const { cookie } = await signIn("privacy-notice-no-js@vnx.si");
+      const html = await page("/products", cookie);
+      expect(html).toMatch(/<main id="main" class="container"><details class="privacy-notice"[^>]*\bopen\b/);
+      expect(html).toContain("privacy-notice-close");
+      expect(html).toContain(localizedPath("en", "/privacy"));
+    });
+  });
+
+  describe("request context default", () => {
+    const props = { locale: "en", title: "t", origin: "https://vnx.si", rest: "/", signedIn: true, children: null } as const;
+
+    it("a Layout rendered outside page() never shows the notice, even inside the window", () => {
+      freeze("2026-10-20T00:00:00Z");
+      expect(String(jsx(Layout, props))).not.toContain("data-privacy-notice");
+    });
+
+    it("the same Layout does show it once the request context is provided (the gate is the context)", () => {
+      const html = String(withPrivacyNoticeRequest({ goLive: "2026-10-20", now: new Date("2026-10-20T00:00:00Z") }, jsx(Layout, props)));
+      expect(html).toContain(NOTICE);
+    });
+  });
+  ```
+
+  Chạy `npm test -w apps/web -- test/design/privacy-notice.test.ts` → RED (module `views/privacy-notice.tsx` chưa có).
+
+- [ ] **Step 4: Binding, context, `page()`, `Layout` (GREEN).**
+
+  `apps/web/src/env.ts`: thêm `PRIVACY_NOTICE_GO_LIVE?: string;` vào `Bindings`. `apps/web/wrangler.jsonc`: thêm vào `vars` (sau `TURNSTILE_SITE_KEY`, nhớ dấu phẩy):
+
+  ```jsonc
+  // Privacy notice go-live (YYYY-MM-DD, UTC). Empty hides the notice. The production date is committed here in a chore: commit before the VNX-0701c deploy; never via --var or the dashboard.
+  "PRIVACY_NOTICE_GO_LIVE": ""
+  ```
+
+  Tạo `apps/web/src/views/privacy-notice.tsx`:
+
+  ```tsx
+  import { createContext, useContext, type Child, type FC } from "hono/jsx";
+  import { localizedPath, type Locale } from "../i18n/locales.ts";
+  import type { Translate } from "../i18n/t.ts";
+  import { formatPrivacyNoticeDate, shouldShowPrivacyNotice } from "../domain/privacy-notice.ts";
+
+  export type PrivacyNoticeRequest = { goLive: string | undefined; now: Date };
+
+  /** Default null: a Layout rendered outside page() (unit tests, any future path) never shows the notice. */
+  const PrivacyNoticeRequestContext = createContext<PrivacyNoticeRequest | null>(null);
+
+  export function withPrivacyNoticeRequest(value: PrivacyNoticeRequest, node: Child) {
+    return <PrivacyNoticeRequestContext.Provider value={value}>{node}</PrivacyNoticeRequestContext.Provider>;
+  }
+
+  /** The localized go-live date when the notice must render, else null. Call during render (reads the context). */
+  export function privacyNoticeDate(locale: Locale, signedIn: boolean): string | null {
+    const req = useContext(PrivacyNoticeRequestContext);
+    if (!signedIn || !req || !shouldShowPrivacyNotice(req.goLive, req.now)) return null;
+    return formatPrivacyNoticeDate(req.goLive, locale);
+  }
+
+  export const PRIVACY_NOTICE_SCRIPT = "/assets/privacy-notice.js";
+
+  export const PrivacyNotice: FC<{ locale: Locale; date: string; tr: Translate }> = ({ locale, date, tr }) => (
+    <details class="privacy-notice" data-privacy-notice="true" open>
+      <summary class="privacy-notice-close">{tr("privacyNotice.dismiss")}</summary>
+      <p>
+        {tr("privacyNotice.message", { date })}{" "}
+        <a href={localizedPath(locale, "/privacy")}>{tr("privacyNotice.readChanges")}</a>
+      </p>
+    </details>
+  );
+  ```
+
+  `apps/web/src/views/render.ts` (chữ ký giữ nguyên):
+
+  ```ts
+  import type { Context } from "hono";
+  import type { Child } from "hono/jsx";
+  import type { ContentfulStatusCode } from "hono/utils/http-status";
+  import type { AppEnv } from "../env.ts";
+  import { withPrivacyNoticeRequest } from "./privacy-notice.tsx";
+
+  /** Renders a JSX page with a doctype. The single render choke point: it also hands Layout the request's privacy-notice data. */
+  export async function page(c: Context<AppEnv>, node: unknown, status: ContentfulStatusCode = 200): Promise<Response> {
+    const resolved = await node;
+    const html = String(withPrivacyNoticeRequest({ goLive: c.env.PRIVACY_NOTICE_GO_LIVE, now: new Date() }, resolved as Child));
+    return c.html("<!DOCTYPE html>" + html, status);
+  }
+  ```
+
+  `apps/web/src/views/Layout.tsx`: import `{ PRIVACY_NOTICE_SCRIPT, PrivacyNotice, privacyNoticeDate } from "./privacy-notice.tsx"`; không đổi `LayoutProps`. Sau `const isSignedIn = signedIn === true;` thêm:
+
+  ```tsx
+  const noticeDate = privacyNoticeDate(locale, isSignedIn);
+  const pageScripts = [...new Set([...(scripts ?? []), ...(noticeDate !== null ? [PRIVACY_NOTICE_SCRIPT] : [])])];
+  const notice = noticeDate !== null ? <PrivacyNotice locale={locale} date={noticeDate} tr={tr} /> : null;
+  ```
+
+  Trong `<head>` thay `(scripts ?? []).map(...)` bằng `pageScripts.map((src) => (<script src={src} defer></script>))`; trong `<main>`:
+
+  ```tsx
+  <main id="main" class={fullWidth ? "page-full" : "container"}>
+    {notice !== null && fullWidth ? <div class="container">{notice}</div> : notice}
+    {children}
+  </main>
+  ```
+
+  Chạy `npm test -w apps/web -- test/design/privacy-notice.test.ts test/design/layout.test.ts`: vẫn RED cho tới Step 6 (re-review L2): thiếu key locale thì `t()` gọi `.replace` trên `undefined` → trang trong cửa sổ trả 500 và typecheck báo `MessageKey` lạ; chỉ test default-null và test guard `c.html(` có thể xanh ở bước này. Nếu `jsx(Layout, props)` báo lỗi kiểu, ép `props as never`; không đổi `Layout`.
+
+- [ ] **Step 5: Test locale, asset, layout (RED).** `test/design/assets.test.ts`: `/assets/privacy-notice.js` trả 200, ≤ 2048 byte, không chứa `import`, `require`, `fetch`, `XMLHttpRequest`, `sendBeacon`, `http://`, `https://`, `document.cookie`; chứa đúng key `vnxsi:privacy-notice-dismissed:v1`; có ít nhất hai `try {` và hai `catch` (cả `getItem` và `setItem` được bọc); `app.css` chứa `.privacy-notice:not([open])` với `display: none`. Cùng việc kiểm tra bằng mắt rằng hai lời gọi storage nằm trong `try/catch`, đây là cách kiểm nhánh localStorage bị chặn (không có integration test trình duyệt). `test/design/layout.test.ts`: với mỗi `LOCALES`, trang signed-in trong cửa sổ có link `localizedPath(locale, "/privacy")` bên trong `<details class="privacy-notice"`, và chữ EN/VI khớp chuỗi đã duyệt với `{date}` thay bằng ngày định dạng. Chạy:
+
+  ```
+  npm test -w apps/web -- test/i18n/parity.test.ts test/design/assets.test.ts test/design/layout.test.ts
+  ```
+
+  Expected RED: thiếu key locale, asset và CSS.
+
+- [ ] **Step 6: Locale, asset, CSS (GREEN).** Thêm đúng giá trị bảng trên vào bốn file messages (giữ parity key và tham số `{date}`); tạo `public/assets/privacy-notice.js` và thêm khối CSS ở trên vào `app.css`. Chạy lệnh Step 5 rồi `npm test -w apps/web -- test/design/privacy-notice.test.ts` → GREEN.
+
+- [ ] **Step 7: Hồi quy biên và kiểm tra bằng mắt.** Chạy `npm test -w apps/web -- test/domain/privacy-notice.test.ts test/design/privacy-notice.test.ts test/design/layout.test.ts test/design/assets.test.ts test/i18n/parity.test.ts test/architecture.test.ts` → GREEN. Kiểm bằng mắt: `src/domain/privacy-notice.ts` không import Hono/D1; `Layout` không có script/style inline; `privacy-notice.js` gọi `getItem` và `setItem` đều trong `try/catch` (đường localStorage bị chặn được kiểm bằng cách này cộng các khẳng định nội dung ở `assets.test.ts`); `git status` chỉ có các file trong danh sách Files.
+
+- [ ] **Step 8: Typecheck, test đầy đủ, commit.** Từ thư mục gốc repo:
+
+  ```
+  npm run typecheck -w apps/web
+  npm test
+  git add apps/web/src/domain/privacy-notice.ts apps/web/src/views/privacy-notice.tsx apps/web/src/views/render.ts apps/web/src/views/Layout.tsx apps/web/src/env.ts apps/web/wrangler.jsonc apps/web/public/assets/privacy-notice.js apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/domain/privacy-notice.test.ts apps/web/test/design/privacy-notice.test.ts apps/web/test/design/layout.test.ts apps/web/test/design/assets.test.ts apps/web/test/architecture.test.ts
+  git commit -m "feat(web): notify signed-in users of the Privacy change (VNX-0701c)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  ```
+
+  Commit không chứa `.ai/tasks/*-report.md`. Diff ước tính ~300-350 dòng, không kể locale (ba key × bốn file).
+
+**Ghi chú deploy cho Owner:** ngày production nằm trong `apps/web/wrangler.jsonc` `vars.PRIVACY_NOTICE_GO_LIVE`, được commit bằng một commit `chore:` riêng trước lần deploy 3c. Không đặt qua `--var` hay dashboard vì một lần deploy thường sau đó sẽ đặt lại thành `""`. (1) Mọi lần deploy cho đến go-live + 31 ngày đều mang giá trị này. (2) Nếu Task 3 trễ, cập nhật ngày và deploy lại trước ngày cũ, vì thông báo nêu ngày đó. (3) `ANALYTICS_SALT` được đặt ở production đúng vào ngày go-live này. Deploy 3c ít nhất 14 ngày UTC trước ngày go-live.
+
+**Tiêu chí chấp nhận → cách kiểm:**
+
+| # | Tiêu chí | Kiểm bằng |
+|---|---|---|
+| AC1 | `PRIVACY_NOTICE_GO_LIVE` tùy chọn trong `Bindings`, non-secret trong `wrangler.jsonc`; unset/rỗng/malformed/ngày không tồn tại thì ẩn cả thông báo lẫn script | `npm test -w apps/web -- test/domain/privacy-notice.test.ts test/design/privacy-notice.test.ts`; `grep -n "PRIVACY_NOTICE_GO_LIVE" apps/web/src/env.ts apps/web/wrangler.jsonc` |
+| AC2 | Cửa sổ UTC: đầu bao gồm, ngày go-live có, ngày +30 có, đúng +31 ẩn; đủ các ca trước/đầu/go-live/cuối/sau | `npm test -w apps/web -- test/domain/privacy-notice.test.ts` |
+| AC3 | Ngày định dạng bằng `Intl.DateTimeFormat` UTC (EN đúng `October 20, 2026`); ba key có cùng tham số `{date}` ở bốn locale | `npm test -w apps/web -- test/domain/privacy-notice.test.ts test/i18n/parity.test.ts` |
+| AC4 | HTML signed-out không có thông báo; signed-in public, `/me`, `/hub`, `/admin` (mọi trang qua `page()` có `Layout` signed-in) có thông báo chỉ trong cửa sổ; landing có `landing.js` và script thông báo mỗi cái đúng một lần | `npm test -w apps/web -- test/design/privacy-notice.test.ts test/design/layout.test.ts` |
+| AC5 | Link "Read the changes" có tiền tố locale; EN/VI đúng văn bản đã duyệt | `npm test -w apps/web -- test/design/privacy-notice.test.ts test/design/layout.test.ts` |
+| AC6 | Đóng chỉ bằng `<details>` native và `localStorage` key `vnxsi:privacy-notice-dismissed:v1`; không cookie, cột DB, tracking, `Set-Cookie` | `npm test -w apps/web -- test/design/assets.test.ts`; `grep -nE "Set-Cookie\|document\.cookie\|fetch\(\|sendBeacon" apps/web/public/assets/privacy-notice.js apps/web/src/views/privacy-notice.tsx` (không khớp) |
+| AC7 | Không JS: thông báo SSR mở, link Privacy dùng được, đóng native ẩn cả khối (`.privacy-notice:not([open]) { display: none; }`, không còn "Dismiss" lẻ). Storage bị chặn: kiểm bằng mắt hai lời gọi storage trong `try/catch` cộng khẳng định nội dung ở `assets.test.ts` (không có integration test) | `npm test -w apps/web -- test/design/privacy-notice.test.ts test/design/assets.test.ts`; kiểm bằng mắt `privacy-notice.js` |
+| AC8 | JS mới same-origin, `defer` chỉ khi cần, không import/network/inline, sống chung với `landing.js` | `npm test -w apps/web -- test/design/assets.test.ts test/design/layout.test.ts test/design/privacy-notice.test.ts` |
+| AC9 | `Layout` render ngoài `page()` không bao giờ hiện thông báo; chỉ `render.ts` gọi `c.html(`; domain không import Hono/D1; không legal/DB mới | `npm test -w apps/web -- test/design/privacy-notice.test.ts test/architecture.test.ts` và `git diff --name-only -- docs/legal/privacy.md apps/web/src/legal/content.ts apps/web/migrations` (rỗng) |
+| AC10 | Typecheck sạch, toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
+| AC11 | Diff trong ngân sách và không có chữ đánh dấu dành riêng | sau `git add` ở Step 8: `git diff --cached --stat` (~300-350 dòng không kể locale); `grep -nE "[T][O][D][O]\|[T][B][D]\|[P][L][A][C][E][H][O][L][D][E][R]" apps/web/src/domain/privacy-notice.ts apps/web/src/views/privacy-notice.tsx apps/web/public/assets/privacy-notice.js apps/web/test/domain/privacy-notice.test.ts apps/web/test/design/privacy-notice.test.ts` (không khớp) |
+
+**Câu hỏi mở cho Owner:** không còn. Quyết định Owner 2026-10-06: (1) copy zh-Hans/zh-Hant đã duyệt nguyên văn; (2) cờ localStorage `vnxsi:privacy-notice-dismissed:v1` không cần wording Privacy §5.
+
+**Quyết định kỹ thuật cần Reviewer kiểm:** dữ liệu request tới `Layout` qua `hono/jsx` context trong `page()` (mặc định null); `page()` `await node` rồi mới bọc (một node đã stringify trước đó sẽ không thấy context, hiện không route nào làm vậy); biên nửa mở `+31`; `.privacy-notice:not([open])` ẩn cả khối; bọc `.container` khi `fullWidth`; `/ops` ngoài phạm vi; ngày production commit trong `wrangler.jsonc`; Task 3 giữ cookie và legal.
 
 ---
 
