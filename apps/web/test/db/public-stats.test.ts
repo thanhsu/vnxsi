@@ -4,7 +4,7 @@ import {
 } from "../../src/db/public-stats.ts";
 import { bumpProductStat } from "../../src/db/stats.ts";
 import { addDays, STALE_AFTER_MS } from "../../src/domain/public-stats.ts";
-import { addLiveProduct, ensureUser, inviteBuilders, makeBuilder, makeInquiry, makeRequest } from "../fixtures.ts";
+import { addLiveProduct, inviteBuilders, makeBuilder, makeInquiry, makeRequest } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
 const NOW = "2026-10-05T12:05:00.000Z";
@@ -69,11 +69,27 @@ describe("counts", () => {
     const { request: gone } = await makeRequest({ tag: "cnt-r-gone", now: daysBefore(NOW, 1) });
     await run("UPDATE requests SET status = 'removed' WHERE id = ?1", gone.id);
     const after = await loadCounts(DB, NOW);
-    expect(request.id).toBeTruthy();
+    expect(request.status).toBe("submitted");
     expect(after.products - before.products).toBe(1);
     expect(after.builders - before.builders).toBe(2);
     expect(after.requests30d - before.requests30d).toBe(1);
     expect(after.countries - before.countries).toBe(1);
+  });
+
+  it("uses 30 UTC calendar days including today", async () => {
+    const countsBefore = await loadCounts(DB, NOW);
+    const categoriesBefore = await loadCategoryCounts(DB, NOW);
+    await makeRequest({ tag: "win30-old", category: "crm", now: "2026-09-05T00:00:00.000Z" }); // today − 30: excluded
+    await makeRequest({ tag: "win30-edge", category: "crm", now: "2026-09-06T00:00:00.000Z" }); // today − 29 at midnight: included
+    const countsAfter = await loadCounts(DB, NOW);
+    const categoriesAfter = await loadCategoryCounts(DB, NOW);
+    expect(countsAfter.requests30d - countsBefore.requests30d).toBe(1);
+    expect((categoriesAfter.requests.crm ?? 0) - (categoriesBefore.requests.crm ?? 0)).toBe(1);
+    const old = await makeInquiry({ tag: "win30i-old", status: "open", now: "2026-09-05T00:00:00.000Z" });
+    const edge = await makeInquiry({ tag: "win30i-edge", status: "open", now: "2026-09-06T00:00:00.000Z" });
+    const products = await loadProductCandidates(DB, NOW);
+    expect(products.find((p) => p.id === old.product!.id)?.inquiries30d).toBe(0);
+    expect(products.find((p) => p.id === edge.product!.id)?.inquiries30d).toBe(1);
   });
 });
 
@@ -148,7 +164,29 @@ describe("top builder inputs", () => {
     const mine = (await loadBuilderTallies(DB, NOW)).find((t) => t.userId === builder.userId)!;
     expect(mine).toMatchObject({ handle: "tb-1-b", selected: 1, answered: 1, verified: 1 });
     expect([...mine.replyMinutes].sort((a, b) => a - b)).toEqual([30, 60]); // inquiry 30 min, invitation 60 min
-    expect(verified.id).toBeTruthy();
+    expect(verified.name).toBe("Tb verified");
+  });
+
+  it("uses 90 UTC calendar days including today for inquiries and invitations", async () => {
+    const old = await makeInquiry({ tag: "win90-old", status: "answered", now: "2026-07-07T00:00:00.000Z" }); // today − 90: excluded
+    const edge = await makeInquiry({ tag: "win90-edge", status: "answered", now: "2026-07-08T00:00:00.000Z" }); // today − 89 at midnight: included
+    for (const [tag, row, at] of [["old", old, "2026-07-07T00:00:00.000Z"], ["edge", edge, "2026-07-08T00:00:00.000Z"]] as const)
+      await run(`INSERT INTO inquiry_messages (id, inquiry_id, sender_user_id, kind, body, created_at) VALUES ('win90-${tag}-msg', ?1, ?2, 'message', 'Hi', ?3)`, row.inquiry.id, row.builder.userId, at);
+    const tallies = await loadBuilderTallies(DB, NOW);
+    expect(tallies.find((t) => t.userId === old.builder.userId)?.answered).toBe(0);
+    expect(tallies.find((t) => t.userId === edge.builder.userId)?.answered).toBe(1);
+    const inviteAt = async (tag: string, at: string) => {
+      const builder = await makeBuilder(`win90-${tag}@vnx.si`, `win90-${tag}`, "approved");
+      const { request } = await makeRequest({ tag: `win90-${tag}-request`, now: at });
+      const [invite] = await inviteBuilders(request, [builder], at);
+      await run("UPDATE request_invites SET status = 'selected', responded_at = ?2 WHERE id = ?1", invite!.id, at);
+      return builder;
+    };
+    const oldInvite = await inviteAt("old-invite", "2026-07-07T00:00:00.000Z");
+    const edgeInvite = await inviteAt("edge-invite", "2026-07-08T00:00:00.000Z");
+    const withInvites = await loadBuilderTallies(DB, NOW);
+    expect(withInvites.find((t) => t.userId === oldInvite.userId)?.selected).toBe(0);
+    expect(withInvites.find((t) => t.userId === edgeInvite.userId)?.selected).toBe(1);
   });
 
   it("leaves out suspended builders and anything older than 90 days", async () => {

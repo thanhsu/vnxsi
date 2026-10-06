@@ -107,6 +107,8 @@ const RANKING_FILES = [
   // VNX-0702a (public statistics): Trending, Top builders/products, Live.
   "../src/domain/public-stats.ts",
   "../src/db/public-stats.ts",
+  // VNX-0702b: hourly public-stat snapshot.
+  "../src/jobs/hourly.ts",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
