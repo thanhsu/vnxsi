@@ -35,7 +35,7 @@ const NAV = [
   ["/products", "nav.products"],
   ["/builders", "nav.findBuilders"],
   ["/#how", "nav.howItWorks"],
-  ["/#builders", "nav.forBuilders"],
+  ["/for-builders", "nav.forBuilders"],
   ["/contact", "nav.contact"],
 ] as const;
 const navHref = (locale: Locale, target: string) => {

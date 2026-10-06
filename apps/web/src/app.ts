@@ -36,6 +36,7 @@ import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
 import { registerAdminFlagRoutes } from "./routes/admin-flags.tsx";
 import { registerAdminMerchantRoutes } from "./routes/admin-merchants.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
+import { registerForBuildersRoutes } from "./routes/for-builders.tsx";
 import { registerLandingRoutes } from "./routes/landing.tsx";
 import { registerLegalRoutes } from "./routes/legal.tsx";
 import { registerContactRoutes } from "./routes/contact.tsx";
@@ -50,6 +51,7 @@ export function createApp() {
   app.use("*", noStorePrivate);
 
   registerLandingRoutes(app);
+  registerForBuildersRoutes(app);
   registerLegalRoutes(app);
   registerContactRoutes(app);
   registerAuthRoutes(app);

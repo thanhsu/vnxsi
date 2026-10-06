@@ -21,6 +21,7 @@ export function registerSeoRoutes(app: Hono<AppEnv>) {
       { rest: "/products", localized: true },
       { rest: "/builders", localized: true },
       { rest: "/request", localized: true },
+      { rest: "/for-builders", localized: true },
       { rest: "/terms", localized: true },
       { rest: "/privacy", localized: true },
       { rest: "/disclosure", localized: true },

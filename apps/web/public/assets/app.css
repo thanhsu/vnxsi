@@ -388,7 +388,7 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .lp-section { padding: 88px 0; }
 .section-head { display: flex; flex-direction: column; gap: 12px; max-width: 720px; margin-bottom: 40px; }
 .section-head > * { margin: 0; }
-.section-head h2 { font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 42px); font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; }
+.section-head h2, .lp-builders h1 { font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 42px); font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; }
 .section-sub { margin: 0; color: var(--text-2); font-size: 17px; }
 
 .lp-how { background: var(--bg); }
@@ -424,7 +424,7 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .lp-builders-inner { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 56px; padding-top: 96px; padding-bottom: 96px; }
 .lp-builders .section-head { gap: 20px; }
 .lp-builders .eyebrow { color: #9db7ff; }
-.lp-builders h2 { font-size: clamp(32px, 4vw, 48px); line-height: 1.08; }
+.lp-builders :is(h1, h2) { font-size: clamp(32px, 4vw, 48px); line-height: 1.08; }
 .lp-builders .section-sub { color: #c9d3e3; font-size: 18px; }
 .lp-perks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .lp-perks li { display: flex; align-items: flex-start; gap: 12px; color: #e4e9f2; }

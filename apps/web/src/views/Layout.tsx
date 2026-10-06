@@ -80,7 +80,7 @@ function mainNav(locale: Locale, rest: string): NavItem[] {
     { href: localizedPath(locale, "/products"), key: "nav.products", current: rest === "/products" },
     { href: localizedPath(locale, "/builders"), key: "nav.findBuilders", current: rest === "/builders" },
     { href: anchorOn(locale, "/", "how"), key: "nav.howItWorks", current: false },
-    { href: anchorOn(locale, "/", "builders"), key: "nav.forBuilders", current: false },
+    { href: localizedPath(locale, "/for-builders"), key: "nav.forBuilders", current: rest === "/for-builders" },
     { href: localizedPath(locale, "/contact"), key: "nav.contact", current: rest === "/contact" },
   ];
 }
