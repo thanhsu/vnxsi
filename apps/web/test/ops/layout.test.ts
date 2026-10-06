@@ -97,7 +97,9 @@ describe("Ops shell on /ops (AC2, AC7)", () => {
       // Desktop sidebar and the narrow-screen menu carry the same list.
       expect(navs, role).toHaveLength(2);
       for (const nav of navs) {
-        expect([...nav.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(marketplace ? ["/ops", "/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests"] : ["/ops"]);
+        expect([...nav.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(marketplace ? ["/ops", "/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", ...merchants] : ["/ops"]);
+        if (merchants.length > 0) expect(nav, role).toMatch(/<p class="ops-group-h" id="[^"]+">Monetization<\/p>[\s\S]*Merchants<\/a>/);
+        else expect(nav, role).not.toContain("Monetization");
         expect(nav, role).toMatch(/<a class="ops-nav-link" href="\/ops" aria-current="page">[\s\S]*Overview<\/a>/);
         // A group heading only for a group that has an item left: Content has none in Marketplace.
         if (marketplace) expect(nav, role).toMatch(/<p class="ops-group-h" id="[^"]+">Marketplace<\/p>/);
@@ -105,7 +107,7 @@ describe("Ops shell on /ops (AC2, AC7)", () => {
       }
       // Every link in the page goes to a page that exists: /ops, the skip target and, for roles with marketplace.view, Builders, Products and Requests.
       const hrefs = new Set([...body.matchAll(/href="([^"]*)"/g)].map((m) => m[1]));
-      expect([...hrefs].sort(), role).toEqual(marketplace ? ["#ops-main", "/ops", "/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests"] : ["#ops-main", "/ops"]);
+      expect([...hrefs].sort(), role).toEqual(marketplace ? ["#ops-main", "/ops", "/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", ...merchants] : ["#ops-main", "/ops"]);
     }
   });
 
