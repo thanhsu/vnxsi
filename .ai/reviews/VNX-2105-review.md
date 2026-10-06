@@ -59,4 +59,19 @@ AC9 (xem giao diện ở 360 px và 1280 px, sáng và tối): Reviewer làm sau
 
 ## Re-review
 
-_Chưa làm._
+- **Lượt sửa:** `d3611e9` (test), `d1d6c60` (fix F2–F6), `96242f3` (báo cáo). Reviewer đã đọc toàn bộ diff `src` và `public`. Diff gọn, không có thay đổi ngoài các mục đã duyệt. Ba lần đọc cờ vẫn chạy nối tiếp.
+- **F1–F7: đã sửa.**
+  - F2: `tool: ""` trước khi sửa trả 18 kết quả, sau khi sửa trả 0, có test ở tầng `db`.
+  - F1 và F7 là thay đổi làm chắc test: test pass ngay vì code vốn đúng, đúng như dự kiến.
+- **Lệnh Reviewer chạy lại ở `47d870f`** (đầu nhánh, gồm cả lượt sửa của VNX-2508a):
+  - `npm run typecheck -w apps/web`: sạch.
+  - `npm test`: **136 file / 1447 test xanh**.
+- **AC9 (Reviewer xem):** chạy `wrangler dev` cổng 8796 trên D1 local, dữ liệu mẫu chỉ nằm ở máy (2 product, 3 builder, trong đó 1 builder không khớp tên công cụ). Chụp bằng Chrome headless qua CDP:
+  - `/tools/elevenlabs` 1280 px sáng: thẻ dùng font display như `/products`; hai thẻ CTA lấp đủ hai cột.
+  - `/tools/elevenlabs` 360 px sáng: một cột.
+  - `/vi/tools/elevenlabs` 1280 px tối: chữ tiếng Việt khớp plan, tương phản đọc được.
+  - Cả ba ảnh: không cuộn ngang, builder không khớp không hiện.
+
+## Verdict cuối
+
+**APPROVE.**

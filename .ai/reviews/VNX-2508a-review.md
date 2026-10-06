@@ -54,4 +54,26 @@ Duyệt **M1, L1 (phần test tìm theo `path`), L2, L3**, theo ủy quyền đi
 
 ## Re-review
 
-_Chưa làm._
+- **Lượt sửa:** `8bbf315` (chỉ test), `47d870f` (báo cáo). Không đổi code production.
+- **M1: đã sửa.**
+  - `routes/ops-monetization.tsx` đã vào `MONEY_ALLOWED` và danh sách ghim, có ghi lý do.
+  - Assertion mới (a): không file nào trong `RANKING_FILES` import một module thuộc `MONEY_ALLOWED`. Riêng `db/audit.ts` được miễn, vì nó là bộ ghi audit dùng chung và `admin-requests.tsx` (một file xếp hạng) dùng nó hợp lệ; nó không đọc giá trị tiền. Reviewer chấp nhận ngoại lệ này.
+  - Assertion mới (b): ngoài `MONEY_ALLOWED` và `app.ts`, không file nào import `routes/admin-merchants.tsx`.
+  - Implementer đã chứng minh hai assertion bắt được vi phạm bằng 4 lần thêm import tạm (không commit).
+  - Giới hạn còn lại: import chỉ để lấy side effect, không có `from`, sẽ không bị bắt. Đây là giới hạn chung của kiểu kiểm hiện có. Đã ghi nhận.
+- **L1, L2, L3: đã sửa.**
+  - L1: tìm mục menu theo `path`.
+  - L2: kiểm cả 4 trang 400 render trong `OpsLayout`, kèm câu thông báo hoặc dấu hiệu lỗi.
+  - L3: ma trận POST so cả header.
+- **Lệnh Reviewer chạy lại ở `47d870f`:**
+  - `npm run typecheck -w apps/web`: sạch.
+  - `npm test`: **136 file / 1447 test xanh**.
+- **AC9 (Reviewer xem):** `wrangler dev` cổng 8796, D1 local, phiên Owner local, chụp bằng Chrome headless qua CDP:
+  - `/ops/monetization/merchants` 1280 px sáng: menu Monetization › Merchants đang chọn; breadcrumb Ops / Monetization / Merchants; bảng và form tạo.
+  - `/ops/monetization/merchants/:id` 1280 px sáng và tối, 390 px sáng: đủ form merchant, nút chuyển trạng thái, chương trình, offer, History.
+  - Không cuộn ngang. Ở 390 px mọi thứ về một cột.
+  - Giao diện là form của admin đặt trong khung Ops (`.ops-legacy`), đọc được và dùng được. Làm lại cho đúng mockup Ops là việc của VNX-2509, đã ghi nhận.
+
+## Verdict cuối
+
+**APPROVE.**
