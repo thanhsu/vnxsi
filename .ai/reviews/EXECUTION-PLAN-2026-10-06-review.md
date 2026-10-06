@@ -119,6 +119,22 @@ Các mâu thuẫn nhỏ hơn:
 
 **Ưu tiên 3, quyết khi tới lượt:** Pulse (13), Build Kits (14), trang so sánh vendor (15), newsletter (16), rail trang product (17), chỉ số seeding và cổng exit (18), video trên card, save/share, tái dùng nội dung builder trên mạng xã hội, công khai bằng chứng huy hiệu (19). Khuyến nghị cho từng mục nằm ở mục 3 và 5.
 
+## 7. Quyết định của Owner (2026-10-06)
+
+1. "Approved" = **định hướng đã duyệt**. Reviewer chuyển sang spec addendum, ADR và roadmap qua quy trình chuẩn; M7 làm xong trước.
+2. Homepage: **giữ A2**. Homepage 3 cột làm sau M7. Các khối của Task 7 viết thành component không phụ thuộc vị trí.
+3. Listing bên thứ ba: **giữ Q1**. `/products` chỉ có product của builder; seed bằng cách tiếp cận và mời builder.
+4. Request: **bảng công khai đầy đủ** (khác đề xuất). Làm sau M7, cần:
+   - spec addendum sửa spec §4, §8.8 và §11;
+   - câu chữ Privacy và Terms mới do Owner duyệt, báo trước theo Privacy §10;
+   - opt-in cho từng request (request đã gửi không bị công khai hồi tố);
+   - trường quốc gia mới;
+   - quy tắc hiển thị ngân sách (dải hay con số);
+   - kiểm duyệt trước khi công khai.
+
+   Các câu hỏi chi tiết sẽ đưa ra khi lên plan.
+5. Còn chờ: VNX Labs (câu 5) và các câu ưu tiên 2–3.
+
 ---
 
 **Nguồn:**
