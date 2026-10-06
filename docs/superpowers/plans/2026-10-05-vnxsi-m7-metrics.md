@@ -3237,11 +3237,221 @@ Không có chuỗi giao diện, không locale. Diff ~1100 dòng gồm test (5a ~
 
 ### Task 6: VNX-0702b — Cron hằng giờ
 
-**Scope:** `jobs/hourly.ts` (`runHourly(env, now): Promise<HourlyResult[]>`: một bước cho mỗi key của Task 5, mỗi bước bọc try/catch như `runDaily`, ghi log JSON `{ job: "hourly", step, ... }`), `index.ts#scheduled` rẽ theo `controller.cron`: `"0 1 * * *"` → `runDaily`, `"5 * * * *"` → `runHourly`, giá trị khác → `console.warn` và bỏ qua; `wrangler.jsonc` `triggers.crons = ["0 1 * * *", "5 * * * *"]` và cập nhật ghi chú deploy; `README`/runbook ghi hai cron. Không đổi hành vi các bước cũ của job ngày.
+**Scope:** Tạo `apps/web/src/jobs/hourly.ts` với `runHourly(env, now: Date): Promise<HourlyResult[]>`, đúng một bước cho mỗi phần tử của `PUBLIC_STAT_KEYS`. Mỗi bước gọi truy vấn `db/public-stats.ts`, tính bằng hàm thuần của `domain/public-stats.ts`, rồi mới gọi `writePublicStat`; `try/catch` từng bước theo mẫu `runDaily`, ghi JSON `{ job: "hourly", step, ... }`, lỗi một bước không chặn bước sau. `apps/web/src/index.ts#scheduled` rẽ theo `controller.cron`: `"0 1 * * *"` → `runDaily`, `"5 * * * *"` → `runHourly`, giá trị khác → `console.warn` rồi bỏ qua. Thêm `5 * * * *` cạnh `0 1 * * *`; không thêm bước Live/event ngoài key `live` mà Task 5 đã tính, không đổi `runDaily` (dọn view-dedupe là Task 3).
 
-**Files:** Create `src/jobs/hourly.ts`; Modify `src/index.ts`, `wrangler.jsonc`, `test/architecture.test.ts` (thêm `jobs/hourly.ts` vào `RANKING_FILES`; `MONEY_ALLOWED` KHÔNG thêm `jobs/hourly.ts` vì job giờ không đọc bảng tiền; nếu đọc `outbound_clicks` thì chỉ qua `db/stats.ts`); Test `test/jobs/hourly.test.ts`, `test/jobs/scheduled.test.ts`, `test/jobs/daily.test.ts` chỉ chạy lại.
+**Files:**
+- Create: `apps/web/src/jobs/hourly.ts`, `apps/web/test/jobs/hourly.test.ts`, `apps/web/test/jobs/scheduled.test.ts`.
+- Modify: `apps/web/src/index.ts`, `apps/web/wrangler.jsonc`, `apps/web/test/architecture.test.ts`, `apps/web/test/db/public-stats.test.ts` (chỉ các test deferred của Task 5).
+- Rerun only: `apps/web/test/jobs/daily.test.ts` and the existing daily inquiry/request tests; do not edit `apps/web/src/jobs/daily.ts`.
+- No README/runbook change: repository inspection found no suitable cron runbook (only index READMEs under `docs/adr/` and `docs/blueprint/`). No i18n keys or locale changes.
 
-**Acceptance:** `scheduled` gọi đúng job cho từng cron (spy) và bỏ qua cron lạ; `runHourly` ghi mọi key, chạy hai lần liên tiếp cho cùng `public_stats.value` (idempotent) và `computed_at` cập nhật; một bước ném lỗi không dừng các bước sau; dưới ngưỡng ghi `null`, không xóa dòng cũ khi truy vấn lỗi; `grep -n '"crons"' apps/web/wrangler.jsonc` = hai trigger đúng; `runDaily` không đổi (bước dọn dedupe thuộc Task 3); không còn bước/sự kiện Live nào ở Task này (Live do Task 5 tính, Task 7 hiện). Kiểm: `npm test -w apps/web -- test/jobs`. Triển khai thật chờ Owner (c). Diff ~300 dòng.
+**Interfaces:**
+- Consumes real exports: `PUBLIC_STAT_KEYS`, `MIN`, `countStat`, `rankTrending`, `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `liveEvents`, `type PublicStatKey`, `type PublicStatValues` (`domain/public-stats.ts`); `loadCounts`, `loadCategoryCounts`, `loadGrowthDays`, `loadTrendingCandidates`, `loadProductCandidates`, `loadBuilderTallies`, `loadLiveEvents`, `writePublicStat` (`db/public-stats.ts`); `Bindings` (`env.ts`); `runDaily` (`jobs/daily.ts`).
+- Produces: `HourlyResult`; `runHourly(env: Bindings, now: Date): Promise<HourlyResult[]>`; `scheduled` dispatch for the two exact cron strings; `wrangler.jsonc.triggers.crons = ["0 1 * * *", "5 * * * *"]`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. Keep the key order exactly `PUBLIC_STAT_KEYS`; the eleven steps are `count_products`, `count_builders`, `count_requests_30d`, `count_countries`, `trending`, `request_by_category`, `scarcest_category`, `growth`, `top_builders`, `top_products`, `live`—no separate Live step. Count/category loaders are intentionally called inside each relevant key step so query failure and write failure are isolated per key; do not memoize a shared query result across steps.
+2. A successful result is `{ job: "hourly", step, value, computedAt: iso }`; a failed result is `{ job: "hourly", step, error: String(err) }`. `writePublicStat` runs only after that step's query and pure computation succeed, so a failed query leaves the previous JSON value and `computed_at` untouched. A computed value below threshold is `null` and is still written.
+3. Unknown cron warning is one JSON line `{"job":"scheduler","event":"unknown_cron","cron":controller.cron}`; it does not call `waitUntil`. `MONEY_ALLOWED` remains unchanged; `jobs/hourly.ts` is added to `RANKING_FILES` only and never imports or reads a money table.
+
+- [ ] **Step 1: Pin the deferred Task 5 calendar-window tests before adding the job**
+
+In `apps/web/test/db/public-stats.test.ts`, remove the unused `ensureUser` import. Replace both truthiness-only checks with exact stable fixture-value assertions (`submitted` status and the explicit product name), and add the two exact UTC boundary pairs. Keep the file's `after − before` style because its D1 rows are shared:
+
+```ts
+// The fixtures have stable exact values: makeRequest defaults to `submitted`, and this product is named explicitly below.
+expect(request.status).toBe("submitted");
+expect(verified.name).toBe("Tb verified");
+
+it("uses 30 UTC calendar days including today", async () => {
+  const countsBefore = await loadCounts(DB, NOW);
+  const categoriesBefore = await loadCategoryCounts(DB, NOW);
+  await makeRequest({ tag: "win30-old", category: "crm", now: "2026-09-05T00:00:00.000Z" }); // today − 30: excluded
+  await makeRequest({ tag: "win30-edge", category: "crm", now: "2026-09-06T00:00:00.000Z" }); // today − 29 at midnight: included
+  const countsAfter = await loadCounts(DB, NOW);
+  const categoriesAfter = await loadCategoryCounts(DB, NOW);
+  expect(countsAfter.requests30d - countsBefore.requests30d).toBe(1);
+  expect((categoriesAfter.requests.crm ?? 0) - (categoriesBefore.requests.crm ?? 0)).toBe(1);
+  const old = await makeInquiry({ tag: "win30i-old", status: "open", now: "2026-09-05T00:00:00.000Z" });
+  const edge = await makeInquiry({ tag: "win30i-edge", status: "open", now: "2026-09-06T00:00:00.000Z" });
+  const products = await loadProductCandidates(DB, NOW);
+  expect(products.find((p) => p.id === old.product!.id)?.inquiries30d).toBe(0);
+  expect(products.find((p) => p.id === edge.product!.id)?.inquiries30d).toBe(1);
+});
+
+it("uses 90 UTC calendar days including today for inquiries and invitations", async () => {
+  const old = await makeInquiry({ tag: "win90-old", status: "answered", now: "2026-07-07T00:00:00.000Z" }); // today − 90: excluded
+  const edge = await makeInquiry({ tag: "win90-edge", status: "answered", now: "2026-07-08T00:00:00.000Z" }); // today − 89 at midnight: included
+  for (const [tag, row, at] of [["old", old, "2026-07-07T00:00:00.000Z"], ["edge", edge, "2026-07-08T00:00:00.000Z"]] as const)
+    await run(`INSERT INTO inquiry_messages (id, inquiry_id, sender_user_id, kind, body, created_at) VALUES ('win90-${tag}-msg', ?1, ?2, 'message', 'Hi', ?3)`, row.inquiry.id, row.builder.userId, at);
+  const tallies = await loadBuilderTallies(DB, NOW);
+  expect(tallies.find((t) => t.userId === old.builder.userId)?.answered).toBe(0);
+  expect(tallies.find((t) => t.userId === edge.builder.userId)?.answered).toBe(1);
+  const inviteAt = async (tag: string, at: string) => {
+    const builder = await makeBuilder(`win90-${tag}@vnx.si`, `win90-${tag}`, "approved");
+    const { request } = await makeRequest({ tag: `win90-${tag}-request`, now: at });
+    const [invite] = await inviteBuilders(request, [builder], at);
+    await run("UPDATE request_invites SET status = 'selected', responded_at = ?2 WHERE id = ?1", invite!.id, at);
+    return builder;
+  };
+  const oldInvite = await inviteAt("old-invite", "2026-07-07T00:00:00.000Z");
+  const edgeInvite = await inviteAt("edge-invite", "2026-07-08T00:00:00.000Z");
+  const withInvites = await loadBuilderTallies(DB, NOW);
+  expect(withInvites.find((t) => t.userId === oldInvite.userId)?.selected).toBe(0);
+  expect(withInvites.find((t) => t.userId === edgeInvite.userId)?.selected).toBe(1);
+});
+```
+
+Run `npm test -w apps/web -- test/db/public-stats.test.ts` → expected GREEN (these are deferred regression guards against the already-implemented `windowStart`; if a fixture timestamp is normalized, set that row's `submitted_at`/`opened_at` explicitly in this test, never change production code).
+
+- [ ] **Step 2: Add hourly tests first (RED)**
+
+Create `apps/web/test/jobs/hourly.test.ts`. It must cover all eleven keys, JSON `null` below threshold, repeat writes with a new timestamp, and query failure preservation/continuation:
+
+```ts
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { PUBLIC_STAT_KEYS } from "../../src/domain/public-stats.ts";
+import { runHourly } from "../../src/jobs/hourly.ts";
+import { testEnv } from "../helpers.ts";
+import { writePublicStat } from "../../src/db/public-stats.ts";
+
+const NOW = new Date("2026-10-05T12:05:00.000Z");
+const LATER = new Date("2026-10-05T13:05:00.000Z");
+const brokenOn = (fragment: string): D1Database => new Proxy(testEnv.DB, { get(db, prop) {
+  if (prop === "prepare") return (sql: string) => sql.includes(fragment) ? (() => { throw new Error(`boom on ${fragment}`); })() : db.prepare(sql);
+  const value = Reflect.get(db, prop) as unknown; return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(db) : value;
+} }) as D1Database;
+afterEach(() => vi.restoreAllMocks());
+describe("hourly public-stat job", () => {
+it("writes exactly PUBLIC_STAT_KEYS, including null below thresholds", async () => {
+  await testEnv.DB.prepare("DELETE FROM public_stats").run();
+  const results = await runHourly(testEnv, NOW);
+  expect(results.map((r) => r.step)).toEqual([...PUBLIC_STAT_KEYS]);
+  expect((await testEnv.DB.prepare("SELECT key, value FROM public_stats ORDER BY key").all()).results).toHaveLength(PUBLIC_STAT_KEYS.length);
+  expect((await testEnv.DB.prepare("SELECT value FROM public_stats WHERE key = 'count_products'").first<{ value: string }>())?.value).toBe("null");
+});
+
+it("is idempotent for values while computed_at advances", async () => {
+  await runHourly(testEnv, NOW); const before = await testEnv.DB.prepare("SELECT value FROM public_stats WHERE key = 'count_products'").first<{ value: string }>();
+  await runHourly(testEnv, LATER); const after = await testEnv.DB.prepare("SELECT value, computed_at FROM public_stats WHERE key = 'count_products'").first<{ value: string; computed_at: string }>();
+  expect(after?.value).toBe(before?.value); expect(after?.computed_at).toBe(LATER.toISOString());
+});
+
+it("keeps a prior row when one query fails and continues later keys", async () => {
+  const oldAt = "2026-10-05T11:05:00.000Z";
+  await writePublicStat(testEnv.DB, "growth", [{ week: "2026-W40", products: 1, builders: 1 }], oldAt);
+  const results = await runHourly({ ...testEnv, DB: brokenOn("first_published_at") }, NOW);
+  expect(results.find((r) => r.step === "growth")).toEqual({ job: "hourly", step: "growth", error: "Error: boom on first_published_at" });
+  expect(await testEnv.DB.prepare("SELECT value, computed_at FROM public_stats WHERE key = 'growth'").first()).toEqual({ value: JSON.stringify([{ week: "2026-W40", products: 1, builders: 1 }]), computed_at: oldAt });
+  expect(results.find((r) => r.step === "top_builders")).toHaveProperty("value");
+});
+});
+```
+
+Run `npm test -w apps/web -- test/jobs/hourly.test.ts` → expected RED because `src/jobs/hourly.ts` does not exist. Do not weaken the failure by mocking the public-stats loaders in this file; the D1 query/write boundary is the acceptance target.
+
+- [ ] **Step 3: Add scheduler dispatch tests (RED)**
+
+Create `apps/web/test/jobs/scheduled.test.ts` with hoisted module mocks so the test spies on dispatch without running either job:
+
+```ts
+import { expect, it, vi } from "vitest";
+import { testEnv } from "../helpers.ts";
+const daily = vi.hoisted(() => ({ runDaily: vi.fn(async () => []) }));
+const hourly = vi.hoisted(() => ({ runHourly: vi.fn(async () => []) }));
+vi.mock("../../src/jobs/daily.ts", () => daily);
+vi.mock("../../src/jobs/hourly.ts", () => hourly);
+import worker from "../../src/index.ts";
+
+const call = async (cron: string) => {
+  const pending: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => pending.push(p), passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+  await worker.scheduled?.({ cron, scheduledTime: Date.parse("2026-10-05T12:05:00.000Z"), noRetry() {} } as ScheduledController, testEnv, ctx);
+  await Promise.all(pending); return pending;
+};
+it.each([["0 1 * * *", daily.runDaily], ["5 * * * *", hourly.runHourly]])("dispatches %s", async (cron, job) => { vi.clearAllMocks(); await call(cron); expect(job).toHaveBeenCalledWith(testEnv, new Date("2026-10-05T12:05:00.000Z")); });
+it("warns and skips an unknown cron", async () => { vi.clearAllMocks(); const warn = vi.spyOn(console, "warn").mockImplementation(() => {}); expect(await call("17 * * * *")).toHaveLength(0); expect(daily.runDaily).not.toHaveBeenCalled(); expect(hourly.runHourly).not.toHaveBeenCalled(); expect(warn).toHaveBeenCalledWith(JSON.stringify({ job: "scheduler", event: "unknown_cron", cron: "17 * * * *" })); });
+```
+
+Each test clears the hoisted mocks first (plan review M1: the dispatch cases leave call history that would break the unknown-cron `not.toHaveBeenCalled()` checks). Run `npm test -w apps/web -- test/jobs/scheduled.test.ts` → expected RED because the current handler only recognizes the daily cron and does not import `runHourly`.
+
+- [ ] **Step 4: Implement `jobs/hourly.ts` minimally, then turn the hourly RED test GREEN**
+
+Use this step table; do not add a Live/event job or a second writer:
+
+```ts
+import {
+  MIN, PUBLIC_STAT_KEYS, countStat, liveEvents, rankTrending, requestByCategory, scarcestCategory, topBuilders, topProductsByCategory, weeklyGrowth,
+  type PublicStatKey, type PublicStatValues,
+} from "../domain/public-stats.ts";
+import {
+  loadBuilderTallies, loadCategoryCounts, loadCounts, loadGrowthDays, loadLiveEvents, loadProductCandidates, loadTrendingCandidates, writePublicStat,
+} from "../db/public-stats.ts";
+import type { Bindings } from "../env.ts";
+
+type HourlyStep = { step: PublicStatKey; run: (env: Bindings, now: string) => Promise<PublicStatValues[PublicStatKey] | null> };
+const STEPS: HourlyStep[] = [
+  { step: "count_products", run: async (e, n) => countStat((await loadCounts(e.DB, n)).products, MIN.products) },
+  { step: "count_builders", run: async (e, n) => countStat((await loadCounts(e.DB, n)).builders, MIN.builders) },
+  { step: "count_requests_30d", run: async (e, n) => countStat((await loadCounts(e.DB, n)).requests30d, MIN.requests30d) },
+  { step: "count_countries", run: async (e, n) => countStat((await loadCounts(e.DB, n)).countries, MIN.countries) },
+  { step: "trending", run: async (e, n) => rankTrending(await loadTrendingCandidates(e.DB, n), n) },
+  { step: "request_by_category", run: async (e, n) => { const x = await loadCategoryCounts(e.DB, n); return requestByCategory(x.requests, x.products); } },
+  { step: "scarcest_category", run: async (e, n) => { const x = await loadCategoryCounts(e.DB, n); return scarcestCategory(x.requests, x.products); } },
+  { step: "growth", run: async (e, n) => weeklyGrowth(await loadGrowthDays(e.DB), n) },
+  { step: "top_builders", run: async (e, n) => topBuilders(await loadBuilderTallies(e.DB, n)) },
+  { step: "top_products", run: async (e, n) => topProductsByCategory(await loadProductCandidates(e.DB, n)) },
+  { step: "live", run: async (e, n) => liveEvents(await loadLiveEvents(e.DB, n), n) },
+];
+
+export type HourlyResult =
+  | { job: "hourly"; step: PublicStatKey; value: PublicStatValues[PublicStatKey] | null; computedAt: string }
+  | { job: "hourly"; step: PublicStatKey; error: string };
+export async function runHourly(env: Bindings, now: Date): Promise<HourlyResult[]> {
+  const iso = now.toISOString(); const results: HourlyResult[] = [];
+  for (const { step, run } of STEPS) try {
+    const value = await run(env, iso); await writePublicStat(env.DB, step, value, iso);
+    const result: HourlyResult = { job: "hourly", step, value, computedAt: iso }; console.log(JSON.stringify(result)); results.push(result);
+  } catch (err) { const result: HourlyResult = { job: "hourly", step, error: String(err) }; console.error(JSON.stringify(result)); results.push(result); }
+  return results;
+}
+```
+
+Run `npm test -w apps/web -- test/jobs/hourly.test.ts` → expected GREEN. Confirm the old `growth` row is unchanged after the forced query error; only a successful step may call `writePublicStat`.
+
+- [ ] **Step 5: Wire dispatch, triggers, and architecture guard**
+
+In `apps/web/src/index.ts`, import `runHourly` and replace the one-branch handler with:
+
+```ts
+scheduled(controller, env, ctx) {
+  const now = new Date(controller.scheduledTime);
+  if (controller.cron === "0 1 * * *") ctx.waitUntil(runDaily(env, now));
+  else if (controller.cron === "5 * * * *") ctx.waitUntil(runHourly(env, now));
+  else console.warn(JSON.stringify({ job: "scheduler", event: "unknown_cron", cron: controller.cron }));
+},
+```
+
+In `apps/web/wrangler.jsonc`, set exactly `"triggers": { "crons": ["0 1 * * *", "5 * * * *"] }` and update the adjacent deploy comments to say daily clean-up runs at 01:00 UTC and the hourly `public_stats` snapshot runs at minute 05; retain the existing `0014`/`0016` migration order. In `apps/web/test/architecture.test.ts`, add `"../src/jobs/hourly.ts"` to `RANKING_FILES` and assert it is not in `MONEY_ALLOWED`; leave the allowlist contents unchanged. Run `npm test -w apps/web -- test/jobs/scheduled.test.ts test/architecture.test.ts` → expected GREEN.
+
+- [ ] **Step 6: Focused acceptance and unchanged daily job**
+
+Run `npm test -w apps/web -- test/jobs test/db/public-stats.test.ts test/architecture.test.ts` → expected GREEN. This must prove: both exact cron branches and unknown-cron skip; eleven rows/keys including `live` exactly once; below-threshold JSON `null`; same value is idempotent while `computed_at` advances; a failed query preserves its old row and later steps run; ranking code has no money access; and `runDaily` still has its prior steps and no view-dedupe purge. Re-run `npm test -w apps/web -- test/jobs/daily.test.ts test/jobs/daily-inquiries.test.ts test/jobs/daily-requests.test.ts` → expected GREEN. Do not add README/runbook files and do not deploy; Owner must verify the shared-account cron slot.
+
+- [ ] **Step 7: Typecheck, full test, and commit instructions**
+
+```text
+npm run typecheck -w apps/web && npm test
+git add apps/web/src/jobs/hourly.ts apps/web/src/index.ts apps/web/wrangler.jsonc apps/web/test/jobs/hourly.test.ts apps/web/test/jobs/scheduled.test.ts apps/web/test/db/public-stats.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): add hourly public stats cron (VNX-0702b)
+
+Dispatch the daily and hourly triggers explicitly, isolate one snapshot write
+per public stat key, and preserve prior snapshots when a query fails.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+Expected: typecheck and full `npm test` pass; `rg -n '"crons"' apps/web/wrangler.jsonc` shows both exact triggers; `git diff --stat` is about 300 lines and ≤600 lines excluding locale (none). Production migration/deploy and `ANALYTICS_SALT` remain Owner-controlled.
 
 ---
 
