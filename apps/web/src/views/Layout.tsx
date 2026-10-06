@@ -4,6 +4,7 @@ import { translator, type Translate } from "../i18n/t.ts";
 import { CONTACT_EMAIL } from "../domain/feedback.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { jsonLdScript } from "./json-ld.ts";
+import { PRIVACY_NOTICE_SCRIPT, PrivacyNotice, privacyNoticeDate } from "./privacy-notice.tsx";
 
 export type LayoutProps = {
   locale: Locale;
@@ -132,6 +133,9 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
   const canonical = origin + localizedPath(locale, rest);
   const nav = mainNav(locale, rest);
   const isSignedIn = signedIn === true;
+  const noticeDate = privacyNoticeDate(locale, isSignedIn);
+  const pageScripts = [...new Set([...(scripts ?? []), ...(noticeDate !== null ? [PRIVACY_NOTICE_SCRIPT] : [])])];
+  const notice = noticeDate !== null ? <PrivacyNotice locale={locale} date={noticeDate} tr={tr} /> : null;
   return (
     <html lang={locale}>
       <head>
@@ -156,7 +160,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         ))}
         <link rel="stylesheet" href="/assets/app.css" />
         <link rel="icon" type="image/svg+xml" href="/assets/brand/vnxsi-icon.svg" />
-        {(scripts ?? []).map((src) => (
+        {pageScripts.map((src) => (
           <script src={src} defer></script>
         ))}
       </head>
@@ -200,6 +204,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
           </div>
         </header>
         <main id="main" class={fullWidth ? "page-full" : "container"}>
+          {notice !== null && fullWidth ? <div class="container">{notice}</div> : notice}
           {children}
         </main>
         <footer class="site-footer">

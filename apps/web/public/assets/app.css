@@ -547,3 +547,11 @@ table.data th { font-weight: 600; color: var(--text-2); }
   .belt-track { flex-wrap: wrap; width: auto; max-width: 1200px; margin: 0 auto; padding: 0 24px; gap: 12px 32px; white-space: normal; }
   .belt-track > [aria-hidden="true"] { display: none; }
 }
+
+.privacy-notice { position: relative; margin: 0 0 24px; padding: 16px 96px 16px 18px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.privacy-notice:not([open]) { display: none; }
+.privacy-notice p { margin: 0; }
+.privacy-notice-close { position: absolute; top: 8px; right: 10px; min-height: 44px; padding: 8px; color: var(--primary); cursor: pointer; font-weight: 600; }
+.privacy-notice-close:hover { color: var(--primary-hover); }
+.privacy-notice-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.page-full > .container > .privacy-notice { margin-top: 16px; }

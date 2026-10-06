@@ -217,3 +217,12 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
     for (const [file, src] of Object.entries(sources)) expect(src, file).not.toMatch(/elevenlabs|partnerstack/i);
   });
 });
+
+describe("single render choke point (VNX-0701c)", () => {
+  it("only views/render.ts calls c.html( — a direct call would silently drop the privacy notice", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (file === "../src/views/render.ts") continue;
+      expect(src, file).not.toMatch(/\bc\.html\(/);
+    }
+  });
+});

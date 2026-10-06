@@ -25,7 +25,9 @@
     "APP_ORIGIN": "https://vnx.si",
     // Turnstile site key (public) of the vnx.si widget (Owner, 2026-10-04; VNX-0710). Empty = signed-out inquiries and
     // contact messages are refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X",
+    // Privacy notice go-live (YYYY-MM-DD, UTC). Empty hides the notice. The production date is committed here in a chore: commit before the VNX-0701c deploy; never via --var or the dashboard.
+    "PRIVACY_NOTICE_GO_LIVE": ""
   },
   "workers_dev": true,
   "routes": [
