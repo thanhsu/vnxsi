@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPrivacyNoticeDate, parsePrivacyNoticeDate, shouldShowPrivacyNotice } from "../../src/domain/privacy-notice.ts";
+import { formatPrivacyNoticeDate, parsePrivacyNoticeDate, privacyVersion, shouldShowPrivacyNotice } from "../../src/domain/privacy-notice.ts";
 
 const LIVE = "2026-10-20";
 const at = (iso: string) => new Date(iso);
@@ -37,4 +37,20 @@ describe("formatPrivacyNoticeDate", () => {
     expect(out).not.toBe(LIVE);
   });
   it("is null for a malformed date", () => expect(formatPrivacyNoticeDate("2026-02-30", "en")).toBeNull());
+});
+
+describe("privacyVersion", () => {
+  it.each([
+    ["before the window", "2026-10-05T23:59:59.999Z", "current"],
+    ["start of the window (go-live - 14 days), inclusive", "2026-10-06T00:00:00.000Z", "m7"],
+    ["go-live", "2026-10-20T00:00:00.000Z", "m7"],
+    ["long after the notice window ends", "2027-03-01T00:00:00.000Z", "m7"],
+  ] as const)("%s", (_label, iso, expected) => expect(privacyVersion(LIVE, at(iso))).toBe(expected));
+  it("is current for an unset, empty or malformed go-live and for an invalid now", () => {
+    for (const bad of [undefined, "", "2026-02-30", "20-10-2026", "2026-10-20T00:00:00Z"]) expect(privacyVersion(bad, at("2026-10-20T00:00:00Z"))).toBe("current");
+    expect(privacyVersion(LIVE, new Date(Number.NaN))).toBe("current");
+  });
+  it("starts exactly when the notice starts", () => {
+    for (const iso of ["2026-10-05T23:59:59.999Z", "2026-10-06T00:00:00.000Z"]) expect(privacyVersion(LIVE, at(iso)) === "m7").toBe(shouldShowPrivacyNotice(LIVE, at(iso)));
+  });
 });

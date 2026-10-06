@@ -26,7 +26,7 @@
     // Turnstile site key (public) of the vnx.si widget (Owner, 2026-10-04; VNX-0710). Empty = signed-out inquiries and
     // contact messages are refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X",
-    // Privacy notice go-live (YYYY-MM-DD, UTC). Empty hides the notice. The production date is committed here in a chore: commit before the VNX-0701c deploy; never via --var or the dashboard.
+    // Privacy go-live (YYYY-MM-DD, UTC). Empty = the old Privacy text, no notice, and (Task VNX-0701b) no view counting. From go-live minus 14 days /privacy shows the M7 text and the notice appears; counting starts at go-live 00:00 UTC. NEVER clear it after go-live: it selects the Privacy version and enables counting. The production date is committed here in a chore: commit before the VNX-0701c deploy; never via --var or the dashboard.
     "PRIVACY_NOTICE_GO_LIVE": ""
   },
   "workers_dev": true,

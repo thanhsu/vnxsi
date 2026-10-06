@@ -18,6 +18,16 @@ export function shouldShowPrivacyNotice(goLive: string | undefined, now: Date): 
   return at >= date.getTime() - 14 * DAY_MS && at < date.getTime() + 31 * DAY_MS;
 }
 
+export type PrivacyVersion = "current" | "m7";
+
+/** `"m7"` from the start of the notice window (go-live - 14 UTC days, inclusive) for ever after; `"current"` before it, or for an unset or malformed value. Never go back: the value is not cleared after go-live. */
+export function privacyVersion(goLive: string | undefined, now: Date): PrivacyVersion {
+  const date = parsePrivacyNoticeDate(goLive);
+  const at = now.getTime();
+  if (!date || !Number.isFinite(at)) return "current";
+  return at >= date.getTime() - 14 * DAY_MS ? "m7" : "current";
+}
+
 export function formatPrivacyNoticeDate(goLive: string | undefined, locale: Locale): string | null {
   const date = parsePrivacyNoticeDate(goLive);
   return date
