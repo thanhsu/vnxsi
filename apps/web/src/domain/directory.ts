@@ -11,6 +11,8 @@ export interface DirectoryQuery {
   lang: WorkLanguage | null;
   country: string | null;
   availability: Availability | null;
+  /** Internal only (the /tools/:slug bridge): builders whose ai_tools list this exact name. Never read from the URL. */
+  tool?: string;
   page: number;
 }
 

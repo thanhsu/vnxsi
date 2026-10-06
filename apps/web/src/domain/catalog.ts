@@ -28,6 +28,8 @@ export interface CatalogQuery {
   /** Bounds on the cheapest priced tier (Owner decision 2026-10-04), in cents. */
   minCents: number | null;
   maxCents: number | null;
+  /** Internal only (the /tools/:slug bridge): products whose tech_stack lists this exact name. Never read from the URL. */
+  tool?: string;
   page: number;
 }
 

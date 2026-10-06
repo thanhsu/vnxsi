@@ -5,16 +5,14 @@ import { directorySearchParams, isDirectoryFiltered, type DirectoryEntry, type D
 import { CATEGORIES } from "../domain/product.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
+import { BuilderCard } from "./BuilderCard.tsx";
 import { countryName } from "./country.ts";
-import { formatUsd } from "./format.ts";
-import { AVAILABILITY_KEY, CATEGORY_KEY, KIND_KEY, LANGUAGE_KEY } from "./labels.ts";
+import { AVAILABILITY_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "./labels.ts";
 import { Layout } from "./Layout.tsx";
 import { Pagination } from "./Pagination.tsx";
 import { SelectFilter } from "./SelectFilter.tsx";
 
 type Props = { locale: Locale; origin: string; query: DirectoryQuery; result: Paged<DirectoryEntry>; countries: string[]; signedIn: boolean };
-
-const MAX_SKILLS = 6;
 
 /** Spec §5.2 directory, with the "Post a request" entry point (Owner decision 2026-10-04, M6). */
 export const DirectoryPage: FC<Props> = ({ locale, origin, query, result, countries, signedIn }) => {
@@ -60,25 +58,7 @@ export const DirectoryPage: FC<Props> = ({ locale, origin, query, result, countr
       {result.items.length > 0 ? (
         <ul class="cards">
           {result.items.map((e) => (
-            <li>
-              <h2><a href={localizedPath(locale, `/b/${e.handle}`)}>{e.name}</a></h2>
-              <p>{e.headline}</p>
-              <p class="muted">
-                {tr(KIND_KEY[e.kind])} · {countryName(locale, e.country)}
-              </p>
-              <p>
-                <span class={`badge badge-avail-${e.availability}`}>{tr(AVAILABILITY_KEY[e.availability])}</span>
-                {e.hourlyRateCents !== null ? <span class="rate">{tr("bprofile.rate", { amount: formatUsd(locale, e.hourlyRateCents) })}</span> : null}
-              </p>
-              {e.skills.length > 0 ? (
-                <ul class="chips">
-                  {e.skills.slice(0, MAX_SKILLS).map((s) => (
-                    <li>{s}</li>
-                  ))}
-                </ul>
-              ) : null}
-              <p class="muted">{tr("directory.products", { n: e.publishedCount })}</p>
-            </li>
+            <BuilderCard locale={locale} entry={e} />
           ))}
         </ul>
       ) : (
