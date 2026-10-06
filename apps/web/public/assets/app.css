@@ -265,8 +265,9 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .cards > li > * { margin: 0; }
 .cards img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid var(--border); border-radius: 8px; }
 .cards h2, .cards h3 { font-size: 18px; }
+.cards h3 { font-family: var(--font-display); letter-spacing: -0.015em; }
 .tool-cta { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 32px; }
-.tool-cta .card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; background: var(--surface); }
+.tool-cta .card { max-width: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; background: var(--surface); }
 .tool-cta .card > * { margin: 0; }
 .tool-cta .btn { text-decoration: none; }
 @media (min-width: 768px) { .tool-cta { grid-template-columns: 1fr 1fr; } }

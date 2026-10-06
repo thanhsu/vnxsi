@@ -70,7 +70,7 @@ export const ToolPage: FC<Props> = ({ locale, origin, merchant, offers, products
             </ul>
           </section>
         ) : null}
-        <section class="tool-cta" aria-label={tr("request.cta")}>
+        <section class="tool-cta">
           <div class="card">
             <h2>{tr("tools.request.title", { name: merchant.name })}</h2>
             <p>{tr("tools.request.body")}</p>

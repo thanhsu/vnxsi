@@ -34,8 +34,12 @@ export function registerToolsRoutes(app: Hono<AppEnv>) {
     const indexing = await isFlagEnabled(c.env.DB, "content_indexing");
     const offers = visibleOffers({ merchant, rows, flags, now: new Date().toISOString() });
     // The same neutral searches as /builders and /products (ADR-004), narrowed to this tool's name; money never reaches them.
-    const builders = (await searchBuilders(c.env.DB, { ...parseDirectoryQuery({}), tool: merchant.name })).items.slice(0, BRIDGE_LIMIT);
-    const products = (await searchProducts(c.env.DB, { ...parseCatalogQuery({}), tool: merchant.name })).items.slice(0, BRIDGE_LIMIT);
+    const [builderPage, productPage] = await Promise.all([
+      searchBuilders(c.env.DB, { ...parseDirectoryQuery({}), tool: merchant.name }),
+      searchProducts(c.env.DB, { ...parseCatalogQuery({}), tool: merchant.name }),
+    ]);
+    const builders = builderPage.items.slice(0, BRIDGE_LIMIT);
+    const products = productPage.items.slice(0, BRIDGE_LIMIT);
     return page(
       c,
       <ToolPage locale={locale} origin={siteOrigin(c)} merchant={merchant} offers={offers} products={products} builders={builders} noindex={!toolIndexable(merchant, indexing)} signedIn={c.get("user") !== null} />,
