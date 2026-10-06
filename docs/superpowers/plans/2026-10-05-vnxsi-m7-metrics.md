@@ -4849,48 +4849,46 @@ Expected: typecheck and full `npm test` pass; `rg -n '"crons"' apps/web/wrangler
 
 ---
 
-### Task 7a: VNX-0703a — Khối dữ liệu homepage (Con số, Live, Trending hoặc Founding products)
+### Task 7a: VNX-0703a — Khối dữ liệu homepage (Con số, Trending hoặc Founding products)
 
-**Trạng thái:** bản nháp, CHƯA review, TẠM GIỮ — chờ Owner quyết về execution plan marketing/designer (2026-10-06).
+**Trạng thái:** đã review (Opus), Owner duyệt câu chữ 2026-10-06.
 
-**Tách 7a / 7b:** một Task 7 ước ~1100 dòng (mã ~650 + test ~450) vượt trần 600. 7a làm đường ống (route, `LandingPage` nhận khối dưới, `HomeBlocks`, helper định dạng, CSS nền, test chung) và ba khối đầu; 7b (Task 7b ngay sau) thêm Market pulse bảng-trước, Top builders, Top products. Mỗi bên ≲ 600 dòng không tính locale.
+**Tách 7a / 7b:** một Task 7 ước ~1100 dòng (mã ~650 + test ~450) vượt trần 600. 7a làm đường ống (route, `LandingPage` nhận khối dưới, `HomeBlocks`, helper định dạng, CSS nền, test chung) và hai khối đầu (Con số, Trending/Founding); 7b (Task 7b ngay sau) thêm Live, Market pulse bảng-trước, Top builders, Top products. (Live đã được chuyển sang 7b để 7a vừa trần 600; `homeView` vẫn trả `live` nhưng `HomeBlocks` của 7a chưa in nó.) Mỗi bên ≲ 600 dòng không tính locale.
 
-**Scope:** (A2, Owner 2026-10-05) các khối dữ liệu nằm DƯỚI landing VNX-0708 ở `/`, landing giữ nguyên chữ và thứ tự. `routes/home.tsx#homeBlocks(c)` đọc đúng MỘT truy vấn `readPublicStats`, truyền xuống `views/home/HomeBlocks.tsx`; mỗi khối chỉ hiện khi key của nó còn tươi (≤ 3 giờ) và khác `null`; không khối nào hiện thì không in ra gì (landing y nguyên từng byte của phần `<main>`). 7a có ba khối:
+**Scope:** (A2, Owner 2026-10-05) các khối dữ liệu nằm DƯỚI landing VNX-0708 ở `/`, landing giữ nguyên chữ và thứ tự. `routes/home.tsx#loadHomeData` đọc đúng MỘT truy vấn `readPublicStats`, `domain/public-stats.ts#homeView` chọn dữ liệu của từng khối (dữ liệu hoặc `null`), `views/home/HomeBlocks.tsx` chỉ ánh xạ từng trường sang `HomeSection`; mỗi khối chỉ hiện khi key của nó còn tươi (≤ 3 giờ) và khác `null`; không khối nào hiện thì không in ra gì (landing y nguyên từng byte của phần `<main>`). 7a có hai khối:
 - **Con số** (4 ô theo `NUMBER_KEYS`, ẩn ô dưới ngưỡng, ẩn cả hàng nếu còn < 2 ô, nhãn "cập nhật mỗi giờ" chỉ khi hàng hiện, tức có `computed_at` thật).
-- **Live** (danh sách tĩnh các sự kiện công khai kèm thời gian tương đối; dải chạy ngang là Task 8).
 - **Trending this week** (6 thẻ: số thứ hạng bằng CSS counter, sparkline SVG 14 ngày, % thay đổi) hoặc, khi Trending ẩn, **Founding products** (6 product có `first_published_at` mới nhất, mới trước).
 
 **Hero và 4 khối tĩnh (4 ways, huy hiệu, khối builder, CTA cuối): KHÔNG làm gì.** Landing 0708 đã có đủ và Owner chọn A2. Hero của landing đã là "3 product nổi bật theo thứ tự mặc định của catalogue" (`firstPublicProducts` = `searchProducts(parseCatalogQuery({}))`, huy hiệu cao nhất rồi mới nhất, spec §8.7), đúng Owner Q1; test ở 7a chỉ KHÓA hành vi đó (không viết lại, không nhân đôi truy vấn). Thẻ "Your product here" của spec §5.9 vẫn là thẻ category của deck (đã duyệt ở 0708).
 
 **Files:**
-- Create: `apps/web/src/routes/home.tsx`, `apps/web/src/views/home/HomeBlocks.tsx`, `apps/web/src/views/home/Numbers.tsx`, `apps/web/src/views/home/Live.tsx`, `apps/web/src/views/home/Trending.tsx` (Trending và Founding).
-- Modify: `apps/web/src/domain/public-stats.ts` (thêm `NUMBER_KEYS`, `MIN_NUMBER_TILES`, `FOUNDING_LIMIT`, `FOUNDING_MIN`, `numberTiles`), `apps/web/src/db/catalog.ts` (`ITEM_COLUMNS`, `foundingProducts`), `apps/web/src/views/format.ts` (`formatCount`, `formatChange`, `relativeTime`, `SPARK_VIEWBOX`, `sparkPoints`), `apps/web/src/views/labels.ts` (`NUMBER_LABEL`), `apps/web/src/views/LandingPage.tsx` (prop `below`), `apps/web/src/routes/landing.tsx` (gọi `homeBlocks` ở GET), `apps/web/public/assets/app.css`, 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`, `apps/web/test/architecture.test.ts`, `apps/web/test/domain/public-stats.test.ts`.
-- Test (create): `apps/web/test/home/blocks.ts` (helper dùng chung, 7b mở rộng), `apps/web/test/home/home.test.ts`, `apps/web/test/home/founding.test.ts`.
-- Rerun only: `test/landing/*`, `test/catalog/*`, `test/design/assets.test.ts`, `test/i18n/parity.test.ts`.
+- Create: `apps/web/src/routes/home.tsx`, `apps/web/src/views/home/HomeSection.tsx`, `apps/web/src/views/home/HomeBlocks.tsx`, `apps/web/src/views/home/Numbers.tsx`, `apps/web/src/views/home/Trending.tsx` (Trending và Founding).
+- Modify: `apps/web/src/domain/public-stats.ts` (thêm `NUMBER_KEYS`, `MIN_NUMBER_TILES`, `FOUNDING_LIMIT`, `FOUNDING_MIN`, `numberTiles`, `homeView`), `apps/web/src/db/catalog.ts` (`ITEM_COLUMNS`, `foundingProducts`), `apps/web/src/views/format.ts` (`formatCount`, `formatChange`, `SPARK_VIEWBOX`, `sparkPoints`), `apps/web/src/views/labels.ts` (`NUMBER_LABEL`), `apps/web/src/views/LandingPage.tsx` (prop `below`), `apps/web/src/routes/landing.tsx` (gọi `homeBlocks` ở GET), `apps/web/public/assets/app.css`, 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`, `apps/web/test/architecture.test.ts`, `apps/web/test/domain/public-stats.test.ts`.
+- Test (create): `apps/web/test/home/blocks.ts` (helper dùng chung, 7b mở rộng), `apps/web/test/home/home.test.ts`, `apps/web/test/home/founding.test.ts`, `apps/web/test/home/separable.test.tsx`.
+- Rerun only (không sửa): `test/landing/*` (gồm `test/landing/deck.test.ts`), `test/catalog/*`, `test/design/assets.test.ts`, `test/i18n/parity.test.ts`.
 
 **Interfaces:**
-- Consumes (thật): `readPublicStats(db, now): Promise<PublicSnapshot>`, `PublicSnapshot`, `MIN`, `REQUEST_DAYS`, `SPARK_DAYS`, `STALE_AFTER_MS`, `TrendingItem`, `PublicLiveEvent`, `LIVE_MAX`, `writePublicStat`, `countStat`, `rankTrending`, `liveEvents` (`domain|db/public-stats.ts`); `CatalogItem`, `topBadge`, `BADGE_SCORE` (`domain/catalog.ts`); `PUBLIC_PRODUCT`, `JOINS`, `COVER_SQL`, `MIN_PRICE_SQL`, `BADGE_SCORE_SQL`, `ItemRow`, `toItem` (`db/catalog.ts`, nội bộ); `BADGE_KEY`, `CATEGORY_KEY`, `LANGUAGE_KEY` (`views/labels.ts`); `page`, `localizedPath`, `translator`; `makeLiveProduct`, `testEnv`.
-- Produces: `NUMBER_KEYS`, `type NumberKey`, `MIN_NUMBER_TILES`, `FOUNDING_LIMIT = 6`, `FOUNDING_MIN = 1`, `type NumberTile`, `numberTiles(snapshot): NumberTile[] | null`; `foundingProducts(db, limit): Promise<CatalogItem[]>`; `homeBlocks(c): Promise<Child>`; `HomeBlocks`, `Numbers`, `Live`, `Trending`, `Founding`; `formatCount`, `formatChange`, `relativeTime`, `SPARK_VIEWBOX`, `sparkPoints`; section ids `home-numbers`, `home-live`, `home-trending`, `home-founding`.
+- Consumes (thật): `readPublicStats(db, now): Promise<PublicSnapshot>`, `PublicSnapshot`, `MIN`, `REQUEST_DAYS`, `SPARK_DAYS`, `STALE_AFTER_MS`, `TrendingItem`, `writePublicStat`, `countStat`, `rankTrending` (`domain|db/public-stats.ts`); `CatalogItem`, `topBadge`, `BADGE_SCORE` (`domain/catalog.ts`); `PUBLIC_PRODUCT`, `JOINS`, `COVER_SQL`, `MIN_PRICE_SQL`, `BADGE_SCORE_SQL`, `ItemRow`, `toItem` (`db/catalog.ts`, nội bộ); `BADGE_KEY`, `CATEGORY_KEY` (`views/labels.ts`); `page`, `localizedPath`, `translator`; `makeLiveProduct`, `testEnv`.
+- Produces: `NUMBER_KEYS`, `type NumberKey`, `MIN_NUMBER_TILES`, `FOUNDING_LIMIT = 6`, `FOUNDING_MIN = FOUNDING_LIMIT`, `type NumberTile`, `numberTiles(snapshot): NumberTile[] | null`; `foundingProducts(db, limit): Promise<CatalogItem[]>`; `homeView(snapshot, founding): HomeView`, `type HomeView`; `loadHomeData(db, now): Promise<HomeData | null>`, `renderHome(locale, data): Promise<Child | null>`, `homeBlocks(c): Promise<Child | null>`; `HomeSection`, `HomeBlocks`, `Numbers`, `Trending`, `Founding`; `formatCount`, `formatChange`, `SPARK_VIEWBOX`, `sparkPoints`; section ids `home-numbers`, `home-trending`, `home-founding`.
 
 **Quyết định kỹ thuật (Reviewer kiểm):**
-1. **Ngưỡng chỉ áp ở domain, view không tự quyết.** View chỉ hỏi "key còn trong snapshot không". Mọi con số đến từ `public_stats` (hoặc `MIN`/`*_DAYS` của domain, chỉ để điền tham số nhãn); view không có chữ số nào. Test grep mã `views/home/*.tsx` (không chữ số trừ thẻ `h1`–`h6`; tên khóa i18n, class và id không có chữ số; chú thích bị loại trước khi grep nên không cần tránh chữ số trong chú thích). Sparkline, tỉ lệ phần trăm, thời gian tương đối và định dạng số nằm trong `views/format.ts`; ánh xạ khóa thống kê sang nhãn (`count_requests_30d` có chữ số) nằm ở `views/labels.ts#NUMBER_LABEL`. Cả hai ngoài thư mục `home/`, nơi chữ số được phép. Không viết chú thích `//` cuối dòng trong `views/home/*.tsx` (grep chỉ bỏ chú thích đứng riêng một dòng và `/* */`).
+1. **Ngưỡng chỉ áp ở domain, view không tự quyết.** View chỉ hỏi "key còn trong snapshot không". Mọi con số đến từ `public_stats` (hoặc `MIN`/`*_DAYS` của domain, chỉ để điền tham số nhãn); view không có chữ số nào. Test grep mã `views/home/*.tsx` (không chữ số trừ thẻ `h1`–`h6`; tên khóa i18n, class và id không có chữ số; chú thích bị loại trước khi grep nên không cần tránh chữ số trong chú thích). Sparkline, tỉ lệ phần trăm và định dạng số nằm trong `views/format.ts`; ánh xạ khóa thống kê sang nhãn (`count_requests_30d` có chữ số) nằm ở `views/labels.ts#NUMBER_LABEL`. Cả hai ngoài thư mục `home/`, nơi chữ số được phép. Không viết chú thích `//` cuối dòng trong `views/home/*.tsx` (grep chỉ bỏ chú thích đứng riêng một dòng và `/* */`).
 2. **Founding products là truy vấn trực tiếp, không phải key `public_stats`** (Task 5 không tạo key; spec §8.11 không có). Nó chỉ chạy khi Trending ẩn, `LIMIT 6`, trên `PUBLIC_PRODUCT` đã có chỉ mục; không có tham số trả tiền, không đọc bảng tiền (file `db/catalog.ts` đã nằm trong `RANKING_FILES`). Số `public_stats` vẫn đọc đúng một lần.
 3. **Trending cũ (stale) cũng nhường chỗ cho Founding** (key vắng thì cùng nhánh với "dưới 6 product đủ điểm"). Giá trị "trending chỉ ẩn khi stale" không có truy vấn tự tính lại.
-4. **Founding hiện khi có ≥ `FOUNDING_MIN` (1) product** (xem câu hỏi mở). Hằng số nằm ở domain để đổi một dòng.
-5. **Lỗi đọc thống kê không làm sập landing:** `homeBlocks` bọc `try/catch`, log một dòng JSON `home_blocks_failed` rồi trả `null` (landing là trang chủ; thiếu migration `0016` hay D1 lỗi không được kéo theo 500). Test dùng proxy ném lỗi khi `prepare` chứa `public_stats`.
+4. **Founding chỉ hiện khi có đủ `FOUNDING_MIN = FOUNDING_LIMIT` (6) product** (Owner 2026-10-06). 5 product thì ẩn, 6 thì hiện; test biên ở `founding.test.ts`.
+5. **Lỗi thống kê không làm sập landing, cả lúc đọc lẫn lúc dựng:** `loadHomeData` có `try/catch` (đọc lỗi thì log `home_blocks_failed` và trả `null`); `renderHome` dựng HTML THÀNH CHUỖI ngay trong `try` (`await (<HomeBlocks/>).toString()` rồi `raw(...)`), nên một giá trị snapshot đúng JSON nhưng sai hình cũng chỉ log và bỏ khối, không 500 (hono dựng JSX lười; nếu không thì lỗi thoát khỏi `try`). Test: proxy ném lỗi khi `prepare` chứa `public_stats`; và một `trending` tươi nhưng sai hình.
 6. **`LandingPage` nhận `below?: Child | null`** và in nó sau khối `#ask`, trong cùng `<main class="page-full">`; chỉ `GET /` truyền `below` (POST `/waitlist` lỗi vẫn dựng lại landing không có khối dữ liệu, tránh thêm truy vấn ở đường POST).
 7. **Không `<script>`, không `style=`, không `on*=`** (CSP; Task 8 mới có JS). Thứ hạng là `<ol>` + CSS counter; sparkline là `<svg role="img">` với `<polyline points>`; nét vẽ nằm trong CSS.
-8. **`HomeBlocks` là component trả `null`** khi không khối nào hiện (hono `FC` cho phép). Các khối con nhận dữ liệu ĐÃ được quyết là hiện, nên không khối nào tự trả `null`.
-9. **Thời gian tương đối tính ở server theo `now` của request** (`Intl.RelativeTimeFormat`); `<time datetime>` giữ thời điểm thật. Chữ số trong nhãn đến từ `Intl`, là định dạng.
+8. **Khối không biết chỗ đặt (Owner: homepage ba cột sẽ dùng lại sau M7).** `HomeSection` là nơi DUY NHẤT có `<section class="lp-section home-block">`, `container`, `section-head`, `h2` và `aria-labelledby`; chỉ `HomeBlocks` gọi nó và giữ các id `home-*`. Mỗi khối (`Numbers`, `Trending`, `Founding`, và ở 7b `Live`, `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`) chỉ trả phần thân: props là dữ liệu, `locale`, và `now` (chỉ `Live`, ở 7b; `HomeBlocks` và `renderHome` của 7a chưa có `now`); ghi chú của khối đi cùng thân ("updated hourly", noPay và tiêu chí, dòng thứ tự). Việc chọn khối nào hiện là hàm thuần `homeView` ở domain; `HomeBlocks` trả `null` khi mọi trường là `null`. Test `separable.test.tsx`: dựng riêng từng thân, không có `<section`, `container`, lớp `lp-`.
+9. **Tải song song:** ở `GET /`, `homeBlocks(c)` bắt đầu cùng lúc với truy vấn deck (`Promise.all` trong `renderLanding`); `homeBlocks` không bao giờ reject.
 
-**Câu hỏi mở cho Owner (7a):**
-- **Q-F:** khối "Founding products" có hiện khi mới có 1 đến 5 product published (mặc định của plan: hiện, `FOUNDING_MIN = 1`), hay chỉ hiện khi đủ 6 (`FOUNDING_MIN = FOUNDING_LIMIT`)? Spec chỉ nói "Founding products (product mới published)", không nêu số tối thiểu.
+**Câu hỏi mở cho Owner (7a):** không còn. Owner 2026-10-06: `FOUNDING_MIN = 6`; tiêu đề Live, Top builders và Top products theo bảng ở 7b.
 
-**Nhãn mới (nhãn dữ liệu trung tính, không có câu quảng bá):** 15 khóa `home.*` ở Step 3; "Updated hourly" là chữ spec §5.9 ("cập nhật mỗi giờ"), các tiêu đề là tên khối spec §5.9.
+**Nhãn mới (nhãn dữ liệu trung tính, không có câu quảng bá):** 10 khóa `home.*` ở Step 3; "Updated hourly" là chữ spec §5.9 ("cập nhật mỗi giờ"), các tiêu đề là tên khối spec §5.9.
 
 - [ ] **Step 1: Failing tests first (domain, helpers, route)**
 
-Append to `apps/web/test/domain/public-stats.test.ts` (add `numberTiles`, `type NumberKey`, `type PublicSnapshot` to its import from `domain/public-stats.ts`):
+Append to `apps/web/test/domain/public-stats.test.ts` (add `numberTiles`, `homeView`, `FOUNDING_MIN`, `type NumberKey`, `type PublicSnapshot` to its import from `domain/public-stats.ts`):
 
 ```ts
 describe("numberTiles (spec §5.9): the numbers row needs two tiles", () => {
@@ -4901,6 +4899,21 @@ describe("numberTiles (spec §5.9): the numbers row needs two tiles", () => {
     expect(numberTiles(snap(["count_countries", "count_products"]))?.map((x) => x.key)).toEqual(["count_products", "count_countries"]);
   });
 });
+
+describe("homeView: what each homepage block gets, data or null", () => {
+  const some = (n: number) => Array.from({ length: n }, (_, i) => i);
+  it("founding needs FOUNDING_MIN items and only while Trending is absent", () => {
+    expect(homeView({}, some(FOUNDING_MIN - 1)).founding).toBeNull();
+    expect(homeView({}, some(FOUNDING_MIN)).founding).toHaveLength(FOUNDING_MIN);
+    const trending = { trending: { value: [], computedAt: NOW } } as unknown as PublicSnapshot;
+    expect(homeView(trending, some(FOUNDING_MIN)).founding).toBeNull();
+  });
+  it("every field is null for an empty snapshot; pulse needs chart 1 or chart 2", () => {
+    expect(Object.values(homeView({}, [])).every((v) => v === null)).toBe(true);
+    const growth = { growth: { value: [{ week: "w", products: 1, builders: 1 }], computedAt: NOW } } as PublicSnapshot;
+    expect(homeView(growth, []).pulse).toEqual({ categories: null, scarcest: null, growth: [{ week: "w", products: 1, builders: 1 }] });
+  });
+});
 ```
 
 Create `apps/web/test/home/blocks.ts` (shared with 7b, which extends `seedSnapshot`):
@@ -4908,7 +4921,7 @@ Create `apps/web/test/home/blocks.ts` (shared with 7b, which extends `seedSnapsh
 ```ts
 import { createApp } from "../../src/app.ts";
 import { writePublicStat } from "../../src/db/public-stats.ts";
-import { MIN, NUMBER_KEYS, liveEvents, rankTrending, type LiveEvent, type NumberKey, type TrendingCandidate } from "../../src/domain/public-stats.ts";
+import { MIN, NUMBER_KEYS, rankTrending, type NumberKey, type TrendingCandidate } from "../../src/domain/public-stats.ts";
 import { utcDay } from "../../src/domain/stats.ts";
 import type { Bindings } from "../../src/env.ts";
 import { testEnv } from "../helpers.ts";
@@ -4917,13 +4930,12 @@ export const DB = testEnv.DB;
 /** A snapshot time that is fresh now (the route reads the real clock). */
 export const fresh = (minutesAgo = 1): string => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 export const clearStats = () => DB.prepare("DELETE FROM public_stats").run();
-export const getHome = async (path = "/", env: Bindings = testEnv): Promise<string> => (await createApp().request(new Request(`https://vnx.si${path}`), undefined, env)).text();
+export const getHome = async (path = "/", env: Bindings = testEnv, cookie?: string): Promise<string> =>
+  (await createApp().request(new Request(`https://vnx.si${path}`, { headers: cookie ? { cookie } : {} }), undefined, env)).text();
 /** One block: the whole <section id="…">…</section>, or "" when it is not on the page. */
 export const block = (html: string, id: string): string => new RegExp(`<section[^>]*id="${id}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? "";
 
 export const COUNT_MIN: Record<NumberKey, number> = { count_products: MIN.products, count_builders: MIN.builders, count_requests_30d: MIN.requests30d, count_countries: MIN.countries };
-export const eventList = (n: number): LiveEvent[] =>
-  Array.from({ length: n }, (_, i) => ({ id: `e${i}`, at: new Date(Date.now() - (i + 1) * 60_000).toISOString(), kind: "product_published" as const, productName: `Live product ${i}`, slug: `live-${i}` }));
 export const trendingCandidates = (n: number, views: number = MIN.trendingScore): TrendingCandidate[] =>
   Array.from({ length: n }, (_, i) => ({ productId: `t${i}`, slug: `trend-${i}`, name: `Trend ${i}`, tagline: "Tagline", category: "crm" as const, builderHandle: `tb${i}`, builderName: `TB ${i}`, daily: { [utcDay(new Date())]: { views } } }));
 
@@ -4931,7 +4943,6 @@ export const trendingCandidates = (n: number, views: number = MIN.trendingScore)
 export async function seedSnapshot(at = fresh()): Promise<void> {
   await clearStats();
   for (const key of NUMBER_KEYS) await writePublicStat(DB, key, COUNT_MIN[key], at);
-  await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents), new Date()), at);
   await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems), new Date()), at);
 }
 
@@ -4953,22 +4964,24 @@ Create `apps/web/test/home/home.test.ts`:
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { writePublicStat } from "../../src/db/public-stats.ts";
 import { testEnv } from "../helpers.ts";
-import { LIVE_MAX, MIN, NUMBER_KEYS, STALE_AFTER_MS, countStat, liveEvents, rankTrending } from "../../src/domain/public-stats.ts";
+import { MIN, NUMBER_KEYS, STALE_AFTER_MS, countStat, rankTrending } from "../../src/domain/public-stats.ts";
 import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
 import { en, type MessageKey } from "../../src/i18n/messages/en.ts";
+import { vi as viMessages } from "../../src/i18n/messages/vi.ts";
+import { zhHans } from "../../src/i18n/messages/zh-hans.ts";
+import { zhHant } from "../../src/i18n/messages/zh-hant.ts";
+import { createApp } from "../../src/app.ts";
+import { signIn } from "../fixtures.ts";
 import { t } from "../../src/i18n/t.ts";
-import { formatChange, relativeTime, sparkPoints, SPARK_VIEWBOX } from "../../src/views/format.ts";
-import { COUNT_MIN, DB, block, clearStats, eventList, fresh, getHome, seedSnapshot, spyDb, trendingCandidates } from "./blocks.ts";
+import { formatChange, sparkPoints, SPARK_VIEWBOX } from "../../src/views/format.ts";
+import { COUNT_MIN, DB, block, clearStats, fresh, getHome, seedSnapshot, spyDb, trendingCandidates } from "./blocks.ts";
 
 afterEach(() => vi.restoreAllMocks());
 const tile = (key: string) => `data-stat="${key}"`;
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 describe("format helpers", () => {
-  it("relativeTime picks the largest whole unit; formatChange signs; sparkPoints is one point per value", () => {
-    const now = new Date("2026-10-05T12:00:00.000Z");
-    expect(relativeTime("en", "2026-10-05T10:00:00.000Z", now)).toBe("2 hours ago");
-    expect(relativeTime("en", "2026-10-02T12:00:00.000Z", now)).toBe("3 days ago");
+  it("formatChange signs; sparkPoints is one point per value", () => {
     expect(formatChange("en", 25)).toBe("+25%");
     expect(formatChange("en", -10)).toMatch(/^[-−]10%$/);
     const points = sparkPoints([0, 5, 10]).split(" ");
@@ -5021,28 +5034,6 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
     expect(block(html, "home-numbers")).toContain(t("en", "home.updatedHourly"));
   });
 
-  it("Live: 4 events hide it, 5 show it, and it never lists more than LIVE_MAX", async () => {
-    const now = new Date();
-    await clearStats();
-    await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents - 1), now), fresh());
-    expect(block(await getHome(), "home-live")).toBe("");
-    await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents), now), fresh());
-    expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(MIN.liveEvents);
-    await writePublicStat(DB, "live", liveEvents(eventList(LIVE_MAX + 1), now), fresh());
-    expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(LIVE_MAX);
-  });
-
-  it("Live: a new request shows its category and languages, nothing else of it", async () => {
-    const at = new Date(Date.now() - 60_000).toISOString();
-    const events = [...eventList(MIN.liveEvents - 1), { id: "r", at, kind: "request_new" as const, category: "crm" as const, languages: ["vi" as const] }];
-    await clearStats();
-    await writePublicStat(DB, "live", liveEvents(events, new Date()), fresh());
-    const live = block(await getHome(), "home-live");
-    expect(live).toContain(t("en", "home.live.requestNew"));
-    expect(live).toContain(t("en", "product.category.crm"));
-    expect(live).toContain(t("en", "builder.lang.vi"));
-  });
-
   it("Trending: 5 products at the score threshold hide it, 6 show it; one point under the score hides it", async () => {
     const now = new Date();
     await clearStats();
@@ -5064,15 +5055,17 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
     expect(html).not.toContain(t("en", "home.updatedHourly"));
     await seedSnapshot();
     html = await getHome();
-    for (const id of ["home-numbers", "home-live", "home-trending"]) expect(block(html, id), id).not.toBe("");
+    for (const id of ["home-numbers", "home-trending"]) expect(block(html, id), id).not.toBe("");
   });
 
-  it("reads public_stats exactly once per request, with and without Trending", async () => {
+  it("reads public_stats exactly once per request, signed in, with and without Trending, in at most 8 statements", async () => {
+    const { cookie } = await signIn("home-reader@vnx.si");
     for (const seed of [true, false]) {
       if (seed) await seedSnapshot(); else await clearStats();
       const sql: string[] = [];
-      await getHome("/", { ...testEnv, DB: spyDb(sql) });
+      await getHome("/", { ...testEnv, DB: spyDb(sql) }, cookie);
       expect(sql.filter((s) => /\bpublic_stats\b/.test(s))).toHaveLength(1);
+      expect(sql.length).toBeLessThanOrEqual(8);
     }
   });
 
@@ -5082,6 +5075,24 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
     expect(html).toContain('<section id="ask"');
     expect(html).not.toContain("home-block");
     expect(error).toHaveBeenCalledWith(expect.stringContaining("home_blocks_failed"));
+  });
+
+  it("a fresh but malformed value drops the blocks, logs, and still returns the landing with 200", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await seedSnapshot();
+    await writePublicStat(DB, "trending", { bad: true } as never, fresh()); // valid JSON, wrong shape: the view throws while rendering
+    const res = await createApp().request(new Request("https://vnx.si/"), undefined, testEnv);
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html).toContain('<section id="ask"');
+    expect(html).not.toContain("home-block");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("home_blocks_failed"));
+  });
+
+  it("no home.* value in any locale holds a digit (numbers come from data or parameters)", () => {
+    for (const [name, messages] of Object.entries({ en, vi: viMessages, zhHans, zhHant })) {
+      for (const [key, value] of Object.entries(messages)) if (key.startsWith("home.")) expect(value, `${name} ${key}`).not.toMatch(/\d/);
+    }
   });
 
   it("adds no <script>, no inline style and no inline handler (CSP; scripts are Task 8)", async () => {
@@ -5120,29 +5131,38 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
 
 (`home.builders.noPay` arrives in 7b: until then `t` returns `undefined` for it and `String(...)` makes the `replace` a no-op; 7b Step 1 turns the cast into a plain typed call. The "no sponsored or paid wording" rule is not weakened for the rest of the region.)
 
-Create `apps/web/test/home/founding.test.ts`:
+Create `apps/web/test/home/founding.test.ts` (its tests share one D1 and run in this order):
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { parseCatalogQuery } from "../../src/domain/catalog.ts";
 import { searchProducts } from "../../src/db/catalog.ts";
-import { FOUNDING_LIMIT } from "../../src/domain/public-stats.ts";
+import { writePublicStat } from "../../src/db/public-stats.ts";
+import { parseCatalogQuery } from "../../src/domain/catalog.ts";
+import { FOUNDING_LIMIT, FOUNDING_MIN, STALE_AFTER_MS, rankTrending } from "../../src/domain/public-stats.ts";
 import { DECK_SIZE } from "../../src/views/landing/Deck.tsx";
 import { makeLiveProduct } from "../fixtures.ts";
-import { DB, block, clearStats, getHome } from "./blocks.ts";
+import { testEnv } from "../helpers.ts";
+import { DB, block, clearStats, getHome, seedSnapshot, spyDb, trendingCandidates } from "./blocks.ts";
 
 const at = (i: number) => new Date(Date.UTC(2026, 9, 1, i)).toISOString();
-const names = (html: string) => [...html.matchAll(/Founding p(\d)/g)].map((m) => Number(m[1]));
+// p0 is the OLDEST and carries a badge: a badge must not lift it into Founding.
+const add = (i: number) => makeLiveProduct(`fnd${i}@vnx.si`, `fnd-${i}`, `Founding p${i}`, { at: at(i), badges: i === 0 ? ["demo_verified"] : [] });
+const names = (html: string) => [...new Set([...html.matchAll(/Founding p(\d)/g)].map((m) => Number(m[1])))];
 
-describe("Founding products and the hero (Owner Q1, 2026-10-05)", () => {
-  it("Founding shows the FOUNDING_LIMIT newest first publications, newest first, when Trending is hidden", async () => {
+describe("Founding products and the hero (Owner Q1 2026-10-05, minimum 2026-10-06)", () => {
+  it("boundary: FOUNDING_MIN - 1 published products show no Founding block, FOUNDING_MIN show it", async () => {
     await clearStats();
-    // p0 is the OLDEST and carries a badge: a badge must not lift it into Founding.
-    for (let i = 0; i <= FOUNDING_LIMIT; i++) await makeLiveProduct(`fnd${i}@vnx.si`, `fnd-${i}`, `Founding p${i}`, { at: at(i), badges: i === 0 ? ["demo_verified"] : [] });
+    for (let i = 0; i < FOUNDING_MIN - 1; i++) await add(i);
+    expect(block(await getHome(), "home-founding")).toBe("");
+    await add(FOUNDING_MIN - 1);
+    expect(names(block(await getHome(), "home-founding"))).toEqual([5, 4, 3, 2, 1, 0]);
+  });
+
+  it("with one more, Founding keeps the FOUNDING_LIMIT newest first publications, newest first", async () => {
+    await add(FOUNDING_LIMIT);
     const html = await getHome();
     const founding = block(html, "home-founding");
-    expect(founding).not.toBe("");
-    expect([...new Set(names(founding))]).toEqual([6, 5, 4, 3, 2, 1]);
+    expect(names(founding)).toEqual([6, 5, 4, 3, 2, 1]);
     expect(founding).not.toContain("Founding p0");
     expect(block(html, "home-trending")).toBe("");
   });
@@ -5152,6 +5172,24 @@ describe("Founding products and the hero (Owner Q1, 2026-10-05)", () => {
     expect(block(await getHome(), "home-founding")).not.toContain("Founding p6");
   });
 
+  it("a fresh Trending runs no newest-products query and shows no Founding", async () => {
+    await seedSnapshot();
+    const sql: string[] = [];
+    const html = await getHome("/", { ...testEnv, DB: spyDb(sql) });
+    expect(sql.filter((s) => s.includes("first_published_at DESC"))).toHaveLength(0);
+    expect(block(html, "home-founding")).toBe("");
+    expect(block(html, "home-trending")).not.toBe("");
+  });
+
+  it("a stale Trending with enough published products shows Founding", async () => {
+    await seedSnapshot();
+    const old = new Date(Date.now() - STALE_AFTER_MS - 60_000).toISOString();
+    await writePublicStat(DB, "trending", rankTrending(trendingCandidates(6), new Date()), old);
+    const html = await getHome();
+    expect(block(html, "home-trending")).toBe("");
+    expect(block(html, "home-founding")).not.toBe("");
+  });
+
   it("the landing hero keeps the catalogue default order (badge first, then newest) and Task 7 adds no hero", async () => {
     const expected = (await searchProducts(DB, parseCatalogQuery({}))).items.slice(0, DECK_SIZE).map((i) => i.slug);
     const html = await getHome();
@@ -5159,6 +5197,38 @@ describe("Founding products and the hero (Owner Q1, 2026-10-05)", () => {
     const slugs = [...new Set([...hero.matchAll(/href="\/p\/([^"]+)"/g)].map((m) => m[1]))];
     expect(slugs).toEqual(expected);
     expect(html.match(/<section class="lp-hero"/g)).toHaveLength(1);
+  });
+});
+```
+
+(The hero test keeps its assertion; only the slug extraction may change to match the Deck markup.)
+
+Create `apps/web/test/home/separable.test.tsx` (each body renders alone, with no wrapper, no container and no `lp-` class, so a later three-column homepage can reuse it; 7b adds its three bodies):
+
+```tsx
+import { describe, expect, it } from "vitest";
+import { readPublicStats } from "../../src/db/public-stats.ts";
+import { homeView } from "../../src/domain/public-stats.ts";
+import { Numbers } from "../../src/views/home/Numbers.tsx";
+import { Founding, Trending } from "../../src/views/home/Trending.tsx";
+import { DB, seedSnapshot } from "./blocks.ts";
+
+const item = { id: "i", slug: "s", name: "Item", tagline: "Tag", category: "crm" as const, builderHandle: "b", builderName: "B", coverKey: null, minPriceCents: null, badgeScore: 0 };
+
+describe("blocks do not know where they sit", () => {
+  it("each body renders alone with no section, container or lp- class", async () => {
+    await seedSnapshot();
+    const view = homeView(await readPublicStats(DB, new Date()), [item]);
+    const bodies = {
+      numbers: <Numbers locale="en" tiles={view.numbers!} />,
+      trending: <Trending locale="en" items={view.trending!} />,
+      founding: <Founding locale="en" items={[item]} />,
+    };
+    for (const [name, node] of Object.entries(bodies)) {
+      const html = String(await node);
+      expect(html.length, name).toBeGreaterThan(0);
+      expect(html, name).not.toMatch(/<section\b|class="[^"]*\bcontainer\b|class="[^"]*\blp-/);
+    }
   });
 });
 ```
@@ -5177,8 +5247,8 @@ export type NumberKey = (typeof NUMBER_KEYS)[number];
 export const MIN_NUMBER_TILES = 2;
 /** Owner Q1 (2026-10-05): the Founding products block shows the 6 newest first publications. */
 export const FOUNDING_LIMIT = 6;
-/** Not in the spec (question Q-F): products needed before the Founding block shows. */
-export const FOUNDING_MIN = 1;
+/** Owner 2026-10-06: the Founding products block waits until there are as many products as it shows. */
+export const FOUNDING_MIN = FOUNDING_LIMIT;
 export type NumberTile = { key: NumberKey; value: number; computedAt: string };
 
 /** The tiles whose key is fresh and not null, in NUMBER_KEYS order; null when fewer than MIN_NUMBER_TILES. */
@@ -5188,6 +5258,31 @@ export function numberTiles(snapshot: PublicSnapshot): NumberTile[] | null {
     return hit ? [{ key, value: hit.value, computedAt: hit.computedAt }] : [];
   });
   return tiles.length >= MIN_NUMBER_TILES ? tiles : null;
+}
+
+/** What each homepage block gets: its data, or null (hide). Pure; `HomeBlocks` only maps fields to wrappers. */
+export type HomeView<F> = {
+  numbers: NumberTile[] | null;
+  live: PublicLiveEvent[] | null;
+  trending: TrendingItem[] | null;
+  founding: readonly F[] | null;
+  pulse: { categories: CategoryRow[] | null; scarcest: ScarcestCategory | null; growth: GrowthPoint[] | null } | null;
+  builders: TopBuilders | null;
+  products: TopProductsByCategory | null;
+};
+export function homeView<F>(snapshot: PublicSnapshot, founding: readonly F[]): HomeView<F> {
+  const trending = snapshot.trending?.value ?? null;
+  const categories = snapshot.request_by_category?.value ?? null;
+  const growth = snapshot.growth?.value ?? null;
+  return {
+    numbers: numberTiles(snapshot),
+    live: snapshot.live?.value ?? null,
+    trending,
+    founding: trending === null && founding.length >= FOUNDING_MIN ? founding : null,
+    pulse: categories || growth ? { categories, scarcest: snapshot.scarcest_category?.value ?? null, growth } : null,
+    builders: snapshot.top_builders?.value ?? null,
+    products: snapshot.top_products?.value ?? null,
+  };
 }
 ```
 (`PublicSnapshot` is declared further down the file; a type reference before its declaration is fine in TypeScript.)
@@ -5216,7 +5311,7 @@ export async function foundingProducts(db: D1Database, limit: number): Promise<C
 
 Run `npm test -w apps/web -- test/domain/public-stats.test.ts test/catalog` → expected GREEN.
 
-- [ ] **Step 3: Locale keys (15, all four locales)**
+- [ ] **Step 3: Locale keys (10, all four locales)**
 
 Append before the closing brace of each of `en.ts`, `vi.ts`, `zh-hans.ts`, `zh-hant.ts` (placeholders `{days}` are identical in every locale; no apostrophes, quotes or `&` in any value):
 
@@ -5228,11 +5323,6 @@ Append before the closing brace of each of `en.ts`, `vi.ts`, `zh-hans.ts`, `zh-h
 | `home.numbers.builders` | Builders approved | Builder đã được duyệt | 已通过审核的 Builder | 已通過審核的 Builder |
 | `home.numbers.requests` | Requests in the last {days} days | Nhu cầu trong {days} ngày qua | 过去 {days} 天的需求 | 過去 {days} 天的需求 |
 | `home.numbers.countries` | Builder countries | Quốc gia của builder | Builder 所在国家 | Builder 所在國家 |
-| `home.live.title` | Live | Trực tiếp | 实时动态 | 即時動態 |
-| `home.live.productPublished` | Product published | Sản phẩm mới đăng | 产品已发布 | 產品已發佈 |
-| `home.live.badgeGranted` | Badge granted | Huy hiệu mới | 已授予徽章 | 已授予徽章 |
-| `home.live.builderApproved` | Builder approved | Builder được duyệt | Builder 已通过审核 | Builder 已通過審核 |
-| `home.live.requestNew` | New request | Nhu cầu mới | 新需求 | 新需求 |
 | `home.trending.title` | Trending this week | Thịnh hành tuần này | 本周热门 | 本週熱門 |
 | `home.trending.vsPrevious` | vs previous week | so với tuần trước | 较上周 | 較上週 |
 | `home.trending.spark` | Activity, last {days} days | Hoạt động {days} ngày qua | 过去 {days} 天的活跃度 | 過去 {days} 天的活躍度 |
@@ -5257,20 +5347,11 @@ Append to `apps/web/src/views/format.ts` (this file, not `views/home/`, may hold
 
 ```ts
 const PERCENT = 100;
-const MS = { day: 86_400_000, hour: 3_600_000, minute: 60_000 } as const;
 const round = (n: number): number => Math.round(n * 10) / 10;
 
 export const formatCount = (locale: Locale, n: number): string => new Intl.NumberFormat(locale).format(n);
 /** A whole percent change with its sign ("+25%"); zero has none. */
 export const formatChange = (locale: Locale, pct: number): string => new Intl.NumberFormat(locale, { style: "percent", signDisplay: "exceptZero" }).format(pct / PERCENT);
-
-/** "2 hours ago": the largest whole unit between `iso` and `now` (the viewer's locale). */
-export function relativeTime(locale: Locale, iso: string, now: Date): string {
-  const diff = Date.parse(iso) - now.getTime();
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  for (const unit of ["day", "hour", "minute"] as const) if (Math.abs(diff) >= MS[unit]) return rtf.format(Math.trunc(diff / MS[unit]), unit);
-  return rtf.format(0, "minute");
-}
 
 /** A 14-day sparkline drawn as one polyline in a fixed box; the stroke lives in CSS. */
 const SPARK = { width: 112, height: 32, pad: 2 } as const;
@@ -5284,34 +5365,50 @@ export function sparkPoints(values: readonly number[]): string {
 
 - [ ] **Step 5: Views, route, landing wiring, CSS**
 
-`apps/web/src/views/home/HomeBlocks.tsx`:
+`apps/web/src/views/home/HomeSection.tsx` (the ONLY place that knows how a block sits on the page):
+
+```tsx
+import type { FC, PropsWithChildren } from "hono/jsx";
+
+export const HomeSection: FC<PropsWithChildren<{ id: string; title: string }>> = ({ id, title, children }) => (
+  <section id={id} class="lp-section home-block" aria-labelledby={`${id}-title`}>
+    <div class="container">
+      <div class="section-head">
+        <h2 id={`${id}-title`}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  </section>
+);
+```
+
+`apps/web/src/views/home/HomeBlocks.tsx` (the only caller of `HomeSection`; `view.live` is not rendered until 7b; 7b adds four entries and `now`):
 
 ```tsx
 import type { FC } from "hono/jsx";
 import type { CatalogItem } from "../../domain/catalog.ts";
-import { FOUNDING_MIN, numberTiles, type PublicSnapshot } from "../../domain/public-stats.ts";
+import type { HomeView } from "../../domain/public-stats.ts";
 import type { Locale } from "../../i18n/locales.ts";
-import { Live } from "./Live.tsx";
+import { translator } from "../../i18n/t.ts";
+import { HomeSection } from "./HomeSection.tsx";
 import { Numbers } from "./Numbers.tsx";
 import { Founding, Trending } from "./Trending.tsx";
 
-export type HomeBlocksProps = { locale: Locale; snapshot: PublicSnapshot; founding: readonly CatalogItem[]; now: Date };
+export type HomeBlocksProps = { locale: Locale; view: HomeView<CatalogItem> };
 
-/** The data blocks under the landing (Owner A2). A block shows only when its fresh snapshot value exists; with none, nothing prints. */
-export const HomeBlocks: FC<HomeBlocksProps> = ({ locale, snapshot, founding, now }) => {
-  const tiles = numberTiles(snapshot);
-  const live = snapshot.live?.value;
-  const trending = snapshot.trending?.value;
+/** The data blocks under the landing (Owner A2). Which blocks show was decided by `homeView`; with none, nothing prints. */
+export const HomeBlocks: FC<HomeBlocksProps> = ({ locale, view }) => {
+  const tr = translator(locale);
   const blocks = [
-    tiles ? <Numbers locale={locale} tiles={tiles} /> : null,
-    live ? <Live locale={locale} events={live} now={now} /> : null,
-    trending ? <Trending locale={locale} items={trending} /> : founding.length >= FOUNDING_MIN ? <Founding locale={locale} items={founding} /> : null,
+    view.numbers ? <HomeSection id="home-numbers" title={tr("home.numbers.title")}><Numbers locale={locale} tiles={view.numbers} /></HomeSection> : null,
+    view.trending ? <HomeSection id="home-trending" title={tr("home.trending.title")}><Trending locale={locale} items={view.trending} /></HomeSection> : null,
+    view.founding ? <HomeSection id="home-founding" title={tr("home.founding.title")}><Founding locale={locale} items={view.founding} /></HomeSection> : null,
   ].filter((b) => b !== null);
   return blocks.length === 0 ? null : <>{blocks}</>;
 };
 ```
 
-`apps/web/src/views/home/Numbers.tsx`:
+`apps/web/src/views/home/Numbers.tsx` (body only; the "updated hourly" note travels with it and is true because the tiles are fresh and at least two):
 
 ```tsx
 import type { FC } from "hono/jsx";
@@ -5321,78 +5418,25 @@ import { translator } from "../../i18n/t.ts";
 import { formatCount } from "../format.ts";
 import { NUMBER_LABEL } from "../labels.ts";
 
-/** The tiles are already known to be fresh, non-null and at least two (numberTiles), so "Updated hourly" is true. */
 export const Numbers: FC<{ locale: Locale; tiles: readonly NumberTile[] }> = ({ locale, tiles }) => {
   const tr = translator(locale);
   return (
-    <section id="home-numbers" class="lp-section home-block" aria-labelledby="home-numbers-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-numbers-title">{tr("home.numbers.title")}</h2>
-          <p class="section-sub">{tr("home.updatedHourly")}</p>
-        </div>
-        <ul class="home-numbers">
-          {tiles.map((tile) => (
-            <li data-stat={tile.key}>
-              <strong>{formatCount(locale, tile.value)}</strong>
-              <span>{tr(NUMBER_LABEL[tile.key], { days: REQUEST_DAYS })}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
+    <>
+      <p class="home-note">{tr("home.updatedHourly")}</p>
+      <ul class="home-numbers">
+        {tiles.map((tile) => (
+          <li data-stat={tile.key}>
+            <strong>{formatCount(locale, tile.value)}</strong>
+            <span>{tr(NUMBER_LABEL[tile.key], { days: REQUEST_DAYS })}</span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 };
 ```
 
-`apps/web/src/views/home/Live.tsx`:
-
-```tsx
-import type { FC } from "hono/jsx";
-import type { PublicLiveEvent } from "../../domain/public-stats.ts";
-import { localizedPath, type Locale } from "../../i18n/locales.ts";
-import { translator } from "../../i18n/t.ts";
-import { relativeTime } from "../format.ts";
-import { BADGE_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "../labels.ts";
-
-const LiveItem: FC<{ locale: Locale; e: PublicLiveEvent }> = ({ locale, e }) => {
-  const tr = translator(locale);
-  switch (e.kind) {
-    case "product_published":
-      return <><strong>{tr("home.live.productPublished")}</strong> <a href={localizedPath(locale, `/p/${e.slug}`)}>{e.productName}</a></>;
-    case "badge_granted":
-      return <><strong>{tr("home.live.badgeGranted")}</strong> <span class={`chip chip-${e.badge}`}>{tr(BADGE_KEY[e.badge])}</span> <a href={localizedPath(locale, `/p/${e.slug}`)}>{e.productName}</a></>;
-    case "builder_approved":
-      return <><strong>{tr("home.live.builderApproved")}</strong> <a href={localizedPath(locale, `/b/${e.handle}`)}>{e.builderName}</a></>;
-    case "request_new":
-      return <><strong>{tr("home.live.requestNew")}</strong> <span>{tr(CATEGORY_KEY[e.category])}</span> <span class="muted">{e.languages.map((l) => tr(LANGUAGE_KEY[l])).join(" · ")}</span></>;
-  }
-};
-
-/** A static list for now (the marquee is Task 8). Only what the snapshot holds: no request title, no client, no e-mail. */
-export const Live: FC<{ locale: Locale; events: readonly PublicLiveEvent[]; now: Date }> = ({ locale, events, now }) => {
-  const tr = translator(locale);
-  return (
-    <section id="home-live" class="lp-section home-block" aria-labelledby="home-live-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-live-title">{tr("home.live.title")}</h2>
-        </div>
-        <ul class="home-live">
-          {events.map((e) => (
-            <li class="home-live-item">
-              <time datetime={e.at}>{relativeTime(locale, e.at, now)}</time>
-              <LiveItem locale={locale} e={e} />
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-};
-```
-
-`apps/web/src/views/home/Trending.tsx` (this file goes into `RANKING_FILES`; its comments must not contain the words listed in the architecture test of Step 6):
+`apps/web/src/views/home/Trending.tsx` (bodies only; ranking file, so its comments must not contain the words listed in the architecture test of Step 6):
 
 ```tsx
 import type { FC } from "hono/jsx";
@@ -5419,34 +5463,27 @@ const Meta: FC<{ locale: Locale; item: TileMeta }> = ({ locale, item }) => {
   );
 };
 
-/** Rank = CSS counter on the <ol>; the score itself is not shown, only its 14-day shape and the change on the week before. */
+/** Rank = CSS counter on the ordered list; the score itself is not shown, only its 14-day shape and the change on the week before. */
 export const Trending: FC<{ locale: Locale; items: readonly TrendingItem[] }> = ({ locale, items }) => {
   const tr = translator(locale);
   return (
-    <section id="home-trending" class="lp-section home-block" aria-labelledby="home-trending-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-trending-title">{tr("home.trending.title")}</h2>
-        </div>
-        <ol class="home-tiles home-ranked">
-          {items.map((item) => (
-            <li class="home-tile">
-              <Meta locale={locale} item={item} />
-              <p class="home-trend">
-                <svg class="home-spark" viewBox={SPARK_VIEWBOX} role="img" aria-label={tr("home.trending.spark", { days: SPARK_DAYS })}>
-                  <polyline points={sparkPoints(item.sparkline)} />
-                </svg>
-                {item.changePct !== null ? (
-                  <span>
-                    <strong>{formatChange(locale, item.changePct)}</strong> <span class="muted">{tr("home.trending.vsPrevious")}</span>
-                  </span>
-                ) : null}
-              </p>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </section>
+    <ol class="home-tiles home-ranked">
+      {items.map((item) => (
+        <li class="home-tile">
+          <Meta locale={locale} item={item} />
+          <p class="home-trend">
+            <svg class="home-spark" viewBox={SPARK_VIEWBOX} role="img" aria-label={tr("home.trending.spark", { days: SPARK_DAYS })}>
+              <polyline points={sparkPoints(item.sparkline)} />
+            </svg>
+            {item.changePct !== null ? (
+              <span>
+                <strong>{formatChange(locale, item.changePct)}</strong> <span class="muted">{tr("home.trending.vsPrevious")}</span>
+              </span>
+            ) : null}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 };
 
@@ -5454,59 +5491,70 @@ export const Trending: FC<{ locale: Locale; items: readonly TrendingItem[] }> = 
 export const Founding: FC<{ locale: Locale; items: readonly CatalogItem[] }> = ({ locale, items }) => {
   const tr = translator(locale);
   return (
-    <section id="home-founding" class="lp-section home-block" aria-labelledby="home-founding-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-founding-title">{tr("home.founding.title")}</h2>
-        </div>
-        <ul class="home-tiles">
-          {items.map((item) => {
-            const badge = topBadge(item.badgeScore);
-            return (
-              <li class="home-tile">
-                <Meta locale={locale} item={item} />
-                {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </section>
+    <ul class="home-tiles">
+      {items.map((item) => {
+        const badge = topBadge(item.badgeScore);
+        return (
+          <li class="home-tile">
+            <Meta locale={locale} item={item} />
+            {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 };
 ```
 
-`apps/web/src/routes/home.tsx` (no word from the architecture test's money list in comments):
+`apps/web/src/routes/home.tsx` (loading and rendering are separate; no word from the architecture test's money list in comments):
 
 ```tsx
 import type { Context } from "hono";
+import { raw } from "hono/html";
 import type { Child } from "hono/jsx";
 import { foundingProducts } from "../db/catalog.ts";
 import { readPublicStats } from "../db/public-stats.ts";
-import { FOUNDING_LIMIT } from "../domain/public-stats.ts";
+import type { CatalogItem } from "../domain/catalog.ts";
+import { FOUNDING_LIMIT, homeView, type PublicSnapshot } from "../domain/public-stats.ts";
 import type { AppEnv } from "../env.ts";
+import type { Locale } from "../i18n/locales.ts";
 import { HomeBlocks } from "../views/home/HomeBlocks.tsx";
 
-/**
- * The data blocks under the landing at `/` (Owner A2). One public_stats read; the newest-products query runs only while
- * Trending is hidden. A failure here must never take the landing down.
- */
-export async function homeBlocks(c: Context<AppEnv>): Promise<Child> {
-  const now = new Date();
+export type HomeData = { snapshot: PublicSnapshot; founding: CatalogItem[] };
+const fail = (err: unknown) => console.error(JSON.stringify({ event: "home_blocks_failed", error: String(err) }));
+
+/** One public_stats read; the newest-products query runs only while Trending is absent. A failure here never takes the landing down. */
+export async function loadHomeData(db: D1Database, now: Date): Promise<HomeData | null> {
   try {
-    const snapshot = await readPublicStats(c.env.DB, now);
-    const founding = snapshot.trending ? [] : await foundingProducts(c.env.DB, FOUNDING_LIMIT);
-    return <HomeBlocks locale={c.get("locale")} snapshot={snapshot} founding={founding} now={now} />;
+    const snapshot = await readPublicStats(db, now);
+    return { snapshot, founding: snapshot.trending ? [] : await foundingProducts(db, FOUNDING_LIMIT) };
   } catch (err) {
-    console.error(JSON.stringify({ event: "home_blocks_failed", error: String(err) }));
+    fail(err);
     return null;
   }
+}
+
+/** Renders to a string INSIDE the try: hono builds JSX lazily, so a malformed snapshot value would otherwise throw after the try. */
+export async function renderHome(locale: Locale, data: HomeData | null): Promise<Child | null> {
+  if (data === null) return null;
+  try {
+    return raw(await (<HomeBlocks locale={locale} view={homeView(data.snapshot, data.founding)} />).toString());
+  } catch (err) {
+    fail(err);
+    return null;
+  }
+}
+
+/** The data blocks under the landing at `/` (Owner A2). Never rejects. */
+export async function homeBlocks(c: Context<AppEnv>): Promise<Child | null> {
+  const now = new Date();
+  return renderHome(c.get("locale"), await loadHomeData(c.env.DB, now));
 }
 ```
 
 `apps/web/src/views/LandingPage.tsx`: add `import type { Child } from "hono/jsx";` (merge with the existing `FC` import), the prop `/** The data blocks under the landing (VNX-0703, Owner A2); null/absent prints nothing. */ below?: Child | null;`, destructure `below`, and render `{below}` right after the `#ask` `</section>`, before `</Layout>`.
 
-`apps/web/src/routes/landing.tsx`: import `homeBlocks` from `./home.tsx` and `type { Child } from "hono/jsx"`; add `below?: Child` to `RenderOpts`; pass `below={opts.below}` to `<LandingPage>`; make the GET handler `async (c) => renderLanding(c, { joined: …, asked: …, utm: …, referrer: …, below: await homeBlocks(c) })`. The POST `/waitlist` renders stay without `below`.
+`apps/web/src/routes/landing.tsx`: import `homeBlocks` from `./home.tsx` and `type { Child } from "hono/jsx"`; add `below?: Promise<Child | null>` to `RenderOpts`; in `renderLanding` replace the deck await with `const [deck, below] = await Promise.all([firstPublicProducts(c.env.DB, DECK_SIZE), opts.below ?? null]);` (deck and blocks load in parallel) and pass `below={below}` to `<LandingPage>`; the GET handler passes `below: homeBlocks(c)` WITHOUT awaiting it (it never rejects). The POST `/waitlist` renders stay without `below`.
 
 Append to `apps/web/public/assets/app.css` (tokens only, so dark mode follows; no animation, Task 8 adds it):
 
@@ -5514,13 +5562,11 @@ Append to `apps/web/public/assets/app.css` (tokens only, so dark mode follows; n
 /* VNX-0703: data blocks under the landing (public_stats). */
 .home-block { padding: 56px 0; background: var(--bg); border-top: 1px solid var(--border); }
 .home-block + .home-block { background: var(--surface); }
+.home-note { margin: 0 0 24px; color: var(--text-2); font-size: 17px; }
 .home-numbers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 16px; }
 .home-numbers li { display: flex; flex-direction: column; gap: 4px; padding: 20px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
 .home-numbers strong { font: 700 clamp(32px, 4vw, 44px)/1.1 var(--font-display); }
 .home-numbers span { color: var(--text-2); }
-.home-live { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.home-live-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
-.home-live-item time { color: var(--muted); font: 400 13px/1.4 var(--font-mono); }
 .home-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; counter-reset: rank; }
 .home-tile { display: flex; flex-direction: column; gap: 8px; padding: 20px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
 .home-tile h3, .home-tile h4 { margin: 0; font-size: 18px; }
@@ -5532,7 +5578,7 @@ Append to `apps/web/public/assets/app.css` (tokens only, so dark mode follows; n
 .home-spark polyline { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 ```
 
-Run `npm test -w apps/web -- test/home test/domain/public-stats.test.ts test/landing test/design test/i18n` → expected GREEN. If `test/home/home.test.ts` "every home.* key is used" or the digits grep fails, fix the VIEW (move the digit into `views/format.ts` or a domain constant), never weaken the grep.
+Run `npm test -w apps/web -- test/home test/domain/public-stats.test.ts test/landing test/design test/i18n` → expected GREEN (including `test/landing/deck.test.ts`, unedited). If `test/home/home.test.ts` "every home.* key is used" or the digits grep fails, fix the VIEW (move the digit into `views/format.ts` or a domain constant), never weaken the grep.
 
 - [ ] **Step 6: Architecture guard**
 
@@ -5561,8 +5607,8 @@ Run `npm test -w apps/web -- test/architecture.test.ts` → GREEN (the existing 
 
 ```text
 npm run typecheck -w apps/web && npm test
-git add apps/web/src/domain/public-stats.ts apps/web/src/db/catalog.ts apps/web/src/views/format.ts apps/web/src/views/LandingPage.tsx apps/web/src/views/home/HomeBlocks.tsx apps/web/src/views/home/Numbers.tsx apps/web/src/views/home/Live.tsx apps/web/src/views/home/Trending.tsx apps/web/src/routes/home.tsx apps/web/src/routes/landing.tsx apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/blocks.ts apps/web/test/home/home.test.ts apps/web/test/home/founding.test.ts apps/web/test/domain/public-stats.test.ts apps/web/test/architecture.test.ts
-git commit -m "feat(web): add Numbers, Live and Trending blocks under the landing (VNX-0703a)
+git add apps/web/src/domain/public-stats.ts apps/web/src/db/catalog.ts apps/web/src/views/format.ts apps/web/src/views/LandingPage.tsx apps/web/src/views/home/HomeSection.tsx apps/web/src/views/home/HomeBlocks.tsx apps/web/src/views/home/Numbers.tsx apps/web/src/views/home/Trending.tsx apps/web/src/routes/home.tsx apps/web/src/routes/landing.tsx apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/blocks.ts apps/web/test/home/home.test.ts apps/web/test/home/founding.test.ts apps/web/test/home/separable.test.tsx apps/web/test/domain/public-stats.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): add Numbers and Trending blocks under the landing (VNX-0703a)
 
 Read one public_stats snapshot per request and show each block only when its
 fresh value exists; Founding products (newest first publications) replaces a
@@ -5573,62 +5619,62 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Acceptance (mỗi dòng kiểm được bằng một lệnh):**
 - Con số: từng ô ẩn ở n−1 và hiện ở n; ẩn hàng khi còn 1 ô; "Updated hourly" chỉ khi có hàng: `npm test -w apps/web -- test/home/home.test.ts -t "Numbers"`; `numberTiles`: `test/domain/public-stats.test.ts`.
-- Live ẩn ở 4, hiện ở 5, tối đa `LIVE_MAX`, request chỉ category và ngôn ngữ: `-t "Live"`. Trending ẩn ở 5 product và ở điểm 19, hiện ở 6: `-t "Trending"`. Quá 3 giờ ẩn hết: `-t "older than 3 hours"`.
-- Founding: 6 product mới nhất trước, không bị huy hiệu đẩy lên, product bỏ published thì rời: `test/home/founding.test.ts`. Hero của landing giữ thứ tự catalogue mặc định, không có hero thứ hai: cùng file.
-- Đúng một truy vấn `public_stats` mỗi request, và lỗi đọc không làm sập landing: `-t "exactly once"`, `-t "never breaks the landing"`.
+- Trending ẩn ở 5 product và ở điểm 19, hiện ở 6: `-t "Trending"`. Quá 3 giờ ẩn hết: `-t "older than 3 hours"`.
+- Founding: 5 product thì không có `home-founding`, 6 thì hiện; 6 mới nhất trước, không bị huy hiệu đẩy lên, product bỏ published thì rời; Trending tươi thì không chạy truy vấn `first_published_at DESC`, Trending cũ thì Founding hiện: `test/home/founding.test.ts`. Hero của landing giữ thứ tự catalogue mặc định, không có hero thứ hai: cùng file.
+- Đúng một truy vấn `public_stats` mỗi request (đã đăng nhập, ≤ 8 câu lệnh), lỗi đọc và giá trị sai hình không làm sập landing: `-t "exactly once"`, `-t "never breaks the landing"`, `-t "malformed"`. Khối không biết chỗ đặt: `npm test -w apps/web -- test/home/separable.test.tsx`. Không chữ số trong `home.*` ở 4 locale: `-t "holds a digit"`.
 - Không `<script>`/`style=`/`on*=` thêm, không chữ "Sponsored"/trả tiền ở 4 locale: `-t "adds no <script>"`, `-t "sponsored or paid"`.
 - Không chữ số cứng trong `views/home/*.tsx`, mọi khóa `home.*` được dùng: `-t "no invented number"`; `grep -nE "[0-9]" apps/web/src/views/home/*.tsx` chỉ còn thẻ `h1`-`h6` và chú thích.
 - Xếp hạng không đọc tiền: `npm test -w apps/web -- test/architecture.test.ts` xanh; `grep -n "views/home/Trending\|routes/home" apps/web/test/architecture.test.ts` thấy cả hai trong `RANKING_FILES`.
 - Landing nguyên vẹn khi không có dữ liệu: `npm test -w apps/web -- test/landing` xanh không sửa test; `git diff --stat -- apps/web/migrations` rỗng; `git diff package.json` rỗng.
 - `npm run typecheck -w apps/web` và `npm test` xanh.
 
-Diff ước ~560 dòng không tính locale (mã ~315, test ~245; locale +60 dòng). Nếu vượt 600 khi làm, chuyển khối Live (view, test, 5 khóa locale) sang đầu 7b, không cắt test.
+Diff ước ~600 dòng không tính locale (mã ~300, test ~300; locale +40 dòng). Live đã nằm ở 7b; nếu vẫn vượt trần khi làm, báo Controller, không cắt test.
 
 ---
 
-### Task 7b: VNX-0703b — Market pulse (bảng), Top builders, Top products
+### Task 7b: VNX-0703b — Live, Market pulse (bảng), Top builders, Top products
 
-**Trạng thái:** bản nháp, CHƯA review, TẠM GIỮ — chờ Owner quyết về execution plan marketing/designer (2026-10-06).
+**Trạng thái:** đã review (Opus), Owner duyệt câu chữ 2026-10-06.
 
-**Scope:** thêm ba khối vào `HomeBlocks` của 7a, cùng quy tắc: hiện chỉ khi key còn tươi và khác `null`, không chữ số cứng, không JS. Phụ thuộc: Task 7a đã commit.
+**Scope:** thêm bốn khối vào `HomeBlocks` của 7a (Live chuyển từ 7a sang để 7a vừa trần), cùng quy tắc: hiện chỉ khi key còn tươi và khác `null`, không chữ số cứng, không JS. Phụ thuộc: Task 7a đã commit.
+- **Live** (khối thứ hai của trang, sau Con số): danh sách tĩnh các sự kiện công khai (tối đa 20, ẩn khi < 5 trong 7 ngày, domain đã quyết) kèm thời gian tương đối; tiêu đề "Recent activity". Dải chạy ngang là Task 8. `HomeBlocks` và `renderHome` nhận thêm `now`.
 - **Market pulse:** chart 1 thay bằng bảng "request và product đang listed theo category" (category dưới 3 request đã gộp "Other" ở domain), kèm một dòng nhãn+giá trị "category thiếu supply nhất"; chart 2 thay bằng bảng product và builder cộng dồn theo tuần ISO. Mỗi bảng ẩn riêng khi key của nó vắng; cả khối ẩn khi cả hai vắng. (Task 8 thêm chart SVG, legend, tooltip; bảng trở thành `<details>` tương đương.)
 - **Top builders:** ba bảng (được chọn, trả lời nhanh, nhiều product được xác minh), mỗi bảng chỉ hiện khi tab có ≥ 3 builder đủ điều kiện (domain đã trả `null` cho tab đó); mỗi bảng ghi tiêu chí của nó, và cả khối ghi "no one pays to appear here". Không còn tab nào thì ẩn khối. (Chuyển tab bằng JS là Task 8; ở 7b ba bảng xếp dọc.)
 - **Top products theo category:** hàng nút neo category (chỉ category có ≥ 1 product) và, mỗi category, tối đa 3 product theo huy hiệu rồi Inquiry 30 ngày rồi mới nhất (đã xếp ở domain; view chỉ in đúng thứ tự đó).
 
 **Files:**
-- Create: `apps/web/src/views/home/MarketPulse.tsx`, `apps/web/src/views/home/TopBuilders.tsx` (xuất `TopBuildersBlock`), `apps/web/src/views/home/TopProducts.tsx` (xuất `TopProductsBlock`), `apps/web/test/home/blocks-b.test.ts`.
-- Modify: `apps/web/src/views/home/HomeBlocks.tsx`, `apps/web/src/views/format.ts` (`formatDuration`), `apps/web/public/assets/app.css`, 4 file i18n, `apps/web/test/home/blocks.ts` (`seedSnapshot` ghi nốt 5 key), `apps/web/test/home/home.test.ts` (đổi hai chỗ, xem Step 1), `apps/web/test/architecture.test.ts`.
+- Create: `apps/web/src/views/home/Live.tsx`, `apps/web/src/views/home/MarketPulse.tsx`, `apps/web/src/views/home/TopBuilders.tsx` (xuất `TopBuildersBlock`), `apps/web/src/views/home/TopProducts.tsx` (xuất `TopProductsBlock`), `apps/web/test/home/blocks-b.test.ts`.
+- Modify: `apps/web/test/home/separable.test.tsx` (thêm bốn thân), `apps/web/src/views/home/HomeBlocks.tsx`, `apps/web/src/routes/home.tsx` (`now` vào `renderHome`), `apps/web/src/views/format.ts` (`MS`, `relativeTime`, `formatDuration`), `apps/web/public/assets/app.css`, 4 file i18n, `apps/web/test/home/blocks.ts` (`seedSnapshot` ghi nốt 5 key), `apps/web/test/home/home.test.ts` (đổi ba chỗ, xem Step 1), `apps/web/test/architecture.test.ts`.
 - Rerun only: `test/home/*`, `test/landing/*`, `test/design/assets.test.ts`, `test/i18n/parity.test.ts`.
 
 **Interfaces:**
-- Consumes (thật): `CategoryRow`, `ScarcestCategory`, `GrowthPoint`, `TopBuilders` (type), `TopProductsByCategory`, `MIN`, `BUILDER_DAYS`, `REQUEST_DAYS`, `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `type BuilderTally`, `type ProductCandidate` (`domain/public-stats.ts`); `CATEGORIES` (`domain/product.ts`); `topBadge`, `BADGE_SCORE` (`domain/catalog.ts`); `formatCount`, `HomeBlocks`, `block`, `fresh`, `DB`, `getHome`, `seedSnapshot` (7a).
-- Produces: `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`, `formatDuration`; section ids `home-pulse`, `home-builders`, `home-products`; `data-tab="selected|fast|verified"`; chip anchors `#home-top-<category>`.
+- Consumes (thật): `PublicLiveEvent`, `LIVE_MAX`, `liveEvents`, `LiveEvent`, `BADGE_KEY`, `LANGUAGE_KEY`, `CategoryRow`, `ScarcestCategory`, `GrowthPoint`, `TopBuilders` (type), `TopProductsByCategory`, `MIN`, `BUILDER_DAYS`, `REQUEST_DAYS`, `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `type BuilderTally`, `type ProductCandidate` (`domain/public-stats.ts`); `CATEGORIES` (`domain/product.ts`); `topBadge`, `BADGE_SCORE` (`domain/catalog.ts`); `formatCount`, `HomeBlocks`, `block`, `fresh`, `DB`, `getHome`, `seedSnapshot` (7a).
+- Produces: `Live`, `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`, `relativeTime`, `formatDuration`, `eventList` (test helper); section ids `home-live`, `home-pulse`, `home-builders`, `home-products`; `data-tab="selected|fast|verified"`; chip anchors `#home-top-<category>`.
 
 **Quyết định kỹ thuật (Reviewer kiểm):**
-1. **Tab Top builders là ba bảng, không tab giả bằng CSS.** Không JS thì mọi tiêu chí hiện cùng lúc, đúng "ghi rõ tiêu chí". Task 8 có thể bọc thành tab.
-2. **Tiêu chí lấy tham số từ domain** (`BUILDER_DAYS`, `MIN.selected|fastSamples|verified`), không viết số vào chuỗi hay view: đổi ngưỡng ở domain thì chữ đổi theo.
-3. **"Category thiếu supply" nằm trong khung của bảng 1** (cùng điều kiện tổng ≥ 10 ở domain, nên không bao giờ hiện khi bảng 1 ẩn).
-4. **Tên category "Other" dùng nhãn category sẵn có** (`product.category.other`); view không biết "Other" là gộp hay thật (domain đã gộp).
-5. **`MarketPulse` nhận `categories`, `scarcest`, `growth` dạng `null` được**, vì chúng là ba key độc lập; `HomeBlocks` hiện khối khi `categories || growth`.
-6. **Mọi chuỗi mới tránh dấu nháy đơn, `&`, `<`** (để test so chuỗi với HTML đã escape).
+1. **Live chuyển từ 7a sang 7b** (trần 600 dòng). `homeView` của 7a đã trả `live`; 7a không in nó. 7b thêm `now` cho `HomeBlocks` và `renderHome`. Thời gian tương đối tính ở server theo `now` của request (`Intl.RelativeTimeFormat`); `<time datetime>` giữ thời điểm thật; chữ số trong nhãn đến từ `Intl`, là định dạng (`relativeTime` nằm ở `views/format.ts`).
+2. **Tab Top builders là ba bảng, không tab giả bằng CSS.** Không JS thì mọi tiêu chí hiện cùng lúc, đúng "ghi rõ tiêu chí". Task 8 có thể bọc thành tab.
+3. **Tiêu chí lấy tham số từ domain** (`BUILDER_DAYS`, `MIN.selected|fastSamples|verified`), không viết số vào chuỗi hay view: đổi ngưỡng ở domain thì chữ đổi theo.
+4. **"Category thiếu supply" nằm trong khung của bảng 1** (cùng điều kiện tổng ≥ 10 ở domain, nên không bao giờ hiện khi bảng 1 ẩn).
+5. **Tên category "Other" dùng nhãn category sẵn có** (`product.category.other`); view không biết "Other" là gộp hay thật (domain đã gộp).
+6. **`MarketPulse` nhận `categories`, `scarcest`, `growth` dạng `null` được**, vì chúng là ba key độc lập; `homeView` đã quyết `pulse` là `null` khi cả `categories` và `growth` vắng.
+7. **Thân thuần, không biết chỗ đặt** (quyết định 8 của 7a): `Live`, `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock` không có `<section>`, `container` hay `h2`; `HomeBlocks` bọc từng khối bằng `HomeSection`. noPay, tiêu chí và dòng thứ tự nằm TRONG thân.
+8. **Mọi chuỗi mới tránh dấu nháy đơn, `&`, `<`** (để test so chuỗi với HTML đã escape).
 
-**Câu hỏi mở cho Owner (7b), chặn merge 7b, không chặn viết code:** duyệt chữ của năm câu dưới đây (EN, rồi VI/zh-Hans/zh-Hant ở bảng Step 2). Spec §5.9 yêu cầu "ghi rõ tiêu chí" và "không ai trả tiền để có mặt ở đây" nhưng không cho câu chữ.
-- `home.builders.noPay` = "No one pays to appear here."
-- `home.builders.criteria.selected` = "Proposals chosen by clients plus inquiries answered, last {days} days. At least {min} to qualify."
-- `home.builders.criteria.fast` = "Median time to a first reply, last {days} days. At least {min} replies to qualify."
-- `home.builders.criteria.verified` = "Products with a Demo verified or In production badge. At least {min} to qualify."
-- `home.products.order` = "Ordered by badge, then inquiries in the last {days} days, then newest."
+**Câu chữ đã duyệt:** năm câu `home.builders.noPay`, `home.builders.criteria.selected|fast|verified`, `home.products.order` được Owner duyệt NGUYÊN VĂN ở cả 4 locale (2026-10-06), đúng bảng Step 2; tiêu đề Top builders và Top products theo bảng Step 2 (Owner 2026-10-06). Không còn câu hỏi mở.
 
 - [ ] **Step 1: Failing tests first**
 
-Extend `apps/web/test/home/blocks.ts` `seedSnapshot` (add imports `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `type BuilderTally`, `type ProductCandidate` from `domain/public-stats.ts`) and export the builders the tests use:
+Extend `apps/web/test/home/blocks.ts` `seedSnapshot` (add imports `liveEvents`, `requestByCategory`, `scarcestCategory`, `weeklyGrowth`, `topBuilders`, `topProductsByCategory`, `type LiveEvent`, `type BuilderTally`, `type ProductCandidate` from `domain/public-stats.ts`) and export the builders the tests use:
 
 ```ts
+export const eventList = (n: number): LiveEvent[] =>
+  Array.from({ length: n }, (_, i) => ({ id: `e${i}`, at: new Date(Date.now() - (i + 1) * 60_000).toISOString(), kind: "product_published" as const, productName: `Live product ${i}`, slug: `live-${i}` }));
 export const tally = (i: number, over: Partial<BuilderTally> = {}): BuilderTally => ({ userId: `u${i}`, handle: `tb-${i}`, name: `Top builder ${i}`, selected: 0, answered: 0, replyMinutes: [], verified: 0, ...over });
 export const candidate = (i: number, over: Partial<ProductCandidate> = {}): ProductCandidate => ({ id: `p${i}`, slug: `tp-${i}`, name: `Top product ${i}`, category: "crm", builderHandle: "tb", builderName: "TB", badgeScore: 1, inquiries30d: 0, publishedAt: `2026-10-0${i + 1}T00:00:00.000Z`, ...over });
 const WEEKS = { products: { "2026-09-14": 1, "2026-09-21": 1, "2026-09-28": 1, "2026-10-05": 1 }, builders: {} };
 ```
-and, at the end of `seedSnapshot`, write: `request_by_category` from `requestByCategory({ crm: 4, ecommerce: 3, booking: 3 }, { crm: 1 })`, `scarcest_category` from `scarcestCategory(same)`, `growth` from `weeklyGrowth(WEEKS, new Date("2026-10-05T12:05:00.000Z"))`, `top_builders` from `topBuilders([0, 1, 2].map((i) => tally(i, { selected: MIN.selected, replyMinutes: Array(MIN.fastSamples).fill(10), verified: MIN.verified })))`, `top_products` from `topProductsByCategory([candidate(0)])`. In `home.test.ts`: (a) the stale/fresh test lists `["home-numbers", "home-live", "home-trending", "home-pulse", "home-builders", "home-products"]`; (b) the "sponsored or paid" strip becomes the typed `.replace(t(locale, "home.builders.noPay"), "")`; (c) the digit grep expects `files.length` ≥ 7.
+and, at the end of `seedSnapshot`, write: `live` from `liveEvents(eventList(MIN.liveEvents), new Date())`, `request_by_category` from `requestByCategory({ crm: 4, ecommerce: 3, booking: 3 }, { crm: 1 })`, `scarcest_category` from `scarcestCategory(same)`, `growth` from `weeklyGrowth(WEEKS, new Date("2026-10-05T12:05:00.000Z"))`, `top_builders` from `topBuilders([0, 1, 2].map((i) => tally(i, { selected: MIN.selected, replyMinutes: Array(MIN.fastSamples).fill(10), verified: MIN.verified })))`, `top_products` from `topProductsByCategory([candidate(0)])`. In `home.test.ts`: (a) the stale/fresh test lists `["home-numbers", "home-live", "home-trending", "home-pulse", "home-builders", "home-products"]` (7a lists the two it has); (b) the "sponsored or paid" strip becomes the typed `.replace(t(locale, "home.builders.noPay"), "")`; (c) the digit grep expects `files.length` ≥ 8 (the four files of 7a: `HomeSection`, `HomeBlocks`, `Numbers`, `Trending`; plus `Live`, `MarketPulse`, `TopBuilders`, `TopProducts` = 8 files). In `separable.test.tsx` add `import { Live } from "../../src/views/home/Live.tsx";` and the four bodies: `<Live locale="en" events={view.live!} now={new Date()} />`, `<MarketPulse locale="en" {...view.pulse!} />`, `<TopBuildersBlock locale="en" data={view.builders!} />`, `<TopProductsBlock locale="en" data={view.products!} />`.
 
 Create `apps/web/test/home/blocks-b.test.ts`:
 
@@ -5636,12 +5682,14 @@ Create `apps/web/test/home/blocks-b.test.ts`:
 import { describe, expect, it } from "vitest";
 import { writePublicStat } from "../../src/db/public-stats.ts";
 import { BADGE_SCORE } from "../../src/domain/catalog.ts";
-import { BUILDER_DAYS, MIN, REQUEST_DAYS, requestByCategory, scarcestCategory, topBuilders, topProductsByCategory, weeklyGrowth } from "../../src/domain/public-stats.ts";
+import { BUILDER_DAYS, LIVE_MAX, MIN, REQUEST_DAYS, liveEvents, requestByCategory, scarcestCategory, topBuilders, topProductsByCategory, weeklyGrowth } from "../../src/domain/public-stats.ts";
 import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
 import { t } from "../../src/i18n/t.ts";
-import { formatDuration } from "../../src/views/format.ts";
+import { formatDuration, relativeTime } from "../../src/views/format.ts";
 import { CATEGORY_KEY } from "../../src/views/labels.ts";
-import { DB, block, candidate, clearStats, fresh, getHome, tally } from "./blocks.ts";
+import { DB, block, candidate, clearStats, eventList, fresh, getHome, tally } from "./blocks.ts";
+
+const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 const label = (c: keyof typeof CATEGORY_KEY) => t("en", CATEGORY_KEY[c]);
 const rowsOf = (html: string) => [...html.matchAll(/<th scope="row">([^<]*)<\/th>/g)].map((m) => m[1]);
@@ -5649,6 +5697,36 @@ const NOW = new Date("2026-10-05T12:05:00.000Z");
 // total = 2 * categoryRequests + (categoryRequests - 1) + finance; finance = REST at the threshold, REST - 1 one under
 const REST = MIN.categoryTotal - 3 * MIN.categoryRequests + 1;
 const requests = (finance: number) => ({ crm: MIN.categoryRequests, ecommerce: MIN.categoryRequests, booking: MIN.categoryRequests - 1, finance });
+
+describe("Live (VNX-0703b, moved from 7a)", () => {
+  it("4 events hide it, 5 show it, and it never lists more than LIVE_MAX", async () => {
+    const now = new Date();
+    await clearStats();
+    await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents - 1), now), fresh());
+    expect(block(await getHome(), "home-live")).toBe("");
+    await writePublicStat(DB, "live", liveEvents(eventList(MIN.liveEvents), now), fresh());
+    expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(MIN.liveEvents);
+    await writePublicStat(DB, "live", liveEvents(eventList(LIVE_MAX + 1), now), fresh());
+    expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(LIVE_MAX);
+  });
+
+  it("a new request shows its category and languages, nothing else of it", async () => {
+    const at = new Date(Date.now() - 60_000).toISOString();
+    const events = [...eventList(MIN.liveEvents - 1), { id: "r", at, kind: "request_new" as const, category: "crm" as const, languages: ["vi" as const] }];
+    await clearStats();
+    await writePublicStat(DB, "live", liveEvents(events, new Date()), fresh());
+    const live = block(await getHome(), "home-live");
+    expect(live).toContain(t("en", "home.live.requestNew"));
+    expect(live).toContain(t("en", "product.category.crm"));
+    expect(live).toContain(t("en", "builder.lang.vi"));
+  });
+
+  it("relativeTime picks the largest whole unit", () => {
+    const now = new Date("2026-10-05T12:00:00.000Z");
+    expect(relativeTime("en", "2026-10-05T10:00:00.000Z", now)).toBe("2 hours ago");
+    expect(relativeTime("en", "2026-10-02T12:00:00.000Z", now)).toBe("3 days ago");
+  });
+});
 
 describe("Market pulse (VNX-0703b)", () => {
   it("chart 1 hides under the request total and folds categories under the minimum into Other", async () => {
@@ -5737,10 +5815,15 @@ describe("Top products by category (VNX-0703b)", () => {
 
 Run `npm test -w apps/web -- test/home` → expected RED (no `home-pulse|builders|products`, no `formatDuration`, no new keys).
 
-- [ ] **Step 2: Locale keys (22, all four locales)**
+- [ ] **Step 2: Locale keys (27, all four locales)**
 
 | Key | en | vi | zh-Hans | zh-Hant |
 |---|---|---|---|---|
+| `home.live.title` | Recent activity | Hoạt động gần đây | 近期动态 | 近期動態 |
+| `home.live.productPublished` | Product published | Sản phẩm mới đăng | 产品已发布 | 產品已發佈 |
+| `home.live.badgeGranted` | Badge granted | Huy hiệu mới | 已授予徽章 | 已授予徽章 |
+| `home.live.builderApproved` | Builder approved | Builder được duyệt | Builder 已通过审核 | Builder 已通過審核 |
+| `home.live.requestNew` | New request | Nhu cầu mới | 新需求 | 新需求 |
 | `home.pulse.title` | Market pulse | Nhịp thị trường | 市场脉搏 | 市場脈搏 |
 | `home.pulse.requestsTitle` | Requests and listed products by category | Nhu cầu và sản phẩm đang đăng theo danh mục | 按类别统计的需求与已上架产品 | 按類別統計的需求與已上架產品 |
 | `home.pulse.category` | Category | Danh mục | 类别 | 類別 |
@@ -5749,7 +5832,7 @@ Run `npm test -w apps/web -- test/home` → expected RED (no `home-pulse|builder
 | `home.pulse.scarcest` | Most requests per listed product | Nhiều nhu cầu nhất trên mỗi sản phẩm đang đăng | 每个已上架产品对应需求最多 | 每個已上架產品對應需求最多 |
 | `home.pulse.growthTitle` | Products and builders, cumulative by week | Sản phẩm và builder, cộng dồn theo tuần | 产品与 Builder，按周累计 | 產品與 Builder，按週累計 |
 | `home.pulse.week` | Week | Tuần | 周 | 週 |
-| `home.builders.title` | Top builders | Builder nổi bật | 优秀 Builder | 優秀 Builder |
+| `home.builders.title` | Top builders | Builder hàng đầu | Builder 排行 | Builder 排行 |
 | `home.builders.noPay` | No one pays to appear here. | Không ai trả tiền để có mặt ở đây. | 没有人能付钱出现在这里。 | 沒有人能付錢出現在這裡。 |
 | `home.builders.name` | Builder | Builder | Builder | Builder |
 | `home.builders.selected` | Most selected | Được chọn nhiều nhất | 入选最多 | 入選最多 |
@@ -5761,16 +5844,26 @@ Run `npm test -w apps/web -- test/home` → expected RED (no `home-pulse|builder
 | `home.builders.criteria.selected` | Proposals chosen by clients plus inquiries answered, last {days} days. At least {min} to qualify. | Đề xuất được khách chọn cộng số yêu cầu đã trả lời trong {days} ngày qua. Cần ít nhất {min} để đủ điều kiện. | 客户选中的提案加上已回复的咨询，过去 {days} 天。至少 {min} 才符合资格。 | 客戶選中的提案加上已回覆的詢問，過去 {days} 天。至少 {min} 才符合資格。 |
 | `home.builders.criteria.fast` | Median time to a first reply, last {days} days. At least {min} replies to qualify. | Trung vị thời gian đến lần trả lời đầu tiên trong {days} ngày qua. Cần ít nhất {min} lượt trả lời để đủ điều kiện. | 首次回复所需时间的中位数，过去 {days} 天。至少 {min} 次回复才符合资格。 | 首次回覆所需時間的中位數，過去 {days} 天。至少 {min} 次回覆才符合資格。 |
 | `home.builders.criteria.verified` | Products with a Demo verified or In production badge. At least {min} to qualify. | Sản phẩm có huy hiệu Demo verified hoặc In production. Cần ít nhất {min} để đủ điều kiện. | 拥有 Demo verified 或 In production 徽章的产品。至少 {min} 个才符合资格。 | 擁有 Demo verified 或 In production 徽章的產品。至少 {min} 個才符合資格。 |
-| `home.products.title` | Top products by category | Sản phẩm nổi bật theo danh mục | 各类别热门产品 | 各類別熱門產品 |
+| `home.products.title` | Top products by category | Sản phẩm hàng đầu theo danh mục | 各类别排行靠前的产品 | 各類別排行靠前的產品 |
 | `home.products.order` | Ordered by badge, then inquiries in the last {days} days, then newest. | Xếp theo huy hiệu, rồi số yêu cầu trong {days} ngày qua, rồi mới nhất. | 按徽章排序，其次为过去 {days} 天的咨询数，再其次为最新。 | 按徽章排序，其次為過去 {days} 天的詢問數，再其次為最新。 |
 
 (`{min}` and `{days}` are the only placeholders; vi uses "yêu cầu" for inquiry and "nhu cầu" for request, as elsewhere.) Run `npm test -w apps/web -- test/i18n/parity.test.ts` → GREEN.
 
-- [ ] **Step 3: `formatDuration`**
+- [ ] **Step 3: `relativeTime` and `formatDuration`**
 
 Append to `apps/web/src/views/format.ts`:
 
 ```ts
+const MS = { day: 86_400_000, hour: 3_600_000, minute: 60_000 } as const;
+
+/** "2 hours ago": the largest whole unit between `iso` and `now` (the viewer's locale). */
+export function relativeTime(locale: Locale, iso: string, now: Date): string {
+  const diff = Date.parse(iso) - now.getTime();
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  for (const unit of ["day", "hour", "minute"] as const) if (Math.abs(diff) >= MS[unit]) return rtf.format(Math.trunc(diff / MS[unit]), unit);
+  return rtf.format(0, "minute");
+}
+
 /** A median reply time given in minutes, shown in the largest whole unit ("10 min", "2 hr", "3 days"). */
 export function formatDuration(locale: Locale, minutes: number): string {
   const unit = minutes * MS.minute >= MS.day ? "day" : minutes * MS.minute >= MS.hour ? "hour" : "minute";
@@ -5780,7 +5873,44 @@ export function formatDuration(locale: Locale, minutes: number): string {
 
 - [ ] **Step 4: Views, wiring, CSS**
 
-`apps/web/src/views/home/MarketPulse.tsx`:
+`apps/web/src/views/home/Live.tsx` (body only):
+
+```tsx
+import type { FC } from "hono/jsx";
+import type { PublicLiveEvent } from "../../domain/public-stats.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { relativeTime } from "../format.ts";
+import { BADGE_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "../labels.ts";
+
+const LiveItem: FC<{ locale: Locale; e: PublicLiveEvent }> = ({ locale, e }) => {
+  const tr = translator(locale);
+  switch (e.kind) {
+    case "product_published":
+      return <><strong>{tr("home.live.productPublished")}</strong> <a href={localizedPath(locale, `/p/${e.slug}`)}>{e.productName}</a></>;
+    case "badge_granted":
+      return <><strong>{tr("home.live.badgeGranted")}</strong> <span class={`chip chip-${e.badge}`}>{tr(BADGE_KEY[e.badge])}</span> <a href={localizedPath(locale, `/p/${e.slug}`)}>{e.productName}</a></>;
+    case "builder_approved":
+      return <><strong>{tr("home.live.builderApproved")}</strong> <a href={localizedPath(locale, `/b/${e.handle}`)}>{e.builderName}</a></>;
+    case "request_new":
+      return <><strong>{tr("home.live.requestNew")}</strong> <span>{tr(CATEGORY_KEY[e.category])}</span> <span class="muted">{e.languages.map((l) => tr(LANGUAGE_KEY[l])).join(" · ")}</span></>;
+  }
+};
+
+/** A static list for now (the marquee is Task 8). Only what the snapshot holds: no request title, no client, no e-mail. */
+export const Live: FC<{ locale: Locale; events: readonly PublicLiveEvent[]; now: Date }> = ({ locale, events, now }) => (
+  <ul class="home-live">
+    {events.map((e) => (
+      <li class="home-live-item">
+        <time datetime={e.at}>{relativeTime(locale, e.at, now)}</time>
+        <LiveItem locale={locale} e={e} />
+      </li>
+    ))}
+  </ul>
+);
+```
+
+`apps/web/src/views/home/MarketPulse.tsx` (body only):
 
 ```tsx
 import type { FC } from "hono/jsx";
@@ -5796,72 +5926,65 @@ type Props = { locale: Locale; categories: readonly CategoryRow[] | null; scarce
 export const MarketPulse: FC<Props> = ({ locale, categories, scarcest, growth }) => {
   const tr = translator(locale);
   return (
-    <section id="home-pulse" class="lp-section home-block" aria-labelledby="home-pulse-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-pulse-title">{tr("home.pulse.title")}</h2>
-        </div>
-        <div class="home-pulse-grid">
-          {categories ? (
-            <div class="table-wrap">
-              <table class="data" data-chart="requests-by-category">
-                <caption>{tr("home.pulse.requestsTitle")}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{tr("home.pulse.category")}</th>
-                    <th scope="col">{tr("home.pulse.requests", { days: REQUEST_DAYS })}</th>
-                    <th scope="col">{tr("home.pulse.products")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((row) => (
-                    <tr>
-                      <th scope="row">{tr(CATEGORY_KEY[row.category])}</th>
-                      <td>{formatCount(locale, row.requests)}</td>
-                      <td>{formatCount(locale, row.products)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {scarcest ? (
-                <p class="home-scarcest">
-                  <span class="muted">{tr("home.pulse.scarcest")}</span> <strong>{tr(CATEGORY_KEY[scarcest.category])}</strong>
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {growth ? (
-            <div class="table-wrap">
-              <table class="data" data-chart="growth">
-                <caption>{tr("home.pulse.growthTitle")}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{tr("home.pulse.week")}</th>
-                    <th scope="col">{tr("home.numbers.products")}</th>
-                    <th scope="col">{tr("home.numbers.builders")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {growth.map((point) => (
-                    <tr>
-                      <th scope="row">{point.week}</th>
-                      <td>{formatCount(locale, point.products)}</td>
-                      <td>{formatCount(locale, point.builders)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+    <div class="home-pulse-grid">
+      {categories ? (
+        <div class="table-wrap">
+          <table class="data" data-chart="requests-by-category">
+            <caption>{tr("home.pulse.requestsTitle")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{tr("home.pulse.category")}</th>
+                <th scope="col">{tr("home.pulse.requests", { days: REQUEST_DAYS })}</th>
+                <th scope="col">{tr("home.pulse.products")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((row) => (
+                <tr>
+                  <th scope="row">{tr(CATEGORY_KEY[row.category])}</th>
+                  <td>{formatCount(locale, row.requests)}</td>
+                  <td>{formatCount(locale, row.products)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {scarcest ? (
+            <p class="home-scarcest">
+              <span class="muted">{tr("home.pulse.scarcest")}</span> <strong>{tr(CATEGORY_KEY[scarcest.category])}</strong>
+            </p>
           ) : null}
         </div>
-      </div>
-    </section>
+      ) : null}
+      {growth ? (
+        <div class="table-wrap">
+          <table class="data" data-chart="growth">
+            <caption>{tr("home.pulse.growthTitle")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{tr("home.pulse.week")}</th>
+                <th scope="col">{tr("home.numbers.products")}</th>
+                <th scope="col">{tr("home.numbers.builders")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {growth.map((point) => (
+                <tr>
+                  <th scope="row">{point.week}</th>
+                  <td>{formatCount(locale, point.products)}</td>
+                  <td>{formatCount(locale, point.builders)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
   );
 };
 ```
 (The growth test counts `<th scope="row">` rows: the week cells; the category test counts category names. Both tables never appear together in those two tests.)
 
-`apps/web/src/views/home/TopBuilders.tsx` (ranking file; no word from the architecture money list in comments):
+`apps/web/src/views/home/TopBuilders.tsx` (body only; ranking file, no word from the architecture money list in comments):
 
 ```tsx
 import type { FC } from "hono/jsx";
@@ -5877,48 +6000,43 @@ const TABS = [
   { key: "verified", title: "home.builders.verified", value: "home.builders.value.verified", criteria: "home.builders.criteria.verified", min: MIN.verified },
 ] as const satisfies readonly { key: keyof TopBuilders; title: MessageKey; value: MessageKey; criteria: MessageKey; min: number }[];
 
-/** One table per tab that has enough builders (the domain returns null for the others); each states its own criteria. */
+/** One table per tab that has enough builders (the domain returns null for the others); each states its own criteria, and the note travels with the body. */
 export const TopBuildersBlock: FC<{ locale: Locale; data: TopBuilders }> = ({ locale, data }) => {
   const tr = translator(locale);
   return (
-    <section id="home-builders" class="lp-section home-block" aria-labelledby="home-builders-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-builders-title">{tr("home.builders.title")}</h2>
-          <p class="section-sub">{tr("home.builders.noPay")}</p>
-        </div>
-        {TABS.map((tab) => {
-          const rows = data[tab.key];
-          return rows ? (
-            <div class="table-wrap home-group" data-tab={tab.key}>
-              <h3>{tr(tab.title)}</h3>
-              <p class="home-criteria">{tr(tab.criteria, { days: BUILDER_DAYS, min: tab.min })}</p>
-              <table class="data">
-                <thead>
+    <>
+      <p class="home-note">{tr("home.builders.noPay")}</p>
+      {TABS.map((tab) => {
+        const rows = data[tab.key];
+        return rows ? (
+          <div class="table-wrap home-group" data-tab={tab.key}>
+            <h3>{tr(tab.title)}</h3>
+            <p class="home-criteria">{tr(tab.criteria, { days: BUILDER_DAYS, min: tab.min })}</p>
+            <table class="data">
+              <thead>
+                <tr>
+                  <th scope="col">{tr("home.builders.name")}</th>
+                  <th scope="col">{tr(tab.value)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
                   <tr>
-                    <th scope="col">{tr("home.builders.name")}</th>
-                    <th scope="col">{tr(tab.value)}</th>
+                    <th scope="row"><a href={localizedPath(locale, `/b/${row.handle}`)}>{row.name}</a></th>
+                    <td>{tab.key === "fast" ? formatDuration(locale, row.value) : formatCount(locale, row.value)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr>
-                      <th scope="row"><a href={localizedPath(locale, `/b/${row.handle}`)}>{row.name}</a></th>
-                      <td>{tab.key === "fast" ? formatDuration(locale, row.value) : formatCount(locale, row.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null;
-        })}
-      </div>
-    </section>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null;
+      })}
+    </>
   );
 };
 ```
 
-`apps/web/src/views/home/TopProducts.tsx` (ranking file):
+`apps/web/src/views/home/TopProducts.tsx` (body only; ranking file):
 
 ```tsx
 import type { FC } from "hono/jsx";
@@ -5934,53 +6052,54 @@ export const TopProductsBlock: FC<{ locale: Locale; data: TopProductsByCategory 
   const tr = translator(locale);
   const present = CATEGORIES.filter((c) => (data[c]?.length ?? 0) > 0);
   return (
-    <section id="home-products" class="lp-section home-block" aria-labelledby="home-products-title">
-      <div class="container">
-        <div class="section-head">
-          <h2 id="home-products-title">{tr("home.products.title")}</h2>
-          <p class="section-sub">{tr("home.products.order", { days: REQUEST_DAYS })}</p>
-        </div>
-        <ul class="home-chips" aria-label={tr("home.products.title")}>
-          {present.map((c) => (
-            <li><a class="btn btn-ghost btn-sm" href={`#home-top-${c}`}>{tr(CATEGORY_KEY[c])}</a></li>
-          ))}
-        </ul>
+    <>
+      <p class="home-note">{tr("home.products.order", { days: REQUEST_DAYS })}</p>
+      <ul class="home-chips" aria-label={tr("home.products.title")}>
         {present.map((c) => (
-          <div class="home-group" id={`home-top-${c}`}>
-            <h3>{tr(CATEGORY_KEY[c])}</h3>
-            <ul class="home-tiles">
-              {(data[c] ?? []).map((p) => {
-                const badge = topBadge(p.badgeScore);
-                return (
-                  <li class="home-tile">
-                    <h4><a href={localizedPath(locale, `/p/${p.slug}`)}>{p.name}</a></h4>
-                    <p class="muted">{tr("catalog.by", { name: p.builderName })}</p>
-                    {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+          <li><a class="btn btn-ghost btn-sm" href={`#home-top-${c}`}>{tr(CATEGORY_KEY[c])}</a></li>
         ))}
-      </div>
-    </section>
+      </ul>
+      {present.map((c) => (
+        <div class="home-group" id={`home-top-${c}`}>
+          <h3>{tr(CATEGORY_KEY[c])}</h3>
+          <ul class="home-tiles">
+            {(data[c] ?? []).map((p) => {
+              const badge = topBadge(p.badgeScore);
+              return (
+                <li class="home-tile">
+                  <h4><a href={localizedPath(locale, `/p/${p.slug}`)}>{p.name}</a></h4>
+                  <p class="muted">{tr("catalog.by", { name: p.builderName })}</p>
+                  {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </>
   );
 };
 ```
 
-`HomeBlocks.tsx`: import `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`; add after the Trending/Founding entry of `blocks`:
+`HomeBlocks.tsx`: import `Live`, `MarketPulse`, `TopBuildersBlock`, `TopProductsBlock`; add `now: Date` to `HomeBlocksProps` and to the destructuring; add the Live entry between the Numbers and Trending entries:
 
 ```tsx
-    snapshot.request_by_category || snapshot.growth ? (
-      <MarketPulse locale={locale} categories={snapshot.request_by_category?.value ?? null} scarcest={snapshot.scarcest_category?.value ?? null} growth={snapshot.growth?.value ?? null} />
-    ) : null,
-    snapshot.top_builders ? <TopBuildersBlock locale={locale} data={snapshot.top_builders.value} /> : null,
-    snapshot.top_products ? <TopProductsBlock locale={locale} data={snapshot.top_products.value} /> : null,
+    view.live ? <HomeSection id="home-live" title={tr("home.live.title")}><Live locale={locale} events={view.live} now={now} /></HomeSection> : null,
+```
+In `routes/home.tsx` give `renderHome` the parameter `now: Date`, pass `now={now}` to `<HomeBlocks>`, and call `renderHome(c.get("locale"), await loadHomeData(c.env.DB, now), now)`. Then add after the Trending/Founding entries of `blocks`:
+
+```tsx
+    view.pulse ? <HomeSection id="home-pulse" title={tr("home.pulse.title")}><MarketPulse locale={locale} {...view.pulse} /></HomeSection> : null,
+    view.builders ? <HomeSection id="home-builders" title={tr("home.builders.title")}><TopBuildersBlock locale={locale} data={view.builders} /></HomeSection> : null,
+    view.products ? <HomeSection id="home-products" title={tr("home.products.title")}><TopProductsBlock locale={locale} data={view.products} /></HomeSection> : null,
 ```
 
 Append to `apps/web/public/assets/app.css`:
 
 ```css
+.home-live { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.home-live-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.home-live-item time { color: var(--muted); font: 400 13px/1.4 var(--font-mono); }
 .home-pulse-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start; }
 .home-pulse-grid caption { caption-side: top; text-align: left; font-weight: 600; padding: 0 0 8px; }
 .home-scarcest { margin: 12px 0 0; }
@@ -6009,8 +6128,8 @@ and extend the 7a test's file list to `["../src/routes/home.tsx", "../src/views/
 
 ```text
 npm run typecheck -w apps/web && npm test
-git add apps/web/src/views/home/MarketPulse.tsx apps/web/src/views/home/TopBuilders.tsx apps/web/src/views/home/TopProducts.tsx apps/web/src/views/home/HomeBlocks.tsx apps/web/src/views/format.ts apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/blocks.ts apps/web/test/home/blocks-b.test.ts apps/web/test/home/home.test.ts apps/web/test/architecture.test.ts
-git commit -m "feat(web): add Market pulse tables, Top builders and Top products (VNX-0703b)
+git add apps/web/src/views/home/Live.tsx apps/web/src/views/home/MarketPulse.tsx apps/web/src/views/home/TopBuilders.tsx apps/web/src/views/home/TopProducts.tsx apps/web/src/views/home/HomeBlocks.tsx apps/web/src/views/format.ts apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/blocks.ts apps/web/test/home/blocks-b.test.ts apps/web/test/home/home.test.ts apps/web/test/home/separable.test.tsx apps/web/test/architecture.test.ts apps/web/src/routes/home.tsx
+git commit -m "feat(web): add Live, Market pulse tables, Top builders and Top products (VNX-0703b)
 
 Each block reads a fresh public_stats value and hides under its threshold;
 Top builders states its criteria and that no one pays to appear.
@@ -6019,14 +6138,15 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 **Acceptance (mỗi dòng kiểm được bằng một lệnh):**
+- Live: ẩn ở 4 sự kiện, hiện ở 5, tối đa `LIVE_MAX`, request chỉ category và ngôn ngữ, thời gian tương đối: `npm test -w apps/web -- test/home/blocks-b.test.ts -t "Live"`.
 - Market pulse: bảng 1 ẩn ở tổng n−1 và hiện ở n với category dưới 3 request gộp "Other"; dòng thiếu supply cần ≥ 3 request; bảng 2 ẩn ở 3 tuần, hiện ở 4: `npm test -w apps/web -- test/home/blocks-b.test.ts -t "Market pulse"`.
 - Top builders: mỗi tab ẩn với 2 builder đủ điều kiện (kể cả một builder dưới ngưỡng 2/5/1) và hiện với 3; ghi tiêu chí và "no one pays to appear here" ở 4 locale; thời gian hiện bằng đơn vị: `-t "Top builders"`.
 - Top products: ẩn khi không có product, chip chỉ cho category có product, tối đa 3 theo thứ tự huy hiệu rồi mới nhất: `-t "Top products"`.
-- Toàn trang: stale ẩn cả 6 khối, một truy vấn `public_stats`, không `<script>`, không chữ trả tiền/Sponsored, không chữ số cứng trong 7 file `views/home/*.tsx`: `npm test -w apps/web -- test/home/home.test.ts`.
+- Toàn trang: stale ẩn cả 6 khối, một truy vấn `public_stats`, không `<script>`, không chữ trả tiền/Sponsored, không chữ số cứng trong 8 file `views/home/*.tsx` (`HomeSection`, `HomeBlocks`, `Numbers`, `Trending`, `Live`, `MarketPulse`, `TopBuilders`, `TopProducts`): `npm test -w apps/web -- test/home/home.test.ts`.
 - `RANKING_FILES` có đủ `routes/home.tsx`, `views/home/{Trending,TopBuilders,TopProducts}.tsx` và không file nào trong đó đọc bảng tiền: `npm test -w apps/web -- test/architecture.test.ts`.
 - `git diff --stat -- apps/web/migrations apps/web/package.json` rỗng; `npm run typecheck -w apps/web` và `npm test` xanh.
 
-Diff ước ~330 dòng không tính locale (mã ~185, test ~145; locale +90 dòng).
+Diff ước ~360 dòng không tính locale (mã ~215, test ~145; locale +115 dòng).
 
 ---
 
