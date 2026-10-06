@@ -6042,21 +6042,456 @@ Diff ước ~330 dòng không tính locale (mã ~185, test ~145; locale +90 dòn
 
 ### Task 9: VNX-0705b — `/for-builders`
 
-**Scope:** (chặn bởi (d).) Trang `/for-builders` (4 locale) với nút "Become a builder" → `/login` (cùng luồng 0708, không đổi auth), nội dung theo lựa chọn D1/D2. Mọi khối chữ tái dùng chữ landing đã duyệt hoặc chữ Owner duyệt; không tuyên bố, số liệu, testimonial, logo tự nghĩ. Thêm `/for-builders` vào sitemap (`routes/seo.ts` danh sách `entries`, `localized: true`), link vào nav/footer (`Layout.tsx`, theo CURRENT-STATUS "link header vào `<nav>`"), `domain/builder-input.ts` giữ handle dành riêng. Có JSON-LD không cần.
+**Scope:** Owner (d) D2: trang tối thiểu, dựng CHỈ từ chữ landing đã duyệt (`landing.builders.*`). Một khối "For builders" (eyebrow, tiêu đề H1, câu phụ, 3 lợi ích, nút, 3 bước), không viết câu mới, không số, testimonial, logo, không chip công cụ AI, không JS. Nút trỏ cùng đích với CTA landing (`builderCtaHref`: chưa đăng nhập → `/login?next=/hub/apply`, đã đăng nhập → `/hub`), không đổi auth. Thêm vào sitemap (kèm alternate) và đổi mục "For builders" trên header từ `/#builders` sang `/for-builders`. Landing giữ nguyên khối `#builders` của nó. Marketing plan (CTA "List what you built") là hướng tương lai, KHÔNG làm ở đây.
 
-**Files:** Create `src/routes/for-builders.tsx`, `src/views/ForBuildersPage.tsx`; Modify `src/app.ts`, `src/routes/seo.ts`, `src/views/Layout.tsx`, 4 file i18n; Test `test/public/for-builders.test.tsx` (200 ở 4 locale, hreflang, CTA tới `/login`, có trong sitemap với alternate, không có chữ số tự nghĩ: test chặn `\d` trong view trừ định dạng, i18n đủ key).
+**Files:**
+- Create: `apps/web/src/views/landing/Icon.tsx` (chuyển `Icon` và `CHECK` ra khỏi `LandingPage.tsx`, không đổi hành vi), `apps/web/src/views/ForBuildersPage.tsx`, `apps/web/src/routes/for-builders.tsx`, `apps/web/test/public/for-builders.test.ts`.
+- Modify: `apps/web/src/views/LandingPage.tsx` (import `Icon`, `CHECK` thay định nghĩa cục bộ; `ARROW` ở lại), `apps/web/src/views/Layout.tsx` (mục nav), `apps/web/src/app.ts` (đăng ký route), `apps/web/src/routes/seo.ts` (một dòng `entries`), `apps/web/public/assets/app.css` (một selector), `apps/web/test/design/layout.test.ts` (dòng NAV), `apps/web/test/seo/sitemap.test.ts` (thêm `/for-builders` vào danh sách).
+- i18n: KHÔNG có key mới, không đụng 4 file locale. Mọi chữ lấy từ `landing.builders.*` và `nav.forBuilders` (đủ 4 locale, test parity hiện có). Tiêu đề tab = `${nav.forBuilders} · VNX.SI`; description = `landing.builders.sub`. Không phải key mới vì ghép chuỗi bằng mã.
 
-**Acceptance:** `GET /for-builders` và `/vi/for-builders`… 200; sitemap có `/for-builders` + 3 alternate; `GET /sitemap.xml` test hiện có xanh. Diff ~260 dòng (không tính copy).
+**Interfaces:**
+- Consumes (thật): `Layout`, `builderCtaHref` (`views/Layout.tsx`); `translator` (`i18n/t.ts`); `onLocalized` (`http/localized.ts`); `siteOrigin` (`http/origin.ts`); `page` (`views/render.ts`); `MessageKey` (`i18n/messages/en.ts`); class CSS có sẵn `lp-builders`, `lp-builders-inner`, `lp-split`, `section-head`, `eyebrow`, `section-sub`, `lp-perks`, `lp-builders-cta`, `btn btn-light btn-lg`, `lp-steps`, `lp-step`, `lp-step-num`, `lp-step-body`; `c.get("user")`, `c.get("locale")`.
+- Produces: `Icon`, `CHECK` (`views/landing/Icon.tsx`); `ForBuildersPage: FC<{ locale: Locale; origin: string; signedIn: boolean }>`; `registerForBuildersRoutes(app: Hono<AppEnv>)`; route `GET /for-builders` và `/{vi,zh-hans,zh-hant}/for-builders`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. Dùng lại markup và class của khối `#builders` landing (băng tối) thay vì CSS mới, để trang đúng "chữ và dáng đã duyệt". Chỉ thêm `h1` vào đúng phạm vi `.lp-builders`, KHÔNG mở rộng `.section-head h2` (sẽ đổi kiểu `h1` của `/contact`): `app.css:391` thành `.section-head h2, .lp-builders h1 {` và `app.css:427` thành `.lp-builders :is(h1, h2) {`, vì trang cần đúng một `<h1>`. Không dùng `reveal-scroll` (không cần animation, tránh phụ thuộc `landing.js`).
+2. Header: `/#builders` → `/for-builders`, `current: rest === "/for-builders"`. Footer GIỮ NGUYÊN (test footer ghim đúng href; footer đã có "Become a builder"). Câu hỏi Owner bên dưới nếu muốn thêm vào footer.
+3. Route đăng ký trong file riêng, KHÔNG gọi `c.html(` (guard kiến trúc), đi qua `page()`. `Cache-Control` mặc định như landing (không đặt gì), vì trang tĩnh theo locale và có nút phụ thuộc đăng nhập (giống `/`).
+4. Chống "bịa" bằng test: văn bản của `<main>` phải BẰNG ĐÚNG nối các key đã duyệt, theo thứ tự, ở cả 4 locale; không chữ số, không `<img`, không `<script`. Thêm một câu hay một con số là test đỏ.
+
+- [ ] **Step 1: Tách `Icon` và `CHECK` (refactor giữ nguyên hành vi)**
+
+Create `apps/web/src/views/landing/Icon.tsx`: chuyển nguyên văn từ `LandingPage.tsx` (dòng 35–54 và `const CHECK`), thêm `export`:
+
+```tsx
+import type { FC } from "hono/jsx";
+
+/** Stroke icons, one set (audit §2.7). Decorative: the text next to them carries the meaning. */
+export const Icon: FC<{ d: readonly string[]; size?: number; width?: number; circles?: readonly (readonly [number, number, number])[]; rects?: readonly (readonly [number, number, number, number, number])[] }> = ({
+  d, size = 22, width = 1.6, circles = [], rects = [],
+}) => (
+  <svg class="icon" viewBox="0 0 24 24" width={size} height={size} stroke-width={width} aria-hidden="true" focusable="false">
+    {rects.map(([x, y, w, h, r]) => (<rect x={x} y={y} width={w} height={h} rx={r} />))}
+    {circles.map(([cx, cy, r]) => (<circle cx={cx} cy={cy} r={r} />))}
+    {d.map((path) => (<path d={path} />))}
+  </svg>
+);
+
+export const CHECK = ["M5 12l5 5L20 7"];
+```
+
+(Giữ định dạng nhiều dòng của bản gốc khi chép; ở trên chỉ nén cho gọn.) Trong `LandingPage.tsx`: xóa khối `const Icon …` và `const CHECK …`, thêm `import { CHECK, Icon } from "./landing/Icon.tsx";`, giữ `const ARROW`. Run `npm test -w apps/web -- test/landing` → GREEN (không đổi HTML).
+
+- [ ] **Step 2: Viết test trước (RED)**
+
+Create `apps/web/test/public/for-builders.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { LOCALES, localizedPath, type Locale } from "../../src/i18n/locales.ts";
+import type { MessageKey } from "../../src/i18n/messages/en.ts";
+import { t } from "../../src/i18n/t.ts";
+import { builderCtaHref } from "../../src/views/Layout.tsx";
+import type { Bindings } from "../../src/env.ts";
+import { signIn } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+// VNX-0705b (Owner D2): the page is built only from the approved landing copy.
+const get = (path: string, cookie?: string) =>
+  createApp().request(new Request(`https://vnx.si${path}`, { headers: cookie ? { cookie } : {} }), undefined, testEnv);
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const norm = (s: string) => decode(s.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
+const PATH = (l: Locale) => localizedPath(l, "/for-builders");
+
+/** Exactly these keys, in this order. Nothing else may appear in <main>. */
+const APPROVED: MessageKey[] = [
+  "landing.builders.eyebrow", "landing.builders.title", "landing.builders.sub",
+  "landing.builders.perk.free", "landing.builders.perk.tools", "landing.builders.perk.requests",
+  "landing.builders.apply",
+  "landing.builders.step.apply.title", "landing.builders.step.apply.body",
+  "landing.builders.step.list.title", "landing.builders.step.list.body",
+  "landing.builders.step.requests.title", "landing.builders.step.requests.body",
+];
+
+describe("/for-builders (VNX-0705b)", () => {
+  for (const locale of LOCALES) {
+    it(`${locale}: 200, canonical, hreflang, one h1, no script`, async () => {
+      const res = await get(PATH(locale));
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain(`<html lang="${locale}">`);
+      expect(html).toContain(`<link rel="canonical" href="https://vnx.si${PATH(locale)}"`);
+      for (const [hreflang, href] of [["en", "/for-builders"], ["vi", "/vi/for-builders"], ["zh-Hans", "/zh-hans/for-builders"], ["zh-Hant", "/zh-hant/for-builders"], ["x-default", "/for-builders"]]) {
+        expect(html, hreflang).toContain(`<link rel="alternate" hreflang="${hreflang}" href="https://vnx.si${href}"`);
+      }
+      expect(html.match(/<h1[ >]/g)).toHaveLength(1);
+      expect(norm(/<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html)![1]!)).toBe(t(locale, "landing.builders.title"));
+      expect(html).toContain(`<title>${t(locale, "nav.forBuilders")} · VNX.SI</title>`);
+      expect(html).not.toContain("<script");
+    });
+
+    it(`${locale}: <main> is exactly the approved landing copy, nothing invented`, async () => {
+      const main = mainOf(await (await get(PATH(locale))).text());
+      expect(norm(main)).toBe(norm(APPROVED.map((k) => t(locale, k)).join(" ")));
+      expect(norm(main)).not.toMatch(/\d/);
+      expect(main).not.toMatch(/<img|<script|<form|<input/);
+    });
+  }
+
+  it("the only link in <main> is the builder CTA, same target as the landing page", async () => {
+    for (const locale of LOCALES) {
+      const main = mainOf(await (await get(PATH(locale))).text());
+      const links = [...main.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>/g)].map((m) => decode(m[1]!));
+      expect(links, locale).toEqual([builderCtaHref(locale, false)]);
+    }
+    const { cookie } = await signIn("for-builders-in@vnx.si");
+    const env = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: "" } as Bindings; // a production go-live date would add a /vi/privacy notice link to <main>
+    const res = await createApp().request(new Request("https://vnx.si/vi/for-builders", { headers: { cookie } }), undefined, env);
+    const main = mainOf(await res.text());
+    expect([...main.matchAll(/<a\s[^>]*href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/vi/hub"]);
+  });
+
+  it("is in the header nav (replacing /#builders), marked current on its own page", async () => {
+    for (const locale of LOCALES) {
+      const html = await (await get(PATH(locale))).text();
+      const header = /<header class="site-header">([\s\S]*?)<\/header>/.exec(html)![1]!;
+      expect(header).toContain(`href="${PATH(locale)}" aria-current="page"`);
+      expect(header).not.toMatch(/href="[^"]*#builders"/);
+    }
+    const other = await (await get("/products")).text();
+    expect(other).toContain('<a href="/for-builders">');
+  });
+});
+```
+
+Run `npm test -w apps/web -- test/public/for-builders.test.ts` → FAIL (404 ở mọi `/for-builders`).
+
+- [ ] **Step 3: View, route, đăng ký, nav, sitemap, CSS**
+
+`apps/web/src/views/ForBuildersPage.tsx`:
+
+```tsx
+import type { FC } from "hono/jsx";
+import type { Locale } from "../i18n/locales.ts";
+import type { MessageKey } from "../i18n/messages/en.ts";
+import { translator } from "../i18n/t.ts";
+import { builderCtaHref, Layout } from "./Layout.tsx";
+import { CHECK, Icon } from "./landing/Icon.tsx";
+
+// Owner D2 (2026-10-05): only the approved landing copy. Adding a sentence here is a business decision, not an edit.
+const PERKS = ["landing.builders.perk.free", "landing.builders.perk.tools", "landing.builders.perk.requests"] as const satisfies readonly MessageKey[];
+const STEPS = [
+  ["landing.builders.step.apply.title", "landing.builders.step.apply.body"],
+  ["landing.builders.step.list.title", "landing.builders.step.list.body"],
+  ["landing.builders.step.requests.title", "landing.builders.step.requests.body"],
+] as const satisfies readonly (readonly [MessageKey, MessageKey])[];
+
+export const ForBuildersPage: FC<{ locale: Locale; origin: string; signedIn: boolean }> = ({ locale, origin, signedIn }) => {
+  const tr = translator(locale);
+  return (
+    <Layout locale={locale} title={`${tr("nav.forBuilders")} · VNX.SI`} description={tr("landing.builders.sub")} origin={origin} rest="/for-builders" signedIn={signedIn} fullWidth>
+      <section class="lp-builders" aria-labelledby="builders-title">
+        <div class="container lp-split lp-builders-inner">
+          <div class="section-head">
+            <p class="eyebrow">{tr("landing.builders.eyebrow")}</p>
+            <h1 id="builders-title">{tr("landing.builders.title")}</h1>
+            <p class="section-sub">{tr("landing.builders.sub")}</p>
+            <ul class="lp-perks">
+              {PERKS.map((perk) => (
+                <li>
+                  <Icon d={CHECK} size={20} width={2.5} />
+                  <span>{tr(perk)}</span>
+                </li>
+              ))}
+            </ul>
+            <p class="lp-builders-cta">
+              <a class="btn btn-light btn-lg" href={builderCtaHref(locale, signedIn)}>
+                {tr("landing.builders.apply")}
+              </a>
+            </p>
+          </div>
+          <ol class="lp-steps">
+            {STEPS.map(([title, body]) => (
+              <li class="lp-step">
+                <span class="lp-step-num" aria-hidden="true"></span>
+                <span class="lp-step-body">
+                  <strong>{tr(title)}</strong>
+                  <span>{tr(body)}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+    </Layout>
+  );
+};
+```
+
+`apps/web/src/routes/for-builders.tsx`:
+
+```tsx
+import type { Hono } from "hono";
+import type { AppEnv } from "../env.ts";
+import { onLocalized } from "../http/localized.ts";
+import { siteOrigin } from "../http/origin.ts";
+import { ForBuildersPage } from "../views/ForBuildersPage.tsx";
+import { page } from "../views/render.ts";
+
+/** /for-builders (VNX-0705b): static copy, no database read. */
+export function registerForBuildersRoutes(app: Hono<AppEnv>) {
+  onLocalized(app, "get", "/for-builders", (c) => page(c, <ForBuildersPage locale={c.get("locale")} origin={siteOrigin(c)} signedIn={c.get("user") !== null} />));
+}
+```
+
+`app.ts`: `import { registerForBuildersRoutes } from "./routes/for-builders.tsx";` và `registerForBuildersRoutes(app);` ngay sau `registerLandingRoutes(app);` (trước `/b/:handle`; không xung đột vì `for-builders` là handle dành riêng).
+`seo.ts`: thêm `{ rest: "/for-builders", localized: true },` sau `/request`.
+`Layout.tsx#mainNav`: thay dòng `forBuilders` bằng `{ href: localizedPath(locale, "/for-builders"), key: "nav.forBuilders", current: rest === "/for-builders" },`.
+`app.css`: dòng 391 `.section-head h2 {` → `.section-head h2, .lp-builders h1 {`; dòng 427 `.lp-builders h2 {` → `.lp-builders :is(h1, h2) {` (giữ nguyên khai báo; không đổi `/contact`).
+Tests cũ: `layout.test.ts` dòng NAV `["/#builders", "nav.forBuilders"]` → `["/for-builders", "nav.forBuilders"]`; `sitemap.test.ts` dòng `for (const rest of ["/terms", …, "/disclosure"])` thêm `"/for-builders"` và thêm "/for-builders" vào tên test.
+
+Run `npm test -w apps/web -- test/public/for-builders.test.ts test/design/layout.test.ts test/seo test/landing test/i18n` → GREEN.
+
+- [ ] **Step 4: Typecheck, full test, commit**
+
+```text
+npm run typecheck -w apps/web && npm test
+git add apps/web/src/views/landing/Icon.tsx apps/web/src/views/ForBuildersPage.tsx apps/web/src/routes/for-builders.tsx apps/web/src/views/LandingPage.tsx apps/web/src/views/Layout.tsx apps/web/src/app.ts apps/web/src/routes/seo.ts apps/web/public/assets/app.css apps/web/test/public/for-builders.test.ts apps/web/test/design/layout.test.ts apps/web/test/seo/sitemap.test.ts
+git commit -m "feat(web): add /for-builders from the approved landing copy (VNX-0705b)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Acceptance (mỗi mục một lệnh):**
+- `/for-builders` và `/vi|zh-hans|zh-hant/for-builders` 200, canonical, 4 hreflang + x-default, một `<h1>`, không `<script>`: `npm test -w apps/web -- test/public/for-builders.test.ts`.
+- `<main>` chứa đúng 13 chuỗi đã duyệt, không chữ số, không hình, không form: cùng file test.
+- Nút tới `/login?next=…/hub/apply` (chưa đăng nhập) hoặc `/hub` (đã đăng nhập), không link nào khác: cùng file test.
+- Header nav trỏ `/for-builders`, không còn `#builders`: `npm test -w apps/web -- test/design/layout.test.ts test/public/for-builders.test.ts`.
+- Sitemap có `/for-builders` đủ 4 locale + alternate, mỗi `loc` một lần: `npm test -w apps/web -- test/seo/sitemap.test.ts`.
+- Landing không đổi HTML: `npm test -w apps/web -- test/landing`. Không locale mới: `git show --stat --format= HEAD -- apps/web/src/i18n` rỗng. Không dependency/migration: `git show --stat --format= HEAD -- apps/web/package.json apps/web/migrations` rỗng.
+- `npm run typecheck -w apps/web` và `npm test` xanh.
+
+**Câu hỏi mở cho Owner: RESOLVED (phán quyết của Controller).** (1) Footer giữ nguyên, không thêm link "For builders". (2) `/for-builders` chỉ có một khối đã duyệt.
+
+**Lệch spec có chủ ý (Reviewer ghi vào CURRENT-STATUS):** spec §5.2 nói "Become a builder" trỏ tới `/for-builders`; plan giữ đích VNX-0708 `/login?next=/hub/apply` (nút của trang này dùng `builderCtaHref`).
+
+Diff ước ~240 dòng không tính locale (mã ~110 gồm chuyển `Icon` ~±25, test ~130; locale 0).
 
 ---
 
 ### Task 10: VNX-0706 — Cutover và vá a11y
 
-**Scope:** (A2: KHÔNG có cutover; chỉ ghi nhận trong CURRENT-STATUS, cộng phần a11y; đoạn sau áp dụng khi Owner sau này chọn A1.) Theo A1: đổi `/` sang homepage dữ liệu, dời landing 0708 (gợi ý: `/about` hoặc bỏ) kèm 301 và cập nhật sitemap, hreflang, test `test/landing`; theo A2: không có cutover, ghi nhận trong CURRENT-STATUS; theo A3/A4: chỉ ghi nhận. Giữ bảng `waitlist` (không xóa). Phần a11y đi kèm milestone (CURRENT-STATUS "M7: độ tương phản `.error-msg` ở dark mode, vùng chạm 44 px, skip link"): `.error-msg` đạt AA ở dark mode (kiểm bằng hàm tính tương phản trong test), brand và nút sign-in ≥ 44 × 44 px, skip link "Skip to content" là phần tử đầu của `<body>` trong `Layout.tsx` (chuỗi `t()` 4 locale; `id="main"` ở vùng nội dung), và cập nhật `CURRENT-STATUS.md` (Reviewer, không phải Implementer).
+**Scope:** Owner A2 (xác nhận lại 2026-10-06): KHÔNG có cutover. `/` giữ landing VNX-0708; không đổi route, redirect, sitemap, hreflang hay `test/landing`; bảng `waitlist` giữ nguyên. Việc ghi nhận "không cutover, cổng ra M7 đọc lại theo A2" là việc của Reviewer trong `.ai/context/CURRENT-STATUS.md`; Implementer KHÔNG sửa file đó. Phần Implementer chỉ là ba mục a11y dưới đây, đều thuần HTML/CSS (không JS, không inline script/style):
 
-**Files (dự kiến):** Modify `src/views/Layout.tsx`, `public/assets/app.css`, `src/routes/landing.tsx` / `src/app.ts` (tùy (a)), 4 file i18n; Test `test/design/a11y.test.tsx` (skip link đầu tiên và trỏ đúng `#main`; tương phản `.error-msg` ≥ 4.5:1 sáng/tối; kích thước 44 px trong CSS), `test/landing/*` (theo (a)).
+1. **Skip link** "Skip to content" là phần tử đầu tiên của `<body>`, `href="#main"`. Đã kiểm code: `Layout.tsx` ĐÃ có `<main id="main">` (dòng 206, cả `container` lẫn `page-full`), và Task 3c đặt thông báo Privacy bên TRONG `<main id="main">`, nên đích tồn tại trên mọi trang dùng `Layout`; chưa có skip link nào.
+2. **`.error-msg` đạt AA ở dark mode**, kiểm bằng hàm tính tương phản trong test. Đã tính trước: dark `--error` `#ff8a80` trên `--bg`/`--surface`/`--surface-2` ≈ 7–8:1, light `#b42318` ≈ 5.80–6.57:1, tức token ĐÃ đạt (từ VNX-0709); test này là hồi quy và chốt `.error-msg` dùng `var(--error)`. Nếu test đỏ ở một nền nào thì sửa giá trị `--error` trong CẢ HAI khối dark của `app.css`, không sửa test.
+3. **Vùng chạm ≥ 44 × 44 px cho brand và sign-in.** Chiều cao đã 44 px (`min-height`), CHIỀU RỘNG chưa bảo đảm: `.nav-account` chỉ có `padding: 0 4px`, "登录"/"登入" ~38 px < 44. Thêm `min-width: 44px` cho `.brand`, `.site-nav a, .nav-account` và `.site-footer .footer-nav a, .footer-lang a`.
 
-**Acceptance:** cổng ra M7: (1) mọi khối homepage ẩn đúng khi dưới ngưỡng (Task 7); (2) không số liệu nào không truy được (Task 5, 7); `grep -rn "api/waitlist" apps/web/src` rỗng; `npm test` và `npm run typecheck -w apps/web` xanh; `/robots.txt` còn `Disallow: /go/`. Diff ~250 dòng.
+**Files:**
+- Modify: `apps/web/src/views/Layout.tsx` (skip link), `apps/web/public/assets/app.css`, 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts`.
+- Create: `apps/web/test/design/a11y.test.ts`.
+- Không đụng: `routes/landing.tsx`, `app.ts`, `routes/seo.ts`, `test/landing/*`, `CURRENT-STATUS.md`.
+
+**Interfaces:**
+- Consumes: `Layout` (`<body>`, `<main id="main">`); `t(locale, key)` (`i18n/t.ts`); `createApp`, `testEnv`, `signIn`; tokens CSS `--error`, `--bg`, `--surface`, `--surface-2`, `--primary`, `--on-primary` (đọc từ `public/assets/app.css` bằng `import.meta.glob(..., { query: "?raw" })`, cùng cách `test/design/assets.test.ts`).
+- Produces: key i18n `a11y.skipToContent`; class `.skip-link`; test helper cục bộ `luminance`, `contrast` (WCAG 2.x) trong `a11y.test.ts`.
+
+**i18n (key mới, đủ 4 locale, thêm ngay sau `nav.menu`):**
+
+| Key | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `a11y.skipToContent` | Skip to content | Chuyển đến nội dung | 跳到主要内容 | 跳到主要內容 |
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. Skip link nằm TRƯỚC `<header>`, là `<a class="skip-link" href="#main">`; ẩn bằng `top: -80px` (vẫn focus được, KHÔNG `display:none`), hiện khi `:focus`. Màu `var(--on-primary)` trên `var(--primary)`; `:hover` ghi đè màu vì `a:hover` toàn cục đổi sang `--primary-hover` sẽ mất tương phản.
+2. KHÔNG thêm `tabindex="-1"` vào `<main>`: test hiện có (`test/design/privacy-notice.test.ts` dòng 65, 72) khớp đúng `<main id="main" class="…">` liền sau là nội dung; trình duyệt hiện hành đặt điểm bắt đầu focus tuần tự tại đích của anchor nên không cần.
+3. Tương phản kiểm bằng công thức WCAG (luminance tương đối) trên giá trị hex đọc từ `app.css`, KHÔNG hard-code số trong test, ở ba bộ token: light (`:root`), dark theo media (`:root:not([data-theme="light"])`), dark thủ công (`:root[data-theme="dark"]`). Nền kiểm: `--bg`, `--surface`, `--surface-2` (nơi `.error-msg` xuất hiện: form trên trang, thẻ, `lp-final`).
+4. Vùng chạm kiểm trên CSS: mọi rule có selector `.brand`, `.nav-account`, `.site-nav a`, `.site-footer .footer-nav a` không được khai `min-height`/`min-width` < 44 ở bất cứ đâu (kể cả trong `@media`), và phải có cả hai thuộc tính ≥ 44. Chiều rộng thực của brand luôn lớn hơn 44 (logo 30 px + chữ), nhưng khai tường minh để test kiểm được.
+
+- [ ] **Step 1: Viết test trước (RED)**
+
+Create `apps/web/test/design/a11y.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { LOCALES, localizedPath, type Locale } from "../../src/i18n/locales.ts";
+import { t } from "../../src/i18n/t.ts";
+import { signIn } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+// VNX-0706 (Owner A2: no cutover): skip link, .error-msg contrast in dark mode, 44 px targets.
+const CSS = Object.values(import.meta.glob("../../public/assets/app.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>)[0]!;
+const get = (path: string, cookie?: string) =>
+  createApp().request(new Request(`https://vnx.si${path}`, { headers: cookie ? { cookie } : {} }), undefined, testEnv);
+
+/** WCAG 2.x relative luminance and contrast ratio of two #rrggbb colours. */
+const channel = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+const luminance = (hex: string) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255); };
+const contrast = (a: string, b: string) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi! + 0.05) / (lo! + 0.05); };
+
+/** Hex tokens of the first rule block whose header matches. */
+function tokens(header: RegExp): Record<string, string> {
+  const m = header.exec(CSS);
+  if (!m) throw new Error(`no CSS block for ${header}`);
+  const start = m.index + m[0].length;
+  const body = CSS.slice(start, CSS.indexOf("}", start));
+  return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map((x) => [x[1]!, x[2]!]));
+}
+const THEMES = {
+  light: tokens(/^:root \{/m),
+  "dark (prefers-color-scheme)": tokens(/:root:not\(\[data-theme="light"\]\) \{/),
+  "dark (data-theme)": tokens(/:root\[data-theme="dark"\] \{/),
+};
+
+describe("contrast helper", () => {
+  it("matches the WCAG reference values", () => {
+    expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 5);
+    expect(contrast("#767676", "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#777777", "#ffffff")).toBeLessThan(4.5);
+  });
+});
+
+describe(".error-msg contrast (VNX-0706)", () => {
+  it("uses the --error token", () => {
+    expect(CSS).toMatch(/\.error-msg\s*\{[^}]*\bcolor:\s*var\(--error\)/);
+  });
+  for (const [name, tk] of Object.entries(THEMES)) {
+    it(`${name}: --error is at least 4.5:1 on --bg, --surface and --surface-2`, () => {
+      for (const bg of ["bg", "surface", "surface-2"]) {
+        expect(tk[bg], `${name} --${bg}`).toBeDefined();
+        expect(contrast(tk.error!, tk[bg]!), `${name} error on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+    it(`${name}: the skip link (--on-primary on --primary) is at least 4.5:1`, () => {
+      expect(contrast(tk["on-primary"]!, tk.primary!)).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
+describe("hit areas (VNX-0706)", () => {
+  const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: m[1]!.split(",").map((s) => s.trim()), body: m[2]! }));
+  const px = (body: string, prop: string) => [...body.matchAll(new RegExp(`(?:^|[;\\s])${prop}:\\s*(\\d+)px`, "g"))].map((m) => Number(m[1]));
+  for (const selector of [".brand", ".nav-account", ".site-nav a", ".site-footer .footer-nav a"]) {
+    it(`${selector} declares min-height and min-width of at least 44px and never less`, () => {
+      const own = rules.filter((r) => r.selectors.includes(selector));
+      expect(own.length, selector).toBeGreaterThan(0);
+      for (const prop of ["min-height", "min-width"]) {
+        const values = own.flatMap((r) => px(r.body, prop));
+        expect(values.length, `${selector} ${prop}`).toBeGreaterThan(0);
+        expect(Math.min(...values), `${selector} ${prop}`).toBeGreaterThanOrEqual(44);
+      }
+    });
+  }
+
+  it("renders the brand and the sign-in link in the header of every locale", async () => {
+    for (const locale of LOCALES) {
+      const html = await (await get(localizedPath(locale, "/products"))).text();
+      const header = /<header class="site-header">([\s\S]*?)<\/header>/.exec(html)![1]!;
+      expect(header, locale).toContain('class="brand"');
+      expect(header, locale).toContain(`class="nav-account" href="${localizedPath(locale, "/login")}"`);
+    }
+  });
+});
+
+describe("skip link (VNX-0706)", () => {
+  const PAGES = ["/", "/vi/products", "/zh-hans/builders", "/zh-hant/terms", "/login", "/vi/no-such-page"];
+  const localeOf = (path: string): Locale => (path.startsWith("/vi") ? "vi" : path.startsWith("/zh-hans") ? "zh-Hans" : path.startsWith("/zh-hant") ? "zh-Hant" : "en");
+
+  it("is the first element of <body> and points at #main, in every locale", async () => {
+    for (const path of PAGES) {
+      const html = await (await get(path)).text();
+      const m = /<body>\s*<a class="skip-link" href="#main">([^<]*)<\/a>\s*<header class="site-header">/.exec(html);
+      expect(m, path).not.toBeNull();
+      expect(m![1], path).toBe(t(localeOf(path), "a11y.skipToContent"));
+    }
+  });
+
+  it("has its target: exactly one id=\"main\", and the skip link comes before every other link", async () => {
+    for (const path of PAGES) {
+      const html = await (await get(path)).text();
+      expect(html.match(/\bid="main"/g), path).toHaveLength(1);
+      const body = html.slice(html.indexOf("<body>"));
+      expect(body.indexOf("<a "), path).toBe(body.indexOf('<a class="skip-link"'));
+    }
+  });
+
+  it("also leads when signed in", async () => {
+    const { cookie } = await signIn("a11y-skip@vnx.si");
+    expect(await (await get("/me", cookie)).text()).toMatch(/<body>\s*<a class="skip-link" href="#main">/);
+  });
+
+  it("is hidden off-screen until focused, without display:none", () => {
+    const rule = /\.skip-link\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? "";
+    expect(rule).toMatch(/position:\s*absolute/);
+    expect(rule).toMatch(/top:\s*-\d+px/);
+    expect(rule).not.toMatch(/display:\s*none|visibility:\s*hidden/);
+    expect(CSS).toMatch(/\.skip-link:focus\s*\{[^}]*top:\s*\d+px/);
+  });
+});
+```
+
+Run `npm test -w apps/web -- test/design/a11y.test.ts` → FAIL: skip link (không có `.skip-link` trong HTML và CSS), và hit-area (`min-width` thiếu ở `.brand`, `.nav-account`, `.site-nav a`, footer). Các test tương phản `.error-msg` PASS ngay (token đã đạt, xem Scope mục 2); đó là hồi quy, không phải lỗi cần sửa.
+
+- [ ] **Step 2: Skip link trong `Layout.tsx`**
+
+Ngay sau `<body>`, trước `<header class="site-header">`:
+
+```tsx
+<a class="skip-link" href="#main">
+  {tr("a11y.skipToContent")}
+</a>
+```
+
+Thêm key `a11y.skipToContent` vào 4 file locale ngay sau `"nav.menu"` (xem bảng i18n): `"a11y.skipToContent": "Skip to content",`, `"Chuyển đến nội dung"`, `"跳到主要内容"`, `"跳到主要內容"`.
+
+- [ ] **Step 3: CSS**
+
+Trong `apps/web/public/assets/app.css`:
+- Dòng `.brand { … min-height: 44px; … }`: thêm `min-width: 44px;`.
+- Dòng `.site-nav a, .nav-account { … min-height: 44px; … }`: thêm `min-width: 44px; justify-content: center;`.
+- Dòng `.site-footer .footer-nav a, .footer-lang a { … min-height: 44px; … }`: thêm `min-width: 44px;`.
+- Thêm `main { scroll-margin-top: 68px; }` (header dính cao 68 px không che đích skip link).
+- Thêm ngay sau `.visually-hidden { … }`:
+
+```css
+/* Skip link (VNX-0706): first focusable element, off-screen until it has focus. */
+.skip-link { position: absolute; left: 8px; top: -80px; z-index: 100; display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: var(--r-md); background: var(--primary); color: var(--on-primary); font-weight: 600; text-decoration: none; }
+.skip-link:hover, .skip-link:focus { color: var(--on-primary); }
+.skip-link:focus { top: 8px; }
+```
+
+Run `npm test -w apps/web -- test/design/a11y.test.ts test/design test/i18n test/landing` → GREEN. Nếu một test tương phản đỏ, sửa `--error` trong cả hai khối dark (không sửa test), rồi chạy lại.
+
+- [ ] **Step 4: Không cutover (kiểm âm)**
+
+Không viết code. Chạy `npm test -w apps/web -- test/landing test/seo` → GREEN không sửa file nào trong hai thư mục này (chứng minh `/`, sitemap, hreflang không đổi). `git show --stat --format= HEAD -- apps/web/src/routes apps/web/src/app.ts apps/web/test/landing apps/web/test/seo` phải rỗng trong commit của Task 10.
+
+- [ ] **Step 5: Typecheck, full test, commit**
+
+```text
+npm run typecheck -w apps/web && npm test
+git add apps/web/src/views/Layout.tsx apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/design/a11y.test.ts
+git commit -m "feat(web): skip link, 44px hit areas and a dark-mode contrast guard (VNX-0706)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Việc của Reviewer sau verdict (không phải Implementer):** ghi vào `CURRENT-STATUS.md` rằng VNX-0706 không có cutover theo A2 (đã xác nhận 2026-10-06), cổng ra M7 "thay landing cũ" đọc lại thành "các khối dữ liệu ẩn đúng khi dưới ngưỡng, landing 0708 giữ nguyên", đóng mục "Ghi nhận" a11y của M7 (độ tương phản `.error-msg`, vùng chạm 44 px, skip link), kèm SHA commit.
+
+**Acceptance (mỗi mục một lệnh):**
+- Skip link đầu `<body>`, `href="#main"`, đúng chữ 4 locale, có đích `id="main"` đúng một lần trên mọi trang kiểm: `npm test -w apps/web -- test/design/a11y.test.ts`.
+- `.error-msg` ≥ 4.5:1 trên `--bg`/`--surface`/`--surface-2` ở light và cả hai dark: cùng file test.
+- `.brand`, `.nav-account`, `.site-nav a`, `.site-footer .footer-nav a` có `min-height` và `min-width` ≥ 44 px, không rule nào nhỏ hơn: cùng file test.
+- 4 locale đủ key mới: `npm test -w apps/web -- test/i18n/parity.test.ts`.
+- Không cutover: `git show --stat --format= HEAD -- apps/web/src/routes apps/web/src/app.ts apps/web/test/landing apps/web/test/seo` rỗng; `/robots.txt` còn `Disallow: /go/` (`npm test -w apps/web -- test/seo/robots.test.ts`); không `<script>`/`style=` mới: `git show -U0 HEAD -- apps/web/src/views/Layout.tsx | grep -E '^\+.*(<script|style=)'` không in gì.
+- Không migration/dependency: `git show --stat --format= HEAD -- apps/web/migrations apps/web/package.json` rỗng; `npm run typecheck -w apps/web` và `npm test` xanh.
+
+**Câu hỏi mở cho Owner:** không có (A2 đã xác nhận; ba mục a11y là kỹ thuật).
+
+Diff ước ~165 dòng không tính locale (mã ~12, CSS ~6, test ~145; locale +4 dòng).
 
 ---
 
