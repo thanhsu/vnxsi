@@ -165,6 +165,9 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         ))}
       </head>
       <body>
+        <a class="skip-link" href="#main">
+          {tr("a11y.skipToContent")}
+        </a>
         <header class="site-header">
           <div class="container bar">
             <Brand locale={locale} size={30} />

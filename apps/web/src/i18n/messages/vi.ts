@@ -12,6 +12,7 @@ export const vi: Messages = {
   "nav.forBuilders": "Dành cho builder",
   "nav.becomeBuilder": "Trở thành builder",
   "nav.menu": "Menu",
+"a11y.skipToContent": "Chuyển đến nội dung",
   "footer.terms": "Điều khoản",
   "footer.privacy": "Quyền riêng tư",
   "privacyNotice.message": "Chúng tôi cập nhật Chính sách quyền riêng tư: từ {date}, chúng tôi đếm lượt truy cập trang product bằng một cookie hết hạn vào cuối mỗi ngày.",

@@ -12,6 +12,7 @@ export const zhHant: Messages = {
   "nav.forBuilders": "給 Builder",
   "nav.becomeBuilder": "成為 Builder",
   "nav.menu": "選單",
+"a11y.skipToContent": "跳到主要內容",
   "footer.terms": "條款",
   "footer.privacy": "隱私",
   "privacyNotice.message": "我們正在更新隱私權政策：自 {date} 起，我們會使用一個在每天結束時到期的 Cookie 來統計產品頁面瀏覽次數。",

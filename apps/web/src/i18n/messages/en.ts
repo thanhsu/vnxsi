@@ -10,6 +10,7 @@ export const en = {
   "nav.forBuilders": "For builders",
   "nav.becomeBuilder": "Become a builder",
   "nav.menu": "Menu",
+"a11y.skipToContent": "Skip to content",
   "footer.terms": "Terms",
   "footer.privacy": "Privacy",
   "privacyNotice.message": "We are updating our Privacy Policy: from {date} we count visits to product pages using a cookie that expires at the end of each day.",
