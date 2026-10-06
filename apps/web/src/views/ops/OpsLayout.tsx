@@ -38,6 +38,7 @@ const ICON_PATHS: Record<OpsIcon, string> = {
   builders: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c1.5-4 4.5-6 8-6s6.5 2 8 6",
   products: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7",
   requests: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
+  merchants: "M4 9l1.5-5h13L20 9M4 9h16M5 9v11h14V9M9 20v-6h6v6",
 };
 
 const NavIcon: FC<{ icon: OpsIcon }> = ({ icon }) => (

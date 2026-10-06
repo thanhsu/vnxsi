@@ -264,7 +264,13 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .cards > li:hover { box-shadow: var(--shadow-2); border-color: var(--border-strong); }
 .cards > li > * { margin: 0; }
 .cards img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid var(--border); border-radius: 8px; }
-.cards h2 { font-size: 18px; }
+.cards h2, .cards h3 { font-size: 18px; }
+.cards h3 { font-family: var(--font-display); letter-spacing: -0.015em; }
+.tool-cta { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 32px; }
+.tool-cta .card { max-width: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; background: var(--surface); }
+.tool-cta .card > * { margin: 0; }
+.tool-cta .btn { text-decoration: none; }
+@media (min-width: 768px) { .tool-cta { grid-template-columns: 1fr 1fr; } }
 .pager { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 24px; }
 .pager a { display: inline-flex; align-items: center; min-height: 44px; }
 /* Inquiries (M5), on the VNX-0709 tokens. */
@@ -717,3 +723,10 @@ textarea.ops-in { width: 100%; min-height: 76px; padding: 8px 10px; resize: vert
   .ops-bar .ops-btn, .ops-actions .ops-btn { min-height: 44px; }
   .ops-tl li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* Merchants (VNX-2508a): the partner forms and tables of /admin, reused inside an Ops page; the site's .card, .field and .btn apply. */
+.ops-legacy { max-width: 880px; min-width: 0; }
+.ops-legacy h1 { margin: 0 0 8px; font: 600 24px/1.25 var(--font-display); letter-spacing: -0.015em; }
+.ops-legacy h2 { margin: 24px 0 8px; font: 600 18px/1.3 var(--font-display); letter-spacing: 0; }
+.ops-legacy .table-wrap { overflow-x: auto; }
+.ops-legacy-after { max-width: 880px; }

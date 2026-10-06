@@ -916,6 +916,12 @@ export const en = {
   "disclosure.note": "VNX.SI may earn a commission when you sign up or buy through some links on this page. This never changes how products are ranked.",
   "disclosure.learnMore": "Learn more",
   "tools.offers": "Links to {name}",
+  "tools.products.title": "Products built with {name}",
+  "tools.builders.title": "Builders who work with {name}",
+  "tools.request.title": "Need something built with {name}?",
+  "tools.request.body": "Describe what you need, and the VNX.SI team will invite up to five builders to send you a proposal.",
+  "tools.builder.title": "Building with {name}?",
+  "tools.builder.body": "List your product so clients can find it and contact you on VNX.SI.",
   "legal.disclosure.title": "Disclosure",
   "legal.disclosure.description": "How VNX.SI may earn from partner links, and why rankings are never for sale.",
   "footer.disclosure": "Disclosure",
@@ -1084,6 +1090,9 @@ export const en = {
   "ops.requests.removeHelp": "Removes the request. The client is not told. Builders with an open invitation or a proposal get an e-mail that it ended.",
   "ops.requests.removeConfirm": "Remove request",
   "ops.requests.noHistory": "No audit entries for this request yet.",
+  "ops.nav.merchants": "Merchants",
+  "ops.merchants.noHistory": "No audit entries for this merchant yet.",
+  "ops.merchants.badRequest": "That request was not valid, so nothing was saved. Check the form and try again.",
 } as const;
 
 export type MessageKey = keyof typeof en;

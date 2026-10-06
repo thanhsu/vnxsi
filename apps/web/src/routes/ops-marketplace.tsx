@@ -70,7 +70,7 @@ function requestFilter(c: Context<AppEnv>): RequestFilter {
 }
 
 /** The object's History: audit rows in the safe projection; a failed read is an error state, never an empty list. */
-async function historyOf(c: Context<AppEnv>, entity: string, entityId: string): Promise<HistoryView> {
+export async function historyOf(c: Context<AppEnv>, entity: string, entityId: string): Promise<HistoryView> {
   try {
     const owners = adminEmails(c.env);
     const rows = await listEntityAudit(c.env.DB, entity, entityId, HISTORY_LIMIT);

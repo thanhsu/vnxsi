@@ -6,13 +6,16 @@ import { formatUsd } from "./format.ts";
 import { BADGE_KEY, CATEGORY_KEY } from "./labels.ts";
 
 /** A catalogue card. "Listed" is on every published product, so only checked badges are shown. */
-export const ProductCard: FC<{ locale: Locale; item: CatalogItem }> = ({ locale, item }) => {
+export const ProductCard: FC<{ locale: Locale; item: CatalogItem; heading?: "h2" | "h3" }> = ({ locale, item, heading = "h2" }) => {
   const tr = translator(locale);
+  const Heading = heading;
   const badge = topBadge(item.badgeScore);
   return (
     <li>
       {item.coverKey ? <img src={`/media/${item.coverKey}`} alt="" loading="lazy" /> : null}
-      <h2><a href={localizedPath(locale, `/p/${item.slug}`)}>{item.name}</a></h2>
+      <Heading>
+        <a href={localizedPath(locale, `/p/${item.slug}`)}>{item.name}</a>
+      </Heading>
       <p>{item.tagline}</p>
       <p class="muted">
         {item.category ? `${tr(CATEGORY_KEY[item.category])} · ` : null}

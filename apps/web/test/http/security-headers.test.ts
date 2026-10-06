@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import type { AppEnv } from "../../src/env.ts";
 import { CONTENT_SECURITY_POLICY, securityHeaders } from "../../src/http/security-headers.ts";
-import { makeBuilder, makeReadyProduct, makeRequest, signIn } from "../fixtures.ts";
+import { makeBuilder, makeMerchant, makeOffer, makeReadyProduct, makeRequest, signIn } from "../fixtures.ts";
 import { getReq, testEnv } from "../helpers.ts";
 
 describe("securityHeaders middleware (VNX-0803 F2)", () => {
@@ -81,11 +81,13 @@ describe("security headers on the real app (VNX-0803 F2)", () => {
     }
   });
 
-  it("CSP needs nothing inline on the Ops console either (VNX-2503, VNX-2504a, VNX-2504a2, VNX-2504b): /ops pages signed in as the root Owner", async () => {
+  it("CSP needs nothing inline on the Ops console either (VNX-2503, VNX-2504a, VNX-2504a2, VNX-2504b, VNX-2508a): /ops pages signed in as the root Owner", async () => {
     const { cookie } = await signIn("owner@vnx.si");
     const builder = await makeBuilder("csp-ops-builder@vnx.si", "csp-ops-builder");
     const { product } = await makeReadyProduct("csp-ops-product@vnx.si", "csp-ops-product", "CSP Ops Kit");
     const { request } = await makeRequest({ tag: "csp-ops-request" });
+    const merchant = await makeMerchant();
+    await makeOffer(merchant, null);
     for (const path of [
       "/ops",
       "/ops/marketplace/builders",
@@ -96,6 +98,8 @@ describe("security headers on the real app (VNX-0803 F2)", () => {
       "/ops/marketplace/requests",
       "/ops/marketplace/requests?status=all",
       `/ops/marketplace/requests/${request.id}`,
+      "/ops/monetization/merchants",
+      `/ops/monetization/merchants/${merchant.id}`,
     ]) {
       const res = await createApp().request(getReq(path, cookie), undefined, testEnv);
       expect(res.status, path).toBe(200);

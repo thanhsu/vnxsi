@@ -109,7 +109,10 @@ const RANKING_FILES = [
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
 // the files it creates (Task 2c: db/{merchants,programs}.ts, and db/audit.ts, which only reads `write_id` of those rows to guard audit rows; Task 2d: db/offers.ts (setDefaultOffer stays in db/merchants.ts, which owns `merchants`); Task 3: routes/admin-merchants.tsx only (views take structural prop types and may not import db); Task 4: db/clicks.ts,
 // routes/go.ts, jobs/daily.ts; Task 5: routes/tools.tsx, routes/seo.ts; Task 6: routes/legal.tsx).
-const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/offers.ts", "../src/db/audit.ts", "../src/routes/admin-merchants.tsx", "../src/db/clicks.ts", "../src/jobs/daily.ts", "../src/routes/go.ts", "../src/routes/tools.tsx", "../src/routes/seo.ts", "../src/routes/legal.tsx"]);
+const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/programs.ts", "../src/db/offers.ts", "../src/db/audit.ts", "../src/routes/admin-merchants.tsx", "../src/db/clicks.ts", "../src/jobs/daily.ts", "../src/routes/go.ts", "../src/routes/tools.tsx", "../src/routes/seo.ts", "../src/routes/legal.tsx", "../src/routes/ops-monetization.tsx"]);
+// VNX-2508a: routes/ops-monetization.tsx is the Ops front of the same monetization module; it reuses the admin-merchants actions, so it is allowlisted for the same reason as admin-merchants.tsx.
+// Only app.ts (route registration) and allowlisted files may import routes/admin-merchants.tsx.
+const ADMIN_MERCHANTS_IMPORTERS = new Set<string>([...MONEY_ALLOWED, "../src/app.ts"]);
 
 describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("lists only files that exist", () => {
@@ -117,7 +120,7 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   });
 
   it("after Task 6 the allowlist is exactly the files of Tasks 2c-6", () => {
-    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/clicks.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts", "../src/jobs/daily.ts", "../src/routes/admin-merchants.tsx", "../src/routes/go.ts", "../src/routes/legal.tsx", "../src/routes/seo.ts", "../src/routes/tools.tsx"]);
+    expect([...MONEY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/clicks.ts", "../src/db/merchants.ts", "../src/db/offers.ts", "../src/db/programs.ts", "../src/jobs/daily.ts", "../src/routes/admin-merchants.tsx", "../src/routes/go.ts", "../src/routes/legal.tsx", "../src/routes/ops-monetization.tsx", "../src/routes/seo.ts", "../src/routes/tools.tsx"]);
   });
 
   it("the allowlist holds only files that exist, and no ranking file is on it", () => {
@@ -130,6 +133,28 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
       for (const name of MONEY_DB) {
         expect(sources[file], `${file} imports db/${name}`).not.toMatch(new RegExp(`from\\s+["'][^"']*/db/${name}\\.ts["']`));
       }
+    }
+  });
+
+  it("no ranking file imports any module on the money allowlist", () => {
+    // db/audit.ts is the shared audit writer used by every admin route (it is allowlisted only because it reads the `write_id` of money rows to guard audit rows); it reads no money value.
+    const SHARED = new Set(["../src/db/audit.ts"]);
+    for (const file of RANKING_FILES) {
+      for (const allowed of MONEY_ALLOWED) {
+        if (SHARED.has(allowed)) continue;
+        const base = allowed.replace("../src/", "").replace(/\.tsx?$/, "");
+        const [dir = "", name = ""] = base.split("/");
+        // A sibling route is imported as "./name.tsx", anything else as ".../dir/name.ts".
+        const where = dir === "routes" ? `(?:\\./|/routes/)${name}` : `/${dir}/${name}`;
+        expect(sources[file], `${file} imports ${base}`).not.toMatch(new RegExp(`from\\s+["'][^"']*${where}(?:\\.tsx?)?["']`));
+      }
+    }
+  });
+
+  it("only allowlisted files (and app.ts, which registers it) import routes/admin-merchants.tsx", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (ADMIN_MERCHANTS_IMPORTERS.has(file)) continue;
+      expect(src, `${file} imports admin-merchants`).not.toMatch(/from\s+["'][^"']*admin-merchants(?:\.tsx)?["']/);
     }
   });
 

@@ -1,8 +1,16 @@
 # CURRENT STATUS — VNX.SI
 
-_Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên Ops._
+_Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang tool + Ops Merchants (nhánh `feat/vnx-2105-2508a`)._
 
 ## Tóm tắt
+- **Trang tool → marketplace, và Merchants trong Ops (2026-10-06):** Owner hỏi cách làm `/tools/elevenlabs` hiệu quả và dẫn người dùng về VNX.SI; Owner duyệt hướng đề xuất ("approve") và yêu cầu thêm tab Merchants vào Ops.
+  - **VNX-2105** (khối "Products built with {name}" / "Builders who work with {name}" + hai thẻ CTA Post a request / Become a builder trên `/tools/:slug`) và **VNX-2508a** (`/ops/monetization/merchants`, chỉ Owner, dùng chung logic với `/admin/merchants`) **xong**.
+  - Nhánh `feat/vnx-2105-2508a` cắt từ `main` `f155765`, worktree riêng `D:\DOCS\SUPHAM\GIT\vnxsi-merchants`.
+  - Implementer là subagent Claude, vì Codex hết credit; Owner đồng ý 2026-10-06.
+  - Review: `.ai/reviews/VNX-2105-review.md` và `.ai/reviews/VNX-2508a-review.md`, cả hai **APPROVE** sau một lượt sửa.
+  - Typecheck sạch, **136 file / 1447 test xanh** ở `47d870f`. AC9 đã xem bằng `wrangler dev` local + Chrome headless.
+  - **Chưa push, chưa merge, chưa deploy** (chờ Owner). Không có migration.
+  - **Mô tả merchant ElevenLabs trên production chưa đổi:** Reviewer định sửa qua `wrangler d1 --remote` nhưng auto mode chặn. Owner tự dán bản mới ở `/admin/merchants` (văn bản ở "Nghĩa vụ để lại").
 - **Production (2026-10-06, lần 3):** `main` `d447cf4` (PR #10: phần đầu Ops O1, kèm EPIC 21 và VNX-0803-fix đã có trên `main`) **đã deploy** (version `411e3c9f`, Owner chạy `npm run deploy`). D1 production đã áp `0010`–`0013` (Reviewer, `db:migrate:remote`, ngay trước deploy). Trước deploy: smoke local VNX-0803 F2 trên Chrome headless với khóa test Turnstile: `/contact`, `/request`, Inquiry (`/b/:handle/hire`) có widget + token, gửi được; magic link `/auth/verify` POST thành công, có cookie phiên, vào `/me`; không vi phạm CSP. Sau deploy (vnx.si): 22 route trả mã đúng (`/ops`, `/ops/*`, `/vi/ops` 404 kín có `no-store` + `X-Robots-Tag`; `/go/elevenlabs`, `/tools/elevenlabs` 404 vì EPIC 21 còn tắt; `/admin`, `/hub`, `/me` 303 về `/login`); CSP, HSTS và các header có mặt; `/contact` nạp Turnstile với site key thật, không có script Rocket Loader / Web Analytics / Bot Fight Mode trong HTML; `robots.txt` có `Disallow: /ops`. Chưa đặt `ANALYTICS_SALT` (công tắc của M7).
 - **EPIC 21 lát mỏng partner (2026-10-05):** **xong** trên nhánh `feat/epic21-partner-slice`: 11 task (VNX-2101, 2102a-1…4, 2102b-1/2, 2103-1/2, 2104a/b), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md`. Đã gộp `main` hai lần (`e77c769`, `9760016`). 1194 test, typecheck sạch; chạy cả bộ dưới tải máy có vài test 5 s timeout ở file có sẵn từ trước, chạy riêng thì xanh. Review: `.ai/reviews/EPIC21-partner-slice-review.md`, APPROVE WITH CHANGES. Đã merge vào `main` (`7622105`, đã push); **đã deploy 2026-10-06** (version `411e3c9f`, xem dòng Production lần 3). ElevenLabs chưa bật (xem "Việc của Owner trước khi bật ElevenLabs").
 - **Ops console (2026-10-05):** Owner yêu cầu trang Ops riêng gồm 4 nhóm (gộp admin, tổng quan + sức khỏe, nội dung & marketing, cài đặt), chia O1 (khung, vai trò, audit, chuyển `/admin`) → O2 → O3 → O4. Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md` và ADR-010 **Accepted** (review `.ai/reviews/OPS-DESIGN-review.md`). Mockup O1 duyệt (canvas, `docs/design/mockups/ops/`); plan O1 `docs/superpowers/plans/2026-10-05-vnxsi-ops-o1.md` **APPROVED** (EPIC 25, VNX-2501…2509; lời mời Ops hết hạn 7 ngày). **Phần đầu O1 đã merge vào `main`** (Owner 2026-10-05: "push merge và deploy"): VNX-2501 (migration `0013_ops_members`, quyền), 2502 (`requireOps`, 404 kín, header Ops), 2503 (khung + Overview), 2504a Builders, 2504a2 Products, 2504b Requests; tất cả review APPROVE. Lúc này chỉ Owner gốc (`ADMIN_EMAILS`) vào được `/ops`; `/admin` giữ nguyên. Còn lại trên nhánh `feat/ops-o1`: 2504c (Inquiries + Invites, đang làm), 2505, 2506 (Team & roles), 2507 (Audit log), 2508 (chuyển `/admin`), 2509.
@@ -120,6 +128,8 @@ _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên Ops._
 | VNX-2504b Ops Requests | ✅ | 659ce10, a327a6c | review `.ai/reviews/VNX-2504b-review.md` APPROVE (d1a0289) |
 | Merge phần đầu Ops O1 vào `main` | ✅ | d447cf4 | PR #10 (nhánh `release/ops-o1-a`, `0ce5f83`), Owner merge; 2504c ở lại `feat/ops-o1` |
 | Deploy `main` (EPIC 21 + VNX-0803 + Ops O1 phần đầu) | ✅ | d447cf4 | `db:migrate:remote` `0010`–`0013` rồi deploy, version `411e3c9f`; smoke local + production |
+| VNX-2105 Trang tool dẫn sang builder, product, request | ✅ | dbfcb61 (plan), 654cd71, bdfbdf7, 60bd5d0, d26f00e, d3611e9, d1d6c60 | lọc `tool` nội bộ (không đọc từ URL) trên `searchBuilders`/`searchProducts`, khớp chính xác `COLLATE NOCASE`, thứ tự organic giữ nguyên (ADR-004); tách `BuilderCard`; 6 khóa `tools.*` × 4 locale; review APPROVE (`.ai/reviews/VNX-2105-review.md`, F1–F7 đã sửa). Nhánh `feat/vnx-2105-2508a`, chưa merge |
+| VNX-2508a Ops Merchants (`/ops/monetization/merchants`) | ✅ | cc0c089, 4d89c98, 39e1f96, 8bbf315 | phần Merchants của VNX-2508 làm trước (Owner); tách action và thân view dùng chung với `/admin/merchants` (HTML `/admin` không đổi); History; `MONEY_ALLOWED` thêm `routes/ops-monetization.tsx` + assertion chặn import vòng qua `admin-merchants.tsx`; review APPROVE (`.ai/reviews/VNX-2508a-review.md`). `/admin/merchants` giữ tới phần còn lại của 2508. Chưa merge |
 
 ## Việc của Owner trước khi bật ElevenLabs
 
@@ -203,6 +213,20 @@ Owner, trước khi ElevenLabs chạy thật:
 - Header hiện link Builder Hub khi đã đăng nhập (người chưa là builder được đưa sang `/hub/apply`).
 
 ## Nghĩa vụ để lại
+- **Owner (ElevenLabs, 2026-10-06):** sửa ô Description của merchant ElevenLabs ở `/admin/merchants` (hoặc `/ops/monetization/merchants` sau khi deploy nhánh này) thành bản dưới. Bản này bỏ đoạn disclosure 4 thứ tiếng, vì câu disclosure đã dịch sẵn nằm trên khối offer; giữ câu nhãn hiệu. Mục đích: `meta description` và phần xem trước khi chia sẻ link bắt đầu bằng nội dung thật.
+
+  ```
+  ElevenLabs is a voice AI platform for text to speech, voice cloning, dubbing and conversational voice agents, available as an app and through an API.
+
+  - Narrate articles, courses and videos in many languages
+  - Add a voice assistant to a support or sales flow
+  - Build voice into your own product through the API
+
+  ElevenLabs and the ElevenLabs logo are registered trademarks or trademarks of ElevenLabs, Inc. Used with permission. VNX.SI is not sponsored by, endorsed by, or affiliated with ElevenLabs except as an independent participant in the ElevenLabs Creator Affiliate Program.
+  ```
+- **Merge `feat/vnx-2105-2508a` (Owner quyết):** không migration. Thử `git merge-tree` với `feat/ops-o1` (`37969f7`) đã thấy xung đột ở `test/ops/layout.test.ts`, `test/http/security-headers.test.ts`; dòng union `OpsIcon` trong `src/ops/menu.ts`, `OPS_MENU`, `OpsLayout.tsx` (icon), `en.ts`, `app.css`, `app.ts` cũng bị cả hai nhánh sửa. Nhánh merge sau gộp, giữ cả hai phía (chỉ là thêm dòng).
+- **Phần còn lại của VNX-2508:** chuyển hướng `/admin/merchants*` → `/ops/monetization/merchants*` (route Ops đã có), và `/admin/flags` → `/ops/settings/feature-flags` (chưa có).
+- **Builder dùng ElevenLabs:** khối builder/product trên `/tools/:slug` chỉ khớp khi `ai_tools` / `tech_stack` ghi đúng tên merchant (không phân biệt hoa thường). "Eleven Labs" hay "ElevenLabs API" không khớp.
 - ~~**Deploy M6:** `npm run db:migrate:remote -w apps/web` (`0008_requests`) rồi `npm run deploy`~~ Đã deploy 2026-10-05 (`3c77ac5`, xem Tóm tắt).
 - ~~**Deploy EPIC 21**~~ Đã deploy 2026-10-06 (`d447cf4`, `411e3c9f`). Còn các bước Owner trước khi bật ElevenLabs (mục "Việc của Owner trước khi bật ElevenLabs").
 - **Owner (zone vnx.si):** `robots.txt` đang là bản Cloudflare Managed (AI Crawl Control), chặn các crawler AI và cả Baiduspider, PetalBot (máy tìm kiếm Trung Quốc), trong khi site có `/zh-hans`, `/zh-hant`. `User-agent: *` vẫn `Allow: /`. Owner quyết giữ hay bỏ chặn hai bot tìm kiếm này.
@@ -255,6 +279,22 @@ Owner, trước khi ElevenLabs chạy thật:
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
 ## Ghi nhận (minor, chưa làm)
+
+- **Trang tool (VNX-2105):**
+  - Site chưa có ảnh `og:image` raster (1200×630), nên link chia sẻ không có hình.
+  - Chưa có bộ lọc công khai `?tool=` / link "See all" trên `/builders` và `/products`.
+  - Chưa có bí danh tên merchant.
+  - Chưa đo nguồn request/builder đến từ trang tool.
+  - Chưa có trang chỉ mục `/tools`.
+  - Mỗi lượt tìm lấy 24 dòng để dùng 6, kèm câu đếm bị bỏ đi (thêm chế độ limit / không đếm nếu cần).
+  - `COLLATE NOCASE` chỉ gộp hoa thường ASCII.
+- **Ops Merchants (VNX-2508a):**
+  - History chỉ hiện audit `entity = 'merchant'`, không hiện sửa chương trình/offer.
+  - Giao diện là form admin trong khung Ops (`.ops-legacy`); làm lại theo mockup ở VNX-2509.
+  - `/admin` vẫn trả chữ "Bad request" trần cho 400 (Ops render trang).
+  - Commit test đỏ `cc0c089` không qua typecheck (chấp nhận).
+  - Test kiến trúc không bắt được import chỉ lấy side effect (không có `from`).
+- **Feature flags trong Ops** (`/ops/settings/feature-flags`): chưa có. Owner chỉ yêu cầu Merchants.
 
 - Ops O1: tìm kiếm không phân biệt hoa thường chỉ với ASCII (SQLite `lower()`); Overview/menu đọc mỗi bộ đếm hai lần mỗi request (thẻ + số trên menu).
 - Ops O1: khối ảnh product hiện alt hai lần khi ảnh lỗi; thẻ Invitations của request có khoảng trống thừa khi chưa mời ai; 9 tab Requests cuộn ngang ở 390 px (xem ở 2509).
