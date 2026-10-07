@@ -18,3 +18,9 @@
 
 ## Ghi nhan
 - The `redirect: "manual"` test in the plan checks `.redirect` indirectly through `new Request`; it does not assert `.redirect` on the Request object itself. The brief asked for an assertion that `.redirect === "manual"`; the plan's test asserts `init.redirect` and non-throwing construction. Not extended (out of the plan text); reviewer may want a one-line add.
+
+## Fix round R1
+- M1: workerd loop now also asserts `new Request(call.url, call.init).redirect === "manual"`.
+- M2: login regex widened to `^[A-Za-z0-9][A-Za-z0-9_-]{0,38}$` (EMU logins); comment updated. Accepted cases added: `mona-cat_octo`, `a--b-`. Rejected cases added: `_octocat`, `octo%2Fcat`, `octo.cat`, 39-char-plus-underscore overflow (40 chars); existing cases cover leading `-`, `/ ? #  @`, space.
+- M3: `oauthCredentials` is an exhaustive `switch` on the provider union with a `never` default.
+- Tests: `npm test -w apps/web -- test/auth/oauth-github.test.ts test/auth/oauth-providers.test.ts test/auth/oauth-oidc.test.ts` -> 3 files, 46 tests passed. `npm run typecheck -w apps/web` exit 0.

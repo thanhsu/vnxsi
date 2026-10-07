@@ -73,7 +73,10 @@ describe("GithubClient requests (decision 3 (b), F1)", () => {
   it("builds options the workerd runtime accepts for both calls: a Request made from each captured call does not throw", async () => {
     const { calls } = await run(PROFILE);
     expect(calls).toHaveLength(2);
-    for (const call of calls) expect(() => new Request(call.url, call.init), call.url).not.toThrow();
+    for (const call of calls) {
+      expect(() => new Request(call.url, call.init), call.url).not.toThrow();
+      expect(new Request(call.url, call.init).redirect, call.url).toBe("manual");
+    }
   });
 
   it("treats any redirect on either call as a failure and goes no further", async () => {
@@ -125,10 +128,14 @@ describe("GithubClient result (ADR-012 §1, decision 12, F2, Review Focus 9)", (
   });
 
   it("refuses a login that is missing, empty, too long or not a plain GitHub login (profile_response)", async () => {
-    for (const login of [undefined, null, 42, "", " ", "a".repeat(40), "octo cat", "octo/cat", "octo?x=1", "octo#", "-octocat", "octo\ncat", "@octocat", "octocat[bot]", "é"]) {
+    for (const login of [undefined, null, 42, "", " ", "a".repeat(40), "octo cat", "octo/cat", "octo?x=1", "octo#", "-octocat", "octo\ncat", "@octocat", "octocat[bot]", "é", "_octocat", "octo%2Fcat", "octo.cat", "a".repeat(38) + "_x"]) {
       const { result } = await run({ ...PROFILE, login });
       expect(result, JSON.stringify(login)).toEqual({ ok: false, reason: "profile_response" });
     }
+  });
+
+  it("accepts Enterprise Managed User and legacy double-hyphen logins", async () => {
+    for (const login of ["mona-cat_octo", "a--b-"]) expect((await run({ ...PROFILE, login })).result, login).toEqual({ ok: true, identity: { subject: "583231", label: login } });
   });
 
   it("always gives a label the database accepts (1-254 characters)", async () => {

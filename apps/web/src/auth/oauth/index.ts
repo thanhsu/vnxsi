@@ -24,12 +24,24 @@ export function isFakeOAuth(env: Pick<Bindings, "OAUTH_DRIVER" | "MAIL_DRIVER" |
 
 /** The provider's client id and secret, or null when either is missing or blank (decision 6). */
 export function oauthCredentials(env: OAuthEnv, provider: OAuthProvider): { clientId: string; clientSecret: string } | null {
-  const [id, secret] =
-    provider === "google"
-      ? [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET]
-      : provider === "github"
-        ? [env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET]
-        : [env.LINKEDIN_CLIENT_ID, env.LINKEDIN_CLIENT_SECRET];
+  let id: string | undefined;
+  let secret: string | undefined;
+  switch (provider) {
+    case "google":
+      [id, secret] = [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET];
+      break;
+    case "github":
+      [id, secret] = [env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET];
+      break;
+    case "linkedin":
+      [id, secret] = [env.LINKEDIN_CLIENT_ID, env.LINKEDIN_CLIENT_SECRET];
+      break;
+    default: {
+      // A new provider must be added above: it must never fall through to another provider's secrets.
+      const unreachable: never = provider;
+      return unreachable;
+    }
+  }
   const clientId = id?.trim();
   const clientSecret = secret?.trim();
   return clientId && clientSecret ? { clientId, clientSecret } : null;

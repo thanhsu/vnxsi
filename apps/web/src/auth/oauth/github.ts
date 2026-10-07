@@ -5,8 +5,8 @@ export const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 export const GITHUB_USER_URL = "https://api.github.com/user";
 
 const TIMEOUT_MS = 8000;
-/** A GitHub login: letters, digits and hyphens, at most 39 characters. Stricter than the label CHECK, so it can never put `/`, `?` or `#` in a profile link. */
-const LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+/** A GitHub login: letters, digits, hyphens and (Enterprise Managed Users, `name_SHORTCODE`) underscores, at most 39 characters. Stricter than the label CHECK, so it can never put `/`, `?` or `#` in a profile link. */
+const LOGIN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,38}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
