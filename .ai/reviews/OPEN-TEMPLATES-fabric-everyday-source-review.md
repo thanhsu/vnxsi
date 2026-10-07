@@ -15,7 +15,7 @@ The ten adapted entries live under `content/open-templates/fabric-everyday/`. Ea
 
 ## Licence and notice findings
 
-The inspected checkout contains one root `LICENSE` file and no nested `LICENSE*`, `COPYING*`, or `NOTICE*` file under the inspected tree. The root file is the MIT License and names “Scott Chacon and others” with copyright years 2012–2024. Its notice and permission text is preserved verbatim in [`notices/fabric-MIT.txt`](../../notices/fabric-MIT.txt).
+The inspected checkout contains one root `LICENSE` file and no nested `LICENSE*`, `COPYING*`, or `NOTICE*` file under the inspected tree. The root file is the MIT License and names “Scott Chacon and others” with copyright years 2012–2024. Its notice and permission text is preserved verbatim in [`notices/fabric-MIT.txt`](../../content/open-templates/notices/fabric-MIT.txt).
 
 The root MIT text permits copying and modification subject to retaining the copyright and permission notice, and provides the software without warranty. No pattern-level exception or alternate licence was found in this scan. This is an evidence record rather than legal advice; the Owner should confirm that the intended catalogue use is covered before publication.
 
