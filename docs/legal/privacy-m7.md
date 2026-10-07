@@ -1,6 +1,16 @@
 # Privacy Policy — phiên bản M7 (câu chữ Owner đã duyệt 2026-10-05, câu hỏi (b) B1; con trỏ "Visit counting" sửa theo Owner 2026-10-06)
 
-Hiện thay cho `privacy.md` từ đầu cửa sổ thông báo (`PRIVACY_NOTICE_GO_LIVE` − 14 ngày UTC). Phần đầu tệp (Trạng thái, Đối chiếu code) do Reviewer thêm sau.
+- **Trạng thái:** APPROVED. Câu chữ bổ sung M7 (đếm lượt xem, cookie `__Host-vnx_vid`, GPC, chống đếm trùng) do Owner duyệt nguyên văn 2026-10-05 (câu hỏi (b), B1). Con trỏ "Visit counting" sửa theo Owner 2026-10-06. Phần còn lại giống hệt `privacy.md`. Không phải tư vấn pháp lý.
+- **Khi nào hiện:** `/privacy` hiện bản này thay cho `privacy.md` từ `PRIVACY_NOTICE_GO_LIVE` − 14 ngày UTC, và từ đó về sau luôn hiện (`domain/privacy-notice.ts` `privacyVersion`; `routes/legal.tsx`). Biến rỗng hoặc sai dạng thì vẫn hiện `privacy.md`. Ngày "Last updated" của bản này là ngày go-live; Terms và Disclosure giữ `LEGAL_UPDATED_AT`.
+- **Hai phiên bản:** cho tới task dọn sau go-live + 31 ngày, mọi thay đổi Privacy phải sửa cả `privacy.md` và tệp này, cùng cả bốn hằng số trong `src/legal/content.ts` (`privacyEn`, `privacyVi`, `privacyEnM7`, `privacyViM7`). Test `test/legal/content.test.ts` so tệp này với `PRIVACY_M7` theo từng dòng.
+- **Đối chiếu code M7 (`feat/m7-metrics` tại `37f86bc`):**
+  - Cookie `__Host-vnx_vid` (32 ký tự hex ngẫu nhiên, `Secure`, `HttpOnly`, `SameSite=Lax`, hết hạn 00:00 UTC kế tiếp) chỉ đặt trên `GET /p/:slug` trả 200 cho một khách được đếm (`http/visitor.ts` `decideViewVisit`, `setVisitorCookie`; `routes/product-page.tsx`).
+  - Không đếm và không đặt cookie khi: chưa tới ngày go-live (`domain/privacy-notice.ts` `isCountingLive`), thiếu `ANALYTICS_SALT`, bot, `Sec-GPC: 1`, builder của chính product, đội nội bộ (`auth/staff.ts` `isStaff` = admin hoặc thành viên Ops).
+  - Mã băm theo ngày `visitor_hash` = HMAC của cookie với khóa ngày (`domain/visitor.ts`), không nối được giữa hai ngày; lưu ở `product_view_dedupe` (ngày, mã băm, product; migration `0015_view_dedupe`, có CHECK chỉ nhận 64 ký tự hex) và `outbound_clicks.visitor_hash`. Không lưu IP, email hay user id.
+  - Click `/go/p/` chỉ gắn mã băm khi việc đếm đã bật (`routes/go.ts` `trackProductClick`).
+  - Bảng chống đếm trùng bị xóa mỗi ngày, mọi dòng của các ngày UTC trước (`db/stats.ts` `purgeViewDedupe`, bước `view_dedupe` trong `jobs/daily.ts`); vậy dòng sống tối đa khoảng 25 giờ, dưới mức "2 ngày" ghi trong văn bản.
+  - Số đếm theo ngày `product_daily_stats` (lượt xem, click demo, click ra ngoài, Inquiry) không có dữ liệu cá nhân (`db/stats.ts`, migration `0014_product_stats`).
+  - Thông báo trước cho người đã đăng nhập: `views/privacy-notice.tsx`, cửa sổ go-live − 14 ngày tới + 30 ngày; đóng bằng cờ `localStorage` thuần chức năng, không phải cookie (Owner 2026-10-06: không cần câu §5).
 
 ---
 
