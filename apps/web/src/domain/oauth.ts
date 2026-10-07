@@ -166,12 +166,17 @@ export function newLinkIntent(input: { provider: OAuthProvider; sessionHash: str
   return { v: 1, phase: "intent", provider: input.provider, intent: "link", sessionHash: input.sessionHash, exp: now + LINK_INTENT_TTL_MS };
 }
 
+/** One rule for `next` in a cookie, used on write and on parse: a same-site path of printable ASCII, not protocol-relative, within the length cap. */
+export function isSafeCookieNext(next: string): boolean {
+  return next.length <= MAX_NEXT_CHARS && /^[\x20-\x7e]+$/.test(next) && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\");
+}
+
 export function newFlowCookie(
   input: { provider: OAuthProvider; intent: OAuthIntent; state: string; verifier: string; nonce: string; next: string | null; locale: Locale; sessionHash: string | null },
   now: number,
 ): FlowCookie {
   if ((input.intent === "link") !== (input.sessionHash !== null)) throw new Error("a link flow needs a session hash, a signin flow must not have one");
-  const next = input.next !== null && input.next.length <= MAX_NEXT_CHARS ? input.next : null;
+  const next = input.next !== null && isSafeCookieNext(input.next) ? input.next : null;
   return { v: 1, phase: "flow", ...input, next, exp: now + OAUTH_FLOW_TTL_MS };
 }
 
@@ -209,7 +214,7 @@ export function parseOAuthCookie(raw: string | null | undefined, expected: { pro
   const { intent, state, verifier, nonce, next, locale, sessionHash } = value;
   if (intent !== "signin" && intent !== "link") return null;
   if (typeof state !== "string" || !TOKEN.test(state) || typeof verifier !== "string" || !TOKEN.test(verifier) || typeof nonce !== "string" || !TOKEN.test(nonce)) return null;
-  if (next !== null && (typeof next !== "string" || next.length > MAX_NEXT_CHARS || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\"))) return null;
+  if (next !== null && (typeof next !== "string" || !isSafeCookieNext(next))) return null;
   if (!isLocale(locale)) return null;
   if (intent === "link" ? typeof sessionHash !== "string" || !HASH.test(sessionHash) : sessionHash !== null) return null;
   return { v: 1, phase: "flow", provider: expected.provider, intent, state, verifier, nonce, next, locale, sessionHash: sessionHash as string | null, exp };

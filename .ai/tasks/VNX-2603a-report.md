@@ -19,3 +19,8 @@ None from the plan beyond adding LOW-1 (code line + 3 test cases). Files are CRL
 
 ## Ghi nhận
 None.
+
+## Fix round R1
+- M1: new `isSafeCookieNext(next)` in `domain/oauth.ts` (printable ASCII, starts with `/`, not `//` or `/\`, within 512 chars), used by both `newFlowCookie` (invalid `next` becomes `null`) and `parseOAuthCookie`. New test: `//evil.example`, `https://evil.example`, `/\evil.example`, non-ASCII, newline, empty all give `next: null` and the cookie round-trips through `parseOAuthCookie`; a valid `/hub?x=1` is kept.
+- M3: test pins the `exp` boundary: `exp = now - 60 s` is `expired`, `now - 59 s` is `ok`. `<=` unchanged.
+- Run: `npm test -- test/domain/oauth.test.ts test/auth/oauth-cookie.test.ts test/architecture.test.ts` (apps/web): 3 files, 51 tests passed; `npm run typecheck -w apps/web` exit 0. Full suite not run.

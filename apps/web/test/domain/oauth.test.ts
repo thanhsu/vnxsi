@@ -152,6 +152,9 @@ describe("verifyIdToken (ADR-012 §1, decision 3 (c) and (d))", () => {
   it("refuses an expired token with 60 seconds of clock tolerance", () => {
     expect(reason({ ...GOOD, exp: NOW / 1000 - 30 })).toBe("ok");
     expect(reason({ ...GOOD, exp: NOW / 1000 - 61 })).toBe("expired");
+    // The boundary: exp + 60 s equal to now is already expired (M3).
+    expect(reason({ ...GOOD, exp: NOW / 1000 - 60 })).toBe("expired");
+    expect(reason({ ...GOOD, exp: NOW / 1000 - 59 })).toBe("ok");
     for (const exp of [undefined, "9999999999", null]) expect(reason({ ...GOOD, exp }), String(exp)).toBe("expired");
   });
 
@@ -252,6 +255,15 @@ describe("the state cookie (ADR-012 §1, decision 4)", () => {
     for (const raw of [undefined, null, "", "not base64 !", "e30", base64UrlEncode(new TextEncoder().encode("{bad json")), "A".repeat(2049)]) {
       expect(parseOAuthCookie(raw, { provider: "google", now: NOW }), String(raw)).toBeNull();
     }
+  });
+
+  it("writes only a next the parser accepts: any other value becomes null (M1)", () => {
+    for (const next of ["//evil.example", "https://evil.example", "/\\evil.example", "/café", "/a\nb", ""]) {
+      const cookie = flow({ next });
+      expect(cookie.next, next).toBeNull();
+      expect(parse(encodeOAuthCookie(cookie)), next).toEqual(cookie);
+    }
+    expect(flow({ next: "/hub?x=1" }).next).toBe("/hub?x=1");
   });
 
   it("drops a next that is too long instead of storing it, and refuses to build an inconsistent flow", () => {
