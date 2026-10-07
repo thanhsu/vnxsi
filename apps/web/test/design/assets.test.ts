@@ -227,3 +227,24 @@ describe("landing.js (VNX-0709 AC11)", () => {
     }
   });
 });
+
+describe("privacy-notice.js (VNX-0701c)", () => {
+  it("is at most 2 KB, same-origin, no network or cookie access, with both storage calls inside try/catch", async () => {
+    const res = await get("/assets/privacy-notice.js");
+    expect(res.status).toBe(200);
+    const bytes = (await res.arrayBuffer()).byteLength;
+    expect(bytes).toBeGreaterThan(0);
+    expect(bytes).toBeLessThanOrEqual(2048);
+    const js = await text("/assets/privacy-notice.js");
+    expect(js).not.toMatch(/\bimport\b|\brequire\(/);
+    expect(js).not.toMatch(/\bfetch\(|XMLHttpRequest|sendBeacon|https?:\/\/|document\.cookie/);
+    expect(js).toContain("vnxsi:privacy-notice-dismissed:v1");
+    expect(js.match(/\btry\s*\{/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(js.match(/\bcatch\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it("app.css hides the whole notice once it is closed", async () => {
+    const css = await text("/assets/app.css");
+    expect(css).toMatch(/\.privacy-notice:not\(\[open\]\)\s*\{[^}]*display:\s*none/);
+  });
+});

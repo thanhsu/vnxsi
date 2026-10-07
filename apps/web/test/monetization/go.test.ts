@@ -323,7 +323,7 @@ describe("what never reaches D1", { timeout: 30_000 }, () => {
     expect(state.calls).toBe(0);
   });
 
-  it.each(["/go/p", "/go/o", "/go/ab", "/go/UPPER", "/go/-x-", "/go/p/some-product/demo", "/go/p/some-product/site", "/go/o/", "/go/some-slug/"])("%s is a 404 before any D1 read (reserved or malformed slug, /go/p/ stays M7's)", async (path) => {
+  it.each(["/go/p", "/go/o", "/go/ab", "/go/UPPER", "/go/-x-", "/go/p/-x-/demo", "/go/p/UPPER-x/demo", "/go/o/", "/go/some-slug/"])("%s is a 404 before any D1 read (reserved or malformed slug)", async (path) => {
     const { env, state } = untouchableDb();
     const res = await call(path, { env });
     expect(res.status).toBe(404);
@@ -335,7 +335,7 @@ describe("methods", { timeout: 30_000 }, () => {
   it.each(["POST", "PUT", "PATCH", "DELETE"])("%s on /go/ with a valid Origin is 405 with Allow: GET, HEAD, and writes nothing", async (method) => {
     const { offer, merchant } = await seed();
     const before = await totalClicks();
-    for (const path of [`/go/o/${offer.id}`, `/go/${merchant.slug}`, "/go/p/x/demo"]) {
+    for (const path of [`/go/o/${offer.id}`, `/go/${merchant.slug}`, "/go/p/does-not-exist/demo"]) {
       const res = await call(path, { method, headers: { origin: "https://vnx.si" } });
       expect(res.status, `${method} ${path}`).toBe(405);
       expect(res.headers.get("allow")).toBe("GET, HEAD");

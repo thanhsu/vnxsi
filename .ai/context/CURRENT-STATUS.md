@@ -3,6 +3,7 @@
 _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang tool + Ops Merchants (nhánh `feat/vnx-2105-2508a`)._
 
 ## Tóm tắt
+- **M7 (Số liệu và homepage dữ liệu, 2026-10-07):** **xong, đã merge vào `main` (`38bf414`, đã push 2026-10-07)**; nhánh `feat/m7-metrics` (code tới `37f86bc`, tài liệu `56ffb91`): 14 task (VNX-0701a/b/c + 3p, 0702a/b, 0703a/b, 0704a/b, 0705b, 0706, 0707a/b) + gộp `origin/main` hai lần (`f811e60`, `0e44251`) + lượt sửa sau review toàn nhánh (`37f86bc`). 164 file / 1913 test, typecheck sạch. Review toàn nhánh: `.ai/reviews/M7-review.md` (READY_AFTER_FIXES, đã sửa). Owner duyệt merge 2026-10-07; checklist trình duyệt của Task 8b (hiệu ứng, focus, reduced-motion, cảm ứng, trình đọc màn hình) chuyển thành điều kiện **trước khi deploy**. Chưa deploy.
 - **Trang tool → marketplace, và Merchants trong Ops (2026-10-06):** Owner hỏi cách làm `/tools/elevenlabs` hiệu quả và dẫn người dùng về VNX.SI; Owner duyệt hướng đề xuất ("approve") và yêu cầu thêm tab Merchants vào Ops.
   - **VNX-2105** (khối "Products built with {name}" / "Builders who work with {name}" + hai thẻ CTA Post a request / Become a builder trên `/tools/:slug`) và **VNX-2508a** (`/ops/monetization/merchants`, chỉ Owner, dùng chung logic với `/admin/merchants`) **xong**.
   - Nhánh `feat/vnx-2105-2508a` cắt từ `main` `f155765`, worktree riêng `D:\DOCS\SUPHAM\GIT\vnxsi-merchants`.
@@ -11,13 +12,14 @@ _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang too
   - Typecheck sạch, **136 file / 1447 test xanh** ở `47d870f`. AC9 đã xem bằng `wrangler dev` local + Chrome headless.
   - **Chưa push, chưa merge, chưa deploy** (chờ Owner). Không có migration.
   - **Mô tả merchant ElevenLabs trên production chưa đổi:** Reviewer định sửa qua `wrangler d1 --remote` nhưng auto mode chặn. Owner tự dán bản mới ở `/admin/merchants` (văn bản ở "Nghĩa vụ để lại").
-- **Production (2026-10-06, lần 3):** `main` `d447cf4` (PR #10: phần đầu Ops O1, kèm EPIC 21 và VNX-0803-fix đã có trên `main`) **đã deploy** (version `411e3c9f`, Owner chạy `npm run deploy`). D1 production đã áp `0010`–`0013` (Reviewer, `db:migrate:remote`, ngay trước deploy). Trước deploy: smoke local VNX-0803 F2 trên Chrome headless với khóa test Turnstile: `/contact`, `/request`, Inquiry (`/b/:handle/hire`) có widget + token, gửi được; magic link `/auth/verify` POST thành công, có cookie phiên, vào `/me`; không vi phạm CSP. Sau deploy (vnx.si): 22 route trả mã đúng (`/ops`, `/ops/*`, `/vi/ops` 404 kín có `no-store` + `X-Robots-Tag`; `/go/elevenlabs`, `/tools/elevenlabs` 404 vì EPIC 21 còn tắt; `/admin`, `/hub`, `/me` 303 về `/login`); CSP, HSTS và các header có mặt; `/contact` nạp Turnstile với site key thật, không có script Rocket Loader / Web Analytics / Bot Fight Mode trong HTML; `robots.txt` có `Disallow: /ops`. Chưa đặt `ANALYTICS_SALT` (công tắc của M7).
+- **Production (2026-10-06, lần 3):** `main` `d447cf4` (PR #10: phần đầu Ops O1, kèm EPIC 21 và VNX-0803-fix đã có trên `main`) **đã deploy** (version `411e3c9f`, Owner chạy `npm run deploy`). D1 production đã áp `0010`–`0013` (Reviewer, `db:migrate:remote`, ngay trước deploy). Trước deploy: smoke local VNX-0803 F2 trên Chrome headless với khóa test Turnstile: `/contact`, `/request`, Inquiry (`/b/:handle/hire`) có widget + token, gửi được; magic link `/auth/verify` POST thành công, có cookie phiên, vào `/me`; không vi phạm CSP. Sau deploy (vnx.si): 22 route trả mã đúng (`/ops`, `/ops/*`, `/vi/ops` 404 kín có `no-store` + `X-Robots-Tag`; `/go/elevenlabs`, `/tools/elevenlabs` 404 vì EPIC 21 còn tắt; `/admin`, `/hub`, `/me` 303 về `/login`); CSP, HSTS và các header có mặt; `/contact` nạp Turnstile với site key thật, không có script Rocket Loader / Web Analytics / Bot Fight Mode trong HTML; `robots.txt` có `Disallow: /ops`. Chưa đặt `ANALYTICS_SALT`. Từ 2026-10-06 công tắc đếm của M7 là ngày `PRIVACY_NOTICE_GO_LIVE` (xem "Việc của Owner khi deploy M7"); salt chỉ là điều kiện thứ hai.
 - **EPIC 21 lát mỏng partner (2026-10-05):** **xong** trên nhánh `feat/epic21-partner-slice`: 11 task (VNX-2101, 2102a-1…4, 2102b-1/2, 2103-1/2, 2104a/b), plan `docs/superpowers/plans/2026-10-05-vnxsi-epic21-partner-slice.md`. Đã gộp `main` hai lần (`e77c769`, `9760016`). 1194 test, typecheck sạch; chạy cả bộ dưới tải máy có vài test 5 s timeout ở file có sẵn từ trước, chạy riêng thì xanh. Review: `.ai/reviews/EPIC21-partner-slice-review.md`, APPROVE WITH CHANGES. Đã merge vào `main` (`7622105`, đã push); **đã deploy 2026-10-06** (version `411e3c9f`, xem dòng Production lần 3). ElevenLabs chưa bật (xem "Việc của Owner trước khi bật ElevenLabs").
 - **Ops console (2026-10-05):** Owner yêu cầu trang Ops riêng gồm 4 nhóm (gộp admin, tổng quan + sức khỏe, nội dung & marketing, cài đặt), chia O1 (khung, vai trò, audit, chuyển `/admin`) → O2 → O3 → O4. Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md` và ADR-010 **Accepted** (review `.ai/reviews/OPS-DESIGN-review.md`). Mockup O1 duyệt (canvas, `docs/design/mockups/ops/`); plan O1 `docs/superpowers/plans/2026-10-05-vnxsi-ops-o1.md` **APPROVED** (EPIC 25, VNX-2501…2509; lời mời Ops hết hạn 7 ngày). **Phần đầu O1 đã merge vào `main`** (Owner 2026-10-05: "push merge và deploy"): VNX-2501 (migration `0013_ops_members`, quyền), 2502 (`requireOps`, 404 kín, header Ops), 2503 (khung + Overview), 2504a Builders, 2504a2 Products, 2504b Requests; tất cả review APPROVE. Lúc này chỉ Owner gốc (`ADMIN_EMAILS`) vào được `/ops`; `/admin` giữ nguyên. Còn lại trên nhánh `feat/ops-o1`: 2504c (Inquiries + Invites, đang làm), 2505, 2506 (Team & roles), 2507 (Audit log), 2508 (chuyển `/admin`), 2509.
 - **Production (2026-10-05, lần 2):** `main` `3c77ac5` (M6 + PR #6 bật lại R2) **đã deploy** (version `74b85569`, binding `MEDIA` = `vnxsi-media`, cron `0 1 * * *`). D1 production đã áp `0001`–`0009`. Smoke: 15 route OK (gồm `/request`), R2 đọc qua `/media` đã kiểm bằng object tạm (đã xóa). Upload ảnh và submit product giờ dùng được.
 - **M6 (Request, 2026-10-05):** **xong** trên nhánh `feat/m6-request`: 7 task (VNX-0601, 0602a, 0602b, 0603, 0604, 0605 + 0605b, 0606) + lượt sửa sau review toàn nhánh (F2, F3, F4, F5, F7, phần còn lại của Task 7). Đã gộp `origin/main` (PR #4) ở `2865d7e`. 802/802 test, typecheck sạch. Review: `.ai/reviews/M6-review.md`. Đã merge vào `main` (`e9f53a2`, đã push).
 - **Cách làm từ M6 (Owner, 2026-10-04):** phiên Opus điều phối các subagent Sonnet (viết plan và code); Opus review và duyệt thay Owner (plan, khắc phục); sau mỗi milestone được APPROVE thì merge và push.
-- **Tiếp theo:** phần còn lại của M7 (nhánh `feat/m7-metrics`).
+- **Tiếp theo:** Owner kiểm trình duyệt Task 8b → Owner deploy theo "Việc của Owner khi deploy M7". Sau M7: execution plan marketing/designer (review `.ai/reviews/EXECUTION-PLAN-2026-10-06-review.md`, Owner duyệt là định hướng) và M8.
+- **Cách làm M7 (2026-10-05/06):** Owner đổi tạm sang Codex (GPT Astra rồi `gpt-5.6-sol`) để thực thi và review; Codex hết credit hai lần và sandbox không ghi được `.git` (controller tự chạy cả bộ test rồi commit). Owner 2026-10-06: quay lại Sonnet (plan, code) + Opus (review).
 - **VNX-0803-fix đã merge vào `main` (`4034ce2`, đã push, 2026-10-05):** Owner yêu cầu review và merge; review độc lập `.ai/reviews/VNX-0803-fix-independent-review.md` tìm ra BLOCKER F1 (`Referrer-Policy: no-referrer` trên `/auth/verify` làm form POST gửi `Origin: null` → 403, hỏng đăng nhập magic link), đã sửa ở `0f51981` (`same-origin` + test hồi quy), verdict cuối APPROVE. **Đã deploy 2026-10-06** (version `411e3c9f`); smoke F2 local và kiểm zone đã làm (xem dòng Production lần 3).
 - **Production (2026-10-05):** `main` `3169e6d` (PR #4: VNX-0709 thiết kế lại đợt A, VNX-0710 contact/feedback, VNX-0711 chạy khi chưa có R2, kèm M5 + VNX-0508) **đã deploy** lên https://vnx.si (version `b5d0f063`, cron `0 1 * * *`). D1 production đã áp `0003`–`0007`, `0009`. Smoke: 20 route trả mã đúng, magic link thật gửi qua Resend tới `thanhsu604@gmail.com`. Chưa có R2: `/media/*` 404, upload ảnh báo "sắp mở" (builder chưa submit product được). Việc còn lại: Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → bỏ comment `r2_buckets` trong `wrangler.jsonc` → deploy.
 - **Review bảo mật toàn nhánh VNX-0803 (2026-10-05, Reviewer Claude Fable):** `.ai/reviews/VNX-0803-security-review.md`, verdict **APPROVE WITH CHANGES** (tại `main` `b60d8ed` + nhánh EPIC 21 `488df8c`: 1019/1019 test, typecheck sạch, `npm audit` 0). Không BLOCKER. F1 HIGH: xoay `RESEND_API_KEY`, `TURNSTILE_SECRET` (Owner: "làm sau"). F2 headers, F4 body limit, F6 driver mail, F8 no-store, F9 `.gitignore` → task **VNX-0803-fix** (plan `.ai/plans/VNX-0803-fix-plan.md` APPROVED theo ủy quyền Owner 2026-10-05 "you start fix from F2"; handoff `.ai/tasks/VNX-0803-fix-handoff.md`), nhánh `fix/vnx-0803-security` tách từ `main` `b60d8ed` trong worktree riêng `D:\DOCS\SUPHAM\GIT\vnxsi-fix-0803` (phiên vnxsi-93 giữ cây chính cho EPIC 21, đã thống nhất). F3 (Cloudflare Access cho `/admin`), F5 (`workers_dev`), F7 (EXIF): chờ Owner quyết. F10–F13: LOW/SUGGESTION, chưa làm.
@@ -131,6 +133,39 @@ _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang too
 | VNX-2105 Trang tool dẫn sang builder, product, request | ✅ | dbfcb61 (plan), 654cd71, bdfbdf7, 60bd5d0, d26f00e, d3611e9, d1d6c60 | lọc `tool` nội bộ (không đọc từ URL) trên `searchBuilders`/`searchProducts`, khớp chính xác `COLLATE NOCASE`, thứ tự organic giữ nguyên (ADR-004); tách `BuilderCard`; 6 khóa `tools.*` × 4 locale; review APPROVE (`.ai/reviews/VNX-2105-review.md`, F1–F7 đã sửa). Nhánh `feat/vnx-2105-2508a`, chưa merge |
 | VNX-2508a Ops Merchants (`/ops/monetization/merchants`) | ✅ | cc0c089, 4d89c98, 39e1f96, 8bbf315 | phần Merchants của VNX-2508 làm trước (Owner); tách action và thân view dùng chung với `/admin/merchants` (HTML `/admin` không đổi); History; `MONEY_ALLOWED` thêm `routes/ops-monetization.tsx` + assertion chặn import vòng qua `admin-merchants.tsx`; review APPROVE (`.ai/reviews/VNX-2508a-review.md`). `/admin/merchants` giữ tới phần còn lại của 2508. Chưa merge |
 
+| VNX-0701a `product_daily_stats`, đếm Inquiry | ✅ | 51f8f88 (plan), 961adff | migration `0014_product_stats`; đếm trong cùng batch khi Inquiry vào `open` |
+| VNX-0707a Luật bot chung, `visitor_hash`, `isStaff` | ✅ | d18614a, 45a894e | băm theo ngày có tiền tố `vnx.si/visitor/v1`; GPC: phần tử nào bằng "1" là từ chối |
+| VNX-0702a Công thức `public_stats` | ✅ | 39176a9, c079871 | migration `0016_public_stats`; mọi ngưỡng ở domain thuần; cửa sổ N ngày lịch tính cả hôm nay |
+| VNX-0707b `/go/p/:slug/{demo,site}` | ✅ | 8efb41b, 842a819 | `validatePublicUrl` dùng chung editor và redirect; click không cookie không đếm (vẫn ghi dòng) |
+| VNX-0702b Cron hằng giờ | ✅ | 02360f6 (plan), 32af9b3 | trigger `5 * * * *`; bước hỏng giữ dòng cũ; code do `gpt-5.6-sol`, controller commit |
+| VNX-0701c Thông báo Privacy cho người đã đăng nhập | ✅ | 466004d (plan), c1ec708 | context `hono/jsx` đặt ở `render.ts#page`; cửa sổ D−14 → D+31; đóng bằng `<details>` + localStorage |
+| VNX-0701b (3p) Privacy hai phiên bản theo ngày | ✅ | 8be64d5 (plan), 4572243 | `docs/legal/privacy-m7.md`, `PRIVACY_M7`; hiện từ D−14; Terms/Disclosure giữ ngày cũ |
+| VNX-0701b Cookie người xem, đếm lượt xem | ✅ | 960b8b9 | migration `0015_view_dedupe`; cổng `isCountingLive` cho cả xem và click; dọn dedupe trước ngày UTC hiện tại |
+| VNX-0705b `/for-builders` | ✅ | cac28fa (plan), 26272e6 | chỉ khối chữ landing đã duyệt; nav header trỏ `/for-builders`; CTA giữ `/login?next=/hub/apply` (lệch spec §5.2, đã duyệt) |
+| VNX-0706 a11y (không cutover) | ✅ | 61fa123 | skip link, `scroll-margin-top`, vùng chạm 44 px, test tương phản WCAG đọc token thật |
+| VNX-0703a Khối Numbers, Trending / Founding | ✅ | a189fe5 (plan), 43907d7 | khối không phụ thuộc vị trí (`HomeSection`, `homeView`); Founding cần đủ 6 |
+| VNX-0703b Recent activity, Market pulse, Top builders, Top products | ✅ | 8d6237c | câu chữ Owner duyệt nguyên văn; tiêu đề trung tính |
+| VNX-0704a Biểu đồ SVG, bảng dữ liệu | ✅ | 5e322eb (plan), b767b2e | crosshair CSS; bộ kiểm màu WCAG 1.4.11 + mù màu đọc token thật |
+| VNX-0704b Chuyển động, `home.js`, tooltip | ✅ | 5c3d740, 458d87f | `home.js` 4,4 KB; reduced-motion tắt hết; **chờ Owner kiểm trình duyệt** |
+| Gộp `main` vào M7 | ✅ | f811e60, 0e44251 | Ops O1, VNX-2105/2508a, ADR-012 docs; `isStaff` thêm thành viên Ops + test Viewer không bị đếm |
+| Sửa sau review toàn nhánh M7 | ✅ | 37f86bc | ghi chú deploy `wrangler.jsonc`, test bảo vệ cấu hình, làm chắc test; 1913/1913 |
+| Merge M7 vào `main` | ✅ | 38bf414 | merge `--no-ff` của `56ffb91`, Owner duyệt 2026-10-07; đã push. Chưa deploy; kiểm trình duyệt 8b trước deploy |
+
+## Việc của Owner khi deploy M7
+
+Nguồn: `.ai/reviews/M7-review.md`, chú thích trong `apps/web/wrangler.jsonc`.
+
+1. **Trước lần deploy đầu tiên của M7:**
+   - Kiểm còn slot cron trigger trên tài khoản Cloudflare dùng chung với vsnstock: `vnxsi-web` cần 2 trigger (`0 1 * * *`, `5 * * * *`).
+   - Tạo rule rate limit cho `/p/*` và `/go/p/*` (quyết định F1).
+   - Chạy câu SQL kiểm URL demo/website (plan M7, Task 4, mục "Việc Owner chạy trước deploy") với `--remote`. Dòng nào có `suspect` khác NULL thì sửa hoặc gỡ product, vì link đó sẽ 404 ở `/go/p/`.
+2. **Migration trước code:** `npm run db:migrate:remote -w apps/web` (production đang có `0001`–`0013`, sẽ áp `0014`, `0015`, `0016`). Thiếu `0014` thì mọi lần mở Inquiry đều lỗi.
+3. **Deploy lần đầu với `PRIVACY_NOTICE_GO_LIVE: ""`** là an toàn: vẫn Privacy cũ, không thông báo, không cookie, không đếm lượt xem hay hash click. Lên ngay: `/go/p/` (dòng click có hash null), đếm Inquiry, các khối homepage (ẩn khi dưới ngưỡng), `/for-builders`, cron hằng giờ.
+4. **Chọn ngày D (UTC)** cách lần deploy mang ngày đó **ít nhất 14 ngày**. Commit D vào `apps/web/wrangler.jsonc` `vars.PRIVACY_NOTICE_GO_LIVE` trên `main` bằng một commit `chore:`, rồi deploy từ `main`. Không đặt bằng `--var` hay dashboard, không bao giờ xóa. Mọi lần deploy sau, từ phiên nào cũng vậy, phải từ cây có commit này.
+5. **`ANALYTICS_SALT`:** `wrangler secret put ANALYTICS_SALT` (chuỗi ngẫu nhiên ≥ 32 ký tự, ví dụ `openssl rand -hex 32`). Đặt lúc nào cũng được; việc đếm chỉ bắt đầu từ D 00:00 UTC. Trước khi đặt, mỗi isolate ghi một dòng log `visitor.no_salt` (bình thường).
+6. **Sau D:** smoke `/p/:slug` (có `Set-Cookie: __Host-vnx_vid`, `Max-Age` tới nửa đêm UTC, có dòng `product_daily_stats`), `/go/p/:slug/demo` (302, UTM, `no-store`, `X-Robots-Tag`, `Referrer-Policy: origin`), log job giờ ghi `public_stats`.
+7. **Sau D + 31 ngày:** task dọn: bỏ bản Privacy cũ (còn một hằng số, một file md).
+
 ## Việc của Owner trước khi bật ElevenLabs
 
 Đã deploy EPIC 21 (2026-10-06, `411e3c9f`; D1 production có `0001`–`0013`). Lần deploy sau: migration mới nào thì `db:migrate:remote` trước rồi deploy ngay.
@@ -144,6 +179,11 @@ Owner, trước khi ElevenLabs chạy thật:
 - Giữ cờ `content_indexing` tắt lúc ra mắt (`noindex`).
 
 ## Quyết định phát sinh
+
+- **Owner (M7):**
+  - 2026-10-05: (a) A2: khối dữ liệu nằm DƯỚI landing VNX-0708, không cutover (VNX-0706 chỉ còn a11y; lệch roadmap đã duyệt). (b) B1: không banner, cookie `__Host-vnx_vid` hết hạn cuối ngày UTC, tôn trọng GPC, căn cứ lợi ích chính đáng; câu chữ Privacy EN/VI duyệt nguyên văn; mục 10 là thay đổi quan trọng → báo trước người đã đăng nhập (Task 3c, câu chữ EN/VI duyệt nguyên văn). (c) cron hằng giờ. (d) `/for-builders` tối thiểu từ chữ landing. (f) chấp nhận đếm thừa ở trình duyệt chặn cookie + rate limit `/p/*`, `/go/p/*`. Q1: hero theo thứ tự mặc định catalogue; Founding 6 product mới nhất.
+  - 2026-10-06: câu chữ zh của thông báo 3c duyệt nguyên văn; cờ localStorage đóng thông báo không cần câu Privacy §5. Privacy hai phiên bản chọn theo `PRIVACY_NOTICE_GO_LIVE`, bản mới hiện từ D−14; việc đếm (xem và click) chỉ từ D. Sửa con trỏ câu "Visit counting" sang "section 5 (Cookies)" / "mục 5 (Cookie)". Founding cần đủ 6; duyệt nguyên văn 5 câu khối Top; tiêu đề vi/zh trung tính; "Live" đổi thành "Recent activity".
+- **Reviewer (M7):** click `/go/p/` không có cookie hợp lệ không bao giờ được đếm (vẫn ghi dòng); thiếu salt thì không cộng gì (lệch phụ lục 2.5, tránh thổi phồng Trending); `rejected` vẫn tính trong số request công khai, chỉ `removed` (spam) bị loại (E2); cửa sổ N ngày = N ngày lịch UTC tính cả hôm nay; tách `validatePublicUrl` khỏi `offer-url.ts` để dùng chung; `/for-builders` giữ CTA `/login?next=/hub/apply` (spec §5.2 ghi `/for-builders`); `/ops` không hiện thông báo 3c (OpsLayout không dùng Layout); "Show data as a table", "Pause scrolling" là nhãn giao diện, controller duyệt; count-up chấp nhận lóe về 0 khi bắt đầu đếm; tooltip trên cảm ứng giữ tới khi chạm chỗ khác.
 
 - **Owner (EPIC 21):**
   - 2026-10-05: duyệt nguyên văn câu chữ khối A (disclosure trên `/tools`), B (`/disclosure`), C (Privacy).
@@ -235,7 +275,7 @@ Owner, trước khi ElevenLabs chạy thật:
 - **Quyền phiên Claude:** auto mode chặn `npm run deploy` và việc đọc token GitHub để tạo PR; Owner tự push / merge / deploy, hoặc thêm quyền.
 - **Reviewer (tài liệu M6, còn treo):** ARCHITECTURE §2 dòng `notify/` ghi thêm M6 (`notify/request.ts`, gửi một lần, không có cột gửi lại).
 - **Mọi thông báo mới gửi builder khi lời mời / request kết thúc:** phải đi qua `publicBuilderOnly` (bỏ qua builder không công khai); không tự có.
-- **M7 (sau EPIC 21, `.ai/reviews/EPIC21-partner-slice-review.md`):**
+- ✅ **M7 (sau EPIC 21):** đã làm hết trong M7 (`/go/p/` trước catch-all, câu Privacy thay ở bản M7, luật bot chung, `RANKING_FILES` + review F6, migration `0014`–`0016`). Giữ để tra cứu:
   - Route `/go/p/:slug/{demo,site}` đặt **trước** catch-all `app.get("/go/*")` trong `routes/go.ts`, nếu không catch-all che route mới; sửa test `go.test.ts` đang chờ `/go/p/…` trả 404. Dùng lại `outbound_clicks`, không migration mới cho bảng này.
   - Thêm `visitor_hash` (HMAC, `ANALYTICS_SALT`) thì sửa câu Privacy "for now we do not link it to any visitor identifier" (Owner duyệt câu chữ).
   - Thay `isBotRequest` (`domain/outbound.ts`) bằng luật bot chung của spec 8.11.
@@ -244,10 +284,10 @@ Owner, trước khi ElevenLabs chạy thật:
 - **VNX-2105+ (phần còn lại của EPIC 21):** HEAD trên offer có tracking trả `click_id` mà không có dòng `outbound_clicks`: khi ghép conversion coi `click_id` lạ là "không ghép được" hoặc ghi dòng cho HEAD (Owner chọn khi lập plan). `test/monetization/conversions.test.ts` theo ADR-007; `conversions`, `revenue_entries` vào `WRITERS`. Tham số sub-id PartnerStack cho `{click_id}`; offer của product, Hub "Quản lý offer", logo merchant.
 - **ADR-010 (Ops O1):** chuyển `/admin/flags`, `/admin/merchants` vào `/ops/monetization/*`, chỉ Owner dùng.
 - **Ops O1 (còn lại, nhánh `feat/ops-o1`):** 2504c Inquiries + Invites (tab Overdue dùng đúng luật của thẻ Overview; link mời chỉ hiện một lần); 2505 Users + Feedback (Operator không khóa được Owner gốc, luôn audit); 2506 Team & roles (lời mời 7 ngày, kích hoạt khi verify magic link; F1 của 2501: lời mời `pending` đã quá hạn được đánh dấu `expired` + audit + tạo lời mời mới trong một batch; guard audit cho bảng mới trong `db/audit.ts`); 2507 Audit log; 2508 chuyển hướng `/admin` (allowlist query, link email/cron sang `/ops`, `/{locale}/ops*` → 404 kín, `/admin/flags` → `/ops/settings/feature-flags`, `/admin/merchants` → `/ops/monetization/merchants` chỉ Owner); 2509 rà giao diện/a11y.
-- **Hợp đồng `isStaff` với M7 (vnxsi-c9):** nhánh nào vào `main` sau thì đặt `isStaff = isAdminUser(user, env) || (await resolveOpsRole(env, user)) !== null`, thêm test thành viên Viewer không bị đếm, không nới `requireAdmin` qua `isStaff`.
+- ✅ **Hợp đồng `isStaff` với M7 (vnxsi-c9), đã làm ở `f811e60`:** nhánh nào vào `main` sau thì đặt `isStaff = isAdminUser(user, env) || (await resolveOpsRole(env, user)) !== null`, thêm test thành viên Viewer không bị đếm, không nới `requireAdmin` qua `isStaff`.
 - **EPIC 22 / 23 / VNX-0801:** quyền sở hữu bảng `content` trong test kiến trúc; mô tả merchant dạng markdown; ô sponsored và cờ `sponsored_listings` (ADR-008); bản dịch zh của `/disclosure` và Privacy.
 - **Lần đầu bật `content_indexing`:** chờ 1 giờ hoặc purge cache `/sitemap.xml` trước khi gửi sitemap cho Search Console (review F7).
-- **M7 (số liệu, Live, test kiến trúc tiền):**
+- ✅ **M7 (số liệu, Live, test kiến trúc tiền):** đã theo trong VNX-0702a/0703. Giữ để tra cứu:
   - "Request 30 ngày" đếm theo `requests.submitted_at`; bảng thước đo §3 (request đã gửi, tỷ lệ có ≥ 1 đề xuất, tỷ lệ chọn được builder) đọc thẳng `requests`, `request_invites`.
   - Dải Live đọc audit `request.submit`, `request.verify` (chỉ `category`, `languages`), chịu được dòng trùng hiếm (cùng mili giây).
   - Không dùng `closed_at` làm mốc kết thúc của request bị gỡ sau khi đã kết thúc (bị ghi đè).
@@ -258,13 +298,15 @@ Owner, trước khi ElevenLabs chạy thật:
 - **Đợt B/C thiết kế:** catalogue, product, builder, Hub, Admin theo design system mới; thống nhất trọng lượng tiêu đề 600/700.
 - **Go-live (Owner muốn sớm, 2026-10-04):** ✅ Email Routing `contact@vnx.si` → ✅ merge VNX-0705a (PR #3) → Owner bật R2 → `npx wrangler r2 bucket create vnxsi-media` → `npm run db:migrate:remote -w apps/web` → ✅ Resend domain `vnx.si` verified, ✅ secret `RESEND_API_KEY`, ✅ secret `ADMIN_EMAILS` = `thanhsu604@gmail.com` (2026-10-04) → Turnstile: ✅ widget `vnx.si` (site key `0x4AAAAAAFNhEcGnR8e56X8X`, vào `wrangler.jsonc` ở VNX-0710), ✅ secret `TURNSTILE_SECRET` (2026-10-04) → `npm run deploy` (đăng ký cron) → smoke `/`, `/vi`, `/terms`, `/privacy`, `/media-kit`, `/login`, `/robots.txt`, `/sitemap.xml`. OQ-1 của VNX-0708 đã đóng bằng VNX-0705a.
 - ~~**M5 (merge sau VNX-0705a):** gộp cron theo `.ai/reviews/VNX-0705a-review.md` mục "Xung đột"~~ Đã gộp ở `482ef50` theo hướng ở mục Quyết định (Reviewer M5). Privacy cho Inquiry và Turnstile: xong ở VNX-0508. Ghi chú cũ: (lấy `jobs/daily.ts`, `index.ts` của M5; một hàm xóa token `deleteExpiredTokens`; giữ `rate_limits` 2 ngày trừ khi Owner chọn khác); cập nhật `docs/legal/privacy.md` + `src/legal/content.ts` cho Inquiry và Turnstile trước khi M5 lên production.
-- **Mọi task thêm dữ liệu cá nhân/cookie (M5, M6, M7, EPIC 21):** sửa `docs/legal/privacy.md` và `src/legal/content.ts` trong cùng task.
+- **Mọi task thêm dữ liệu cá nhân/cookie (M5, M6, M7, EPIC 21):** sửa `docs/legal/privacy.md` và `src/legal/content.ts` trong cùng task. **Từ M7 cho tới task dọn sau D + 31 ngày:** sửa CẢ HAI phiên bản (`privacy.md` + `privacyEn`/`privacyVi`, và `privacy-m7.md` + `privacyEnM7`/`privacyViM7`), vì từ D−14 `/privacy` hiện bản M7.
+- **VNX-2607 (ADR-012, Privacy tài khoản liên kết):** chép câu chữ vào cả `privacy.md` và `privacy-m7.md` (và cả bốn hằng số trong `content.ts`), hoặc gộp hai phiên bản trước; nếu chỉ sửa `privacy.md` thì nội dung biến mất khi cửa sổ M7 mở.
+- **Execution plan marketing/designer (Owner 2026-10-06):** là định hướng; Reviewer viết spec addendum / ADR sau M7. Đã quyết: giữ A2 (homepage 3 cột sau M7), giữ Q1 (không listing curated trong `/products`), **bảng request công khai đầy đủ** (cần spec addendum sửa §4, §8.8, §11; câu chữ Privacy/Terms mới; opt-in từng request, không công khai hồi tố; trường quốc gia; quy tắc ngân sách). Còn chờ Owner: VNX Labs và các câu ưu tiên 2–3 trong review.
 
-- **M7 (VNX-0707):** secret mới `ANALYTICS_SALT`; thêm vào thứ tự deploy khi tới M7.
+- ✅ **M7 (VNX-0707):** `ANALYTICS_SALT` đã vào thứ tự deploy (xem "Việc của Owner khi deploy M7").
 - **Owner (monetization Q4):** tự kiểm điều khoản từng chương trình partner (có cho cá nhân tham gia không, mẫu thuế, cách payout) trước khi bật trên production; khi lập pháp nhân (VNX-1401) thì chuyển hợp đồng.
 
 - **Deploy sau khi merge M4:** áp `0006_catalog` cùng lúc với code M4 (ghi trong `wrangler.jsonc`). Trước lần `db:migrate:remote` đầu tiên: thử `0006_catalog` trên một D1 remote nháp (trigram, trigger, `json_each` trong trigger, `wrangler d1 export`).
-- **M7:** `/`, `/for-builders`, `/terms`, `/privacy` vào sitemap kèm alternate; link header vào `<nav>`; nếu `/go/` có tiền tố locale thì `robots.txt` chặn cả các tiền tố.
+- ✅ **M7:** `/for-builders` đã vào sitemap kèm alternate, link header trong `<nav>`; `/go/` không có tiền tố locale.
 - **M8 (runbook):** backup D1 khi có bảng ảo FTS5 (bỏ `products_fts` và trigger → export → tạo lại và backfill, hoặc dùng Time Travel).
 
 - **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
@@ -272,8 +314,8 @@ Owner, trước khi ElevenLabs chạy thật:
 - **Deploy sau khi merge M2:** `db:migrate:remote` phải áp cả `0004_builders` (đã ghi trong `wrangler.jsonc`).
 - **Quyết định sau (ADR nhỏ):** hash invite đang vừa là khóa DB vừa là giá trị cookie, nên người đọc được D1/audit có thể tự duyệt builder; thiết kế lại (cookie ≠ khóa DB, hoặc HMAC) nếu cần.
 - **VNX-0507 (Owner):** tạo widget Turnstile cho `vnx.si`, đưa site key để Claude đặt vào `wrangler.jsonc`; `wrangler secret put TURNSTILE_SECRET`. Thiếu thì form Inquiry khi chưa đăng nhập tự đóng.
-- **M7:** đếm `inquiries` vào `product_daily_stats` khi Inquiry vào `open`; cron hằng giờ (`scheduled` hiện chỉ chạy job cho `0 1 * * *`).
-- **M7:** độ tương phản `.error-msg` ở dark mode, vùng chạm 44 px cho brand/sign-in, skip link.
+- ✅ **M7:** đếm Inquiry (`961adff`) và cron hằng giờ (`32af9b3`).
+- ✅ **M7:** `.error-msg` đạt AA ở dark mode (có test), vùng chạm 44 px, skip link (`61fa123`).
 - **M8 (VNX-0804):** chuyển `www.vnx.si` → `vnx.si` (cookie `__Host-` gắn với host).
 - **Owner:** bật Dependency graph tại https://github.com/thanhsu/vnxsi/settings/security_analysis để job `dependency-review` chạy được (token hiện tại không có quyền Administration). `gitleaks` đã xanh, không cần license.
 - **Owner:** thu hồi / thay PAT GitHub đã dán vào hội thoại 2026-10-03, rồi cập nhật Git Credential Manager.
@@ -283,6 +325,16 @@ Owner, trước khi ElevenLabs chạy thật:
 - **EPIC 26 (ADR-012):** Reviewer viết plan `docs/superpowers/plans/` trước khi bắt đầu, Owner chốt thứ tự so với M8. Owner làm VNX-2601: tạo ứng dụng OAuth Google, GitHub, LinkedIn (LinkedIn cần Company Page), callback `/auth/oauth/:provider/callback` cho prod và local, 6 secret qua `wrangler secret`.
 
 ## Ghi nhận (minor, chưa làm)
+
+- **M7:**
+  - `/p/:slug` cho người đã đăng nhập (không phải builder chủ, không phải admin) thêm một lần đọc D1 (`findOpsAccess` trong `isStaff`) sau go-live.
+  - Job giờ đọc `loadCounts` 4 lần, `loadCategoryCounts` 2 lần mỗi lượt (~5 lần đọc thừa; có thể nhớ tạm trong một lượt).
+  - Test: `{views: undefined}` ném lỗi (chưa có nơi gọi); idempotency job giờ chỉ thử giá trị null; `scheduled.test` import `'?test' as string` mất kiểu; log job giờ in cả giá trị; ngày VI trong test ghim theo ICU; test nội dung Privacy so chuỗi con theo thứ tự (không so cấu trúc); test m7 phụ thuộc đồng hồ thật (không thể hồi quy); test in-flight `/go/p/` phụ thuộc thời gian.
+  - `/for-builders` chép khối builders của landing (không dùng chung component); test CTA chưa đăng nhập so với chính `builderCtaHref`.
+  - Biểu đồ: chưa có assertion "Other" ở tầng chart; marker chỉ ở hai đầu chưa test bằng render; nhãn trục y bị cắt khi số ≥ 4 chữ số; chữ SVG co theo khung (xem lại khi làm homepage 3 cột).
+  - `home.js`: bật reduced-motion SAU khi tải trên màn hẹp có thể cắt mục dài trong dải Recent activity (`white-space`); nhánh reduce trong callback IntersectionObserver thừa.
+  - Plan M7: vài đoạn chữ đã cũ (danh sách category trong test 8a, `import.meta.glob ?raw` ở Task 10, email mẫu Task 3c).
+  - Chưa có index cho `audit_log` (dải Live đọc audit).
 
 - **Trang tool (VNX-2105):**
   - Site chưa có ảnh `og:image` raster (1200×630), nên link chia sẻ không có hình.

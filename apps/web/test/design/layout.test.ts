@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { LOCALE_LABEL, LOCALES, localizedPath, type Locale } from "../../src/i18n/locales.ts";
 import { t } from "../../src/i18n/t.ts";
@@ -35,7 +35,7 @@ const NAV = [
   ["/products", "nav.products"],
   ["/builders", "nav.findBuilders"],
   ["/#how", "nav.howItWorks"],
-  ["/#builders", "nav.forBuilders"],
+  ["/for-builders", "nav.forBuilders"],
   ["/contact", "nav.contact"],
 ] as const;
 const navHref = (locale: Locale, target: string) => {
@@ -197,4 +197,35 @@ describe("footer (VNX-0709 AC5)", () => {
     const footer = footerOf(await html("/vi/products", cookie));
     expect(hrefs(inner(footer, "nav", ` aria-label="${t("vi", "footer.builders")}"`))).toEqual(["/vi/hub"]);
   });
+});
+
+describe("privacy notice copy (VNX-0701c)", () => {
+  const liveEnv = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" } as typeof testEnv;
+  const APPROVED = {
+    en: "We are updating our Privacy Policy: from October 20, 2026 we count visits to product pages using a cookie that expires at the end of each day. Read the changes.",
+    vi: "Chúng tôi cập nhật Chính sách quyền riêng tư: từ 20 tháng 10, 2026, chúng tôi đếm lượt truy cập trang product bằng một cookie hết hạn vào cuối mỗi ngày. Xem thay đổi.",
+  } as const;
+
+  for (const locale of LOCALES) {
+    it(`${locale}: the signed-in page links the localized privacy page inside the notice`, async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-20T00:00:00Z"));
+      try {
+        const { cookie } = await signIn(`layout-notice-${locale}@vnx.si`);
+        const res = await createApp().request(
+          new Request(`https://vnx.si${localizedPath(locale, "/products")}`, { headers: { cookie } }),
+          undefined,
+          liveEnv,
+        );
+        const notice = inner(await res.text(), "details", ' class="privacy-notice"');
+        expect(hrefs(notice)).toEqual([localizedPath(locale, "/privacy")]);
+        const date = new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date("2026-10-20T00:00:00Z"));
+        expect(textOf(notice)).toContain(t(locale, "privacyNotice.dismiss"));
+        expect(textOf(notice)).toContain(t(locale, "privacyNotice.message", { date }));
+        if (locale === "en" || locale === "vi") expect(textOf(notice)).toContain(APPROVED[locale]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  }
 });

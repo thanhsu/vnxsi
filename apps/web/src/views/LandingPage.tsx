@@ -1,10 +1,11 @@
-import type { FC } from "hono/jsx";
+import type { Child, FC } from "hono/jsx";
 import type { Utm, WaitlistErrors } from "../domain/waitlist-input.ts";
 import { ContactForm, emptyFeedbackValues } from "./contact/ContactForm.tsx";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { Deck, type DeckProduct } from "./landing/Deck.tsx";
+import { CHECK, Icon } from "./landing/Icon.tsx";
 import { builderCtaHref, Layout } from "./Layout.tsx";
 
 export { builderCtaHref };
@@ -25,6 +26,8 @@ type Props = {
   deck: readonly DeckProduct[];
   /** The "Ask us" block (VNX-0710): ?asked=1 shows the thank-you notice; the form posts to /contact. */
   ask: { asked: boolean; siteKey: string | null; email: string };
+  /** The data blocks under the landing (VNX-0703, Owner A2); null/absent prints nothing. */
+  below?: Child | null;
 };
 
 /** schema.org Organization (plan VNX-0708): no logo, sameAs or ratings. */
@@ -32,28 +35,6 @@ export function organizationJsonLd(origin: string) {
   return { "@context": "https://schema.org", "@type": "Organization", name: "VNX.SI", url: `${origin}/` };
 }
 
-/** Stroke icons, one set (audit §2.7). Decorative: the text next to them carries the meaning. */
-const Icon: FC<{ d: readonly string[]; size?: number; width?: number; circles?: readonly (readonly [number, number, number])[]; rects?: readonly (readonly [number, number, number, number, number])[] }> = ({
-  d,
-  size = 22,
-  width = 1.6,
-  circles = [],
-  rects = [],
-}) => (
-  <svg class="icon" viewBox="0 0 24 24" width={size} height={size} stroke-width={width} aria-hidden="true" focusable="false">
-    {rects.map(([x, y, w, h, r]) => (
-      <rect x={x} y={y} width={w} height={h} rx={r} />
-    ))}
-    {circles.map(([cx, cy, r]) => (
-      <circle cx={cx} cy={cy} r={r} />
-    ))}
-    {d.map((path) => (
-      <path d={path} />
-    ))}
-  </svg>
-);
-
-const CHECK = ["M5 12l5 5L20 7"];
 const ARROW = ["M5 12h14M13 6l6 6-6 6"];
 
 const PRINCIPLES = [
@@ -98,7 +79,7 @@ const STEPS = [
 /** Tool names stay as written in every locale (plan VNX-0709 §8). */
 const TOOLS = ["Claude", "Codex", "Gemini", "Cursor", "Lovable", "Replit"];
 
-export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form, deck, ask }) => {
+export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form, deck, ask, below }) => {
   const tr = translator(locale);
   const builderHref = builderCtaHref(locale, signedIn);
   const emailError = form?.errors?.email ? tr("landing.form.error.email") : null;
@@ -132,7 +113,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
       signedIn={signedIn}
       jsonLd={organizationJsonLd(origin)}
       fullWidth
-      scripts={["/assets/landing.js"]}
+      scripts={["/assets/landing.js", "/assets/home.js"]}
     >
       <section class="lp-hero" aria-labelledby="hero-title">
         <div class="lp-hero-grid" aria-hidden="true"></div>
@@ -364,6 +345,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
           </div>
         </div>
       </section>
+      {below}
     </Layout>
   );
 };

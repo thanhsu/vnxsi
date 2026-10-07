@@ -1,6 +1,9 @@
 import { DEFAULT_LOCALE, localeFromPath, type Locale } from "../i18n/locales.ts";
 import { isPublicHostname } from "./offer-url.ts";
+import type { CfLike } from "./bot.ts";
 import type { NotFoundReason } from "./offer.ts";
+
+export { isBotRequest, type CfLike } from "./bot.ts";
 
 /** Pure helpers for /go/ and the outbound click log (addendum §2.1–2.2). No I/O. */
 
@@ -28,17 +31,6 @@ export function purgeCutoff(now: Date): string {
 
 /** `resolveOfferRedirect` not_found reasons that mean the data is broken (not a dead link): /go/ logs them with console.error. */
 export const CORRUPTION_REASONS: readonly NotFoundReason[] = ["program_missing", "program_merchant", "template_missing", "window_invalid", "invalid_url", "website_invalid", "subject_merchant"];
-
-/** The two fields of `request.cf` that /go/ reads. */
-export type CfLike = { country?: unknown; botManagement?: { verifiedBot?: unknown } } | null | undefined;
-
-const BOT_UA = /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|curl|wget|python-requests|headlesschrome/i;
-
-/** Marks a click as `is_bot`; never blocks the redirect. M7 may replace this with the shared rule of spec 8.11. */
-export function isBotRequest(userAgent: string | null | undefined, cf: CfLike): boolean {
-  if (!userAgent || userAgent.trim() === "") return true;
-  return BOT_UA.test(userAgent) || cf?.botManagement?.verifiedBot === true;
-}
 
 /**
  * Host name only (lower case, no port, path, query or credentials); null for anything that is not an http(s) URL, and null when the host
