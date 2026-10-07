@@ -103,7 +103,7 @@ async function unsuspend(userId: string) {
   await setUserStatusStatement(testEnv.DB, { id: userId, from: "suspended", to: "active", now: new Date().toISOString() }).run();
 }
 
-const sessionUser = (u: { id: string; email: string }): SessionUser => ({ id: u.id, email: u.email, locale: "en", isAdmin: false });
+const sessionUser = (u: { id: string; email: string }): SessionUser => ({ id: u.id, email: u.email, locale: "en", isAdmin: false, method: "magic_link" });
 
 describe("sealed 404 under /ops (AC1, spec §5)", () => {
   it("answers the five denials with the same status, headers and body", async () => {

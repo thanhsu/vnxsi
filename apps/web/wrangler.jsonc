@@ -52,6 +52,9 @@
   // 0008_requests (M6) ships with the M6 code the same way: migrate first, then deploy (the daily cron reads 0008 too).
   // 0010_feature_flags, 0011_partners and 0012_outbound_clicks (EPIC 21) ship with their code the same way: migrate first, then deploy.
   // The daily cron also deletes outbound clicks older than 13 months, so it reads 0012 too.
+  // 0017_user_identities (EPIC 26) ships with its code the same way: migrate first, then deploy. It also adds sessions.method (default 'magic_link'),
+  // which the new createSession writes, so the old code keeps working after the migration but the new code does not work before it.
+  // The three OAuth flags (oauth_google, oauth_github, oauth_linkedin) stay off until the Owner turns them on (VNX-2608).
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //

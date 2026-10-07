@@ -48,6 +48,7 @@ const WRITERS: Record<string, string> = {
   outbound_clicks: "../src/db/clicks.ts",
   ops_members: "../src/db/ops-members.ts",
   ops_member_invites: "../src/db/ops-members.ts",
+  user_identities: "../src/db/identities.ts",
 };
 
 describe("table ownership (VNX-0201)", () => {
@@ -176,5 +177,32 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
 
   it("has no partner name in src (ADR-007 rule 4)", () => {
     for (const [file, src] of Object.entries(sources)) expect(src, file).not.toMatch(/elevenlabs|partnerstack/i);
+  });
+});
+
+// ADR-012 §5, ADR-004: linked identities are read and written only by their module. Ranking, public and builder-facing code
+// never touch the table. Each task adds the files it creates (2604b: routes/oauth.tsx; 2605a: routes/me.tsx; 2606b: routes/builder-profile.tsx, ...).
+// db/audit.ts is on the list only because the identity audit guard reads `id` and `user_id` of the row; it reads nothing else.
+const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts"]);
+
+describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => {
+  it("the allowlist holds only files that exist, and no ranking file is on it", () => {
+    for (const file of IDENTITY_ALLOWED) expect(sources[file], file).toBeDefined();
+    for (const file of RANKING_FILES) expect(IDENTITY_ALLOWED.has(file), file).toBe(false);
+  });
+
+  it("ranking files import no identities module and run no SQL on user_identities", () => {
+    for (const file of RANKING_FILES) {
+      expect(sources[file], `${file} imports db/identities`).not.toMatch(/from\s+["'][^"']*\/db\/identities\.ts["']/);
+      expect(sources[file], `${file} reads user_identities`).not.toMatch(/\b(?:FROM|JOIN|INTO|UPDATE)\s+user_identities\b/);
+    }
+  });
+
+  it("only allowlisted files import db/identities.ts or run SQL on user_identities", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (IDENTITY_ALLOWED.has(file)) continue;
+      expect(src, `${file} imports db/identities`).not.toMatch(/from\s+["'][^"']*\/db\/identities\.ts["']/);
+      expect(src, `${file} touches user_identities`).not.toMatch(/\b(?:FROM|JOIN|INTO|UPDATE)\s+user_identities\b/);
+    }
   });
 });
