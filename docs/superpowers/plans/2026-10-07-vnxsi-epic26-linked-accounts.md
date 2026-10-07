@@ -38,7 +38,7 @@ Lựa chọn kỹ thuật của Planner ở chỗ ADR-012 im lặng hoặc roadm
    - (b) URL token endpoint là hằng số trong code (Google `https://oauth2.googleapis.com/token`, LinkedIn `https://www.linkedin.com/oauth/v2/accessToken`), không bao giờ từ input; `fetch` dùng `redirect: "error"`;
    - (c) `iss` khớp chính xác: Google `https://accounts.google.com` hoặc `accounts.google.com`; LinkedIn `https://www.linkedin.com/oauth`;
    - (d) `aud` bằng client ID, và `azp`, nếu có, cũng bằng client ID; `exp` còn hạn (dung sai 60 s); `nonce` khớp; có `sub`.
-   Lợi: bỏ fetch/cache JWKS, code RS256, chế độ lỗi "JWKS không tải được thì không ai đăng nhập được". Mất: một lớp phòng thủ chiều sâu nếu có kẻ chen vào kênh TLS tới provider (không thực tế trong workerd). `verifyIdToken` là một bước có tên rõ để thêm kiểm chữ ký sau này mà không đổi chữ ký hàm.
+   Lợi: bỏ fetch/cache JWKS, code RS256, chế độ lỗi "JWKS không tải được thì không ai đăng nhập được". Mất: một lớp phòng thủ chiều sâu nếu có kẻ chen vào kênh TLS tới provider (không thực tế trong workerd). `verifyIdToken` là một bước có tên rõ để thêm kiểm chữ ký sau này (khi đó hàm thành async; chấp nhận đổi chữ ký nếu có ngày cần JWKS).
 4. **Một cookie `__Host-vnx_oauth`, không ký, mang `{ v:1, provider, intent, state, verifier, nonce, next, locale, sessionHash, exp }` (JSON → base64url).** Theo ADR-012 mục 1: HttpOnly, Secure, `SameSite=Lax` (callback là GET top-level từ provider, `Strict` sẽ làm cookie không được gửi), `Path=/`, 600 giây, xóa ngay khi callback chạy (dùng một lần; cũng xóa khi lỗi). Không ký vì `__Host-` chặn cookie tossing từ subdomain và kẻ giả mạo cookie của nạn nhân đã vượt qua mọi thứ khác; thêm khóa ký là thêm một secret phải quản lý. `state` kiểm bằng so sánh thời gian cố định với tham số `state` ở callback. Luồng liên kết: `POST …/link` (đã qua `originCheck`, cần session) ghi cookie `{ intent:"link", provider, sessionHash (S1, xem cuối mục), exp ≤ 120 giây }` rồi 303; `GET …/start` đọc cookie đó: nếu có intent `link` còn hạn, cùng provider và `sessionHash` khớp session hiện tại thì giữ intent `link`, ngược lại intent là `signin`; nó sinh `state`/PKCE/`nonce` và ghi lại cookie. Callback với intent `link` cần session hiện tại có `sessionHash` khớp, nếu không từ chối. `start` chỉ thấy intent `link` nếu POST đã ghi nó: không có tham số URL nào chọn intent. `sessionHash` = `sha256("oauth-link:" + raw session id)` (S1; không dùng `sessions.id_hash` nguyên văn). Callback từ chối khi `cookie.provider !== :provider` (F5).
 5. **Provider giả qua port + `OAUTH_DRIVER`.** `OAuthProvider` là interface (`buildAuthorizeUrl`, `exchange(code, verifier, nonce) → ProviderIdentity`); `getOAuthProvider(env, provider)` trả adapter thật, hoặc `FakeOAuthProvider` khi `env.OAUTH_DRIVER === "fake"` (cùng cách `MAIL_DRIVER`, `TURNSTILE_DRIVER`; `vitest.config.ts` đặt `OAUTH_DRIVER: "fake"`; `wrangler.jsonc` không có biến này, có test cấm). Adapter thật nhận `fetch` tiêm vào, nên test adapter dùng `fetch` giả trả JSON dựng sẵn. Test không bao giờ gọi mạng.
 6. **Ba khóa cờ `oauth_google`, `oauth_github`, `oauth_linkedin`, nối vào cuối `FLAG_KEYS`** (thứ tự quan trọng với test và với `/admin/flags`). `key` không có CHECK trong SQL nên không cần migration. Cờ chỉ là "được dùng"; provider chưa cấu hình (thiếu `<PROVIDER>_CLIENT_ID` hoặc `_SECRET`) cũng coi như tắt: nút ẩn, callback 404 (fail closed), kể cả khi cờ bật.
@@ -64,7 +64,7 @@ Không chặn Task 1. Đây là các quy tắc nghiệp vụ hoặc nội dung m
 
 - **CSP `form-action 'self'` và chuỗi redirect sau POST:** đã xử lý bằng quyết định 14 (R3): `start` với intent `link` trả trang trung gian 200, không redirect. Còn lại: bước kiểm tay ở VNX-2605a trên Chrome, Firefox, Safari là **xác nhận**, không còn là quyết định. Nút ở `/login` là `<a>`, không bao giờ form (form GET cũng bị chặn).
 - **GitHub và PKCE:** ADR yêu cầu PKCE S256 cho cả ba. GitHub OAuth App hỗ trợ `code_challenge` từ 2025; nếu một ứng dụng cũ bỏ qua tham số này thì luồng vẫn chạy (GitHub không ép), nhưng ta không dựa vào nó để chống chặn code: `state` + client secret vẫn là lớp chính. VNX-2601 ghi lại kết quả thử.
-- **LinkedIn:** `email` có thể thiếu (→ `label` là chữ "LinkedIn", quyết định 12). VNX-2601 phải xác nhận LinkedIn trả lại `nonce` trong ID token; kiểm `nonce` giữ fail closed, nếu LinkedIn không trả thì quay lại Reviewer, không bỏ kiểm tra.
+- **LinkedIn:** `email` có thể thiếu (→ `label` là chữ "LinkedIn", quyết định 12). VNX-2601 phải xác nhận LinkedIn nhận `scope=openid+profile+email` (dấu cách mã hóa thành `+` bởi `URLSearchParams`) và trả lại `nonce` trong ID token; kiểm `nonce` giữ fail closed, nếu LinkedIn không trả thì quay lại Reviewer, không bỏ kiểm tra.
 - **Hàng `user_identities` và `deleteGhostUsers`:** user có identity luôn đã đăng nhập (`last_login_at` khác null) nên `deleteGhostUsers` không chọn họ; không sửa hàm đó. Ghi vào "Ghi nhận" nếu về sau có luồng xóa tài khoản.
 
 ## Global Constraints
@@ -799,3 +799,753 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 10 | Typecheck và toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
 
 **Kích cỡ ước tính:** mã nguồn ~230 dòng (migration 25, `domain/identity.ts` 60, `db/identities.ts` 110, `sessions.ts` +15, `audit.ts` +15, cờ và `FlagsPage` +20), test ~300 dòng, locale 12 dòng. Dưới 600 dòng không tính locale.
+
+---
+
+### Task 2: VNX-2603a — Lõi OAuth: PKCE, `state`, kiểm claim ID token, cookie `__Host-vnx_oauth`
+
+**Files:**
+- Create: `apps/web/src/domain/oauth.ts` (thuần: không Hono, không D1; chỉ dùng WebCrypto toàn cục)
+- Create: `apps/web/src/auth/oauth-cookie.ts`
+- Test: `apps/web/test/domain/oauth.test.ts`, `apps/web/test/auth/oauth-cookie.test.ts`
+- Không sửa file có sẵn nào. Không có chuỗi giao diện (không khóa i18n). Không có route, không đụng DB.
+
+**Interfaces:**
+- Consumes: `OAuthProvider` (`domain/identity.ts`); `isLocale`, `Locale` (`i18n/locales.ts`); `sha256Hex` (`auth/crypto.ts`); `AppEnv` (`env.ts`); `getCookie`, `setCookie`, `deleteCookie` (`hono/cookie`, cùng kiểu `auth/invite-cookie.ts`).
+- Produces, `domain/oauth.ts`:
+  - `type OAuthIntent = "signin" | "link"`; `OAUTH_FLOW_TTL_MS = 600_000`, `LINK_INTENT_TTL_MS = 120_000`.
+  - `interface OAuthProviderSpec { authorizeUrl; scope; oidc; issuers }` và `OAUTH_PROVIDER_SPECS: Record<OAuthProvider, OAuthProviderSpec>` (URL authorize, scope và `iss` hợp lệ của từng provider; URL token endpoint KHÔNG ở đây, thuộc adapter Task 3).
+  - `base64UrlEncode(bytes): string`, `base64UrlDecode(text): Uint8Array | null`, `timingSafeEqualText(a, b): boolean` (R2).
+  - `generateState()`, `generateNonce()`, `generateVerifier()` (mỗi hàm 32 byte ngẫu nhiên thành 43 ký tự base64url), `codeChallengeS256(verifier): Promise<string>`.
+  - `oauthRedirectUri(appOrigin, provider): string`, `buildAuthorizeUrl({ provider, clientId, redirectUri, state, challenge, nonce }): string`.
+  - `verifyIdToken(idToken, { issuers, audience, nonce, now }): IdTokenResult` với `IdTokenResult = { ok: true; claims: { subject: string; email: string | null } } | { ok: false; reason: IdTokenFailure }`, `IdTokenFailure = "malformed" | "issuer" | "audience" | "azp" | "expired" | "nonce" | "subject"`.
+  - Cookie: `LinkIntentCookie`, `FlowCookie`, `type OAuthCookie = LinkIntentCookie | FlowCookie`; `newLinkIntent({ provider, sessionHash }, now)`, `newFlowCookie({ provider, intent, state, verifier, nonce, next, locale, sessionHash }, now)`, `encodeOAuthCookie(cookie): string`, `parseOAuthCookie(raw, { provider, now }): OAuthCookie | null`.
+  - Quyết định thuần cho route: `resolveStartIntent(cookie, sessionHash, now): OAuthIntent`, `checkCallbackState(cookie, stateParam): CallbackCheck` với `CallbackCheck = { ok: true; flow: FlowCookie } | { ok: false; reason: "no_cookie" | "wrong_phase" | "state_mismatch" }`, `flowMatchesSession(flow, sessionHash): boolean`.
+- Produces, `auth/oauth-cookie.ts`: `OAUTH_COOKIE = "__Host-vnx_oauth"`, `readOAuthCookie(c, provider, now?)`, `writeOAuthCookie(c, cookie, now?)`, `clearOAuthCookie(c)`, `linkSessionHash(rawSessionId): Promise<string>`.
+
+**Quyết định kỹ thuật:**
+- **Hai pha trong một cookie (quyết định 4).** Pha `intent` do `POST …/link` ghi (chỉ `provider`, `intent: "link"`, `sessionHash`, hạn 120 s). Pha `flow` do `GET …/start` ghi (đủ `state`, `verifier`, `nonce`, `intent`, `next`, `locale`, `sessionHash`, hạn 600 s). Cả hai cùng tên cookie `__Host-vnx_oauth`, nên `start` ghi đè intent bằng flow; callback chỉ chấp nhận pha `flow`.
+- **F5 nằm trong `parseOAuthCookie`:** nhận `provider` mong đợi (từ `:provider` của URL) và trả `null` nếu cookie thuộc provider khác. Mọi lý do hỏng (thiếu, sai provider, quá hạn, sai hình dạng) cùng trả `null`; callback chỉ phân biệt `no_cookie`, `wrong_phase`, `state_mismatch` để đặt mã log cố định.
+- **`exp` do server đặt, nhưng cookie không ký, nên parse cũng chặn `exp` quá xa:** `exp - now` không được vượt TTL của pha đó. Các kiểm tra hình dạng (regex `state`/`verifier`/`nonce` 43–128 ký tự `[A-Za-z0-9_-]`, `sessionHash` 64 hex thường, `next` ≤ 512 ký tự, `locale` thuộc `LOCALES`, nhất quán `intent` và `sessionHash`) chặn cookie dị dạng trước khi route dùng.
+- **`next` chỉ là chuỗi ≤ 512 ký tự trong cookie;** route (Task 6) vẫn gọi `safeNext` lúc dùng. `newFlowCookie` đổi `next` quá dài thành `null` thay vì ném lỗi; nhưng ném lỗi khi `intent` và `sessionHash` không nhất quán (lỗi lập trình).
+- **`sessionHash` (S1):** `sha256("oauth-link:" + raw session id)` qua `linkSessionHash` (ở `auth/`, vì cần `sha256Hex`; domain không import `auth/`), không bao giờ là `sessions.id_hash`. `signin` luôn `sessionHash: null`.
+- **So sánh hằng thời gian (R2):** `timingSafeEqualText` mã hóa hai chuỗi UTF-8; khác độ dài thì trả `false` ngay (`crypto.subtle.timingSafeEqual` của workerd ném lỗi khi độ dài khác nhau; độ dài của `state`/`nonce`/hash là công khai nên không lộ gì), cùng độ dài thì gọi `crypto.subtle.timingSafeEqual`. Dùng cho `state`, `nonce`, `sessionHash`.
+- **`verifyIdToken` đúng quyết định 3:** không kiểm chữ ký; kiểm (c) `iss` khớp chính xác một giá trị trong `issuers` (không so tiền tố, dấu `/` cuối là sai), (d) `aud` chứa client ID (chuỗi hoặc mảng), `azp` nếu có thì bằng client ID, `aud` nhiều phần tử mà thiếu `azp` thì từ chối (OIDC Core §2), `exp + 60 s` còn trong tương lai, `nonce` khớp, `sub` là chuỗi 1–255 ký tự (khớp CHECK của `provider_subject`). Điều kiện (a) và (b) thuộc adapter (Task 3). `audience` hoặc `nonce` mong đợi rỗng thì `malformed` (fail closed: client ID chưa cấu hình không bao giờ khớp `aud` rỗng).
+- **Kết quả không bao gồm `name`** (F2): chỉ `subject` và `email` (hoặc `null` khi thiếu hay dài hơn 254 ký tự); adapter ở Task 3 tự quyết `label` (và test CHECK `label` thuộc Task 3).
+- **Không log gì** trong module này; không module nào của task này chạm token, `code` hay secret (cookie chứa `verifier`, `state`, `nonce`: HttpOnly, 10 phút, xóa sau callback).
+- Task này không có route, nên Review Focus 1 và 9 được bao ở tầng đơn vị; route nối vào ở Task 6. Quyết định 11 (header của response callback) thuộc Task 6.
+
+- [ ] **Step 1: Test domain (fail)**
+
+`apps/web/test/domain/oauth.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import {
+  base64UrlDecode,
+  base64UrlEncode,
+  buildAuthorizeUrl,
+  checkCallbackState,
+  codeChallengeS256,
+  encodeOAuthCookie,
+  flowMatchesSession,
+  generateNonce,
+  generateState,
+  generateVerifier,
+  LINK_INTENT_TTL_MS,
+  newFlowCookie,
+  newLinkIntent,
+  OAUTH_FLOW_TTL_MS,
+  OAUTH_PROVIDER_SPECS,
+  oauthRedirectUri,
+  parseOAuthCookie,
+  resolveStartIntent,
+  timingSafeEqualText,
+  verifyIdToken,
+} from "../../src/domain/oauth.ts";
+import type { OAuthProvider } from "../../src/domain/identity.ts";
+
+const NOW = Date.parse("2026-10-07T10:00:00.000Z");
+const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const HASH_A = "a".repeat(64);
+const HASH_B = "b".repeat(64);
+
+describe("PKCE and random values (RFC 7636, ADR-012 §1)", () => {
+  it("derives the S256 challenge of the RFC 7636 appendix B verifier", async () => {
+    expect(await codeChallengeS256("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")).toBe("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+  });
+
+  it("generates 43-character URL-safe values that never repeat", async () => {
+    const seen = new Set<string>();
+    for (const make of [generateState, generateNonce, generateVerifier, generateState, generateNonce, generateVerifier]) {
+      const value = make();
+      expect(value).toMatch(TOKEN);
+      seen.add(value);
+    }
+    expect(seen.size).toBe(6);
+    expect(await codeChallengeS256(generateVerifier())).toMatch(TOKEN);
+  });
+
+  it("round-trips base64url and refuses text outside the alphabet", () => {
+    const bytes = new Uint8Array([0, 250, 251, 252, 253, 254, 255]);
+    expect([...(base64UrlDecode(base64UrlEncode(bytes)) ?? [])]).toEqual([...bytes]);
+    for (const bad of ["a+b", "a/b", "a=b", "a b", "a", "é"]) expect(base64UrlDecode(bad), bad).toBeNull();
+  });
+});
+
+describe("timingSafeEqualText (decision 2, R2)", () => {
+  it("is true only for identical text, and false for any difference in content or length", () => {
+    expect(timingSafeEqualText("abc", "abc")).toBe(true);
+    expect(timingSafeEqualText("", "")).toBe(true);
+    for (const [a, b] of [["abc", "abd"], ["abc", "ab"], ["ab", "abc"], ["abc", ""], ["é", "e"]] as const) expect(timingSafeEqualText(a, b), `${a}|${b}`).toBe(false);
+  });
+});
+
+describe("providers and the authorize URL (ADR-012 §1)", () => {
+  it("fixes scopes and issuers per provider", () => {
+    expect(OAUTH_PROVIDER_SPECS.google).toMatchObject({ scope: "openid email", oidc: true, issuers: ["https://accounts.google.com", "accounts.google.com"] });
+    expect(OAUTH_PROVIDER_SPECS.linkedin).toMatchObject({ scope: "openid profile email", oidc: true, issuers: ["https://www.linkedin.com/oauth"] });
+    expect(OAUTH_PROVIDER_SPECS.github).toMatchObject({ scope: "", oidc: false, issuers: [] });
+  });
+
+  it("builds the callback URI from APP_ORIGIN only, with no locale prefix", () => {
+    expect(oauthRedirectUri("https://vnx.si", "google")).toBe("https://vnx.si/auth/oauth/google/callback");
+    expect(oauthRedirectUri("https://vnx.si/some/path?x=1", "github")).toBe("https://vnx.si/auth/oauth/github/callback");
+  });
+
+  const input = { clientId: "client-1", redirectUri: "https://vnx.si/auth/oauth/google/callback", state: "s".repeat(43), challenge: "c".repeat(43), nonce: "n".repeat(43) };
+
+  it("builds a Google URL with PKCE S256, state, nonce and exactly the known parameters", () => {
+    const url = new URL(buildAuthorizeUrl({ provider: "google", ...input }));
+    expect(`${url.origin}${url.pathname}`).toBe(OAUTH_PROVIDER_SPECS.google.authorizeUrl);
+    expect([...url.searchParams.keys()].sort()).toEqual(["client_id", "code_challenge", "code_challenge_method", "nonce", "redirect_uri", "response_type", "scope", "state"]);
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      response_type: "code",
+      client_id: "client-1",
+      redirect_uri: input.redirectUri,
+      scope: "openid email",
+      state: input.state,
+      code_challenge: input.challenge,
+      code_challenge_method: "S256",
+      nonce: input.nonce,
+    });
+  });
+
+  it("asks GitHub for no scope and no nonce, and LinkedIn for openid profile email", () => {
+    const github = new URL(buildAuthorizeUrl({ provider: "github", ...input }));
+    expect(github.searchParams.has("scope")).toBe(false);
+    expect(github.searchParams.has("nonce")).toBe(false);
+    expect(github.searchParams.get("code_challenge_method")).toBe("S256");
+    const linkedin = new URL(buildAuthorizeUrl({ provider: "linkedin", ...input }));
+    expect(linkedin.searchParams.get("scope")).toBe("openid profile email");
+    expect(linkedin.searchParams.get("nonce")).toBe(input.nonce);
+  });
+});
+
+const enc = (value: unknown) => base64UrlEncode(new TextEncoder().encode(JSON.stringify(value)));
+const idToken = (claims: unknown, signature = "c2ln") => `${enc({ alg: "RS256", typ: "JWT" })}.${enc(claims)}.${signature}`;
+const NONCE = "n".repeat(43);
+const GOOD = { iss: "https://accounts.google.com", aud: "client-1", azp: "client-1", sub: "1122334455", exp: NOW / 1000 + 600, nonce: NONCE, email: "lan@example.com", name: "Lan Nguyen" };
+const EXPECTED = { issuers: OAUTH_PROVIDER_SPECS.google.issuers, audience: "client-1", nonce: NONCE, now: NOW };
+const reason = (claims: unknown, expected = EXPECTED) => {
+  const result = verifyIdToken(idToken(claims), expected);
+  return result.ok ? "ok" : result.reason;
+};
+
+describe("verifyIdToken (ADR-012 §1, decision 3 (c) and (d))", () => {
+  it("returns only the subject and the e-mail, never the name", () => {
+    expect(verifyIdToken(idToken(GOOD), EXPECTED)).toEqual({ ok: true, claims: { subject: "1122334455", email: "lan@example.com" } });
+  });
+
+  it("accepts both Google issuer spellings and a token with no azp and a single audience", () => {
+    expect(reason({ ...GOOD, iss: "accounts.google.com" })).toBe("ok");
+    const { azp: _azp, ...noAzp } = GOOD;
+    expect(reason(noAzp)).toBe("ok");
+    expect(reason({ ...GOOD, aud: ["client-1"] })).toBe("ok");
+  });
+
+  it("gives a missing, empty or over-long e-mail as null instead of failing", () => {
+    for (const email of [undefined, "", "x".repeat(255), 42]) {
+      const result = verifyIdToken(idToken({ ...GOOD, email }), EXPECTED);
+      expect(result, String(email)).toEqual({ ok: true, claims: { subject: "1122334455", email: null } });
+    }
+  });
+
+  it("refuses any issuer that is not exactly listed", () => {
+    for (const iss of ["https://evil.example", "https://accounts.google.com/", "https://accounts.google.com.evil.example", "http://accounts.google.com", "ACCOUNTS.GOOGLE.COM", "", 7, undefined]) {
+      expect(reason({ ...GOOD, iss }), String(iss)).toBe("issuer");
+    }
+    // LinkedIn's issuer is not Google's, and GitHub (no issuers) accepts nothing.
+    expect(reason(GOOD, { ...EXPECTED, issuers: OAUTH_PROVIDER_SPECS.linkedin.issuers })).toBe("issuer");
+    expect(reason(GOOD, { ...EXPECTED, issuers: OAUTH_PROVIDER_SPECS.github.issuers })).toBe("issuer");
+  });
+
+  it("requires aud to contain the client id, and azp, when present, to equal it", () => {
+    expect(reason({ ...GOOD, aud: "other-client" })).toBe("audience");
+    expect(reason({ ...GOOD, aud: ["other-client", "third"] })).toBe("audience");
+    expect(reason({ ...GOOD, aud: undefined })).toBe("audience");
+    expect(reason({ ...GOOD, azp: "other-client" })).toBe("azp");
+    expect(reason({ ...GOOD, azp: 5 })).toBe("azp");
+    const { azp: _azp, ...noAzp } = GOOD;
+    expect(reason({ ...noAzp, aud: ["client-1", "other-client"] })).toBe("azp");
+    expect(reason({ ...GOOD, aud: ["client-1", "other-client"] })).toBe("ok");
+  });
+
+  it("refuses an expired token with 60 seconds of clock tolerance", () => {
+    expect(reason({ ...GOOD, exp: NOW / 1000 - 30 })).toBe("ok");
+    expect(reason({ ...GOOD, exp: NOW / 1000 - 61 })).toBe("expired");
+    for (const exp of [undefined, "9999999999", null]) expect(reason({ ...GOOD, exp }), String(exp)).toBe("expired");
+  });
+
+  it("refuses a missing or different nonce", () => {
+    expect(reason({ ...GOOD, nonce: "m".repeat(43) })).toBe("nonce");
+    expect(reason({ ...GOOD, nonce: NONCE.slice(1) })).toBe("nonce");
+    expect(reason({ ...GOOD, nonce: undefined })).toBe("nonce");
+    expect(reason({ ...GOOD, nonce: 123 })).toBe("nonce");
+  });
+
+  it("refuses a missing, empty or over-long subject", () => {
+    for (const sub of [undefined, "", "s".repeat(256), 12345, null]) expect(reason({ ...GOOD, sub }), String(sub)).toBe("subject");
+    expect(reason({ ...GOOD, sub: "s".repeat(255) })).toBe("ok");
+  });
+
+  it("refuses text that is not a three-part token with a JSON object payload", () => {
+    const notJson = base64UrlEncode(new TextEncoder().encode("not json"));
+    for (const bad of ["", "a.b", "a.b.c.d", `${enc({})}.!!!.sig`, `${enc({})}.${notJson}.sig`, `${enc({})}.${enc([1, 2])}.sig`, `${enc({})}.${enc("text")}.sig`]) {
+      expect(verifyIdToken(bad, EXPECTED), bad).toEqual({ ok: false, reason: "malformed" });
+    }
+  });
+
+  it("fails closed when the expected client id or nonce is empty", () => {
+    expect(reason({ ...GOOD, aud: "" }, { ...EXPECTED, audience: "" })).toBe("malformed");
+    expect(reason({ ...GOOD, nonce: "" }, { ...EXPECTED, nonce: "" })).toBe("malformed");
+  });
+
+  it("does not check the signature (decision 3, approved deviation R1): the token comes from the token endpoint over TLS", () => {
+    expect(verifyIdToken(idToken(GOOD, "AAAA"), EXPECTED).ok).toBe(true);
+  });
+});
+
+describe("the state cookie (ADR-012 §1, decision 4)", () => {
+  const flow = (over: Partial<Parameters<typeof newFlowCookie>[0]> = {}) =>
+    newFlowCookie(
+      { provider: "google", intent: "signin", state: generateState(), verifier: generateVerifier(), nonce: generateNonce(), next: "/hub", locale: "vi", sessionHash: null, ...over },
+      NOW,
+    );
+  const parse = (raw: string, provider: OAuthProvider = "google", now = NOW) => parseOAuthCookie(raw, { provider, now });
+
+  it("sets the lifetimes: 10 minutes for a flow, 2 minutes for a link intent", () => {
+    expect(OAUTH_FLOW_TTL_MS).toBe(600_000);
+    expect(LINK_INTENT_TTL_MS).toBe(120_000);
+    expect(flow().exp).toBe(NOW + 600_000);
+    expect(newLinkIntent({ provider: "github", sessionHash: HASH_A }, NOW).exp).toBe(NOW + 120_000);
+  });
+
+  it("round-trips a signin flow, a link flow and a link intent", () => {
+    const signin = flow();
+    expect(parse(encodeOAuthCookie(signin))).toEqual(signin);
+    const link = flow({ intent: "link", sessionHash: HASH_A, next: null, locale: "zh-Hant" });
+    expect(parse(encodeOAuthCookie(link))).toEqual(link);
+    const intent = newLinkIntent({ provider: "linkedin", sessionHash: HASH_B }, NOW);
+    expect(parse(encodeOAuthCookie(intent), "linkedin")).toEqual(intent);
+  });
+
+  it("refuses a cookie written for another provider (F5)", () => {
+    expect(parse(encodeOAuthCookie(flow()), "github")).toBeNull();
+    expect(parse(encodeOAuthCookie(newLinkIntent({ provider: "github", sessionHash: HASH_A }, NOW)))).toBeNull();
+  });
+
+  it("refuses an expired cookie, and one whose exp is further away than its lifetime allows", () => {
+    expect(parse(encodeOAuthCookie(flow()), "google", NOW + 600_000)).toBeNull();
+    expect(parse(encodeOAuthCookie(flow()), "google", NOW + 599_999)).not.toBeNull();
+    expect(parse(enc({ ...flow(), exp: NOW + 600_001 }))).toBeNull();
+    const intent = newLinkIntent({ provider: "google", sessionHash: HASH_A }, NOW);
+    expect(parse(enc({ ...intent, exp: NOW + 120_001 }))).toBeNull();
+    expect(parse(enc({ ...flow(), exp: "soon" }))).toBeNull();
+  });
+
+  it("refuses anything that is not a well-shaped cookie", () => {
+    const good = { ...flow() };
+    const intent = newLinkIntent({ provider: "google", sessionHash: HASH_A }, NOW);
+    const bad: unknown[] = [
+      { ...good, v: 2 },
+      { ...good, phase: "other" },
+      { ...good, state: "short" },
+      { ...good, state: `${"s".repeat(42)}+` },
+      { ...good, verifier: "v".repeat(129) },
+      { ...good, nonce: undefined },
+      { ...good, intent: "admin" },
+      { ...good, locale: "fr" },
+      { ...good, next: 5 },
+      { ...good, next: `/${"x".repeat(512)}` },
+      { ...good, sessionHash: HASH_A }, // a signin flow carries no session
+      { ...good, intent: "link", sessionHash: null }, // a link flow needs one
+      { ...good, intent: "link", sessionHash: "not-a-hash" },
+      { ...intent, intent: "signin" },
+      { ...intent, sessionHash: "A".repeat(64) },
+      [],
+      "text",
+      5,
+    ];
+    for (const value of bad) expect(parse(enc(value)), JSON.stringify(value)).toBeNull();
+    for (const raw of [undefined, null, "", "not base64 !", "e30", base64UrlEncode(new TextEncoder().encode("{bad json")), "A".repeat(2049)]) {
+      expect(parseOAuthCookie(raw, { provider: "google", now: NOW }), String(raw)).toBeNull();
+    }
+  });
+
+  it("drops a next that is too long instead of storing it, and refuses to build an inconsistent flow", () => {
+    expect(flow({ next: `/${"x".repeat(600)}` }).next).toBeNull();
+    expect(() => flow({ intent: "link", sessionHash: null })).toThrow();
+    expect(() => flow({ intent: "signin", sessionHash: HASH_A })).toThrow();
+  });
+});
+
+describe("start and callback decisions (ADR-012 §3, §4)", () => {
+  const intent = newLinkIntent({ provider: "google", sessionHash: HASH_A }, NOW);
+  const make = (kind: "signin" | "link") =>
+    newFlowCookie({ provider: "google", intent: kind, state: "s".repeat(43), verifier: "v".repeat(43), nonce: "n".repeat(43), next: null, locale: "en", sessionHash: kind === "link" ? HASH_A : null }, NOW);
+  const flow = make("signin");
+  const linkFlow = make("link");
+
+  it("starts a link only for a live intent cookie whose session hash matches the current session", () => {
+    expect(resolveStartIntent(intent, HASH_A, NOW)).toBe("link");
+    expect(resolveStartIntent(intent, HASH_B, NOW)).toBe("signin");
+    expect(resolveStartIntent(intent, null, NOW)).toBe("signin");
+    expect(resolveStartIntent(intent, HASH_A, NOW + LINK_INTENT_TTL_MS)).toBe("signin");
+    expect(resolveStartIntent(null, HASH_A, NOW)).toBe("signin");
+    // A flow cookie (a start that already ran) never turns into a link by itself.
+    expect(resolveStartIntent(linkFlow, HASH_A, NOW)).toBe("signin");
+  });
+
+  it("accepts a callback only for a flow cookie whose state equals the state parameter", () => {
+    expect(checkCallbackState(flow, "s".repeat(43))).toEqual({ ok: true, flow });
+    expect(checkCallbackState(flow, "t".repeat(43))).toEqual({ ok: false, reason: "state_mismatch" });
+    for (const state of [null, undefined, "", "s".repeat(42), "s".repeat(44)]) expect(checkCallbackState(flow, state), String(state)).toEqual({ ok: false, reason: "state_mismatch" });
+    expect(checkCallbackState(null, "s".repeat(43))).toEqual({ ok: false, reason: "no_cookie" });
+    expect(checkCallbackState(intent, "s".repeat(43))).toEqual({ ok: false, reason: "wrong_phase" });
+  });
+
+  it("lets a signin flow through and a link flow only for the same session", () => {
+    expect(flowMatchesSession(flow, null)).toBe(true);
+    expect(flowMatchesSession(linkFlow, HASH_A)).toBe(true);
+    expect(flowMatchesSession(linkFlow, HASH_B)).toBe(false);
+    expect(flowMatchesSession(linkFlow, null)).toBe(false);
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/domain/oauth.test.ts` → FAIL (`domain/oauth.ts` chưa có).
+
+- [ ] **Step 2: `domain/oauth.ts`**
+
+`apps/web/src/domain/oauth.ts`:
+
+```ts
+import { isLocale, type Locale } from "../i18n/locales.ts";
+import type { OAuthProvider } from "./identity.ts";
+
+/**
+ * The OAuth core (ADR-012 §1; VNX-2603a). Pure: no Hono, no database, no I/O; WebCrypto only. It never sees a token endpoint,
+ * a secret or an access token: the ID token claims it checks come from the adapter (Task 3), which got them from the
+ * token endpoint over TLS (decision 3).
+ */
+
+export type OAuthIntent = "signin" | "link";
+
+/** Lifetime of the sign-in cookie (ADR-012 §1) and of the short "link" intent a POST leaves for the start route (decision 4). */
+export const OAUTH_FLOW_TTL_MS = 600_000;
+export const LINK_INTENT_TTL_MS = 120_000;
+/** Clock tolerance on `exp` (decision 3 (d)). */
+const EXP_SKEW_SECONDS = 60;
+const MAX_COOKIE_CHARS = 2048;
+const MAX_NEXT_CHARS = 512;
+
+export interface OAuthProviderSpec {
+  authorizeUrl: string;
+  /** Space-separated; empty means the parameter is left out (GitHub asks for no scope). */
+  scope: string;
+  /** OpenID Connect: adds `nonce` and an ID token to check. GitHub is plain OAuth 2.0. */
+  oidc: boolean;
+  /** Exact `iss` values accepted (decision 3 (c)). */
+  issuers: readonly string[];
+}
+
+export const OAUTH_PROVIDER_SPECS: Record<OAuthProvider, OAuthProviderSpec> = {
+  google: { authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth", scope: "openid email", oidc: true, issuers: ["https://accounts.google.com", "accounts.google.com"] },
+  github: { authorizeUrl: "https://github.com/login/oauth/authorize", scope: "", oidc: false, issuers: [] },
+  linkedin: { authorizeUrl: "https://www.linkedin.com/oauth/v2/authorization", scope: "openid profile email", oidc: true, issuers: ["https://www.linkedin.com/oauth"] },
+};
+
+export function base64UrlEncode(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Null for anything outside the base64url alphabet or of an impossible length. */
+export function base64UrlDecode(text: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]*$/.test(text)) return null;
+  try {
+    const binary = atob(text.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(text.length / 4) * 4, "="));
+    return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Constant-time equality of two strings (decision 2, R2). workerd's `timingSafeEqual` throws on different lengths; the
+ * lengths of state, nonce and hashes are public, so a length mismatch returns false without comparing.
+ */
+export function timingSafeEqualText(a: string, b: string): boolean {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  return x.length === y.length && crypto.subtle.timingSafeEqual(x, y);
+}
+
+/** 32 random bytes as 43 base64url characters: a valid RFC 7636 verifier and a state or nonce with 256 bits of entropy. */
+function randomValue(): string {
+  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+}
+export const generateState = randomValue;
+export const generateNonce = randomValue;
+export const generateVerifier = randomValue;
+
+/** RFC 7636 §4.2 `S256`: BASE64URL(SHA-256(verifier)). */
+export async function codeChallengeS256(verifier: string): Promise<string> {
+  return base64UrlEncode(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+}
+
+/** The fixed callback address (ADR-012 §1): no locale prefix, built from APP_ORIGIN and the provider only. */
+export function oauthRedirectUri(appOrigin: string, provider: OAuthProvider): string {
+  return new URL(`/auth/oauth/${provider}/callback`, appOrigin).toString();
+}
+
+/** Joins only the known parameters; nothing from a request reaches it except the values the caller generated. */
+export function buildAuthorizeUrl(input: { provider: OAuthProvider; clientId: string; redirectUri: string; state: string; challenge: string; nonce: string }): string {
+  const spec = OAUTH_PROVIDER_SPECS[input.provider];
+  const url = new URL(spec.authorizeUrl);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", input.clientId);
+  url.searchParams.set("redirect_uri", input.redirectUri);
+  if (spec.scope) url.searchParams.set("scope", spec.scope);
+  url.searchParams.set("state", input.state);
+  url.searchParams.set("code_challenge", input.challenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  if (spec.oidc) url.searchParams.set("nonce", input.nonce);
+  return url.toString();
+}
+
+export type IdTokenFailure = "malformed" | "issuer" | "audience" | "azp" | "expired" | "nonce" | "subject";
+export type IdTokenResult = { ok: true; claims: { subject: string; email: string | null } } | { ok: false; reason: IdTokenFailure };
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Checks the claims of an ID token the adapter received from the token endpoint (decision 3 (c), (d)). It does NOT verify the
+ * signature: OIDC Core §3.1.3.7 item 6 allows that for a token received directly from the token endpoint over TLS (approved
+ * roadmap deviation R1). Fails closed: an empty expected client id or nonce is `malformed`. Returns the subject and the e-mail
+ * only: the name is never read (F2).
+ */
+export function verifyIdToken(idToken: string, expected: { issuers: readonly string[]; audience: string; nonce: string; now: number }): IdTokenResult {
+  const fail = (reason: IdTokenFailure): IdTokenResult => ({ ok: false, reason });
+  if (!expected.audience || !expected.nonce) return fail("malformed");
+  const parts = idToken.split(".");
+  if (parts.length !== 3) return fail("malformed");
+  const bytes = base64UrlDecode(parts[1] ?? "");
+  if (!bytes) return fail("malformed");
+  let claims: unknown;
+  try {
+    claims = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return fail("malformed");
+  }
+  if (!isRecord(claims)) return fail("malformed");
+
+  if (typeof claims.iss !== "string" || !expected.issuers.includes(claims.iss)) return fail("issuer");
+  const audiences = typeof claims.aud === "string" ? [claims.aud] : Array.isArray(claims.aud) ? claims.aud : [];
+  if (!audiences.includes(expected.audience)) return fail("audience");
+  // OIDC Core §2: with several audiences azp is required; whenever it is present it must be this client.
+  if (claims.azp !== undefined ? claims.azp !== expected.audience : audiences.length > 1) return fail("azp");
+  if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || claims.exp + EXP_SKEW_SECONDS <= expected.now / 1000) return fail("expired");
+  if (typeof claims.nonce !== "string" || !timingSafeEqualText(claims.nonce, expected.nonce)) return fail("nonce");
+  if (typeof claims.sub !== "string" || claims.sub.length < 1 || claims.sub.length > 255) return fail("subject");
+  const email = typeof claims.email === "string" && claims.email.length >= 1 && claims.email.length <= 254 ? claims.email : null;
+  return { ok: true, claims: { subject: claims.sub, email } };
+}
+
+/** Left by `POST …/link` for the start route: "this signed-in session asked to link this provider". */
+export interface LinkIntentCookie {
+  v: 1;
+  phase: "intent";
+  provider: OAuthProvider;
+  intent: "link";
+  /** `sha256("oauth-link:" + raw session id)`, never the session's own `id_hash` (S1). */
+  sessionHash: string;
+  /** Epoch milliseconds. */
+  exp: number;
+}
+
+/** Written by the start route; the callback accepts only this phase. */
+export interface FlowCookie {
+  v: 1;
+  phase: "flow";
+  provider: OAuthProvider;
+  intent: OAuthIntent;
+  state: string;
+  verifier: string;
+  nonce: string;
+  /** A same-site path the route already ran through `safeNext`, or null. */
+  next: string | null;
+  locale: Locale;
+  /** Set for `link` (the session that asked), null for `signin`. */
+  sessionHash: string | null;
+  exp: number;
+}
+
+export type OAuthCookie = LinkIntentCookie | FlowCookie;
+
+export function newLinkIntent(input: { provider: OAuthProvider; sessionHash: string }, now: number): LinkIntentCookie {
+  return { v: 1, phase: "intent", provider: input.provider, intent: "link", sessionHash: input.sessionHash, exp: now + LINK_INTENT_TTL_MS };
+}
+
+export function newFlowCookie(
+  input: { provider: OAuthProvider; intent: OAuthIntent; state: string; verifier: string; nonce: string; next: string | null; locale: Locale; sessionHash: string | null },
+  now: number,
+): FlowCookie {
+  if ((input.intent === "link") !== (input.sessionHash !== null)) throw new Error("a link flow needs a session hash, a signin flow must not have one");
+  const next = input.next !== null && input.next.length <= MAX_NEXT_CHARS ? input.next : null;
+  return { v: 1, phase: "flow", ...input, next, exp: now + OAUTH_FLOW_TTL_MS };
+}
+
+export function encodeOAuthCookie(cookie: OAuthCookie): string {
+  return base64UrlEncode(new TextEncoder().encode(JSON.stringify(cookie)));
+}
+
+const TOKEN = /^[A-Za-z0-9_-]{43,128}$/;
+const HASH = /^[0-9a-f]{64}$/;
+
+/**
+ * The cookie is not signed (decision 4), so everything is checked: shape, lengths, the provider it was written for (F5: the
+ * callback passes the `:provider` of its URL), expiry, and that `exp` is no further away than the phase's lifetime. Every defect
+ * gives the same null.
+ */
+export function parseOAuthCookie(raw: string | null | undefined, expected: { provider: OAuthProvider; now: number }): OAuthCookie | null {
+  if (!raw || raw.length > MAX_COOKIE_CHARS) return null;
+  const bytes = base64UrlDecode(raw);
+  if (!bytes) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+  if (!isRecord(value) || value.v !== 1 || value.provider !== expected.provider) return null;
+  const exp = value.exp;
+  if (typeof exp !== "number" || !Number.isFinite(exp) || exp <= expected.now) return null;
+
+  if (value.phase === "intent") {
+    if (value.intent !== "link" || typeof value.sessionHash !== "string" || !HASH.test(value.sessionHash) || exp - expected.now > LINK_INTENT_TTL_MS) return null;
+    return { v: 1, phase: "intent", provider: expected.provider, intent: "link", sessionHash: value.sessionHash, exp };
+  }
+  if (value.phase !== "flow" || exp - expected.now > OAUTH_FLOW_TTL_MS) return null;
+  const { intent, state, verifier, nonce, next, locale, sessionHash } = value;
+  if (intent !== "signin" && intent !== "link") return null;
+  if (typeof state !== "string" || !TOKEN.test(state) || typeof verifier !== "string" || !TOKEN.test(verifier) || typeof nonce !== "string" || !TOKEN.test(nonce)) return null;
+  if (next !== null && (typeof next !== "string" || next.length > MAX_NEXT_CHARS)) return null;
+  if (!isLocale(locale)) return null;
+  if (intent === "link" ? typeof sessionHash !== "string" || !HASH.test(sessionHash) : sessionHash !== null) return null;
+  return { v: 1, phase: "flow", provider: expected.provider, intent, state, verifier, nonce, next, locale, sessionHash: sessionHash as string | null, exp };
+}
+
+/**
+ * The start route's choice (decision 4): "link" only for a live intent cookie whose session hash equals the hash of the session
+ * making this request; anything else, a flow cookie included, is a plain sign-in. No URL parameter ever chooses the intent.
+ */
+export function resolveStartIntent(cookie: OAuthCookie | null, sessionHash: string | null, now: number): OAuthIntent {
+  if (!cookie || cookie.phase !== "intent" || sessionHash === null || cookie.exp <= now) return "signin";
+  return timingSafeEqualText(cookie.sessionHash, sessionHash) ? "link" : "signin";
+}
+
+export type CallbackCheck = { ok: true; flow: FlowCookie } | { ok: false; reason: "no_cookie" | "wrong_phase" | "state_mismatch" };
+
+/** The callback's first gate: a flow cookie (already matched to `:provider` and unexpired by the parser) and the same `state`. */
+export function checkCallbackState(cookie: OAuthCookie | null, stateParam: string | null | undefined): CallbackCheck {
+  if (!cookie) return { ok: false, reason: "no_cookie" };
+  if (cookie.phase !== "flow") return { ok: false, reason: "wrong_phase" };
+  if (!stateParam || !timingSafeEqualText(cookie.state, stateParam)) return { ok: false, reason: "state_mismatch" };
+  return { ok: true, flow: cookie };
+}
+
+/** A signin flow needs no session; a link flow is valid only for the session that asked for it. */
+export function flowMatchesSession(flow: FlowCookie, sessionHash: string | null): boolean {
+  return flow.intent === "signin" || (flow.sessionHash !== null && sessionHash !== null && timingSafeEqualText(flow.sessionHash, sessionHash));
+}
+```
+
+Chạy: `npm test -w apps/web -- test/domain/oauth.test.ts test/architecture.test.ts` → PASS (domain không import Hono hay db, không nhắc kiểu D1).
+
+- [ ] **Step 3: Test cookie HTTP (fail)**
+
+`apps/web/test/auth/oauth-cookie.test.ts`:
+
+```ts
+import { Hono } from "hono";
+import { describe, expect, it } from "vitest";
+import { sha256Hex } from "../../src/auth/crypto.ts";
+import { clearOAuthCookie, linkSessionHash, OAUTH_COOKIE, readOAuthCookie, writeOAuthCookie } from "../../src/auth/oauth-cookie.ts";
+import { generateNonce, generateState, generateVerifier, newFlowCookie, newLinkIntent } from "../../src/domain/oauth.ts";
+import type { AppEnv } from "../../src/env.ts";
+
+const flow = () =>
+  newFlowCookie({ provider: "github", intent: "signin", state: generateState(), verifier: generateVerifier(), nonce: generateNonce(), next: "/me", locale: "vi", sessionHash: null }, Date.now());
+
+const app = new Hono<AppEnv>();
+app.get("/write-flow", (c) => {
+  writeOAuthCookie(c, flow());
+  return c.text("ok");
+});
+app.get("/write-intent", async (c) => {
+  writeOAuthCookie(c, newLinkIntent({ provider: "github", sessionHash: await linkSessionHash("raw-session") }, Date.now()));
+  return c.text("ok");
+});
+app.get("/clear", (c) => {
+  clearOAuthCookie(c);
+  return c.text("ok");
+});
+app.get("/read/:provider", (c) => c.json(readOAuthCookie(c, c.req.param("provider") as "google" | "github" | "linkedin")));
+
+const setCookieOf = (res: Response) => res.headers.getSetCookie().find((line) => line.startsWith(`${OAUTH_COOKIE}=`)) ?? "";
+const valueOf = (line: string) => line.slice(OAUTH_COOKIE.length + 1).split(";")[0] ?? "";
+const maxAgeOf = (line: string) => Number(/Max-Age=(\d+)/.exec(line)?.[1]);
+
+describe("__Host-vnx_oauth (ADR-012 §1)", () => {
+  it("is host-only, HttpOnly, Secure, Lax, for 10 minutes", async () => {
+    const line = setCookieOf(await app.request("/write-flow"));
+    expect(OAUTH_COOKIE).toBe("__Host-vnx_oauth");
+    expect(line).toContain("Path=/");
+    expect(line).toContain("HttpOnly");
+    expect(line).toContain("Secure");
+    expect(line).toContain("SameSite=Lax");
+    expect(line).not.toMatch(/Domain=/i);
+    expect(maxAgeOf(line)).toBeGreaterThanOrEqual(599);
+    expect(maxAgeOf(line)).toBeLessThanOrEqual(600);
+  });
+
+  it("keeps a link intent for no more than 2 minutes", async () => {
+    const line = setCookieOf(await app.request("/write-intent"));
+    expect(maxAgeOf(line)).toBeGreaterThanOrEqual(119);
+    expect(maxAgeOf(line)).toBeLessThanOrEqual(120);
+  });
+
+  it("reads back what it wrote, for the same provider only (F5)", async () => {
+    const value = valueOf(setCookieOf(await app.request("/write-flow")));
+    const same = await app.request("/read/github", { headers: { cookie: `${OAUTH_COOKIE}=${value}` } });
+    expect(await same.json()).toMatchObject({ phase: "flow", provider: "github", intent: "signin", next: "/me", locale: "vi" });
+    const other = await app.request("/read/google", { headers: { cookie: `${OAUTH_COOKIE}=${value}` } });
+    expect(await other.json()).toBeNull();
+  });
+
+  it("reads null for a missing or tampered cookie", async () => {
+    expect(await (await app.request("/read/github")).json()).toBeNull();
+    expect(await (await app.request("/read/github", { headers: { cookie: `${OAUTH_COOKIE}=garbage` } })).json()).toBeNull();
+  });
+
+  it("is cleared with Max-Age=0 on the same path", async () => {
+    const line = setCookieOf(await app.request("/clear"));
+    expect(line).toContain("Max-Age=0");
+    expect(line).toContain("Path=/");
+    expect(line).toContain("Secure");
+  });
+
+  it("hashes the session for a link intent with a fixed prefix, never as the session's own id_hash (S1)", async () => {
+    const hash = await linkSessionHash("raw-session");
+    expect(hash).toBe(await sha256Hex("oauth-link:raw-session"));
+    expect(hash).not.toBe(await sha256Hex("raw-session"));
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-cookie.test.ts` → FAIL (`auth/oauth-cookie.ts` chưa có).
+
+- [ ] **Step 4: `auth/oauth-cookie.ts`**
+
+`apps/web/src/auth/oauth-cookie.ts`:
+
+```ts
+import type { Context } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import type { OAuthProvider } from "../domain/identity.ts";
+import { encodeOAuthCookie, OAUTH_FLOW_TTL_MS, parseOAuthCookie, type OAuthCookie } from "../domain/oauth.ts";
+import type { AppEnv } from "../env.ts";
+import { sha256Hex } from "./crypto.ts";
+
+/**
+ * Carries one OAuth round trip: state, PKCE verifier, nonce, intent, next, locale (ADR-012 §1). SameSite=Lax, not Strict: the
+ * callback is a top-level GET from the provider and a Strict cookie would not be sent. Used once: the callback clears it.
+ */
+export const OAUTH_COOKIE = "__Host-vnx_oauth";
+
+/** The cookie as written for `provider`, or null (missing, for another provider, expired, malformed: all the same). */
+export function readOAuthCookie(c: Context<AppEnv>, provider: OAuthProvider, now: number = Date.now()): OAuthCookie | null {
+  return parseOAuthCookie(getCookie(c, OAUTH_COOKIE), { provider, now });
+}
+
+export function writeOAuthCookie(c: Context<AppEnv>, cookie: OAuthCookie, now: number = Date.now()) {
+  const maxAge = Math.min(OAUTH_FLOW_TTL_MS / 1000, Math.max(1, Math.ceil((cookie.exp - now) / 1000)));
+  setCookie(c, OAUTH_COOKIE, encodeOAuthCookie(cookie), { path: "/", secure: true, httpOnly: true, sameSite: "Lax", maxAge });
+}
+
+export function clearOAuthCookie(c: Context<AppEnv>) {
+  deleteCookie(c, OAUTH_COOKIE, { path: "/", secure: true });
+}
+
+/** What a link intent and a link flow store in place of the session id: `sha256("oauth-link:" + raw session id)` (S1). */
+export function linkSessionHash(rawSessionId: string): Promise<string> {
+  return sha256Hex(`oauth-link:${rawSessionId}`);
+}
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-cookie.test.ts test/domain/oauth.test.ts` → PASS.
+
+- [ ] **Step 5: Kiểm toàn bộ và commit**
+
+```
+npm run typecheck -w apps/web
+npm test
+```
+
+Kỳ vọng: typecheck sạch (`crypto.subtle.timingSafeEqual` có kiểu trong `worker-configuration.d.ts`); toàn bộ test xanh, gồm `test/architecture.test.ts` (domain thuần, không SQL mới) và `test/i18n/parity.test.ts` (không có khóa mới).
+
+```
+git add apps/web/src/domain/oauth.ts apps/web/src/auth/oauth-cookie.ts apps/web/test/domain/oauth.test.ts apps/web/test/auth/oauth-cookie.test.ts
+git commit -m "feat(web): OAuth core, PKCE, ID token claim checks and state cookie (VNX-2603a)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận của task (mỗi dòng một lệnh):**
+
+| # | Tiêu chí | Lệnh |
+|---|---|---|
+| 1 | S256 đúng vector RFC 7636 phụ lục B; `state`/`nonce`/`verifier` 43 ký tự ngẫu nhiên | `npm test -w apps/web -- test/domain/oauth.test.ts` |
+| 2 | URL authorize chỉ có đúng các tham số đã biết, đúng scope từng provider, GitHub không scope không nonce, redirect URI từ `APP_ORIGIN` | `npm test -w apps/web -- test/domain/oauth.test.ts` |
+| 3 | `iss`, `aud`, `azp`, `exp` (dung sai 60 s), `nonce`, `sub` sai đều bị từ chối; kết quả không có `name`; tham số mong đợi rỗng thì fail closed | `npm test -w apps/web -- test/domain/oauth.test.ts` |
+| 4 | Cookie: sai hình dạng, quá hạn, `exp` quá xa, sai provider (F5), thiếu hoặc thừa `sessionHash` đều ra `null`; `state` sai, thiếu bị từ chối ở `checkCallbackState` | `npm test -w apps/web -- test/domain/oauth.test.ts` |
+| 5 | Link chỉ khi cookie intent còn hạn và `sessionHash` khớp session hiện tại | `npm test -w apps/web -- test/domain/oauth.test.ts` |
+| 6 | Thuộc tính cookie HTTP: `__Host-`, `Path=/`, `HttpOnly`, `Secure`, `Lax`, không `Domain`, 600 s (intent 120 s), xóa bằng `Max-Age=0`; `sessionHash` có tiền tố cố định | `npm test -w apps/web -- test/auth/oauth-cookie.test.ts` |
+| 7 | Domain thuần, không dependency mới | `npm test -w apps/web -- test/architecture.test.ts` và `git diff --stat main -- apps/web/package.json package-lock.json` rỗng |
+| 8 | Typecheck và toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
+
+**Kích cỡ ước tính:** mã nguồn ~215 dòng (`domain/oauth.ts` ~185, `auth/oauth-cookie.ts` ~30), test ~300 dòng, không có locale. Dưới 600 dòng, không cần tách.
+
+#### Kết quả review Task 2 (Opus, 2026-10-07): APPROVE
+
+Reviewer typecheck bản code của plan với types của nhánh (0 lỗi) và chạy hai file test trong Node với hàm thay `timingSafeEqual` (34/34). Bổ sung bắt buộc khi làm Task 2:
+
+- **LOW-1 (làm trong Task 2):** `parseOAuthCookie` trả `null` khi `next` không bắt đầu bằng `/` hoặc bắt đầu bằng `//` hay `/\`. Thêm test: cookie flow tự dựng với `next: "//evil.example"` và `next: "https://evil.example"` → `null`. Lớp `safeNext` ở Task 6 vẫn giữ.
+
+Nghĩa vụ cho task sau:
+
+- **LOW-2 (Task 6 và Task 8):** chỉ truyền `linkSessionHash(raw)` vào `resolveStartIntent` / `flowMatchesSession` khi `c.get("user")` khác null (session còn sống, user `active`); ngược lại truyền `null`. Test: cookie intent + session hết hạn → `signin`.
