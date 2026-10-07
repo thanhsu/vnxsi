@@ -22,7 +22,7 @@ describe("blocks do not know where they sit", () => {
       founding: { node: <Founding locale="en" items={[item]} />, marker: "home-tile" },
       pulse: { node: <MarketPulse locale="en" {...view.pulse!} />, marker: 'data-chart="requests-by-category"' },
       builders: { node: <TopBuildersBlock locale="en" data={view.builders!} />, marker: "data-tab=" },
-      products: { node: <TopProductsBlock locale="en" data={view.products!} />, marker: 'class="home-chips"' },
+      products: { node: <TopProductsBlock locale="en" data={view.products!} />, marker: 'id="home-top-' },
     };
     for (const [name, { node, marker }] of Object.entries(bodies)) {
       const html = await node.toString();

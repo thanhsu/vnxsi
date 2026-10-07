@@ -29,7 +29,7 @@ describe("Live (VNX-0703b, moved from 7a)", () => {
     expect(count(block(await getHome(), "home-live"), 'class="home-live-item"')).toBe(LIVE_MAX);
   });
 
-  it("a new request shows its category and languages, nothing else of it", async () => {
+  it("a new request shows its label, category and languages", async () => {
     const at = new Date(Date.now() - 60_000).toISOString();
     const events = [...eventList(MIN.liveEvents - 1), { id: "r", at, kind: "request_new" as const, category: "crm" as const, languages: ["vi" as const] }];
     await clearStats();
@@ -44,6 +44,8 @@ describe("Live (VNX-0703b, moved from 7a)", () => {
     const now = new Date("2026-10-05T12:00:00.000Z");
     expect(relativeTime("en", "2026-10-05T10:00:00.000Z", now)).toBe("2 hours ago");
     expect(relativeTime("en", "2026-10-02T12:00:00.000Z", now)).toBe("3 days ago");
+    expect(relativeTime("vi", "2026-10-05T10:00:00.000Z", now)).toBe(new Intl.RelativeTimeFormat("vi", { numeric: "auto" }).format(-2, "hour"));
+    expect(relativeTime("en", "2026-10-05T11:59:30.000Z", now)).toBe("this minute"); // under a minute
   });
 });
 
@@ -111,7 +113,7 @@ describe("Top builders (VNX-0703b)", () => {
       expect(html, locale).toContain(t(locale, "home.builders.criteria.verified", { min: MIN.verified }));
     }
     expect(block(await getHome(), "home-builders")).toContain(formatDuration("en", 10));
-    expect(formatDuration("en", 90)).not.toBe(formatDuration("en", 30)); // 90 minutes is shown in hours
+    expect(formatDuration("en", 90)).toBe(new Intl.NumberFormat("en", { style: "unit", unit: "hour", unitDisplay: "short" }).format(1)); // 90 minutes is shown in whole hours
   });
 });
 

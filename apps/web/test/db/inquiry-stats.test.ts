@@ -43,4 +43,15 @@ describe("inquiries are counted when they open (spec §8.11)", () => {
     await inquiryOpenedStatement(testEnv.DB, { inquiryId: pending.inquiry.id, openedAt: NOW }).run();
     expect(await inquiriesOn(pending.product!.id, "2026-10-05")).toBe(0);
   });
+
+  it("a second inquiry opened for the same product on the same UTC day increments the existing row (ON CONFLICT)", async () => {
+    const first = await makeInquiry({ tag: "istat-conf-1", status: "open", now: NOW });
+    expect(await inquiriesOn(first.product!.id, "2026-10-05")).toBe(1);
+    const other = await makeInquiry({ tag: "istat-conf-2", status: "open", now: NOW });
+    await testEnv.DB.prepare("UPDATE inquiries SET product_id = ?1 WHERE id = ?2").bind(first.product!.id, other.inquiry.id).run();
+    await inquiryOpenedStatement(testEnv.DB, { inquiryId: other.inquiry.id, openedAt: NOW }).run();
+    expect(await inquiriesOn(first.product!.id, "2026-10-05")).toBe(2);
+    const rows = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM product_daily_stats WHERE product_id = ?1 AND day = ?2").bind(first.product!.id, "2026-10-05").first<{ n: number }>();
+    expect(rows?.n).toBe(1);
+  });
 });

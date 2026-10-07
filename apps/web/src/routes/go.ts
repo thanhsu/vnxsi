@@ -112,7 +112,7 @@ const inFlight = new Set<string>();
 
 /**
  * The click row first and always; then, only for a counted first click of the day, the product counters. NEVER rejects (M2): everything
- * that decides "count or not" (hash, owner, staff, in-flight, dedupe) sits in one try/catch; on any error it logs `go.count_failed`,
+ * that decides "count or not" (go-live gate `isCountingLive`, hash, owner, staff, in-flight, dedupe) sits in one try/catch; on any error it logs `go.count_failed`,
  * counts nothing and still records the click (with the hash if it was computed, null if hashing failed). A redirect never waits on or
  * fails because of statistics (addendum 2.3). `isStaff` runs last, only for a signed-in visitor who is not the product's builder and
  * who already passed every cheap check (a hash exists only without bot, GPC, missing salt or missing cookie).

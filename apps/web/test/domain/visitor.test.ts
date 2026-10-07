@@ -67,7 +67,7 @@ describe("newVisitorId", () => {
 
 describe("hasGpc (Sec-GPC: 1 is the opt-out)", () => {
   const h = (value?: string) => new Headers(value === undefined ? {} : { "Sec-GPC": value });
-  it("is true only for the value 1", () => {
+  it("is true when any comma-separated member equals 1 (after trimming), false otherwise", () => {
     expect(hasGpc(h("1"))).toBe(true);
     expect(hasGpc(new Headers({ "sec-gpc": "1" }))).toBe(true);
     expect(hasGpc(new Headers([["SEC-GPC", " 1 "]]))).toBe(true);
@@ -85,7 +85,7 @@ describe("hasGpc (Sec-GPC: 1 is the opt-out)", () => {
   });
 });
 
-describe("visitorHash (addendum 2.2: dayKey = HMAC(salt, day), hash = HMAC(dayKey, visitor id))", () => {
+describe("visitorHash (addendum 2.2: dayKey = HMAC(salt, \"vnx.si/visitor/v1|\" + day), hash = HMAC(dayKey, visitor id))", () => {
   it("is deterministic within a day: 64 hex characters", async () => {
     const a = await visitorHash(SALT, "2026-10-05", ID);
     const b = await visitorHash(SALT, "2026-10-05", ID);

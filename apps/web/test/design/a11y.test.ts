@@ -9,7 +9,9 @@ import { testEnv } from "../helpers.ts";
 const get = (path: string, cookie?: string) =>
   createApp().request(new Request(`https://vnx.si${path}`, { headers: cookie ? { cookie } : {} }), undefined, testEnv);
 // import.meta.glob "?raw" yields an empty string for .css in workerd, so read app.css the way assets.test.ts does: through the app.
-const CSS = await (await get("/assets/app.css")).text();
+const CSS_RES = await get("/assets/app.css");
+if (CSS_RES.status !== 200) throw new Error(`app.css fetch status ${CSS_RES.status}`);
+const CSS = await CSS_RES.text();
 
 /** WCAG 2.x relative luminance and contrast ratio of two #rrggbb colours. */
 const channel = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };

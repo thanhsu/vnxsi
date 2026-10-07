@@ -12,7 +12,7 @@ export const zhHans: Messages = {
   "nav.forBuilders": "致 Builder",
   "nav.becomeBuilder": "成为 Builder",
   "nav.menu": "菜单",
-"a11y.skipToContent": "跳到主要内容",
+  "a11y.skipToContent": "跳到主要内容",
   "footer.terms": "条款",
   "footer.privacy": "隐私",
   "privacyNotice.message": "我们正在更新隐私政策：从 {date} 起，我们会使用一个在每天结束时到期的 Cookie 来统计产品页面访问量。",

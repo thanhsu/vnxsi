@@ -26,7 +26,11 @@
     // Turnstile site key (public) of the vnx.si widget (Owner, 2026-10-04; VNX-0710). Empty = signed-out inquiries and
     // contact messages are refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X",
-    // Privacy go-live (YYYY-MM-DD, UTC). Empty = the old Privacy text, no notice, and (Task VNX-0701b) no view counting. From go-live minus 14 days /privacy shows the M7 text and the notice appears; counting starts at go-live 00:00 UTC. NEVER clear it after go-live: it selects the Privacy version and enables counting. The production date is committed here in a chore: commit before the VNX-0701c deploy; never via --var or the dashboard.
+    // Privacy go-live D (YYYY-MM-DD, UTC). From D minus 14 days /privacy shows the M7 text and the notice appears; view counting AND /go/p/ click hashing start at D 00:00 UTC.
+    // (a) D must be at least 14 days after the deploy that first carries it: a nearer or past date shortens or skips the advance notice, and counting starts immediately.
+    // (b) Empty or malformed = no view counting, no /go/p/ click hashing, no notice, and the old Privacy text.
+    // (c) Commit D here on main in a chore: commit. Never set it via --var or the dashboard, and never clear it. Every later deploy, from any session or branch, must come from a tree
+    //     that contains the date commit; otherwise Privacy reverts to the old text while hashes already exist.
     "PRIVACY_NOTICE_GO_LIVE": ""
   },
   "workers_dev": true,
@@ -36,7 +40,7 @@
   ],
   "observability": { "enabled": true },
   // Daily clean-up runs at 01:00 UTC (src/jobs/daily.ts); the hourly public_stats snapshot runs at minute 05 (src/jobs/hourly.ts).
-  // Both triggers are registered on the next `npm run deploy`.
+  // Both triggers are registered on the next `npm run deploy`. (e) vnxsi-web needs 2 cron triggers: check for a free slot on the shared Cloudflare account before deploying.
   "triggers": { "crons": ["0 1 * * *", "5 * * * *"] }
   // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS, ANALYTICS_SALT.
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
@@ -57,6 +61,9 @@
   // 0015_view_dedupe (M7) ships with its code the same way: migrate first, then deploy.
   // 0016_public_stats (M7, hourly snapshot table) ships the same way.
   // The daily cron also deletes outbound clicks older than 13 months, so it reads 0012 too.
+  // (g) Migration order: 0013 (Ops) first, then 0014-0016, all applied before the code that uses them.
+  // (f) Before go-live add Cloudflare rate limits for /p/* and /go/p/*.
+  // (d) ANALYTICS_SALT (secret) may be set any time; counting starts only at D 00:00 UTC.
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //

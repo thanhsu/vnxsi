@@ -54,7 +54,7 @@ const WRITERS: Record<string, string> = {
 };
 
 /** Table names behind a write: INSERT, INSERT OR IGNORE/REPLACE, REPLACE INTO, UPDATE, DELETE (VNX-0701b). */
-const WRITE_SQL = /\b(?:INSERT(?: OR [A-Z]+)? INTO|REPLACE INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g;
+const WRITE_SQL = /\b(?:INSERT\s+(?:OR\s+[A-Z]+\s+)?INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/g;
 
 describe("table ownership (VNX-0201)", () => {
   it("writes each table only from its owning module", () => {
@@ -73,6 +73,12 @@ describe("table ownership (VNX-0201)", () => {
       expect([...sql.matchAll(WRITE_SQL)][0]?.[1], sql).toBe("product_view_dedupe");
     }
     expect(WRITERS.product_view_dedupe).toBe("../src/db/stats.ts");
+  });
+
+  it("positive control: an upsert (INSERT ... ON CONFLICT ... DO UPDATE SET) yields exactly its target table, also across line breaks", () => {
+    const sql = "INSERT INTO x (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b = excluded.b";
+    expect([...sql.matchAll(WRITE_SQL)].map((m) => m[1])).toEqual(["x"]);
+    expect([...sql.replace("INSERT INTO", "INSERT\n  INTO").matchAll(WRITE_SQL)].map((m) => m[1])).toEqual(["x"]);
   });
 });
 
@@ -270,10 +276,14 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
 });
 
 describe("single render choke point (VNX-0701c)", () => {
-  it("only views/render.ts calls c.html( — a direct call would silently drop the privacy notice", () => {
+  it("positive control: render.ts itself calls c.html(", () => {
+    expect(sources["../src/views/render.ts"]).toMatch(/\bc\.html\(/);
+  });
+
+  it("only views/render.ts calls .html( (a direct call would silently drop the privacy notice)", () => {
     for (const [file, src] of Object.entries(sources)) {
       if (file === "../src/views/render.ts") continue;
-      expect(src, file).not.toMatch(/\bc\.html\(/);
+      expect(src, file).not.toMatch(/\.html\(/);
     }
   });
 });
