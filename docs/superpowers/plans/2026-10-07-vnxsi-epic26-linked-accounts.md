@@ -2272,3 +2272,461 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Kích cỡ ước tính:** mã nguồn ~240 dòng (`provider.ts` 40, `oidc.ts` 75, `fake.ts` 45, `index.ts` 55, `env.ts`/`identity.ts`/vitest/wrangler ~25), test ~330 dòng, không có locale. Dưới 600 dòng, không cần tách.
 
 #### Kết quả review Task 3 (Opus, 2026-10-07): APPROVE_WITH_CHANGES, đã sửa F1–F4, S1
+
+---
+
+### Task 4: VNX-2603c — Adapter GitHub (OAuth 2.0, `GET /user`)
+
+**Files:**
+- Create: `apps/web/src/auth/oauth/github.ts`
+- Modify: `apps/web/src/auth/oauth/provider.ts` (thêm hai mã lỗi vào `ExchangeFailure`)
+- Modify: `apps/web/src/auth/oauth/index.ts` (nhánh github của `oauthCredentials`, `getOAuthProvider` dựng `GithubClient`)
+- Modify: `apps/web/src/env.ts` (`GITHUB_CLIENT_ID?`, `GITHUB_CLIENT_SECRET?`)
+- Modify: `apps/web/vitest.config.ts` (ghim `GITHUB_CLIENT_ID` và `GITHUB_CLIENT_SECRET` là `""`)
+- Modify: `apps/web/wrangler.jsonc` (chỉ sửa ghi chú: bỏ "GitHub's two join with its adapter", liệt kê đủ sáu secret)
+- Modify (test có sẵn): `apps/web/test/auth/oauth-providers.test.ts`
+- Test (mới): `apps/web/test/auth/oauth-github.test.ts`
+- Không có route, không khóa i18n, không migration, không dependency mới.
+
+**Interfaces:**
+- Consumes: `ProviderClient`, `ExchangeInput`, `ExchangeResult`, `ExchangeFailure` (`auth/oauth/provider.ts`); `OAUTH_PROVIDER_SPECS.github` (`domain/oauth.ts`: không issuer, không nonce, không scope); `PROVIDER_NAME` (`domain/identity.ts`); `linkIdentity` (`db/identities.ts`, test); `getOAuthProvider`, `oauthCredentials` (`auth/oauth/index.ts`).
+- Produces:
+  - `auth/oauth/github.ts`: `GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"`, `GITHUB_USER_URL = "https://api.github.com/user"`, `class GithubClient implements ProviderClient` (`new GithubClient(clientId, clientSecret, fetchFn)`, `provider = "github"`).
+  - `ExchangeFailure` thêm `"profile_request" | "profile_response"` (lỗi của lần gọi `GET /user`, cùng ý nghĩa với `token_request` / `token_response`).
+  - `oauthCredentials(env, "github")` đọc `GITHUB_CLIENT_ID` và `GITHUB_CLIENT_SECRET`; `getOAuthProvider(env, "github")` trả `GithubClient` khi cả hai có.
+
+**Quyết định kỹ thuật:**
+- **Hai lần `fetch`, hai URL hằng số (quyết định 3 (b)):** (1) `POST GITHUB_TOKEN_URL` với `Accept: application/json` (không có thì GitHub trả dạng form), thân form `client_id`, `client_secret`, `code`, `redirect_uri`, `code_verifier` (PKCE S256 được gửi; GitHub không bắt buộc, nên `state` và client secret vẫn là lớp chính, xem Rủi ro; không có `grant_type`, GitHub không dùng); (2) `GET GITHUB_USER_URL` với `Authorization: Bearer <access_token>`, `Accept: application/vnd.github+json`, `User-Agent: vnx.si` (api.github.com từ chối request không có User-Agent), `X-GitHub-Api-Version: 2022-11-28`. Cả hai: `redirect: "manual"` (workerd không hỗ trợ `"error"`; một 3xx không phải `res.ok` nên thành `token_request` hoặc `profile_request`), `AbortSignal.timeout(8000)`. Không đọc `scope`, `token_type` hay `refresh_token`.
+- **Access token chỉ sống trong một biến cục bộ** giữa hai lần gọi: nằm trong header `Authorization` của đúng lần gọi thứ hai, không nằm trong kết quả, không trong log (không `console.*` nào), không trong DB. Hết hàm là bỏ. Review Focus 9.
+- **`subject` là `id` số dạng chuỗi (ADR-012 §1), không bao giờ `login`:** `id` phải là `number`, nguyên, an toàn (`Number.isSafeInteger`) và > 0; chuỗi `"583231"`, `0`, số âm, số thập phân, số vượt 2^53 hay thiếu thì `profile_response`. Chỉ chấp nhận kiểu `number` vì GitHub luôn trả số; không nới sang chuỗi để không làm hai biểu diễn của cùng một tài khoản thành hai `subject` khác nhau.
+- **`label` là `login`, và `login` không hợp lệ thì TỪ CHỐI (`profile_response`), không rơi về `PROVIDER_NAME.github` như Google/LinkedIn rơi về tên provider.** Lý do: ở Google và LinkedIn `label` chỉ để chủ tài khoản nhận ra; ở GitHub `label` còn là nguồn của huy hiệu công khai `@login` và link `https://github.com/<login>` (Task 11). Nếu fallback là chữ "GitHub" thì Task 11 không phân biệt được nó với một login thật và có thể dựng link sai; từ chối giữ bất biến "label của identity GitHub luôn là một login hợp lệ". Hợp lệ = khớp `^[A-Za-z0-9][A-Za-z0-9-]{0,38}$` (GitHub: chữ số, chữ cái, gạch ngang, tối đa 39 ký tự). Quy tắc này chặt hơn CHECK `length(label) BETWEEN 1 AND 254` nên mọi `label` hợp lệ đều qua CHECK (test đi qua `linkIdentity`); đồng thời chặn `/`, `?`, `#`, khoảng trắng trong login trước khi chúng vào link. GitHub không bao giờ trả login thiếu hoặc rỗng cho một người dùng thật, nên việc từ chối chỉ xảy ra khi API đổi; khi đó đăng nhập thất bại với mã cố định thay vì ghi dữ liệu xấu.
+- **Không đọc `name`, `email`, `avatar_url`, hay bất kỳ trường nào khác** của `/user` (addendum Privacy đã duyệt chỉ liệt kê tên người dùng cho GitHub; F2).
+- **Phản hồi 200 mang `error` của token endpoint** (GitHub trả 200 kèm `{"error":"bad_verification_code"}`) thành `token_response`, vì thiếu `access_token`; non-2xx hoặc lỗi mạng là `token_request`. Lần gọi `/user` chỉ xảy ra khi có `access_token`.
+- **Adapter vẫn không import Hono, DB, không log** (test quét tĩnh của Task 3 tự bao `github.ts`: nó dò mọi file `src/auth/oauth/*.ts`).
+
+- [ ] **Step 1: Test adapter GitHub (fail)**
+
+`apps/web/test/auth/oauth-github.test.ts`:
+
+```ts
+import { describe, expect, it, vi } from "vitest";
+import { GITHUB_TOKEN_URL, GITHUB_USER_URL, GithubClient } from "../../src/auth/oauth/github.ts";
+import { getOAuthProvider } from "../../src/auth/oauth/index.ts";
+import { linkIdentity } from "../../src/db/identities.ts";
+import type { Bindings } from "../../src/env.ts";
+import { ensureUser } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = Date.parse("2026-10-07T10:00:00.000Z");
+const INPUT = { code: "auth-code", verifier: "v".repeat(43), nonce: "n".repeat(43), redirectUri: "https://vnx.si/auth/oauth/github/callback", now: NOW };
+const ACCESS = "gho_SECRET-ACCESS-TOKEN";
+const PROFILE = { id: 583231, login: "octocat", name: "The Octocat", email: "octocat@github.example", avatar_url: "https://avatars.example/u/583231" };
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const tokenOk = () => json({ access_token: ACCESS, token_type: "bearer", scope: "", refresh_token: "ghr_SECRET-REFRESH" });
+const redirect = (status = 302) => new Response(null, { status, headers: { location: "https://evil.example/x" } });
+
+type Call = { url: string; init: RequestInit };
+/** Answers the n-th fetch with the n-th responder; a call beyond the list fails the test. */
+function stubFetch(...responders: Array<() => Response | Promise<Response>>) {
+  const calls: Call[] = [];
+  const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init: init ?? {} });
+    const respond = responders[calls.length - 1];
+    if (!respond) throw new Error(`unexpected fetch #${calls.length}`);
+    return respond();
+  }) as typeof fetch;
+  return { fn, calls };
+}
+const client = (fn: typeof fetch) => new GithubClient("client-id", "client-secret", fn);
+const headersOf = (call: Call | undefined) => (call?.init.headers ?? {}) as Record<string, string>;
+const run = (profile: unknown) => {
+  const { fn, calls } = stubFetch(tokenOk, () => json(profile));
+  return client(fn).exchange(INPUT).then((result) => ({ result, calls }));
+};
+
+describe("GithubClient requests (decision 3 (b), F1)", () => {
+  it("exchanges the code at the constant token URL, then reads the profile once at the constant user URL", async () => {
+    expect([GITHUB_TOKEN_URL, GITHUB_USER_URL]).toEqual(["https://github.com/login/oauth/access_token", "https://api.github.com/user"]);
+    const { calls } = await run(PROFILE);
+    expect(calls).toHaveLength(2);
+    const [token, user] = calls;
+
+    expect(token?.url).toBe(GITHUB_TOKEN_URL);
+    expect(token?.init.method).toBe("POST");
+    expect(token?.init.redirect).toBe("manual");
+    expect(token?.init.signal).toBeInstanceOf(AbortSignal);
+    expect(headersOf(token)).toMatchObject({ accept: "application/json", "content-type": "application/x-www-form-urlencoded" });
+    expect(Object.fromEntries(new URLSearchParams(String(token?.init.body)))).toEqual({
+      client_id: "client-id",
+      client_secret: "client-secret",
+      code: "auth-code",
+      redirect_uri: INPUT.redirectUri,
+      code_verifier: INPUT.verifier,
+    });
+
+    expect(user?.url).toBe(GITHUB_USER_URL);
+    expect(user?.init.method).toBe("GET");
+    expect(user?.init.redirect).toBe("manual");
+    expect(user?.init.signal).toBeInstanceOf(AbortSignal);
+    expect(user?.init.body).toBeUndefined();
+    expect(headersOf(user)).toEqual({ authorization: `Bearer ${ACCESS}`, accept: "application/vnd.github+json", "user-agent": "vnx.si", "x-github-api-version": "2022-11-28" });
+  });
+
+  it("sends the access token only in the Authorization header of the profile call, nowhere in the token call", async () => {
+    const { calls } = await run(PROFILE);
+    const [token, user] = calls;
+    expect(JSON.stringify({ url: token?.url, init: { ...token?.init, body: String(token?.init.body), signal: undefined } })).not.toContain(ACCESS);
+    expect(user?.url).not.toContain(ACCESS);
+    expect(JSON.stringify(headersOf(user)).split(ACCESS)).toHaveLength(2);
+  });
+
+  it("builds options the workerd runtime accepts for both calls: a Request made from each captured call does not throw", async () => {
+    const { calls } = await run(PROFILE);
+    expect(calls).toHaveLength(2);
+    for (const call of calls) expect(() => new Request(call.url, call.init), call.url).not.toThrow();
+  });
+
+  it("treats any redirect on either call as a failure and goes no further", async () => {
+    for (const status of [301, 302, 307]) {
+      const first = stubFetch(() => redirect(status));
+      expect(await client(first.fn).exchange(INPUT), `token ${status}`).toEqual({ ok: false, reason: "token_request" });
+      expect(first.calls, `token ${status}`).toHaveLength(1);
+      const second = stubFetch(tokenOk, () => redirect(status));
+      expect(await client(second.fn).exchange(INPUT), `user ${status}`).toEqual({ ok: false, reason: "profile_request" });
+      expect(second.calls, `user ${status}`).toHaveLength(2);
+    }
+  });
+
+  it("passes the injected fetch through getOAuthProvider", async () => {
+    const env = { ...testEnv, OAUTH_DRIVER: undefined, GITHUB_CLIENT_ID: "hid", GITHUB_CLIENT_SECRET: "hsecret" } as Bindings;
+    const { fn, calls } = stubFetch(() => json({}, 500));
+    const provider = getOAuthProvider(env, "github", fn);
+    expect(provider).toBeInstanceOf(GithubClient);
+    expect(await provider?.exchange(INPUT)).toEqual({ ok: false, reason: "token_request" });
+    expect(calls.map((c) => c.url)).toEqual([GITHUB_TOKEN_URL]);
+  });
+});
+
+describe("GithubClient result (ADR-012 §1, decision 12, F2, Review Focus 9)", () => {
+  it("returns the numeric id as the subject and the login as the label, and nothing else", async () => {
+    const { result } = await run(PROFILE);
+    expect(result).toEqual({ ok: true, identity: { subject: "583231", label: "octocat" } });
+    const text = JSON.stringify(result);
+    for (const secret of [ACCESS, "ghr_SECRET-REFRESH", "client-secret", "auth-code", "The Octocat", "octocat@github.example", "avatars.example"]) expect(text, secret).not.toContain(secret);
+  });
+
+  it("keys the account on the id: a renamed login keeps the subject and changes only the label", async () => {
+    const before = await run(PROFILE);
+    const after = await run({ ...PROFILE, login: "renamed-cat" });
+    expect(before.result).toEqual({ ok: true, identity: { subject: "583231", label: "octocat" } });
+    expect(after.result).toEqual({ ok: true, identity: { subject: "583231", label: "renamed-cat" } });
+  });
+
+  it("accepts the largest safe id, and a 39-character login", async () => {
+    const login = `a${"b".repeat(38)}`;
+    expect((await run({ id: Number.MAX_SAFE_INTEGER, login })).result).toEqual({ ok: true, identity: { subject: "9007199254740991", label: login } });
+  });
+
+  it("refuses a missing, non-numeric or unsafe id (profile_response), and never falls back to the login", async () => {
+    for (const id of [undefined, null, "583231", "octocat", 0, -5, 1.5, 9007199254740993, Number.NaN, true, [583231]]) {
+      const { result } = await run({ ...PROFILE, id });
+      expect(result, String(id)).toEqual({ ok: false, reason: "profile_response" });
+    }
+  });
+
+  it("refuses a login that is missing, empty, too long or not a plain GitHub login (profile_response)", async () => {
+    for (const login of [undefined, null, 42, "", " ", "a".repeat(40), "octo cat", "octo/cat", "octo?x=1", "octo#", "-octocat", "octo\ncat", "@octocat", "octocat[bot]", "é"]) {
+      const { result } = await run({ ...PROFILE, login });
+      expect(result, JSON.stringify(login)).toEqual({ ok: false, reason: "profile_response" });
+    }
+  });
+
+  it("always gives a label the database accepts (1-254 characters)", async () => {
+    const user = await ensureUser("github-label@vnx.si");
+    const { result } = await run({ id: 7001, login: "x".repeat(39) });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.identity.label.length).toBeGreaterThanOrEqual(1);
+    expect(result.identity.label.length).toBeLessThanOrEqual(254);
+    expect((await linkIdentity(testEnv.DB, { userId: user.id, provider: "github", subject: result.identity.subject, label: result.identity.label, now: "2026-10-07T10:00:00.000Z" })).ok).toBe(true);
+  });
+});
+
+describe("GithubClient failures give fixed codes", () => {
+  it("maps a failed or non-2xx token request to token_request, without calling /user", async () => {
+    const cases: Array<() => Response | Promise<Response>> = [() => json({ error: "server" }, 500), () => json({}, 401), () => { throw new TypeError("network failure"); }];
+    for (const respond of cases) {
+      const { fn, calls } = stubFetch(respond);
+      expect(await client(fn).exchange(INPUT)).toEqual({ ok: false, reason: "token_request" });
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  it("maps an unreadable token response, or a 200 that carries an error or no access token, to token_response, without calling /user", async () => {
+    const cases: Array<() => Response> = [
+      () => new Response("access_token=abc&token_type=bearer", { status: 200 }),
+      () => json([1, 2]),
+      () => json({ error: "bad_verification_code", error_description: "The code passed is incorrect or expired." }),
+      () => json({ access_token: "" }),
+      () => json({ access_token: 5 }),
+      () => json({ token_type: "bearer" }),
+    ];
+    for (const respond of cases) {
+      const { fn, calls } = stubFetch(respond);
+      expect(await client(fn).exchange(INPUT)).toEqual({ ok: false, reason: "token_response" });
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  it("maps a failed or non-2xx profile request to profile_request", async () => {
+    const cases: Array<() => Response | Promise<Response>> = [() => json({ message: "Bad credentials" }, 401), () => json({}, 500), () => { throw new TypeError("network failure"); }];
+    for (const respond of cases) {
+      const { fn, calls } = stubFetch(tokenOk, respond);
+      expect(await client(fn).exchange(INPUT)).toEqual({ ok: false, reason: "profile_request" });
+      expect(calls).toHaveLength(2);
+    }
+  });
+
+  it("maps an unreadable or non-object profile to profile_response", async () => {
+    for (const respond of [() => new Response("<html>", { status: 200 }), () => json([PROFILE]), () => json("octocat"), () => json(null)]) {
+      const { fn } = stubFetch(tokenOk, respond);
+      expect(await client(fn).exchange(INPUT)).toEqual({ ok: false, reason: "profile_response" });
+    }
+  });
+
+  it("logs nothing on success or failure, and no failure text carries a token (Review Focus 9)", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined));
+    try {
+      const runs: Array<Array<() => Response>> = [[tokenOk, () => json(PROFILE)], [() => json({}, 500)], [() => json({ error: "bad_verification_code" })], [tokenOk, () => json({}, 401)], [tokenOk, () => json({ id: "x", login: "y" })]];
+      for (const responders of runs) {
+        const { fn } = stubFetch(...responders);
+        const result = await client(fn).exchange(INPUT);
+        expect(JSON.stringify(result)).not.toContain(ACCESS);
+      }
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-github.test.ts` → FAIL (`auth/oauth/github.ts` chưa có).
+
+- [ ] **Step 2: Mã lỗi và adapter**
+
+`apps/web/src/auth/oauth/provider.ts`: đổi dòng `ExchangeFailure` thành
+
+```ts
+export type ExchangeFailure = "token_request" | "token_response" | "profile_request" | "profile_response" | `id_token_${IdTokenFailure}`;
+```
+
+và thêm vào comment ngay trên đó: "`profile_*` is GitHub's `GET /user` (plain OAuth 2.0 has no ID token)".
+
+`apps/web/src/auth/oauth/github.ts`:
+
+```ts
+import type { ExchangeFailure, ExchangeInput, ExchangeResult, ProviderClient } from "./provider.ts";
+
+/** Constants, never built from input (decision 3 (b)). */
+export const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
+export const GITHUB_USER_URL = "https://api.github.com/user";
+
+const TIMEOUT_MS = 8000;
+/** A GitHub login: letters, digits and hyphens, at most 39 characters. Stricter than the label CHECK, so it can never put `/`, `?` or `#` in a profile link. */
+const LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * GitHub: OAuth 2.0 authorization code, then one `GET /user`. The account is the numeric `id` (never `login`, which can change);
+ * the label is the `login`, refreshed at every sign-in (ADR-012 §1, §5). The access token lives in one local variable between the
+ * two calls, goes only into the second call's Authorization header, and is never returned, stored or logged. Nothing else of
+ * the profile (name, e-mail, avatar) is read. No logging here: callers log the fixed failure code.
+ */
+export class GithubClient implements ProviderClient {
+  readonly provider = "github" as const;
+
+  constructor(
+    readonly clientId: string,
+    private readonly clientSecret: string,
+    private readonly fetchFn: typeof fetch,
+  ) {}
+
+  async exchange(input: ExchangeInput): Promise<ExchangeResult> {
+    const fail = (reason: ExchangeFailure): ExchangeResult => ({ ok: false, reason });
+    const fetchFn = this.fetchFn;
+
+    let accessToken: string;
+    try {
+      const res = await fetchFn(GITHUB_TOKEN_URL, {
+        method: "POST",
+        redirect: "manual",
+        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+        body: new URLSearchParams({
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          code: input.code,
+          redirect_uri: input.redirectUri,
+          code_verifier: input.verifier,
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) return fail("token_request");
+      let body: unknown;
+      try {
+        body = await res.json();
+      } catch {
+        return fail("token_response");
+      }
+      // GitHub answers 200 with {"error": …} for a bad code: no access_token, so token_response.
+      const token = isRecord(body) ? body.access_token : undefined;
+      if (typeof token !== "string" || token === "") return fail("token_response");
+      accessToken = token;
+    } catch {
+      return fail("token_request");
+    }
+
+    let profile: unknown;
+    try {
+      const res = await fetchFn(GITHUB_USER_URL, {
+        method: "GET",
+        redirect: "manual",
+        headers: { authorization: `Bearer ${accessToken}`, accept: "application/vnd.github+json", "user-agent": "vnx.si", "x-github-api-version": "2022-11-28" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) return fail("profile_request");
+      try {
+        profile = await res.json();
+      } catch {
+        return fail("profile_response");
+      }
+    } catch {
+      return fail("profile_request");
+    }
+
+    if (!isRecord(profile)) return fail("profile_response");
+    const { id, login } = profile;
+    if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return fail("profile_response");
+    if (typeof login !== "string" || !LOGIN.test(login)) return fail("profile_response");
+    return { ok: true, identity: { subject: String(id), label: login } };
+  }
+}
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-github.test.ts` → các test thuần adapter PASS; test "passes the injected fetch through getOAuthProvider" còn FAIL (factory chưa nối, Step 3–4).
+
+- [ ] **Step 3: Test cấu hình (fail)**
+
+Sửa `apps/web/test/auth/oauth-providers.test.ts`:
+- thêm `import { GithubClient } from "../../src/auth/oauth/github.ts";`;
+- `REAL` thêm `GITHUB_CLIENT_ID: "hid", GITHUB_CLIENT_SECRET: "hsecret"`;
+- test "runs with the fake driver and no client credentials" lặp thêm hai khóa:
+
+```ts
+    for (const key of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"] as const) expect(testEnv[key] ?? "", key).toBe("");
+```
+
+- thay test "has no GitHub adapter yet (Task 4) …" bằng:
+
+```ts
+  it("returns the GitHub adapter when both credentials exist, and nothing when either is missing or blank", () => {
+    const env = withEnv(REAL);
+    expect(getOAuthProvider(env, "github")).toBeInstanceOf(GithubClient);
+    expect(getOAuthProvider(env, "github")).toMatchObject({ provider: "github", clientId: "hid" });
+    expect(isProviderConfigured(env, "github")).toBe(true);
+    for (const over of [{ GITHUB_CLIENT_ID: undefined }, { GITHUB_CLIENT_ID: "" }, { GITHUB_CLIENT_ID: "  " }, { GITHUB_CLIENT_SECRET: undefined }, { GITHUB_CLIENT_SECRET: " " }]) {
+      const broken = withEnv({ ...REAL, ...over });
+      expect(oauthCredentials(broken, "github"), JSON.stringify(over)).toBeNull();
+      expect(getOAuthProvider(broken, "github")).toBeNull();
+      expect(isProviderConfigured(broken, "github")).toBe(false);
+      expect(isProviderConfigured(broken, "google")).toBe(true);
+    }
+  });
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-providers.test.ts test/auth/oauth-github.test.ts` → FAIL (`GITHUB_CLIENT_*` chưa có trong `env.ts`/factory; kiểu chưa có).
+
+- [ ] **Step 4: Nối factory, env, vitest, ghi chú**
+
+`apps/web/src/env.ts`: thêm sau `GOOGLE_CLIENT_SECRET?: string;`
+
+```ts
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+```
+
+`apps/web/src/auth/oauth/index.ts`:
+- thêm `import { GithubClient } from "./github.ts";`;
+- `OAuthEnv` thêm `| "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET"`;
+- sửa comment của `oauthCredentials` thành `/** The provider's client id and secret, or null when either is missing or blank (decision 6). */` và thân:
+
+```ts
+  const [id, secret] =
+    provider === "google"
+      ? [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET]
+      : provider === "github"
+        ? [env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET]
+        : [env.LINKEDIN_CLIENT_ID, env.LINKEDIN_CLIENT_SECRET];
+```
+
+- `getOAuthProvider`: thay hai dòng cuối bằng
+
+```ts
+  const credentials = oauthCredentials(env, provider);
+  if (!credentials) return null;
+  if (provider === "github") return new GithubClient(credentials.clientId, credentials.clientSecret, fetchFn);
+  return new OidcClient(provider, credentials.clientId, credentials.clientSecret, fetchFn);
+```
+
+`apps/web/vitest.config.ts`: trong khối ghim rỗng, thêm giữa Google và LinkedIn
+
+```ts
+            GITHUB_CLIENT_ID: "",
+            GITHUB_CLIENT_SECRET: "",
+```
+
+`apps/web/wrangler.jsonc`: ghi chú OAuth đổi thành (vẫn không chứa chuỗi `OAUTH_DRIVER`, không có biến nào):
+
+```jsonc
+  // OAuth sign-in (EPIC 26, ADR-012): the client ids and secrets are wrangler secrets, never vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  // GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET. Local dev: apps/web/.dev.vars. A provider missing
+  // either of its two is off whatever its feature flag says. The test driver for OAuth is a vitest binding only and never appears here.
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-github.test.ts test/auth/oauth-providers.test.ts test/auth/oauth-oidc.test.ts` → PASS.
+
+- [ ] **Step 5: Kiểm toàn bộ và commit**
+
+```
+npm run typecheck -w apps/web
+npm test
+```
+
+Kỳ vọng: typecheck sạch (`ExchangeFailure` thêm hai mã không làm gãy nơi nào, vì chưa có route nào `switch` trên nó); toàn bộ test xanh, gồm test quét tĩnh của Task 3 (`src/auth/oauth/*.ts` không `console.`, Hono, `db/`; chỉ `index.ts` import `fake.ts`), `test/architecture.test.ts` và `test/i18n/parity.test.ts` (không khóa mới). `git diff --stat -- package.json package-lock.json apps/web/package.json` rỗng.
+
+```
+git add apps/web/src/auth/oauth/github.ts apps/web/src/auth/oauth/provider.ts apps/web/src/auth/oauth/index.ts apps/web/src/env.ts apps/web/vitest.config.ts apps/web/wrangler.jsonc apps/web/test/auth/oauth-github.test.ts apps/web/test/auth/oauth-providers.test.ts
+git commit -m "feat(web): GitHub OAuth adapter (VNX-2603c)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận của task (mỗi dòng một lệnh):**
+
+| # | Tiêu chí | Lệnh |
+|---|---|---|
+| 1 | Hai lần gọi, hai URL hằng số; token call đúng năm trường form có `code_verifier`, `Accept: application/json`; user call có `Authorization: Bearer`, `User-Agent`, không thân; cả hai `redirect: "manual"` và timeout | `npm test -w apps/web -- test/auth/oauth-github.test.ts` |
+| 2 | Mọi 3xx ở một trong hai lần gọi là thất bại và dừng (đếm số `fetch`); `new Request(url, init)` không ném lỗi cho cả hai | `npm test -w apps/web -- test/auth/oauth-github.test.ts` |
+| 3 | `subject` là `id` số dạng chuỗi, đổi `login` không đổi `subject`; `id` thiếu, chuỗi, 0, âm, thập phân, không an toàn bị từ chối | `npm test -w apps/web -- test/auth/oauth-github.test.ts` |
+| 4 | `label` là `login`; `login` thiếu, rỗng, quá 39 ký tự hoặc có ký tự ngoài `[A-Za-z0-9-]` bị từ chối; `label` hợp lệ qua `linkIdentity` | `npm test -w apps/web -- test/auth/oauth-github.test.ts` |
+| 5 | Kết quả không chứa access token, refresh token, `name`, `email`, avatar; token chỉ ở header của lần gọi thứ hai; không `console.*`; lỗi là mã cố định (`token_*`, `profile_*`) | `npm test -w apps/web -- test/auth/oauth-github.test.ts` |
+| 6 | `getOAuthProvider(env, "github")` trả `GithubClient` khi đủ hai secret, `null` khi thiếu hoặc trống; `testEnv` không có credential nào, kể cả GitHub | `npm test -w apps/web -- test/auth/oauth-providers.test.ts` |
+| 7 | Không dependency mới | `git diff --stat -- package.json package-lock.json apps/web/package.json` rỗng |
+| 8 | Typecheck và toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
+
+**Kích cỡ ước tính:** mã nguồn ~110 dòng (`github.ts` ~85, `index.ts`/`env.ts`/`provider.ts`/vitest/wrangler ~25), test ~270 dòng, không có locale. Dưới 600 dòng, không cần tách.
+
+**Nghĩa vụ cho Task 11:** `label` của identity GitHub luôn là một login hợp lệ (bất biến do Task này giữ), nên huy hiệu có thể dựng `https://github.com/<label>` mà không cần kiểm lại; Task 11 vẫn mã hóa an toàn khi render.
+
+#### Kết quả review Task 4 (2026-10-07): Owner duyệt trực tiếp ("approve"); lượt review plan của Opus bị ngắt khi phiên khởi động lại. Các câu hỏi cấp plan (regex `login` so với luật username GitHub, GitHub có nhận `code_verifier` không, giá trị `X-GitHub-Api-Version`) chuyển sang review code của Task 4.
