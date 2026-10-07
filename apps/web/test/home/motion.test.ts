@@ -129,8 +129,26 @@ describe("CSS motion (spec §9: reduced motion has no animation)", () => {
     const reduce = atBlocks(css, "media").filter((b) => /prefers-reduced-motion:\s*reduce/.test(b.prelude)).map((b) => b.body).join("\n");
     expect(reduce).toMatch(/\.chart-data summary::after\s*\{[^}]*transition:\s*none/);
   });
+  it("every reduce override of a rule defined later is effective (!important), so the cascade cannot undo it", async () => {
+    const css = await text("/assets/app.css");
+    const reduce = atBlocks(css, "media").filter((b) => /prefers-reduced-motion:\s*reduce/.test(b.prelude)).map((b) => b.body).join("\n");
+    expect(reduce).toMatch(/\.home-marquee \.home-live\s*\{[^}]*flex-wrap:\s*wrap\s*!important/);
+    expect(reduce).toMatch(/\.home-marquee-track\s*\{[^}]*width:\s*auto\s*!important/);
+    expect(reduce).toMatch(/\.home-marquee-track > \[aria-hidden="true"\]\s*\{[^}]*display:\s*none\s*!important/);
+    expect(reduce).toMatch(/\.chart-data summary::after\s*\{[^}]*transition:\s*none\s*!important/);
+  });
+  it("colours only the Numbers label, never the digits", async () => {
+    const css = await text("/assets/app.css");
+    expect(css).not.toMatch(/\.home-numbers span\s*\{/);
+    expect(css).toMatch(/\.home-numbers li > span\s*\{[^}]*color:\s*var\(--text-2\)/);
+  });
+  it("home.js leaves the printed number alone until counting starts, and lets touch keep the tooltip", async () => {
+    const js = await text("/assets/home.js");
+    expect(js.match(/textContent = nf\.format\(0\)/g) ?? []).toHaveLength(0);
+    expect(js).toContain('pointerType !== "touch"');
+  });
   it("never hides a chart or number in a plain rule (no opacity 0, hidden or scale(0))", async () => {
     const css = await text("/assets/app.css");
-    for (const m of css.matchAll(/([^{}]*\.(?:chart-bar|chart-line|home-numbers)[^{}]*)\{([^}]*)\}/g)) expect(m[2], m[1]).not.toMatch(/opacity\s*:\s*0\b|visibility\s*:\s*hidden|scale\(0/);
+    for (const m of css.matchAll(/([^{}]*\.(?:chart-bar|chart-line|home-numbers)[^{}]*)\{([^}]*)\}/g)) expect(m[2], m[1]).not.toMatch(/opacity\s*:\s*0\b|visibility\s*:\s*hidden|scale[XY]?\(0/);
   });
 });
