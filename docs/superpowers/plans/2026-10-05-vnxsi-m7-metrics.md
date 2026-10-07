@@ -6150,13 +6150,937 @@ Diff ước ~360 dòng không tính locale (mã ~215, test ~145; locale +115 dò
 
 ---
 
-### Task 8: VNX-0704 — Animation, chart, tooltip, bảng dữ liệu, reduced-motion
+### Task 8a: VNX-0704a — Chart SVG, legend, bảng dữ liệu và bảng màu có validator
 
-**Scope:** (chặn bởi (a), sau Task 7.) CSS scroll-driven animation với fallback hiện ngay; cột chart mọc từ baseline, đường chart/sparkline vẽ dần; con số đếm lên, dải Live chạy ngang, thẻ hero tự xoay ~4 giây, dừng khi hover/focus; JS client nhỏ (đếm số, xoay thẻ, tooltip) không thêm thư viện, đi qua `public/assets` hiện có (cùng cách `Deck.tsx`/script của landing); chart SVG tự dựng (bảng màu `#2a78d6` request, `#eb6834` product, dark mode bước màu riêng chạy lại validator; chữ luôn màu chữ), legend cho chart 2 chuỗi, `<details>` bảng dữ liệu tương đương cho mọi chart; `@media (prefers-reduced-motion: reduce)` tắt toàn bộ animation, số hiện giá trị cuối, thẻ không tự xoay.
+Đã đối chiếu code `8d6237c` (2026-10-07). Task 8 cũ vượt ~600 dòng nên tách: **8a** (chart tĩnh, dùng được khi không JS) và **8b** (animation, JS, tooltip, reduced-motion). Bảng "Thứ tự task" ở header giữ một dòng "8"; thực thi 8a rồi 8b, cả hai phụ thuộc Task 7 và chạy trước Task 10.
 
-**Files (dự kiến):** Modify `public/assets/app.css` (hoặc file CSS hiện hành của design system), Create `public/assets/home.js`, `src/views/home/Chart.tsx`; Test `test/home/motion.test.ts` (CSS có `prefers-reduced-motion`; không `autoplay` khi reduced; chart có `<details>` bảng; mọi chart có legend khi 2 chuỗi), `test/design/assets.test.ts` (giữ xanh).
+**Files:**
+- Create: `apps/web/src/views/chart-geometry.ts` (hình học thuần: `barLayout`, `lineLayout`, `linePoints`, `MARKER_MIN_STEP`). Tên khác `Chart.tsx` hẳn để hệ file không phân biệt hoa thường không nhầm. Nằm ngoài `views/home/` vì chứa số; test "home views hold no digit" chỉ quét `views/home/*.tsx`.
+- Create: `apps/web/src/views/Chart.tsx` (`BarChart`, `LineChart`, `ChartData`)
+- Modify: `apps/web/src/views/home/MarketPulse.tsx` (bọc hai bảng bằng chart + `<details>`; nhãn tuần theo locale)
+- Modify: `apps/web/src/views/home/Trending.tsx` (thêm `pathLength` cho polyline sparkline)
+- Modify: `apps/web/src/views/format.ts` (`PATH_LENGTH`, `weekStart`, `formatWeek`)
+- Modify: `apps/web/public/assets/app.css` (token `--chart-blue`/`--chart-orange` ở light và CẢ HAI khối dark; luật `.chart*`)
+- Modify: `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts` (1 key)
+- Test: `apps/web/test/home/chart.test.ts`, `apps/web/test/home/chart-colours.test.ts`; giữ xanh `test/home/{home,blocks-b,separable}`, `test/design/assets.test.ts`.
 
-**Acceptance:** spec §9 "Homepage với `prefers-reduced-motion` không có animation" kiểm bằng test CSS; `grep -rn "<script" apps/web/src/views/home` chỉ trỏ một file asset cùng gốc; kích thước JS ≤ ngân sách của `test/design/assets.test.ts`; không thêm dependency (`git diff package.json` rỗng). Diff ~450 dòng.
+Ngoài phạm vi (8b): mọi animation, `home.js`, tooltip, đếm số, dải Live chạy ngang, `prefers-reduced-motion` cho chart. Không thêm `<script>` ở task này.
+
+**Về "thẻ hero tự xoay ~4 giây" trong stub:** KHÔNG làm. Deck hero của landing đã xoay mỗi 4 giây, dừng khi hover/focus, tắt khi reduced-motion trong `public/assets/landing.js` (VNX-0709, có test `assets.test.ts` AC10/AC11). Làm lại sẽ thành hai bộ hẹn giờ. 8b chỉ thêm test khẳng định `home.js` không có `setInterval`.
+
+**Interfaces:**
+- Consumes (code thật): `MarketPulse` props `{ locale, categories: CategoryRow[] | null, scarcest, growth: GrowthPoint[] | null }`; `REQUEST_DAYS`; `CATEGORY_KEY`; `formatCount`, `SPARK_VIEWBOX`, `sparkPoints` (`views/format.ts`); `translator`; hai bảng `table.data[data-chart="requests-by-category"|"growth"]` hiện có (giữ nguyên làm bảng tương đương); `seedSnapshot`, `getHome`, `block` (`test/home/blocks.ts`).
+- Produces:
+  - `format.ts`: `PATH_LENGTH = 100`; `weekStart(week: string): Date | null` (thứ Hai UTC của tuần ISO `YYYY-Www`); `formatWeek(locale, week, year = false): string` (ngày bắt đầu tuần theo locale, vd en "Sep 28"; chuỗi không phải tuần ISO thì trả nguyên); `formatWeeks(locale, weeks): string[]` (thêm năm vào mọi nhãn khi dãy tuần qua hai năm).
+  - `chart-geometry.ts`: `CHART_WIDTH`, `BAR_HEIGHT`, `MARKER_MIN_STEP`, `barLayout(values)`, `lineLayout(series)`, `linePoints(points)`.
+  - `Chart.tsx`: `type Tone = "blue" | "orange"`, `type Series = { tone: Tone; label: string; mark?: "circle" | "square" }`, `BarChart`, `LineChart`, `ChartData`.
+  - Móc cho 8b (không đổi sau này): `[data-tip]` trên `<g class="chart-group">`, class `chart-bar`, `chart-line`, `chart-dot`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Chart tĩnh render phía server, không JS.** Hình học ở `chart-geometry.ts` thuần (có test số); màu ở CSS qua class tone; không `style=`; không `fill=`/`stroke=` trên `<text>` (chữ luôn `fill: var(--text)`).
+2. **Bar ngang nhóm**, nhãn category nằm TRÊN từng nhóm (không cột nhãn trái) để nhãn dài của vi/zh không bị cắt ở 320 px. Trục dọc bên trái là baseline; 8b làm bar mọc từ trục này (`scaleX`).
+3. **Hai màu cố định** `--chart-blue: #2a78d6` (request), `--chart-orange: #eb6834` (product) ở light; dark có bước riêng `#5b9bf0` và `#f58a5c`, đặt ở cả `@media (prefers-color-scheme: dark)` lẫn `:root[data-theme="dark"]`. Chart nằm trong `.chart` có `background: var(--surface)` vì tương phản `#eb6834` trên `--bg` (#f4f5f7) chỉ ~2.9:1 (dưới 3:1), còn trên `--surface` ~3.2:1. Validator (test) tính tương phản đồ họa ≥ 3:1 với `--surface` ở cả 3 khối token và khoảng cách màu ≥ 100 (thang 0–255) dưới mô phỏng deuteranopia/protanopia (ma trận Machado, mức 1.0). Giá trị dark là ước tính (~6:1 và ~7:1 trên `#111827`); nếu validator đỏ, chỉnh bước dark, không hạ ngưỡng.
+4. **Chart tăng trưởng có hai chuỗi products/builders nhưng bảng màu chỉ gán request=xanh, product=cam.** Chọn: products = cam, builders = xanh, phân biệt thêm bằng hình dấu (products vuông, builders tròn) và legend. Xanh nghĩa "request" ở chart 1 và "builders" ở chart 2; mỗi chart có legend riêng nên không nhập nhằng. Reviewer duyệt.
+5. **Legend chỉ khi ≥ 2 chuỗi** (cả hai chart đều có). Nhãn legend tái dùng key sẵn có (`home.pulse.requests`, `home.pulse.products`, `home.numbers.products`, `home.numbers.builders`): nhãn dữ liệu, không câu mới.
+6. **Bảng dữ liệu là `<details>` đóng**, chứa đúng bảng 7b (giữ `data-chart`, `caption`, `th scope`). Tooltip (8b) chỉ dành cho con trỏ/chạm; bàn phím và trình đọc màn hình dùng bảng, nên SVG là `role="img"` có `aria-label` = tiêu đề chart và KHÔNG có phần tử focus được bên trong.
+7. **Nhãn tuần (theo yêu cầu review 7b):** bảng và trục x không in `2026-W40` thô mà in ngày bắt đầu tuần theo locale qua `formatWeeks` (Intl, `timeZone: "UTC"`); khi dãy tuần qua hai năm, mọi nhãn kèm năm. Không key mới, không câu mới; tiêu đề cột vẫn là `home.pulse.week` có sẵn. `GrowthPoint.week` ở domain giữ nguyên `YYYY-Www` (khóa dữ liệu).
+8. **Sparkline** ở Trending chỉ thêm `pathLength={PATH_LENGTH}` để 8b vẽ dần bằng `stroke-dasharray`, không cần JS đo. `PATH_LENGTH` ở `format.ts` để file `home/*.tsx` không chứa chữ số.
+9. **Chart không biết khối cha:** không class `lp-`/`container`; kích thước theo `width: 100%` của khung chứa (homepage ba cột dùng lại được).
+
+**i18n (1 key mới, nhãn nút, không chữ số):**
+
+| Key | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `home.chart.table` | Show data as a table | Xem dữ liệu dạng bảng | 以表格显示数据 | 以表格顯示資料 |
+
+Thêm sau `"home.pulse.week"` ở cả 4 file. Nhãn trục, legend, tuần là nhãn dữ liệu (key sẵn có hoặc Intl).
+
+- [ ] **Step 1: Viết test hình học, nhãn tuần, chart (đỏ)**
+
+`apps/web/test/home/chart.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { LOCALES } from "../../src/i18n/locales.ts";
+import { t } from "../../src/i18n/t.ts";
+import { BAR_HEIGHT, CHART_WIDTH, MARKER_MIN_STEP, barLayout, lineLayout } from "../../src/views/chart-geometry.ts";
+import { PATH_LENGTH, formatWeek, formatWeeks, weekStart } from "../../src/views/format.ts";
+import { CATEGORY_KEY } from "../../src/views/labels.ts";
+import { block, getHome, seedSnapshot } from "./blocks.ts";
+
+describe("barLayout", () => {
+  it("scales every bar to the largest value, keeps zero at width 0, and never overlaps groups", () => {
+    const g = barLayout([[4, 1], [2, 0]]);
+    const full = g.rows[0]!.bars[0]!.width;
+    expect(full).toBeGreaterThan(0);
+    expect(full).toBeLessThan(CHART_WIDTH);
+    expect(g.rows[1]!.bars[0]!.width).toBeCloseTo(full / 2, 0);
+    expect(g.rows[1]!.bars[1]!.width).toBe(0);
+    expect(g.rows[1]!.top).toBeGreaterThanOrEqual(g.rows[0]!.top + g.rows[0]!.height);
+    expect(g.rows[0]!.bars[1]!.y).toBeGreaterThanOrEqual(g.rows[0]!.bars[0]!.y + BAR_HEIGHT);
+    const last = g.rows[1]!;
+    expect(g.height).toBeGreaterThan(last.top + last.height);
+  });
+  it("an all-zero or empty input does not divide by zero", () => {
+    expect(barLayout([[0, 0]]).rows[0]!.bars.map((b) => b.width)).toEqual([0, 0]);
+    expect(barLayout([]).rows).toEqual([]);
+  });
+});
+
+describe("lineLayout", () => {
+  it("puts the maximum on the top tick and zero on the baseline, x evenly spaced", () => {
+    const g = lineLayout([[1, 2, 4, 8], [0, 1, 1, 2]]);
+    const [zero, max] = g.ticks;
+    expect(zero!.value).toBe(0);
+    expect(max!.value).toBe(8);
+    expect(g.lines[0]![3]!.y).toBe(max!.y);
+    expect(g.lines[1]![0]!.y).toBe(zero!.y);
+    expect(g.lines[0]).toHaveLength(4);
+    g.x.slice(1).forEach((x, i) => expect(Math.abs(x - g.x[i]! - g.step)).toBeLessThanOrEqual(0.1));
+  });
+  it("a dense series is below the marker step, so only the endpoints get a marker", () => {
+    expect(lineLayout([Array<number>(40).fill(1)]).step).toBeLessThan(MARKER_MIN_STEP);
+    expect(lineLayout([[1, 2, 3, 4]]).step).toBeGreaterThanOrEqual(MARKER_MIN_STEP);
+  });
+  it("a single point does not divide by zero", () => {
+    expect(Number.isFinite(lineLayout([[3]]).lines[0]![0]!.x)).toBe(true);
+  });
+});
+
+describe("week labels", () => {
+  it("weekStart is the Monday of the ISO week, including a week that starts in the previous year", () => {
+    expect(weekStart("2026-W40")!.toISOString().slice(0, 10)).toBe("2026-09-28");
+    expect(weekStart("2026-W01")!.toISOString().slice(0, 10)).toBe("2025-12-29");
+    expect(weekStart("2027-W01")!.toISOString().slice(0, 10)).toBe("2027-01-04");
+    expect(weekStart("nonsense")).toBeNull();
+  });
+  it("formatWeek prints a locale date, never the raw key, and falls back to the input", () => {
+    expect(formatWeek("en", "2026-W40")).toBe("Sep 28");
+    for (const l of LOCALES) expect(formatWeek(l, "2026-W40"), l).not.toContain("W40");
+    expect(formatWeek("en", "bad")).toBe("bad");
+  });
+  it("formatWeeks adds the year to every label only when the weeks span two years", () => {
+    expect(formatWeeks("en", ["2026-W40", "2026-W41"])).toEqual(["Sep 28", "Oct 5"]);
+    const across = formatWeeks("en", ["2026-W52", "2027-W01"]);
+    expect(across[0]).toContain("2026");
+    expect(across[1]).toContain("2027");
+    expect(formatWeeks("en", [])).toEqual([]);
+  });
+});
+
+describe("Market pulse charts on /", () => {
+  const svgs = (html: string) => html.match(/<svg class="chart-svg"[\s\S]*?<\/svg>/g)!;
+  const rowsOf = (html: string, kind: string) => html.match(new RegExp(`data-chart="${kind}"[\\s\\S]*?</table>`))![0].match(/<th scope="row">/g)!.length;
+
+  it("draws two SVG charts, each with a legend and its table inside a closed <details>", async () => {
+    await seedSnapshot();
+    const html = block(await getHome(), "home-pulse");
+    expect(svgs(html)).toHaveLength(2);
+    expect(html.match(/<ul class="chart-legend">/g)).toHaveLength(2);
+    for (const kind of ["requests-by-category", "growth"]) {
+      expect(html).toMatch(new RegExp(`<details class="chart-data">\\s*<summary>[^<]+</summary>[\\s\\S]*?<table class="data" data-chart="${kind}"`));
+    }
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
+  });
+  it("each svg is role=img with a label, holds no focusable element, no style=, and no colour on <text>", async () => {
+    await seedSnapshot();
+    for (const svg of svgs(block(await getHome(), "home-pulse"))) {
+      expect(svg).toMatch(/aria-label="[^"]+"/);
+      expect(svg).toContain('role="img"');
+      expect(svg).not.toMatch(/tabindex|\sstyle=|<a\b|<button/);
+      expect(svg).not.toMatch(/<text[^>]*\s(fill|stroke)=/);
+    }
+  });
+  it("the bar chart has one group per category; the growth chart two lines and one dot per week and series", async () => {
+    await seedSnapshot();
+    const html = block(await getHome(), "home-pulse");
+    const [bars, line] = svgs(html);
+    expect(bars!.match(/class="chart-group"/g)).toHaveLength(rowsOf(html, "requests-by-category"));
+    for (const key of ["crm", "ecommerce", "other"] as const) expect(bars).toContain(t("en", CATEGORY_KEY[key]));
+    expect(line!.match(/class="chart-cross"/g)).toHaveLength(rowsOf(html, "growth"));
+    expect(line!.match(/class="chart-line /g)).toHaveLength(2);
+    expect(line!.match(/class="chart-dot /g)).toHaveLength(rowsOf(html, "growth") * 2); // 4 weeks: step is above MARKER_MIN_STEP, so every point has a marker
+    expect(line).toContain(`pathLength="${PATH_LENGTH}"`);
+  });
+  it("the growth table and axis show a localised week start, not the ISO key", async () => {
+    await seedSnapshot();
+    const html = block(await getHome(), "home-pulse");
+    expect(html).not.toMatch(/\d{4}-W\d{2}/);
+    expect(html).toContain("Sep 28");
+  });
+  it("the Trending sparkline carries pathLength", async () => {
+    await seedSnapshot();
+    expect(block(await getHome(), "home-trending")).toMatch(new RegExp(`<polyline[^>]*pathLength="${PATH_LENGTH}"`));
+  });
+});
+```
+
+(`seedSnapshot` có tuần bắt đầu `2026-09-14 … 2026-10-05`, nên tuần ISO `2026-W40` bắt đầu 28/9 nằm trong bảng.)
+
+`apps/web/test/home/chart-colours.test.ts` (validator màu):
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { testEnv } from "../helpers.ts";
+
+const css = await (await createApp().request(new Request("https://vnx.si/assets/app.css"), undefined, testEnv)).text();
+const light = /:root\s*\{([^}]*)\}/.exec(css)![1]!;
+const darkMedia = /prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([^}]*)\}/.exec(css)![1]!;
+const darkAttr = /:root\[data-theme="dark"\]\s*\{([^}]*)\}/.exec(css)![1]!;
+const tok = (block: string, name: string): string => new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})\\b`).exec(block)![1]!.toLowerCase();
+
+const lin = (v: number) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+const rgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const lum = (hex: string) => { const [r, g, b] = rgb(hex).map(lin); return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!; };
+const ratio = (a: string, b: string) => { const [hi, lo] = [lum(a), lum(b)].sort((p, q) => q - p); return (hi! + 0.05) / (lo! + 0.05); };
+const SIM = {
+  deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
+  protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+} as const;
+// Machado et al. define the matrices on LINEAR light, so the product is taken on linear values and compared there (scaled to 0-255,
+// not gamma-encoded). Absolute values differ from what a screen shows; the 100 threshold is calibrated for this linear scale.
+const simulate = (hex: string, m: readonly (readonly number[])[]) => {
+  const l = rgb(hex).map(lin);
+  return m.map((row) => Math.min(255, Math.max(0, 255 * (row[0]! * l[0]! + row[1]! * l[1]! + row[2]! * l[2]!))));
+};
+const distance = (a: number[], b: number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+
+describe("chart series colours (VNX-0704a validator)", () => {
+  it("light keeps the approved #2a78d6 request and #eb6834 product", () => {
+    expect(tok(light, "--chart-blue")).toBe("#2a78d6");
+    expect(tok(light, "--chart-orange")).toBe("#eb6834");
+  });
+  it("dark has its own steps, identical in the media query and the data-theme block, different from light", () => {
+    for (const name of ["--chart-blue", "--chart-orange"]) {
+      expect(tok(darkMedia, name), name).toBe(tok(darkAttr, name));
+      expect(tok(darkAttr, name), name).not.toBe(tok(light, name));
+    }
+  });
+  it("every series colour is at least 3:1 against --surface in all three token blocks (WCAG 1.4.11)", () => {
+    for (const [name, block] of [["light", light], ["dark-media", darkMedia], ["dark-attr", darkAttr]] as const) {
+      for (const series of ["--chart-blue", "--chart-orange"]) expect(ratio(tok(block, series), tok(block, "--surface")), `${name} ${series}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+  it("the two series stay apart under deuteranopia and protanopia", () => {
+    for (const [name, block] of [["light", light], ["dark", darkAttr]] as const) {
+      for (const [kind, m] of Object.entries(SIM)) {
+        expect(distance(simulate(tok(block, "--chart-blue"), m), simulate(tok(block, "--chart-orange"), m)), `${name} ${kind}`).toBeGreaterThanOrEqual(100);
+      }
+    }
+  });
+  it("chart text uses the text colour, never a series colour, and the chart sits on --surface", () => {
+    expect(css).toMatch(/\.chart-label[^{]*\{[^}]*fill:\s*var\(--text\)/);
+    expect(css).toMatch(/\.chart-value[^{]*\{[^}]*fill:\s*var\(--text\)/);
+    expect(css).toMatch(/\.chart\s*\{[^}]*background:\s*var\(--surface\)/);
+    expect(css).not.toMatch(/\.chart-(label|value|axis-label)[^{]*\{[^}]*fill:\s*var\(--chart-/);
+  });
+});
+```
+
+- [ ] **Step 2: Chạy, thấy đỏ**
+
+`npm test -w apps/web -- test/home/chart.test.ts test/home/chart-colours.test.ts` → FAIL (thiếu `chart-geometry.ts`, `formatWeek`, token).
+
+- [ ] **Step 3: `views/format.ts`**
+
+Thêm ngay sau `const MS = …`:
+
+```ts
+/** Normalised path length of the sparkline and chart lines: CSS draws them with one dash of this length (Task 8b). */
+export const PATH_LENGTH = 100;
+
+const ISO_WEEK = /^(\d{4})-W(\d{2})$/;
+/** The Monday (UTC) of an ISO week key `YYYY-Www`; null for anything else. Week 1 is the week that holds 4 January. */
+export function weekStart(week: string): Date | null {
+  const m = ISO_WEEK.exec(week);
+  if (!m) return null;
+  const jan4 = Date.UTC(Number(m[1]), 0, 4);
+  const monday = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * MS.day;
+  return new Date(monday + (Number(m[2]) - 1) * 7 * MS.day);
+}
+/** The week as its first day in the viewer's locale ("Sep 28"; with the year when `year`); the raw key only when it is not an ISO week. */
+export function formatWeek(locale: Locale, week: string, year = false): string {
+  const start = weekStart(week);
+  return start ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" }).format(start) : week;
+}
+/** Labels for a run of weeks; the year goes on every label when the run crosses a year boundary. */
+export function formatWeeks(locale: Locale, weeks: readonly string[]): string[] {
+  const years = new Set(weeks.map((w) => weekStart(w)?.getUTCFullYear()));
+  return weeks.map((w) => formatWeek(locale, w, years.size > 1));
+}
+```
+
+- [ ] **Step 4: `views/chart-geometry.ts`**
+
+```ts
+/** Pure geometry for the hand-built SVG charts (VNX-0704a). No DOM, no colour: colour lives in CSS classes. */
+export const CHART_WIDTH = 320;
+const PAD = 4;
+const BAR = { label: 16, height: 10, gap: 4, group: 14, value: 40 } as const;
+export const BAR_HEIGHT = BAR.height;
+/** Below this x step (px in the viewBox) markers crowd the line: only the two endpoints keep one. */
+export const MARKER_MIN_STEP = 12;
+const round = (n: number): number => Math.round(n * 10) / 10;
+
+export type BarRowLayout = { top: number; height: number; labelY: number; bars: { y: number; width: number; textX: number; textY: number }[] };
+export type BarLayout = { width: number; height: number; left: number; rows: BarRowLayout[] };
+
+/** Horizontal grouped bars: one group per row, its label above it, one bar per series; every bar scaled to the largest value. */
+export function barLayout(values: readonly (readonly number[])[]): BarLayout {
+  const series = Math.max(1, ...values.map((v) => v.length));
+  const max = Math.max(1, ...values.flat());
+  const span = CHART_WIDTH - 2 * PAD - BAR.value;
+  const groupH = BAR.label + series * BAR.height + (series - 1) * BAR.gap;
+  const rows = values.map((row, i): BarRowLayout => {
+    const top = PAD + i * (groupH + BAR.group);
+    return {
+      top,
+      height: groupH,
+      labelY: top + BAR.label - 4,
+      bars: row.map((v, j) => {
+        const y = top + BAR.label + j * (BAR.height + BAR.gap);
+        const width = round((v / max) * span);
+        return { y, width, textX: PAD + width + 4, textY: y + BAR.height - 1 };
+      }),
+    };
+  });
+  return { width: CHART_WIDTH, height: 2 * PAD + Math.max(0, values.length * (groupH + BAR.group) - BAR.group), left: PAD, rows };
+}
+
+const LINE = { height: 180, left: 36, right: 10, top: 10, bottom: 24 } as const;
+export type Point = { x: number; y: number };
+export type LineLayout = { width: number; height: number; left: number; right: number; top: number; baseline: number; step: number; x: number[]; ticks: { value: number; y: number }[]; lines: Point[][] };
+
+/** Lines over a shared category axis; y runs from zero to the largest value, with a tick at each end. */
+export function lineLayout(series: readonly (readonly number[])[]): LineLayout {
+  const n = Math.max(0, ...series.map((s) => s.length));
+  const max = Math.max(1, ...series.flat());
+  const plotW = CHART_WIDTH - LINE.left - LINE.right;
+  const plotH = LINE.height - LINE.top - LINE.bottom;
+  const step = n > 1 ? plotW / (n - 1) : 0;
+  const yOf = (v: number) => round(LINE.top + plotH - (v / max) * plotH);
+  const x = Array.from({ length: n }, (_, i) => round(LINE.left + i * step));
+  return {
+    width: CHART_WIDTH,
+    height: LINE.height,
+    left: LINE.left,
+    right: CHART_WIDTH - LINE.right,
+    top: LINE.top,
+    baseline: LINE.top + plotH,
+    step,
+    x,
+    ticks: [{ value: 0, y: yOf(0) }, { value: max, y: yOf(max) }],
+    lines: series.map((s) => s.map((v, i) => ({ x: x[i]!, y: yOf(v) }))),
+  };
+}
+export const linePoints = (pts: readonly Point[]): string => pts.map((p) => `${p.x},${p.y}`).join(" ");
+```
+
+- [ ] **Step 5: `views/Chart.tsx`**
+
+```tsx
+import type { FC, PropsWithChildren } from "hono/jsx";
+import type { Locale } from "../i18n/locales.ts";
+import { BAR_HEIGHT, MARKER_MIN_STEP, barLayout, lineLayout, linePoints } from "./chart-geometry.ts";
+import { formatCount, PATH_LENGTH } from "./format.ts";
+
+export type Tone = "blue" | "orange";
+export type Series = { tone: Tone; label: string; mark?: "circle" | "square" };
+
+/** The tooltip text of one group (Task 8b shows it): "Label: Series 4 · Series 1". Also what a screen reader never needs: the table has it all. */
+const tip = (locale: Locale, head: string, series: readonly Series[], values: readonly number[]): string =>
+  `${head}: ${series.map((s, i) => `${s.label} ${formatCount(locale, values[i] ?? 0)}`).join(" · ")}`;
+
+const Legend: FC<{ series: readonly Series[] }> = ({ series }) =>
+  series.length > 1 ? (
+    <ul class="chart-legend">
+      {series.map((s) => (
+        <li>
+          <span class={`chart-swatch chart-tone-${s.tone}${s.mark === "circle" ? " chart-mark-circle" : ""}`} aria-hidden="true"></span>
+          {s.label}
+        </li>
+      ))}
+    </ul>
+  ) : null;
+
+/** A chart's equivalent table, closed by default; the table itself is the child. */
+export const ChartData: FC<PropsWithChildren<{ summary: string }>> = ({ summary, children }) => (
+  <details class="chart-data">
+    <summary>{summary}</summary>
+    {children}
+  </details>
+);
+
+type BarProps = { locale: Locale; title: string; series: readonly Series[]; rows: readonly { label: string; values: readonly number[] }[] };
+export const BarChart: FC<PropsWithChildren<BarProps>> = ({ locale, title, series, rows, children }) => {
+  const g = barLayout(rows.map((r) => r.values));
+  return (
+    <figure class="chart" data-chart-kind="bars">
+      <Legend series={series} />
+      <svg class="chart-svg" viewBox={`0 0 ${g.width} ${g.height}`} role="img" aria-label={title}>
+        <line class="chart-axis" x1={g.left} y1="0" x2={g.left} y2={g.height} />
+        {rows.map((row, i) => {
+          const r = g.rows[i]!;
+          return (
+            <g class="chart-group" data-tip={tip(locale, row.label, series, row.values)}>
+              <rect class="chart-hit" x="0" y={r.top} width={g.width} height={r.height} />
+              <text class="chart-label" x={g.left} y={r.labelY}>{row.label}</text>
+              {r.bars.map((b, j) => (
+                <>
+                  <rect class={`chart-bar chart-tone-${series[j]!.tone}`} x={g.left} y={b.y} width={b.width} height={BAR_HEIGHT} rx="2" />
+                  <text class="chart-value" x={b.textX} y={b.textY}>{formatCount(locale, row.values[j] ?? 0)}</text>
+                </>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+      {children}
+    </figure>
+  );
+};
+
+type LineProps = { locale: Locale; title: string; series: readonly Series[]; labels: readonly string[]; values: readonly (readonly number[])[] };
+/** `values[s][i]` is series s at label i. `mark: "square"` draws squares; anything else, circles. */
+export const LineChart: FC<PropsWithChildren<LineProps>> = ({ locale, title, series, labels, values, children }) => {
+  const g = lineLayout(values);
+  const last = labels.length - 1;
+  const ends = last > 0 ? [0, last] : [0];
+  return (
+    <figure class="chart" data-chart-kind="lines">
+      <Legend series={series} />
+      <svg class="chart-svg" viewBox={`0 0 ${g.width} ${g.height}`} role="img" aria-label={title}>
+        {g.ticks.map((tick) => (
+          <>
+            <line class="chart-grid" x1={g.left} y1={tick.y} x2={g.right} y2={tick.y} />
+            <text class="chart-axis-label" x={g.left - 6} y={tick.y + 4} text-anchor="end">{formatCount(locale, tick.value)}</text>
+          </>
+        ))}
+        {ends.map((i) => (
+          <text class="chart-axis-label" x={g.x[i]} y={g.height - 6} text-anchor={i === 0 ? "start" : "end"}>{labels[i]}</text>
+        ))}
+        {labels.map((label, i) => (
+          <g class="chart-group" data-tip={tip(locale, label, series, values.map((s) => s[i] ?? 0))}>
+            <rect class="chart-hit" x={(g.x[i] ?? 0) - g.step / 2} y={g.top} width={g.step || g.width} height={g.baseline - g.top} />
+            <line class="chart-cross" x1={g.x[i]} y1={g.top} x2={g.x[i]} y2={g.baseline} />
+          </g>
+        ))}
+        {series.map((s, k) => (
+          <>
+            <polyline class={`chart-line chart-tone-${s.tone}`} points={linePoints(g.lines[k]!)} pathLength={PATH_LENGTH} />
+            {g.lines[k]!.filter((_, i) => g.step >= MARKER_MIN_STEP || i === 0 || i === last).map((p) =>
+              s.mark === "square" ? (
+                <rect class={`chart-dot chart-tone-${s.tone}`} x={p.x - 3} y={p.y - 3} width="6" height="6" />
+              ) : (
+                <circle class={`chart-dot chart-tone-${s.tone}`} cx={p.x} cy={p.y} r="3" />
+              ),
+            )}
+          </>
+        ))}
+      </svg>
+      {children}
+    </figure>
+  );
+};
+```
+
+Vùng hit nằm trong `<g class="chart-group">` và vẽ trước đường/marker; `.chart-line, .chart-dot { pointer-events: none }` để mọi con trỏ trên chart rơi vào `.chart-hit` (không có vùng chết quanh marker). `.chart-cross` là đường dọc chỉ hiện khi hover nhóm (CSS thuần, spec §5.9 chart 2).
+
+- [ ] **Step 6: `MarketPulse.tsx` và `Trending.tsx`**
+
+`MarketPulse.tsx`: giữ `home-pulse-grid`. Nhánh categories:
+
+```tsx
+<div class="home-pulse-item">
+  <BarChart
+    locale={locale}
+    title={tr("home.pulse.requestsTitle")}
+    series={[
+      { tone: "blue", label: tr("home.pulse.requests", { days: REQUEST_DAYS }) },
+      { tone: "orange", label: tr("home.pulse.products") },
+    ]}
+    rows={categories.map((row) => ({ label: tr(CATEGORY_KEY[row.category]), values: [row.requests, row.products] }))}
+  >
+    <ChartData summary={tr("home.chart.table")}>
+      <div class="table-wrap">{/* bảng requests-by-category của 7b, không đổi */}</div>
+    </ChartData>
+  </BarChart>
+  {scarcest ? <p class="home-scarcest">{/* không đổi */}</p> : null}
+</div>
+```
+
+Nhánh growth: `LineChart` với `title={tr("home.pulse.growthTitle")}`, `series={[{ tone: "orange", label: tr("home.numbers.products"), mark: "square" }, { tone: "blue", label: tr("home.numbers.builders"), mark: "circle" }]}`, `labels={weekLabels}` với `const weekLabels = formatWeeks(locale, growth.map((p) => p.week))`, `values={[growth.map((p) => p.products), growth.map((p) => p.builders)]}`, và bảng growth của 7b trong `<ChartData>`; ô `<th scope="row">` đổi `{point.week}` thành `{weekLabels[i]}` (map có chỉ số `i`; bảng và trục dùng cùng nhãn). Import `BarChart`, `ChartData`, `LineChart` từ `../Chart.tsx`, `formatWeeks` từ `../format.ts`. Không dùng `slice`/số trong file này (test không chữ số). Xóa comment "Tables for now".
+
+`Trending.tsx`: `<polyline points={sparkPoints(item.sparkline)} pathLength={PATH_LENGTH} />`; import `PATH_LENGTH`.
+
+- [ ] **Step 7: CSS và i18n**
+
+`app.css`: thêm `--chart-blue: #2a78d6; --chart-orange: #eb6834;` vào `:root`; `--chart-blue: #5b9bf0; --chart-orange: #f58a5c;` vào CẢ HAI khối dark (cuối mỗi khối, sau `--shadow-…`). Thêm ở cuối file:
+
+```css
+/* VNX-0704a: charts. Series colours are checked by test/home/chart-colours.test.ts; text is never a series colour. */
+.chart { margin: 0 0 16px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.chart-svg { display: block; width: 100%; height: auto; }
+.chart-tone-blue { --chart-ink: var(--chart-blue); }
+.chart-tone-orange { --chart-ink: var(--chart-orange); }
+.chart-bar, .chart-dot { fill: var(--chart-ink); }
+.chart-line { fill: none; stroke: var(--chart-ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-label, .chart-value, .chart-axis-label { fill: var(--text); font: 400 12px var(--font); }
+.chart-value, .chart-axis-label { font-family: var(--font-mono); }
+.chart-axis { stroke: var(--border-strong); stroke-width: 1; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-hit { fill: transparent; pointer-events: all; }
+.chart-line, .chart-dot { pointer-events: none; }
+.chart-cross { stroke: transparent; stroke-width: 1; pointer-events: none; }
+.chart-group:hover .chart-cross { stroke: var(--text-2); }
+.chart-legend { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--text); font-size: 14px; }
+.chart-swatch { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border-radius: 2px; background: var(--chart-ink); }
+.chart-swatch.chart-mark-circle { border-radius: 50%; }
+.chart-data { margin-top: 12px; }
+.chart-data summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--primary); font-weight: 600; cursor: pointer; }
+.chart-data summary::after { content: ""; width: 8px; height: 8px; margin-left: 10px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform var(--dur-1) ease; }
+.chart-data[open] summary::after { transform: rotate(-135deg); }
+.chart-data summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.home-pulse-item { min-width: 0; }
+```
+
+Thêm key `"home.chart.table"` vào 4 file locale theo bảng trên.
+
+- [ ] **Step 8: Chạy xanh và kiểm tác động**
+
+`npm test -w apps/web -- test/home test/design/assets.test.ts` → PASS. Các test cũ phải xanh không sửa: `blocks-b` (`<th scope="row">` vẫn chỉ nằm trong bảng; chart không dùng `<th>`), `home.test.ts:84` (`count(...,"<polyline")` đã giới hạn trong khối `home-trending`, nên 2 `<polyline>` mới của chart đường ở `home-pulse` không ảnh hưởng: KHÔNG sửa test nào), `separable.test.tsx` (marker `data-chart="requests-by-category"`, không `<section>`/`lp-`), `home.test.ts:156` (không chữ số trong `views/home/*.tsx`; `home.chart.table` được dùng trong `MarketPulse.tsx`).
+
+- [ ] **Step 9: Kiểm tra cuối, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git diff --stat -- package.json package-lock.json apps/web/package.json   # rỗng
+git add apps/web/src/views/chart-geometry.ts apps/web/src/views/Chart.tsx apps/web/src/views/format.ts apps/web/src/views/home/MarketPulse.tsx apps/web/src/views/home/Trending.tsx apps/web/public/assets/app.css apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/chart.test.ts apps/web/test/home/chart-colours.test.ts
+git commit -m "feat(web): add SVG charts with legend, data table and colour validator (VNX-0704a)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+
+**Acceptance (mỗi mục một lệnh):**
+1. `npm test -w apps/web -- test/home/chart.test.ts` xanh: hình học, hai chart SVG, legend ở cả hai, `<details>` đóng chứa bảng, không `style=`/focus/màu trên `<text>`, nhãn tuần không còn `YYYY-Www`.
+2. `npm test -w apps/web -- test/home/chart-colours.test.ts` xanh: `#2a78d6`/`#eb6834` ở light, bước dark riêng ở cả hai khối dark, tương phản ≥ 3:1 trên `--surface`, khoảng cách CVD ≥ 100.
+3. `npm test -w apps/web -- test/home test/design/assets.test.ts` xanh.
+4. `git diff --stat -- package.json package-lock.json apps/web/package.json` rỗng; `grep -rn "<script" apps/web/src/views/Chart.tsx apps/web/src/views/home` rỗng.
+5. `npm run typecheck -w apps/web` và `npm test` xanh. Diff ước tính ~320 dòng mã chạy không tính locale và test (chart-geometry.ts ~55, Chart.tsx ~100, format.ts ~20, MarketPulse/Trending ~45, CSS ~25 và token ~4); test ~190 dòng. Cộng test ~490, dưới 600.
+
+---
+
+### Task 8b: VNX-0704b — Animation cuộn, đếm số, dải Live, tooltip, reduced-motion
+
+Phụ thuộc 8a (class `chart-bar`, `chart-line`, `[data-tip]`, `PATH_LENGTH`). Chặn bởi (a) như Task 7.
+
+**Files:**
+- Create: `apps/web/public/assets/home.js` (một IIFE, không thư viện)
+- Modify: `apps/web/src/views/LandingPage.tsx` (dòng 116: `scripts={["/assets/landing.js", "/assets/home.js"]}`)
+- Modify: `apps/web/src/views/home/Numbers.tsx` (giá trị thật trong `.visually-hidden`, chữ số động `aria-hidden` mang `data-count`)
+- Modify: `apps/web/src/views/home/HomeSection.tsx` (`reveal-scroll` ở `section-head`), `Trending.tsx` và `TopProducts.tsx` (`lift` ở `.home-tile`)
+- Modify: `apps/web/test/home/home.test.ts` (một dòng: chuỗi đếm `'<li class="home-tile"'` thành `'<li class="home-tile lift"'`)
+- Modify: `apps/web/src/views/home/Live.tsx` (móc `data-marquee` và nút tạm dừng ẩn sẵn)
+- Modify: `apps/web/public/assets/app.css`
+- Modify: `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts` (1 key)
+- Test: `apps/web/test/home/motion.test.ts`; giữ xanh `test/design/assets.test.ts`, `test/home/*`.
+
+**Quyết định kỹ thuật (Reviewer kiểm):**
+1. **Chọn theo `data-*`, không theo cấu trúc landing.** JS dùng `[data-count]`, `[data-marquee]`, `[data-motion-toggle]`, `[data-tip]`; test cấm selector `#home-`, `.lp-`, `.home-block`, `section`, `.container`. Homepage ba cột sau M7 dùng lại khối thì JS chạy y nguyên (Owner 2026-10-06).
+2. **Nạp ở `/` bằng `scripts` của Layout** (khử trùng như script privacy-notice), có `defer`, luôn nạp trên `/` kể cả khi mọi khối ẩn (file nhỏ; giữ nguyên test hiện có "số `<script>` giữa trang đầy và rỗng bằng nhau"). Không nạp ở trang khác. Trang ba cột sau này thêm đúng một dòng vào `scripts`.
+3. **Fallback tức thì:** không JS, hoặc thiếu IntersectionObserver, thì số hiện giá trị cuối (HTML đã chứa), Live là danh sách dọc như 7b, chart đã vẽ xong. Animation cuộn chỉ nằm TRONG khối `@supports (animation-timeline: view())` ĐÃ CÓ trong `app.css` (test cũ buộc đúng một khối và cấm `animation-timeline` ngoài nó), nên trình duyệt thiếu hỗ trợ không thấy hiệu ứng và không bị ẩn nội dung.
+4. **Reduced motion:** CSS thêm `.chart-bar, .chart-line, .home-spark polyline, .home-marquee-track { animation: none !important; }` và `stroke-dasharray: none` vào khối `@media (prefers-reduced-motion: reduce)` hiện có. JS: `matchMedia("(prefers-reduced-motion: reduce)")` thoát sớm trước đếm số và dải Live, nên số hiện giá trị cuối và Live không cuộn. Tooltip vẫn chạy (không phải animation).
+5. **Dải Live** là nâng cấp bằng JS: bọc `ul[data-marquee]` vào `.home-marquee > .home-marquee-track`, nhân bản danh sách một lần (`aria-hidden="true"`, `inert`) để vòng lặp liền mạch, dùng lại `@keyframes belt` đã có (`-50%`). Không JS thì danh sách dọc 7b không đổi. Thời lượng = số sự kiện x 4 giây, đặt bằng `style.setProperty("--marquee-s", …)` (CSSOM, không vi phạm CSP, không `style=` trong HTML).
+6. **WCAG 2.2.2:** dải tự chạy dừng được bằng hover hoặc focus bên trong, bằng nút bật tắt `aria-pressed` (JS bỏ `hidden`), và bằng reduced motion. Nút render sẵn trong `Live`: `<button type="button" hidden data-motion-toggle aria-pressed="false">`.
+7. **Đếm số:** mỗi `[data-count]` chạy 0 tới giá trị trong 1200 ms (ease-out) khi khối cuộn vào khung nhìn (IntersectionObserver, ngưỡng 0.4). Đây là cách đọc "khi tải trang" của spec: khối nằm DƯới landing nên đếm lúc tải trang thì không ai thấy, định dạng bằng `Intl.NumberFormat(document.documentElement.lang)`, kết thúc LUÔN đặt đúng giá trị cuối. Giá trị cuối do server in sẵn; JS không tự tính con số nào. **Trình đọc màn hình (Controller chọn phương án a):** SSR in giá trị thật trong `<span class="visually-hidden">` (class đã có ở `app.css:111`, không thêm trùng) và chữ số động trong `<span aria-hidden="true" data-count="…">`; nên người đọc màn hình luôn nghe số cuối, không nghe số đang nhảy.
+8. **Tooltip:** một `div.chart-tip` (`aria-hidden="true"`, `pointer-events: none`) tạo bằng JS, nội dung bằng `textContent` từ `data-tip` (không `innerHTML`), đặt vị trí bằng `style.left/top` (CSSOM), ẩn khi rời, cuộn, hoặc nhấn Escape (WCAG 1.4.13). Chỉ cho con trỏ và chạm; bàn phím và trình đọc màn hình dùng bảng `<details>` của 8a.
+9. **Hero:** không có mã xoay thẻ (xem 8a). Test cấm `setInterval` trong `home.js`.
+10. **Ngân sách:** `home.js` ≤ 6 KB; tổng JS cùng gốc tải ở `/` ≤ 60 KB (NFR homepage; không tính script Turnstile, vốn không đổi và chỉ nạp ở trang có form); các trang công khai khác không nạp (≤ 30 KB giữ nguyên). `landing.js` giữ ≤ 2 KB (test cũ).
+11. **Phủ spec §5.9 (Controller):** `HomeSection` thêm `reveal-scroll` vào `section-head`; `.home-tile` thêm `lift`. Hai class đã có (`app.css:545` và `:413`), đã nằm trong khối reduce. Mỗi chart khai `view-timeline: --chart-in` (trên `.chart`, HTML) và sparkline `--spark-in` (trên `.home-spark`), CHỈ trong khối `@supports` duy nhất; thanh và đường dùng `animation-timeline: --chart-in`/`--spark-in` thay vì `view()` trên chính phần tử SVG (hộp của phần tử con SVG co lại theo transform nên khó đoán).
+12. **Focus không bị dải che:** `.home-marquee:focus-within .home-marquee-track { animation: none; }` (không chỉ tạm dừng) để trình duyệt cuộn được tới liên kết đang focus.
+13. **Hành vi JS không có test tự động** (Vitest chạy trong workerd, không DOM, không `eval`): test khẳng định nội dung và cấu trúc; kiểm tay ở Step 8.
+
+**i18n (1 key, nhãn nút, không chữ số):**
+
+| Key | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `home.motion.pause` | Pause scrolling | Tạm dừng cuộn | 暂停滚动 | 暫停捲動 |
+
+Đặt cạnh `"home.live.requestNew"` ở cả 4 file.
+
+- [ ] **Step 1: Viết test (đỏ)**
+
+`apps/web/test/home/motion.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
+import { t } from "../../src/i18n/t.ts";
+import { formatCount } from "../../src/views/format.ts";
+import { testEnv } from "../helpers.ts";
+import { block, getHome, seedSnapshot } from "./blocks.ts";
+
+const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
+const text = async (path: string) => (await get(path)).text();
+const atBlocks = (css: string, rule: string) => {
+  const out: { prelude: string; body: string }[] = [];
+  const re = new RegExp(`@${rule}\\b([^{]*)\\{`, "g");
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    let depth = 1;
+    let i = re.lastIndex;
+    for (; i < css.length && depth > 0; i++) depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0;
+    out.push({ prelude: (m[1] ?? "").trim(), body: css.slice(re.lastIndex, i - 1) });
+  }
+  return out;
+};
+
+describe("home.js (VNX-0704b)", () => {
+  it("is at most 6 KB, same-origin, no network, no import, no innerHTML, no timer that rotates cards", async () => {
+    const res = await get("/assets/home.js");
+    expect(res.status).toBe(200);
+    expect((await res.arrayBuffer()).byteLength).toBeLessThanOrEqual(6 * 1024);
+    const js = await text("/assets/home.js");
+    expect(js).not.toMatch(/\bimport\b|\brequire\(|\bfetch\(|XMLHttpRequest|sendBeacon|https?:\/\/|document\.cookie|localStorage|innerHTML|\beval\(|new Function/);
+    expect(js).not.toContain("setInterval");
+    expect(js).toMatch(/matchMedia\(\s*["']\(prefers-reduced-motion: reduce\)["']\s*\)/);
+  });
+  it("selects only by data-* hooks, never by where a block sits", async () => {
+    const js = await text("/assets/home.js");
+    for (const hook of ["[data-count]", "[data-marquee]", "[data-motion-toggle]", "[data-tip]"]) expect(js).toContain(hook);
+    expect(js).not.toMatch(/["'][^"']*(#home-|\.lp-|\.home-block|\bsection\b|\.container)[^"']*["']/);
+  });
+  it("is loaded with defer on / in every locale, once, and on no other page", async () => {
+    for (const path of ["/", "/vi/", "/zh-hans/", "/zh-hant/"]) {
+      const html = await text(path);
+      expect(html.match(/<script[^>]*src="\/assets\/home\.js"[^>]*>/g), path).toEqual([expect.stringMatching(/\sdefer(=|>|\s)/)]);
+      expect(html, path).toContain("/assets/landing.js");
+    }
+    for (const path of ["/products", "/builders", "/vi/terms", "/login", "/for-builders"]) expect(await text(path), path).not.toContain("home.js");
+  });
+  it("keeps the JS of / under 60 KB in total", async () => {
+    const srcs = [...(await text("/")).matchAll(/<script[^>]*\ssrc="(\/[^"]+)"/g)].map((m) => m[1]!);
+    expect(srcs).toContain("/assets/home.js");
+    let total = 0;
+    for (const src of srcs) total += (await (await get(src)).arrayBuffer()).byteLength;
+    expect(total).toBeLessThanOrEqual(60 * 1024);
+  });
+});
+
+describe("markup hooks", () => {
+  it("every Numbers tile prints its final value (visually hidden for screen readers) and animates an aria-hidden copy carrying data-count", async () => {
+    await seedSnapshot();
+    const tiles = [...block(await getHome(), "home-numbers").matchAll(/<strong><span class="visually-hidden">([^<]*)<\/span><span aria-hidden="true" data-count="(\d+)">([^<]*)<\/span><\/strong>/g)];
+    expect(tiles.length).toBeGreaterThanOrEqual(2);
+    for (const [, real, value, shown] of tiles) {
+      expect(shown).toBe(formatCount("en", Number(value)));
+      expect(real, "the real value is what a screen reader gets").toBe(shown);
+    }
+  });
+  it("Live keeps the static list, marks it for the strip, and holds a hidden pause button in every locale", async () => {
+    await seedSnapshot();
+    for (const locale of LOCALES) {
+      const html = block(await getHome(localizedPath(locale, "/")), "home-live");
+      expect(html, locale).toMatch(/<ul[^>]*data-marquee/);
+      expect(html, locale).toMatch(/<button[^>]*type="button"[^>]*data-motion-toggle[^>]*>/);
+      expect(html, locale).toMatch(/<button[^>]*\shidden/);
+      expect(html, locale).toContain('aria-pressed="false"');
+      expect(html, locale).toContain(t(locale, "home.motion.pause"));
+      expect(html, locale).not.toMatch(/\sstyle=|\son[a-z]+=/i);
+    }
+  });
+  it("section heads reveal on scroll and tiles lift, using the classes the reduced-motion block already covers", async () => {
+    await seedSnapshot();
+    const html = await getHome();
+    for (const id of ["home-numbers", "home-trending", "home-pulse"]) expect(block(html, id), id).toContain('class="section-head reveal-scroll"');
+    expect(block(html, "home-trending")).toMatch(/<li class="home-tile lift"/);
+    expect(block(html, "home-products")).toMatch(/<li class="home-tile lift"/);
+  });
+  it("chart groups carry data-tip text with the label and every series value", async () => {
+    await seedSnapshot();
+    const tips = [...block(await getHome(), "home-pulse").matchAll(/data-tip="([^"]+)"/g)].map((m) => m[1]!);
+    expect(tips.length).toBeGreaterThan(0);
+    for (const tipText of tips) expect(tipText).toMatch(/: .+ \d+ · .+ \d+/);
+  });
+});
+
+describe("CSS motion (spec §9: reduced motion has no animation)", () => {
+  it("runs chart and sparkline animation only inside the one @supports (animation-timeline: view()) block", async () => {
+    const css = await text("/assets/app.css");
+    const supports = atBlocks(css, "supports").filter((b) => /animation-timeline:\s*view\(\)/.test(b.prelude));
+    expect(supports).toHaveLength(1);
+    for (const selector of [".chart-bar", ".chart-line", ".home-spark polyline"]) expect(supports[0]!.body, selector).toContain(selector);
+    expect(supports[0]!.body).toMatch(/\.chart\s*\{[^}]*view-timeline:\s*--chart-in/);
+    expect(supports[0]!.body).toMatch(/\.home-spark\s*\{[^}]*view-timeline:\s*--spark-in/);
+    expect(supports[0]!.body).toMatch(/\.chart-bar[^{]*\{[^}]*animation-timeline:\s*--chart-in/);
+    expect(supports[0]!.body).toMatch(/\.home-spark polyline[^{]*\{[^}]*animation-timeline:\s*--spark-in/);
+    // Outside @supports (and outside the reduced-motion blocks, whose `animation: none` is the point) nothing animates a chart.
+    let plain = css.replace(supports[0]!.body, "");
+    for (const m of atBlocks(css, "media").filter((x) => /prefers-reduced-motion/.test(x.prelude))) plain = plain.replace(m.body, "");
+    expect(plain).not.toMatch(/\.chart-(bar|line)[^{]*\{[^}]*animation\s*:/);
+  });
+  it("turns off every home animation under prefers-reduced-motion: reduce", async () => {
+    const css = await text("/assets/app.css");
+    const reduce = atBlocks(css, "media").filter((b) => /prefers-reduced-motion:\s*reduce/.test(b.prelude)).map((b) => b.body).join("\n");
+    for (const selector of [".chart-bar", ".chart-line", ".home-spark polyline", ".home-marquee-track"]) expect(reduce, selector).toContain(selector);
+    expect(reduce).toMatch(/animation:\s*none\s*!important/);
+    expect(reduce).toMatch(/stroke-dasharray:\s*none/);
+    // The strip stands still like the landing belt: wrapped, copy hidden.
+    expect(reduce).toMatch(/\.home-marquee \.home-live\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(reduce).toMatch(/\.home-marquee-track\s*\{[^}]*width:\s*auto/);
+    expect(reduce).toMatch(/\.home-marquee-track > \[aria-hidden="true"\]\s*\{[^}]*display:\s*none/);
+  });
+  it("pauses the strip on hover and the toggle, stops it on focus, and the tooltip ignores the pointer", async () => {
+    const css = await text("/assets/app.css");
+    expect(css).toMatch(/\.home-marquee:hover[^{]*\{[^}]*animation-play-state:\s*paused/);
+    // Focus stops the strip dead (animation: none), so the browser can scroll the focused link into view.
+    expect(css).toMatch(/\.home-marquee:focus-within \.home-marquee-track\s*\{[^}]*animation:\s*none/);
+    expect(css).toMatch(/\.home-marquee\.is-paused[^{]*\{[^}]*animation-play-state:\s*paused/);
+    expect(css).toMatch(/\.chart-tip\s*\{[^}]*pointer-events:\s*none/);
+  });
+  it("never hides a chart or number in a plain rule (no opacity 0, hidden or scale(0))", async () => {
+    const css = await text("/assets/app.css");
+    for (const m of css.matchAll(/([^{}]*\.(?:chart-bar|chart-line|home-numbers)[^{}]*)\{([^}]*)\}/g)) expect(m[2], m[1]).not.toMatch(/opacity\s*:\s*0\b|visibility\s*:\s*hidden|scale\(0/);
+  });
+});
+```
+
+- [ ] **Step 2: Chạy, thấy đỏ**
+
+`npm test -w apps/web -- test/home/motion.test.ts` → FAIL (chưa có `home.js`, `data-count`, `data-marquee`, CSS).
+
+- [ ] **Step 3: Markup và script loader**
+
+`Numbers.tsx`:
+
+```tsx
+<strong>
+  <span class="visually-hidden">{formatCount(locale, tile.value)}</span>
+  <span aria-hidden="true" data-count={tile.value}>{formatCount(locale, tile.value)}</span>
+</strong>
+```
+
+(`.visually-hidden` có sẵn ở `app.css:111`.) `HomeSection.tsx`: `<div class="section-head reveal-scroll">`. `Trending.tsx` (hai `<li class="home-tile">`) và `TopProducts.tsx` (một) thành `class="home-tile lift"`. `test/home/home.test.ts:83` đếm `'<li class="home-tile"'`: đổi chuỗi thành `'<li class="home-tile lift"'` (sửa test duy nhất, ghi vào báo cáo).
+
+`Live.tsx`:
+
+```tsx
+export const Live: FC<{ locale: Locale; events: readonly PublicLiveEvent[]; now: Date }> = ({ locale, events, now }) => {
+  const tr = translator(locale);
+  return (
+    <div class="home-live-wrap">
+      <button type="button" class="home-motion-toggle" data-motion-toggle hidden aria-pressed="false">{tr("home.motion.pause")}</button>
+      <ul class="home-live" data-marquee>
+        {events.map((e) => (
+          <li class="home-live-item">
+            <time datetime={e.at}>{relativeTime(locale, e.at, now)}</time>
+            <LiveItem locale={locale} e={e} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+```
+
+Cập nhật comment đầu `Live` (bỏ "the marquee is Task 8"). `LandingPage.tsx`: `scripts={["/assets/landing.js", "/assets/home.js"]}`. Thêm `home.motion.pause` vào 4 locale.
+
+- [ ] **Step 4: `public/assets/home.js`**
+
+```js
+// VNX-0704b: count-up, the Live strip and the chart tooltip. No library, no network, no cookies.
+// Picks everything by data-* hooks, so a block works wherever the page puts it. Without this file every block shows its final state.
+(function () {
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var nf;
+  try {
+    nf = new Intl.NumberFormat(document.documentElement.lang || undefined);
+  } catch (e) {
+    nf = new Intl.NumberFormat();
+  }
+
+  function run(el) {
+    var target = Number(el.getAttribute("data-count"));
+    if (!isFinite(target)) return;
+    var start = null;
+    function step(now) {
+      if (start === null) start = now;
+      var p = Math.min(1, (now - start) / 1200);
+      el.textContent = nf.format(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) requestAnimationFrame(step);
+      else el.textContent = nf.format(target);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function countUp() {
+    var els = document.querySelectorAll("[data-count]");
+    if (reduce || !els.length || !("IntersectionObserver" in window)) return;
+    var io = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (en) {
+          if (!en.isIntersecting) return;
+          io.unobserve(en.target);
+          run(en.target);
+        });
+      },
+      { threshold: 0.4 },
+    );
+    Array.prototype.forEach.call(els, function (el) {
+      el.textContent = nf.format(0);
+      io.observe(el);
+    });
+  }
+
+  function marquees() {
+    if (reduce) return;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-marquee]"), function (list) {
+      var n = list.children.length;
+      if (n < 2) return;
+      var host = list.parentNode;
+      var toggle = host.querySelector("[data-motion-toggle]");
+      var wrap = document.createElement("div");
+      var track = document.createElement("div");
+      var copy = list.cloneNode(true);
+      wrap.className = "home-marquee";
+      track.className = "home-marquee-track";
+      track.style.setProperty("--marquee-s", n * 4 + "s");
+      copy.removeAttribute("data-marquee");
+      copy.setAttribute("aria-hidden", "true");
+      copy.inert = true;
+      host.insertBefore(wrap, list);
+      wrap.appendChild(track);
+      track.appendChild(list);
+      track.appendChild(copy);
+      if (!toggle) return;
+      toggle.hidden = false;
+      toggle.addEventListener("click", function () {
+        var paused = wrap.classList.toggle("is-paused");
+        toggle.setAttribute("aria-pressed", paused ? "true" : "false");
+      });
+    });
+  }
+
+  function tooltips() {
+    var tip = null;
+    function hide() {
+      if (tip) tip.hidden = true;
+    }
+    function place(e) {
+      tip.style.left = Math.max(8, Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8)) + "px";
+      tip.style.top = e.clientY + 16 + "px";
+    }
+    document.addEventListener("pointerover", function (e) {
+      var g = e.target && e.target.closest ? e.target.closest("[data-tip]") : null;
+      if (!g) return hide();
+      if (!tip) {
+        tip = document.createElement("div");
+        tip.className = "chart-tip";
+        tip.setAttribute("aria-hidden", "true");
+        document.body.appendChild(tip);
+      }
+      tip.textContent = g.getAttribute("data-tip");
+      tip.hidden = false;
+      place(e);
+    });
+    document.addEventListener("pointermove", function (e) {
+      if (tip && !tip.hidden) place(e);
+    });
+    document.addEventListener("pointerout", function (e) {
+      if (!e.relatedTarget) hide();
+    });
+    window.addEventListener("scroll", hide, { passive: true });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") hide();
+    });
+  }
+
+  countUp();
+  marquees();
+  tooltips();
+})();
+```
+
+- [ ] **Step 5: CSS**
+
+Trong khối `@supports (animation-timeline: view())` ĐÃ CÓ (không tạo khối thứ hai) thêm:
+
+```css
+  .chart { view-timeline: --chart-in block; }
+  .home-spark { view-timeline: --spark-in block; }
+  .chart-bar { transform-box: fill-box; transform-origin: 0 50%; animation: chart-grow linear both; animation-timeline: --chart-in; animation-range: entry 0% cover 40%; }
+  .chart-line { stroke-dasharray: 100; animation: chart-draw linear both; animation-timeline: --chart-in; animation-range: entry 0% cover 40%; }
+  .home-spark polyline { stroke-dasharray: 100; animation: chart-draw linear both; animation-timeline: --spark-in; animation-range: entry 0% cover 40%; }
+```
+
+Cạnh các `@keyframes` hiện có (NGOÀI khối `@supports`):
+
+```css
+@keyframes chart-grow { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes chart-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+```
+
+Trong khối `@media (prefers-reduced-motion: reduce)` hiện có thêm:
+
+```css
+  .chart-bar, .chart-line, .home-spark polyline, .home-marquee-track { animation: none !important; }
+  .chart-line, .home-spark polyline { stroke-dasharray: none; }
+  /* The strip stands still like the landing belt: wrapped, the copy hidden. */
+  .home-marquee .home-live { flex-wrap: wrap; }
+  .home-marquee-track { width: auto; }
+  .home-marquee-track > [aria-hidden="true"] { display: none; }
+```
+
+Sau khối `/* VNX-0704a */` thêm:
+
+```css
+/* VNX-0704b: Live strip (JS adds .home-marquee), pause button, tooltip. Numbers keep a steady width while counting. */
+.home-numbers strong { font-variant-numeric: tabular-nums; }
+.home-motion-toggle { min-height: 44px; margin: 0 0 8px; padding: 8px 14px; color: var(--primary); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
+.home-motion-toggle[aria-pressed="true"] { background: var(--surface-2); }
+.home-motion-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.home-marquee { overflow: hidden; }
+.home-marquee-track { display: flex; width: max-content; animation: belt var(--marquee-s, 60s) linear infinite; }
+.home-marquee .home-live { flex-direction: row; flex-wrap: nowrap; gap: 12px; padding-right: 12px; }
+.home-marquee .home-live-item { flex: none; white-space: nowrap; }
+.home-marquee:hover .home-marquee-track { animation-play-state: paused; }
+.home-marquee:focus-within .home-marquee-track { animation: none; }
+.home-marquee.is-paused .home-marquee-track { animation-play-state: paused; }
+.chart-tip { position: fixed; z-index: 40; max-width: 280px; padding: 8px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); box-shadow: var(--shadow-2); font-size: 13px; pointer-events: none; }
+.chart-tip[hidden] { display: none; }
+```
+
+`@keyframes belt` đã có, dải Live dùng lại.
+
+- [ ] **Step 6: Chạy xanh**
+
+`npm test -w apps/web -- test/home test/design/assets.test.ts` → PASS. Test cũ giữ xanh: `assets.test.ts` "scroll reveal inside @supports" (đúng một khối, không `animation-timeline` ngoài nó) và "turns off every animation under reduced motion" (khối reduce chỉ được thêm); `home.test.ts` "adds no <script>…" (hai trang đều có `home.js` nên số `<script>` bằng nhau; vùng khối không có `<script>`, `style=`, `on…=`). Có thể sửa chữ mô tả "(CSP; scripts are Task 8)" trong test đó, tùy chọn.
+
+- [ ] **Step 7: Kiểm tra cuối, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git diff --stat -- package.json package-lock.json apps/web/package.json   # rỗng: không thêm dependency
+git add apps/web/public/assets/home.js apps/web/public/assets/app.css apps/web/src/views/LandingPage.tsx apps/web/src/views/home/Numbers.tsx apps/web/src/views/home/Live.tsx apps/web/src/views/home/HomeSection.tsx apps/web/src/views/home/Trending.tsx apps/web/src/views/home/TopProducts.tsx apps/web/test/home/home.test.ts apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts apps/web/test/home/motion.test.ts
+git commit -m "feat(web): add scroll-driven chart motion, count-up, Live strip and chart tooltip (VNX-0704b)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 8: Kiểm tay trong trình duyệt (BẮT BUỘC ghi vào báo cáo: tối thiểu mục 3, 5, 6 và ca focus; thiếu bản ghi là một phát hiện review)**
+
+`npm run dev`, mở `/` với snapshot đủ ngưỡng: (1) bar mọc từ trục trái (xác nhận bar THỰC SỰ mọc trong Chromium với `view-timeline` đặt trên `.chart`), đường chart và sparkline vẽ dần khi cuộn tới, tiêu đề khối hiện dần; trình duyệt khác thấy chart đầy đủ ngay; (2) số đếm lên một lần khi vào khung nhìn, kết thúc đúng số in sẵn; (3) dải Live cuộn ngang, dừng khi hover và khi bấm nút; Tab vào một liên kết trong dải thì dải dừng hẳn và liên kết hiện trong khung (ca focus); (4) rê chuột lên nhóm chart ra tooltip, Escape ẩn nó; (5) DevTools Rendering bật "prefers-reduced-motion: reduce": số hiện giá trị cuối ngay, Live không cuộn, chart đầy đủ không chuyển động; (6) tắt JS: mọi khối vẫn đọc được, Live là danh sách dọc.
+
+**Acceptance (mỗi mục một lệnh):**
+1. `npm test -w apps/web -- test/home/motion.test.ts` xanh: `home.js` ≤ 6 KB, không mạng/`innerHTML`/`setInterval`, chọn theo `data-*`, nạp `defer` chỉ ở `/`, tổng JS của `/` ≤ 60 KB.
+2. Cùng file: hiệu ứng chỉ trong `@supports (animation-timeline: view())` duy nhất; khối `prefers-reduced-motion: reduce` tắt chart, sparkline, dải Live (spec §9 "Homepage với `prefers-reduced-motion` không có animation").
+3. `npm test -w apps/web -- test/design/assets.test.ts test/home` xanh (test cũ không sửa, trừ chữ mô tả tùy chọn).
+4. `git diff --stat -- package.json package-lock.json apps/web/package.json` rỗng; `grep -rn "<script" apps/web/src/views/home` rỗng.
+5. `npm run typecheck -w apps/web` và `npm test` xanh. Diff ước tính ~210 dòng mã chạy không tính locale (home.js ~95, CSS ~45, TSX ~30, LandingPage 1) và ~150 dòng test.
+
+**Câu hỏi cho Owner (không chặn viết code):**
+- (i) **ĐÃ GIẢI QUYẾT (Controller: nhãn UI thuần, đã duyệt):** `home.chart.table` ("Show data as a table", 8a) và `home.motion.pause` ("Pause scrolling", 8b) ở 4 locale. Không có câu mô tả mới nào khác; trục, legend, nhãn tuần là nhãn dữ liệu.
+- (ii) Hero auto-rotate không làm lại vì deck landing đã có; nếu Owner muốn bộ xoay riêng cho hero của homepage ba cột thì là task sau M7.
 
 ---
 
