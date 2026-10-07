@@ -21,6 +21,8 @@ export default defineConfig(async () => {
             // Pinned empty so a developer's .dev.vars key can never turn the suite into real mail (VNX-0803 F6).
             RESEND_API_KEY: "",
             TURNSTILE_DRIVER: "fake",
+            // Pinned empty so the committed production go-live date never changes the suite; tests that need a date set it per request (M7).
+            PRIVACY_NOTICE_GO_LIVE: "",
           },
         },
       }),

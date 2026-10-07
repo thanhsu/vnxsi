@@ -31,7 +31,7 @@
     // (b) Empty or malformed = no view counting, no /go/p/ click hashing, no notice, and the old Privacy text.
     // (c) Commit D here on main in a chore: commit. Never set it via --var or the dashboard, and never clear it. Every later deploy, from any session or branch, must come from a tree
     //     that contains the date commit; otherwise Privacy reverts to the old text while hashes already exist.
-    "PRIVACY_NOTICE_GO_LIVE": ""
+    "PRIVACY_NOTICE_GO_LIVE": "2026-10-21"
   },
   "workers_dev": true,
   "routes": [
