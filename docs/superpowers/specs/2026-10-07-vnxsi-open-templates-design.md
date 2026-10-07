@@ -139,11 +139,19 @@ source_revision: generated-at-release
 
 The body sections are `Use this when`, `Inputs`, `Template`, `Illustrative example`, `Check the result`, `Limitations`, and `Change log`. `tested_tools` remains empty until a real test is recorded. `source_revision` is generated release metadata attached to the rendered record or pack from the selected source revision; it is not a self-referential hash committed inside the source file, and the source file does not need its own final Git SHA.
 
+Source-derived candidates also record `source_collection`, `source_path`, `source_commit` as a full pinned upstream SHA, `upstream_license` as the verified source-specific term, `source_license_evidence`, `source_permalink`, and `adaptation_summary` in front matter or an equivalent generated provenance record. `source_commit` identifies the selected upstream material; `source_revision` identifies the later VNX release snapshot. Draft records use `license: null` for pending VNX editorial additions. Provenance records are internal editorial evidence until a public-link decision is accepted.
+
 ### 5.3 Licence and rights
 
-The recommended content licence is **CC BY 4.0**, pending explicit Owner acceptance. The final licence must be shown in each entry and pack, with attribution guidance. Contributors must confirm that their text, examples, and adaptations are original or available under compatible terms. Synthetic examples are preferred; real client data, secrets, and copied vendor prompts are prohibited.
+The recommended content licence is **CC BY 4.0** for original VNX editorial additions only, pending explicit Owner acceptance. It is not a blanket licence for adapted upstream material. Each source-derived entry must preserve the selected upstream terms and attribution requirements, with source-specific evidence recorded before it enters the catalogue or pack. Contributors must confirm that their additions and adaptations are original or available under compatible terms. Synthetic examples are preferred; real client data, secrets, and copied vendor prompts are prohibited.
 
 The licence for any future build tooling is a separate repository decision. A licence URL is an outbound link and must follow the ADR-007 decision described in §7.3.
+
+### 5.4 Source-first curation
+
+The first curation target is 25 adapted entries: 10 from `prompts.chat`, 10 from Fabric everyday patterns, and five from Fabric developer patterns, stored in source-based directories such as `prompts-chat`, `fabric-everyday`, and `fabric-developer`. The target is not a quota. If source quality, rights evidence, safety, or adaptation value is insufficient, omit the candidate and report the shortfall rather than filling it with self-authored material. Prior drafts archived outside the catalogue are not source evidence and must not be counted or distributed.
+
+The source audit records the exact upstream path or permalink, full `source_commit`, verified `upstream_license`, licence evidence, attribution, copied-versus-transformed boundary, adaptation/change summary, safety edits, reviewer, and unresolved question. The current evidence pins `f/prompts.chat` at `7d3f248962d1dca209d59e033524bcb86c2b26b8` with the repo-relative snapshot `content/open-templates/notices/prompts-chat-license-snapshot.md`, and `danielmiessler/Fabric` at `c11e9b6cc065b5a2fad66c85ebbaa89ce9e99d38` with `content/open-templates/notices/fabric-MIT.txt`. Repository-level terms must not be assumed to cover every prompt, pattern, example, or asset. Do not preserve near-duplicate newsletter or summary entries unless their inputs, output contract, and user decision are materially different. Raw source/permalink records are internal provenance; any future user-visible external link follows ADR-007 and the approved `/go` resolver path.
 
 ## 6. Quality and compatibility bar
 
@@ -193,6 +201,17 @@ The portable pack is the MVP distribution artifact: UTF-8 Markdown, stable headi
 At most two tool-specific adapters may ship in the pilot. The adapter set and exact client versions are deliberately deferred until a QA run confirms import/copy behavior. Claude and Codex are candidate targets because they are named use cases, not a promise that either format is already verified. Do not publish a tool-specific pack, compatibility badge, or installation claim based only on documentation assumptions.
 
 Adapters must preserve the portable text and metadata, identify their target version, and be regenerated when the source version changes. An unverified or stale adapter is omitted or labelled unavailable. Hosted execution, account synchronization, private prompt injection, and automatic model calls are deferred.
+
+### 8.1 Conditional publish/deploy guidance
+
+Recommendations are conditional on the output type and remain editorial, portable, and neutral:
+
+- Private notes, local files, and internal tool output receive no default publish or deploy recommendation.
+- Public text or document exports may receive an editorial publishing suggestion only after rights, review, audience, and removal ownership are clear.
+- Static documentation or site output may mention Cloudflare Pages as a nonaffiliate candidate and GitHub Pages as an eligible nonaffiliate alternative after usage constraints are checked. These are options, not guarantees or paid rankings.
+- Audio or video scripts may optionally use ElevenLabs text-to-speech for voice production when relevant. This is not a hosting or distribution recommendation and must not be attached to unrelated templates.
+
+Public official documentation links or registered `/go` destinations require the ADR-007 path. The practical output-type rationale is recorded in the internal [delivery matrix](../../../content/open-templates/DELIVERY-MATRIX.md). Recommendation text remains editorial and portable; monetization/partner resolution stays in the existing registry/database and is not encoded in catalogue metadata or packs. The registry records the ElevenLabs entry as a draft with terms missing; this set emits no affiliate URL or monetized CTA, and any runtime activation requires later backend configuration and validation. Affiliate tags, commission data, and ranking signals never enter source metadata, upstream prompts, generated pages, or exported packs.
 
 ## 9. MCP Phase B
 
@@ -251,7 +270,7 @@ This is the current documentation phase. It delivers an Owner-approved written s
 
 Dependencies: Phase 0 approval, an Owner-accepted content licence, an editor and 2–4 hour/week maintenance budget, and a separately authorized task to open the public content repository before public prelaunch.
 
-Deliverables are 20–30 curated entries with an approximately 80/20 everyday-to-developer mix; English content behind the four-locale UI contract; account-free browse/search/copy/download; one portable Markdown pack; zero to two verified adapters; and a pinned, reproducible source release. Every published template requires one recorded real model/tool trial with normal and missing/ambiguous-input cases plus an output-check rubric. A full cross-model evaluation is not required. Marketplace/Build Kit links remain contextual, neutral, and subject to their own reviewed routes.
+Deliverables target 25 source-reviewed entries: 10 adapted from `prompts.chat`, 10 Fabric everyday patterns, and five Fabric developer patterns, with an approximately 80/20 everyday-to-developer mix. The target may be reduced when source quality, rights, safety, or adaptation value fails review. The remaining deliverables are English content behind the four-locale UI contract; account-free browse/search/copy/download; one portable Markdown pack; zero to two verified adapters; source provenance/licence/change records; and a pinned, reproducible source release. Every published template requires one recorded real model/tool trial with normal and missing/ambiguous-input cases plus an output-check rubric. A full cross-model evaluation is not required. Marketplace/Build Kit links remain contextual, neutral, and subject to their own reviewed routes.
 
 The public repository opening is part of the Phase A prelaunch gate so the open-source promise cannot be silently deferred. Its creation is not authorized by this document. The Worker consumes a pinned release at build time and never fetches the repository at runtime; one repository is authoritative after the release decision.
 
@@ -278,13 +297,13 @@ A later implementation plan may start when all of these are true:
 3. The plan names the source/release contract, the editorial owner, the §6 real-trial record, and the verification work needed before launch.
 4. The remaining product choices are bounded without pretending they are verified: candidate inventory, exact source directory, adapter targets, and MCP client support may be decided during implementation under the gates in this spec.
 
-No 20–30 published entries, generated page/search/pack artifacts, tested adapter, or deployed route is required at this gate.
+No 25 published entries, generated page/search/pack artifacts, tested adapter, or deployed route is required at this gate.
 
 ### 13.2 Public-launch gate
 
 The public pilot is ready only when all of these are true:
 
-1. The catalogue contains 20–30 genuinely useful candidates, with the 80/20 audience mix and no filler; every published candidate passes §6, including the recorded normal and missing/ambiguous-input trials and output-check rubric.
+1. The catalogue contains the accepted source-reviewed candidates toward the 25-entry target (10 `prompts.chat`, 10 Fabric everyday, five Fabric developer), with the 80/20 audience mix and no filler; an evidence-based shortfall is documented when a source fails review. Every published candidate passes §6, including provenance, source-specific rights, and the recorded normal and missing/ambiguous-input trials and output-check rubric.
 2. The public content repository has been opened through a separately authorized execution task, its first reviewed release is pinned, and one authoritative source is recorded. The Worker has no runtime repository dependency.
 3. The source format generates the page, search index, portable pack, and metadata from one pinned revision; no generated file is hand-maintained.
 4. Account-free browse, copy, and portable download flows are implemented, accessible, and verified. All UI keys have four-locale parity, and English content is labelled.
@@ -300,10 +319,12 @@ The public pilot is ready only when all of these are true:
 | Decision | Owner decision required |
 |---|---|
 | Written design | Approve this draft as the basis for a later implementation plan. Product direction is already approved. |
-| Content licence | Accept CC BY 4.0 or name a replacement; decide whether examples need an additional attribution rule. |
+| Content licence | Accept CC BY 4.0 for original VNX editorial additions or name a replacement; confirm source-specific terms and attribution for each upstream adaptation. |
 | Repository | Open the public repository before Phase A prelaunch through a separately authorized task; record the canonical source and pinned release without adding a runtime dependency. |
 | External links | Register repository/licence/tool URLs through `/go/`, or approve a narrow ADR-007 editorial-link exception before exposing them. |
-| Initial inventory | Select the final 20–30 entries, editor, review cadence, and removal owner. |
+| Initial inventory | Select the accepted source-derived entries toward the 25 target, editor, review cadence, and removal owner; record any rights/quality shortfall. |
+| Source evidence | Record exact upstream paths, revisions, licence snapshots, attribution, and adaptation changes before catalogue inclusion. |
+| Publish/deploy recommendations | Approve output-type guidance, nonaffiliate alternatives, and any public official documentation links; keep affiliate activation blocked until backend terms/configuration are active. |
 | Adapters | Select zero to two target clients and exact versions only after real QA; do not infer compatibility from brand names. |
 | Measurement | Approve aggregate event fields and decide whether a voluntary panel is sufficient for repeat-use research. Persistent retention measurement needs a separate privacy decision. |
 | MCP | Approve Phase B only after usefulness evidence; select SDK/runtime, conformance tests, and support matrix then. |
@@ -321,4 +342,4 @@ Deferred from this pilot: accounts, favorites/sync, ratings, comments, public au
 | External links bypass monetization/security policy. | Resolve ADR-007 treatment before shipping any repository, licence, tool, or partner URL. |
 | MCP expands support burden or becomes an execution surface. | Phase B gate, two read-only tools, stateless bounded responses, no execution/fetching, named client matrix. |
 | Traffic does not lead to marketplace demand. | Treat referrals as a separate hypothesis; keep templates valuable without a conversion and use pilot data before expanding. |
-| Maintenance exceeds one-person capacity. | 20–30 item cap, 2–4 hour/week budget, freeze or remove stale entries instead of lowering the bar. |
+| Maintenance exceeds one-person capacity. | Source-review target up to 25 items, 2–4 hour/week budget, freeze or remove stale entries instead of lowering the bar. |
