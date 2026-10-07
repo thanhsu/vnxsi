@@ -302,6 +302,8 @@ Owner, trước khi ElevenLabs chạy thật:
 - **VNX-2607 (ADR-012, Privacy tài khoản liên kết):** chép câu chữ vào cả `privacy.md` và `privacy-m7.md` (và cả bốn hằng số trong `content.ts`), hoặc gộp hai phiên bản trước; nếu chỉ sửa `privacy.md` thì nội dung biến mất khi cửa sổ M7 mở.
 - **Execution plan marketing/designer (Owner 2026-10-06):** là định hướng; Reviewer viết spec addendum / ADR sau M7. Đã quyết: giữ A2 (homepage 3 cột sau M7), giữ Q1 (không listing curated trong `/products`), **bảng request công khai đầy đủ** (cần spec addendum sửa §4, §8.8, §11; câu chữ Privacy/Terms mới; opt-in từng request, không công khai hồi tố; trường quốc gia; quy tắc ngân sách). Còn chờ Owner: VNX Labs và các câu ưu tiên 2–3 trong review.
 - **Bảng request công khai (Owner 2026-10-07):** phụ lục `docs/superpowers/specs/2026-10-07-vnxsi-public-request-board-addendum.md` **thiết kế Approved** ("approve all"): builder bấm "I'm interested" vào hàng chờ Ops, admin vẫn mời tối đa 5; chỉ hiện `budget_band`; mọi trường công khai sau khi Ops (Owner, Operator) kiểm duyệt, danh tính client không bao giờ công khai; request mở được index, đóng thì `noindex`, hiện "Closed" 30 ngày rồi 404; opt-in từng request (cả từ `/me`), rút được bất cứ lúc nào; country tùy chọn; báo trước 14 ngày bằng biến ngày `REQUEST_BOARD_GO_LIVE` (không chờ task dọn Privacy M7). Đề xuất EPIC 27 (VNX-2701…2708, thay VNX-1901), làm sau khi deploy M7. **Còn chặn:** câu chữ EN mục 12 Owner đã duyệt 2026-10-07; còn chờ Owner duyệt bản VI (mục 12.6); người có chuyên môn pháp lý đọc mục 12 (NĐ 13/2023) trước VNX-2708.
+  - **Plan EPIC 27** `docs/superpowers/plans/2026-10-07-vnxsi-epic27-public-request-board.md` (`ad11f1f`, sửa sau review `a6ac733`): Opus review APPROVE_AFTER_FIXES (H1 trần interest chỉ đếm request mở; H2 `findViewerRelation`, không lộ `request_id`; M1–M7, L1–L9 đã sửa). Reviewer quyết OP-1 (không giới hạn opt-in lại), OP-3 (3 phiên bản Privacy + Terms theo ngày), OP-4 (không thu hẹp Viewer), OP-5 (rejected → Closed 30 ngày). **Chờ Owner (VNX-2701):** duyệt plan, bản VI mục 12.6 phụ lục, câu thông báo 14 ngày (OP-2a). Code bắt đầu sau khi deploy M7.
+  - **Nghĩa vụ khi EPIC 27 vào `main`:** VNX-2607 (EPIC 26) phải sửa 3 tệp Privacy (`privacy.md`, `privacy-m7.md`, `privacy-board.md`) và 2 tệp Terms (`terms.md`, `terms-board.md`) cùng các hằng số tương ứng. Ops O2 theo dõi số liệu phụ lục §9.6 (tỷ lệ opt-in, publish/reject, interest → mời → chọn).
 
 - ✅ **M7 (VNX-0707):** `ANALYTICS_SALT` đã vào thứ tự deploy (xem "Việc của Owner khi deploy M7").
 - **Owner (monetization Q4):** tự kiểm điều khoản từng chương trình partner (có cho cá nhân tham gia không, mẫu thuế, cách payout) trước khi bật trên production; khi lập pháp nhân (VNX-1401) thì chuyển hợp đồng.
@@ -327,6 +329,9 @@ Owner, trước khi ElevenLabs chạy thật:
 
 ## Ghi nhận (minor, chưa làm)
 
+- **EPIC 27 (plan):**
+  - Client có thể rút rồi bật lại công khai không giới hạn (mỗi lần vào hàng chờ Ops); chưa đặt trần vì đó là quy tắc nghiệp vụ mới. Nếu bị lạm dụng thì Owner quyết một con số.
+  - Viewer (Ops) đã thấy bản gốc request và email client qua `marketplace.view` (`findAdminRequest`); phụ lục chỉ không mở thêm. Muốn thu hẹp thì cần sửa ADR-010 riêng.
 - **M7:**
   - `/p/:slug` cho người đã đăng nhập (không phải builder chủ, không phải admin) thêm một lần đọc D1 (`findOpsAccess` trong `isStaff`) sau go-live.
   - Job giờ đọc `loadCounts` 4 lần, `loadCategoryCounts` 2 lần mỗi lượt (~5 lần đọc thừa; có thể nhớ tạm trong một lượt).
