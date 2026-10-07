@@ -171,7 +171,7 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m6-request.md` (Owner duyệt 202
 
 ## EPIC 26 — Tài khoản liên kết Google, GitHub, LinkedIn (ADR-012)
 
-Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR-012 Accepted 2026-10-07. Plan riêng ở `docs/superpowers/plans/`, viết trước khi bắt đầu epic. Thứ tự so với M8 do Owner chốt khi duyệt plan. Phụ thuộc: VNX-2602 → 2603 → 2604, 2605 → 2606; VNX-2601 trước khi thử trên môi trường thật; VNX-2607 trước VNX-2608.
+Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR-012 Accepted 2026-10-07. Plan riêng ở `docs/superpowers/plans/`, viết trước khi bắt đầu epic. Plan `docs/superpowers/plans/2026-10-07-vnxsi-epic26-linked-accounts.md` (Approved 2026-10-07; VNX-2603…2606 tách a/b/c). **Thứ tự so với M8 (Owner 2026-10-07):** làm ngay, merge với cả ba cờ tắt, M8 không chờ; VNX-2608 chỉ sau khi ra mắt ổn định. **Lệch dòng VNX-2603 (Reviewer duyệt 2026-10-07):** không kiểm chữ ký ID token bằng JWKS (OIDC Core §3.1.3.7), vẫn kiểm `iss`/`aud`/`azp`/`exp`/`nonce`. Phụ thuộc: VNX-2602 → 2603 → 2604, 2605 → 2606; VNX-2601 trước khi thử trên môi trường thật; VNX-2607 trước VNX-2608.
 
 | Task | Nội dung | Tag |
 |---|---|---|

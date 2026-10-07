@@ -280,7 +280,7 @@ Owner, trước khi ElevenLabs chạy thật:
 - Trước M8: người bản xứ đọc lại `zh-Hans`, `zh-Hant`.
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
 
-- **EPIC 26 (ADR-012):** Reviewer viết plan `docs/superpowers/plans/` trước khi bắt đầu, Owner chốt thứ tự so với M8. Owner làm VNX-2601: tạo ứng dụng OAuth Google, GitHub, LinkedIn (LinkedIn cần Company Page), callback `/auth/oauth/:provider/callback` cho prod và local, 6 secret qua `wrangler secret`.
+- **EPIC 26 (ADR-012):** plan `docs/superpowers/plans/2026-10-07-vnxsi-epic26-linked-accounts.md` **Approved** 2026-10-07 (header + Task 1 VNX-2602; Opus review APPROVE_WITH_CHANGES, đã sửa F1–F10, S1, S2). Owner 2026-10-07: làm ngay, merge với cờ tắt, bật (VNX-2608) sau khi M8 ra mắt ổn định; email báo liên kết gồm provider + `label` + giờ UTC + contact@vnx.si. Lệch đã duyệt: (1) không kiểm JWKS cho ID token, kiểm `iss`/`aud`/`azp`/`exp`/`nonce` (lệch dòng roadmap VNX-2603); (2) liên kết: `start` trả trang trung gian 200 có link sang provider thay vì 302 (lệch chữ ADR-012 §4, vì CSP `form-action 'self'` chặn chuỗi redirect sau POST); (3) luật chỉ-magic-link áp cả `requireAdmin` (legacy `/admin`), không chỉ `/ops`. Câu chữ UI nguyên văn 4 locale chờ Owner duyệt theo từng task. Owner làm VNX-2601: tạo ứng dụng OAuth Google, GitHub, LinkedIn (LinkedIn cần Company Page), callback `/auth/oauth/:provider/callback` cho prod và local, 6 secret qua `wrangler secret`.
 
 ## Ghi nhận (minor, chưa làm)
 
