@@ -1,7 +1,7 @@
 # VNX.SI — Phụ lục spec: Bảng request công khai
 
 - **Ngày:** 2026-10-07
-- **Trạng thái:** **Thiết kế Approved** (Owner 2026-10-07: "approve all", duyệt phụ lục và toàn bộ khuyến nghị ở mục 17). **Câu chữ mục 12 (Privacy, Terms, giao diện) CHƯA DUYỆT.** Không sửa `docs/legal/*` hay `src/legal/content.ts`, và không bật cờ `request_board`, cho tới khi Owner duyệt nguyên văn mục 12.
+- **Trạng thái:** **Thiết kế Approved** (Owner 2026-10-07: "approve all", duyệt phụ lục và toàn bộ khuyến nghị ở mục 17). **Câu chữ EN mục 12.2–12.4: APPROVED** (Owner 2026-10-07). **Bản VI mục 12.6: chờ Owner duyệt.** Không sửa `docs/legal/*` hay `src/legal/content.ts` trước khi bản VI được duyệt; không bật cờ `request_board` trước khi người có chuyên môn pháp lý đọc lại (Q16).
 - **Bổ sung cho:** [spec Wave 1](2026-10-03-vnxsi-marketplace-wave1-design.md). Sau khi được duyệt, phụ lục có cùng cấp với spec; chỗ nào phụ lục ghi "thay mục X" thì phụ lục thắng.
 - **Căn cứ:**
   - [Review execution plan](../../../.ai/reviews/EXECUTION-PLAN-2026-10-06-review.md): C1, mục 4.1, mục 7 câu 4.
@@ -276,9 +276,9 @@ Công thức **không đổi**. Interest hiện ở khối riêng, không cộng
 - HTML khi đã đăng nhập: `no-store` (VNX-0803 F8).
 - Nội dung do client và Ops viết render văn bản thuần (§8.6); cấm `dangerouslySetInnerHTML`.
 
-## 12. Privacy và Terms (đề xuất, **CHƯA DUYỆT**)
+## 12. Privacy và Terms (EN **APPROVED** 2026-10-07; VI chờ duyệt)
 
-> **Trạng thái:** bản đề xuất của Reviewer. **Owner chưa duyệt.** Không chép vào `docs/legal/*` hay `src/legal/content.ts` trước khi Owner duyệt nguyên văn. Không phải tư vấn pháp lý; nên nhờ người có chuyên môn đọc lại (NĐ 13/2023, GDPR).
+> **Trạng thái:** bản EN (12.2–12.4) Owner duyệt nguyên văn 2026-10-07. Bản VI (12.6) chờ Owner duyệt. Không chép vào `docs/legal/*` hay `src/legal/content.ts` trước khi bản VI được duyệt. Không phải tư vấn pháp lý; nên nhờ người có chuyên môn đọc lại (NĐ 13/2023, GDPR).
 
 ### 12.1 Thay đổi so với lời hứa hiện tại
 
@@ -332,11 +332,51 @@ For public requests we rely on your consent. You can withdraw it at any time fro
 
 ### 12.5 Ngôn ngữ, phiên bản và báo trước
 
-- **vi:** Reviewer viết bản VI sau khi Owner duyệt bản EN; Owner duyệt bản VI nguyên văn (như M5–M7).
+- **vi:** Owner duyệt bản EN 2026-10-07; bản VI ở mục 12.6, Owner duyệt nguyên văn (như M5–M7).
 - **zh-Hans, zh-Hant:** trang Privacy/Terms hiện bản EN kèm câu "bản tiếng Anh có hiệu lực" (như hiện nay). Câu chữ giao diện (12.4) và email (9.2) dịch bằng AI, người bản xứ đọc lại trước khi quảng bá (§5.1).
 - **Hai phiên bản Privacy:** cho tới task dọn sau D(M7) + 31 ngày, mọi thay đổi Privacy phải sửa **cả** `privacy.md` và `privacy-m7.md`, và cả bốn hằng số `privacyEn`, `privacyVi`, `privacyEnM7`, `privacyViM7`. EPIC 26 (VNX-2607) cũng sửa các tệp này: điểm phối hợp khi merge.
 - **Báo trước (Privacy §10, Terms §12):** người đã đăng nhập thấy thông báo trước khi thay đổi có hiệu lực, theo khuôn VNX-0701c (Q15: số ngày và cơ chế). Cờ `request_board` chỉ bật từ ngày có hiệu lực.
 - Ngày "Last updated" của Privacy và Terms đổi sang ngày có hiệu lực.
+
+### 12.6 Bản VI đề xuất (chờ Owner duyệt)
+
+Dịch sát bản EN đã duyệt. Thuật ngữ theo bản VI hiện có: "request" = **nhu cầu**, "inquiry" = **yêu cầu**, "public request board" = **bảng nhu cầu công khai**. Bản tiếng Anh vẫn có hiệu lực khi hai bản khác nhau.
+
+**Privacy mục 2, sửa gạch "Nhu cầu (request)":**
+- **Nhu cầu (request):** khi bạn đăng nhu cầu, tên bạn gõ, tiêu đề, mô tả, danh mục, khoảng ngân sách, hạn chót (nếu có), các ngôn ngữ bạn muốn làm việc và quốc gia bạn chọn. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; nhu cầu chưa được xem xét cho tới khi bạn xác nhận email.
+
+**Privacy mục 2, thêm gạch sau "Nhu cầu (request)":**
+- **Nhu cầu công khai:** nếu bạn chọn hiện một nhu cầu trên bảng nhu cầu công khai, chúng tôi ghi lại thời điểm bạn chọn và phiên bản chính sách này mà bạn đã thấy. Đội ngũ của chúng tôi xem nhu cầu trước và có thể rút gọn hoặc sửa tiêu đề, mô tả để bỏ những chi tiết có thể nhận ra bạn hoặc người khác. Chúng tôi giữ bản đã công khai cùng với bản gốc của bạn.
+- **Quan tâm tới nhu cầu công khai:** nếu bạn là builder và báo với chúng tôi rằng bạn quan tâm tới một nhu cầu công khai, chúng tôi ghi lại điều đó, thời điểm, và ghi chú hoặc sản phẩm bạn kèm theo.
+
+**Privacy mục 3, thêm gạch sau "Ghép nhu cầu với builder…":**
+- Hiển thị các nhu cầu mà người đăng đã chọn công khai, để builder tìm thấy và báo với chúng tôi rằng họ quan tâm. Đội ngũ của chúng tôi vẫn quyết định mời builder nào.
+
+**Privacy mục 3, thêm vào đoạn căn cứ:**
+Với nhu cầu công khai, căn cứ của chúng tôi là sự đồng ý của bạn. Bạn có thể rút lại bất cứ lúc nào từ trang tài khoản; nhu cầu khi đó rời bảng công khai ngay, và việc rút lại không ảnh hưởng tới những gì đã diễn ra trước đó.
+
+**Privacy mục 4, thay gạch thứ hai bằng:**
+- Builder không thấy email của client. Builder thấy tên bạn gõ, các tin nhắn, khoảng ngân sách và hạn chót; builder được mời vào nhu cầu của bạn thấy thêm nhu cầu đó. Nếu bạn chọn công khai một nhu cầu, bất kỳ ai, kể cả công cụ tìm kiếm, đều thấy được bản chúng tôi đã công khai, cùng danh mục, khoảng ngân sách, quốc gia, hạn chót và ngôn ngữ, nhưng không bao giờ thấy tên, email hay tài khoản của bạn.
+
+**Privacy mục 4, thêm gạch:**
+- Khi một builder báo với chúng tôi rằng họ quan tâm tới một nhu cầu công khai, chỉ đội ngũ của chúng tôi thấy điều đó. Client không thấy, trừ khi chúng tôi mời builder đó.
+- Công cụ tìm kiếm và các trang khác có thể giữ bản sao của một trang công khai trong một thời gian sau khi chúng tôi đóng hoặc gỡ nó. Chúng tôi yêu cầu công cụ tìm kiếm không lập chỉ mục các nhu cầu đã đóng, nhưng không thể xóa bản sao mà bên khác đang giữ.
+
+**Privacy mục 6, thêm gạch sau "Nhu cầu và đề xuất…":**
+- Nhu cầu công khai: hiển thị khi nhu cầu còn mở và trong 30 ngày sau khi đóng, trừ khi bạn hoặc chúng tôi gỡ sớm hơn. Sau đó, bản đã công khai và lựa chọn của bạn được giữ cùng nhu cầu, theo quy tắc ở trên. Bản ghi quan tâm: theo cùng quy tắc với nhu cầu.
+
+**Terms mục 6 (Client), thêm đoạn:**
+**Nhu cầu công khai.** Bạn có thể chọn hiện một nhu cầu trên bảng nhu cầu công khai. Nếu bạn làm vậy: không đưa dữ liệu cá nhân của người khác, thông tin liên lạc, hay thông tin bạn không được phép chia sẻ; chúng tôi xem nhu cầu trước khi hiện và có thể sửa, từ chối hoặc gỡ nó bất cứ lúc nào; bạn có thể gỡ nó bất cứ lúc nào từ trang tài khoản. Việc một builder báo rằng họ quan tâm không tạo ra thỏa thuận nào, và chúng tôi vẫn chọn mời builder nào.
+
+**Terms mục 5 (Builder và listing), thêm gạch:**
+- Nếu bạn báo với chúng tôi rằng bạn quan tâm tới một nhu cầu công khai, những gì bạn viết phải đúng sự thật. Chỉ dùng bảng nhu cầu để tìm việc thông qua VNX.SI.
+
+**Terms mục 7 (Những điều bạn không được làm), thêm gạch:**
+- Tìm cách nhận ra người đăng một nhu cầu công khai, liên hệ họ bên ngoài VNX.SI, hoặc chép nhu cầu công khai sang trang khác.
+
+**Câu chữ giao diện (12.4), bản VI:**
+- Nhãn: *"Hiện nhu cầu này trên bảng nhu cầu công khai"*
+- Mô tả: *"Đội ngũ của chúng tôi xem trước và có thể sửa để bỏ những chi tiết có thể nhận ra bạn. Tên và email của bạn không bao giờ được hiện. Bạn có thể gỡ bất cứ lúc nào từ tài khoản của mình. Đừng ghi tên người, tên công ty, thông tin liên lạc hay thông tin mật. Quốc gia, ngân sách và một ngách quá cụ thể đôi khi gộp lại có thể nhận ra một doanh nghiệp."*
 
 ## 13. Test bắt buộc (bổ sung spec §9)
 
