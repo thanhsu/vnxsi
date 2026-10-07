@@ -113,7 +113,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
       signedIn={signedIn}
       jsonLd={organizationJsonLd(origin)}
       fullWidth
-      scripts={["/assets/landing.js"]}
+      scripts={["/assets/landing.js", "/assets/home.js"]}
     >
       <section class="lp-hero" aria-labelledby="hero-title">
         <div class="lp-hero-grid" aria-hidden="true"></div>

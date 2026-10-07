@@ -942,6 +942,7 @@ export const vi: Messages = {
   "home.live.badgeGranted": "Huy hiệu mới",
   "home.live.builderApproved": "Builder được duyệt",
   "home.live.requestNew": "Nhu cầu mới",
+  "home.motion.pause": "Tạm dừng cuộn",
   "home.pulse.title": "Nhịp thị trường",
   "home.pulse.requestsTitle": "Nhu cầu và sản phẩm đang đăng theo danh mục",
   "home.pulse.category": "Danh mục",

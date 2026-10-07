@@ -28,7 +28,7 @@ export const Trending: FC<{ locale: Locale; items: readonly TrendingItem[] }> = 
   return (
     <ol class="home-tiles home-ranked">
       {items.map((item) => (
-        <li class="home-tile">
+        <li class="home-tile lift">
           <Meta locale={locale} item={item} />
           <p class="home-trend">
             <svg class="home-spark" viewBox={SPARK_VIEWBOX} role="img" aria-label={tr("home.trending.spark", { days: SPARK_DAYS })}>
@@ -54,7 +54,7 @@ export const Founding: FC<{ locale: Locale; items: readonly CatalogItem[] }> = (
       {items.map((item) => {
         const badge = topBadge(item.badgeScore);
         return (
-          <li class="home-tile">
+          <li class="home-tile lift">
             <Meta locale={locale} item={item} />
             {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}
           </li>

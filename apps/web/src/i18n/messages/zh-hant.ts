@@ -941,6 +941,7 @@ export const zhHant: Messages = {
   "home.live.badgeGranted": "已授予徽章",
   "home.live.builderApproved": "Builder 已通過審核",
   "home.live.requestNew": "新需求",
+  "home.motion.pause": "暫停捲動",
   "home.pulse.title": "市場脈搏",
   "home.pulse.requestsTitle": "按類別統計的需求與已上架產品",
   "home.pulse.category": "類別",

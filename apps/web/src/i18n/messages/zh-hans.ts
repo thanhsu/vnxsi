@@ -941,6 +941,7 @@ export const zhHans: Messages = {
   "home.live.badgeGranted": "已授予徽章",
   "home.live.builderApproved": "Builder 已通过审核",
   "home.live.requestNew": "新需求",
+  "home.motion.pause": "暂停滚动",
   "home.pulse.title": "市场脉搏",
   "home.pulse.requestsTitle": "按类别统计的需求与已上架产品",
   "home.pulse.category": "类别",

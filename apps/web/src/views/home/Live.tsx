@@ -19,14 +19,20 @@ const LiveItem: FC<{ locale: Locale; e: PublicLiveEvent }> = ({ locale, e }) => 
   }
 };
 
-/** A static list for now (the marquee is Task 8). Only what the snapshot holds: no request title, no client, no e-mail. */
-export const Live: FC<{ locale: Locale; events: readonly PublicLiveEvent[]; now: Date }> = ({ locale, events, now }) => (
-  <ul class="home-live">
-    {events.map((e) => (
-      <li class="home-live-item">
-        <time datetime={e.at}>{relativeTime(locale, e.at, now)}</time>
-        <LiveItem locale={locale} e={e} />
-      </li>
-    ))}
-  </ul>
-);
+/** A static list that home.js upgrades into a strip. Only what the snapshot holds: no request title, no client, no e-mail. */
+export const Live: FC<{ locale: Locale; events: readonly PublicLiveEvent[]; now: Date }> = ({ locale, events, now }) => {
+  const tr = translator(locale);
+  return (
+    <div class="home-live-wrap">
+      <button type="button" class="home-motion-toggle" data-motion-toggle hidden aria-pressed="false">{tr("home.motion.pause")}</button>
+      <ul class="home-live" data-marquee>
+        {events.map((e) => (
+          <li class="home-live-item">
+            <time datetime={e.at}>{relativeTime(locale, e.at, now)}</time>
+            <LiveItem locale={locale} e={e} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};

@@ -939,6 +939,7 @@ export const en = {
   "home.live.badgeGranted": "Badge granted",
   "home.live.builderApproved": "Builder approved",
   "home.live.requestNew": "New request",
+  "home.motion.pause": "Pause scrolling",
   "home.pulse.title": "Market pulse",
   "home.pulse.requestsTitle": "Requests and listed products by category",
   "home.pulse.category": "Category",

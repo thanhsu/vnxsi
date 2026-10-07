@@ -80,7 +80,7 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
     expect(block(await getHome(), "home-trending")).toBe("");
     await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems), now), fresh());
     const html = block(await getHome(), "home-trending");
-    expect(count(html, '<li class="home-tile"')).toBe(MIN.trendingItems);
+    expect(count(html, '<li class="home-tile lift"')).toBe(MIN.trendingItems);
     expect(count(html, "<polyline")).toBe(MIN.trendingItems);
     expect(html).toContain("<ol");
   });

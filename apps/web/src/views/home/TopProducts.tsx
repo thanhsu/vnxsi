@@ -25,7 +25,7 @@ export const TopProductsBlock: FC<{ locale: Locale; data: TopProductsByCategory 
             {(data[c] ?? []).map((p) => {
               const badge = topBadge(p.badgeScore);
               return (
-                <li class="home-tile">
+                <li class="home-tile lift">
                   <h4><a href={localizedPath(locale, `/p/${p.slug}`)}>{p.name}</a></h4>
                   <p class="muted">{tr("catalog.by", { name: p.builderName })}</p>
                   {badge ? <p><span class={`chip chip-${badge}`}>{tr(BADGE_KEY[badge])}</span></p> : null}

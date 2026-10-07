@@ -538,6 +538,8 @@ table.data th { font-weight: 600; color: var(--text-2); }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
 @keyframes ping { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.6); opacity: 0; } }
 @keyframes belt { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes chart-grow { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes chart-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 .reveal { animation: fadeUp var(--dur-3) var(--ease-out) both; }
 .d1 { animation-delay: .08s; }
 .d2 { animation-delay: .16s; }
@@ -546,6 +548,11 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .ping { animation: ping 1.6s ease-out infinite; }
 @supports (animation-timeline: view()) {
   .reveal-scroll { animation: fadeUp linear both; animation-timeline: view(); animation-range: entry 0% cover 22%; }
+  .chart { view-timeline: --chart-in block; }
+  .home-spark { view-timeline: --spark-in block; }
+  .chart-bar { transform-box: fill-box; transform-origin: 0 50%; animation: chart-grow linear both; animation-timeline: --chart-in; animation-range: entry 0% cover 40%; }
+  .chart-line { stroke-dasharray: 100; animation: chart-draw linear both; animation-timeline: --chart-in; animation-range: entry 0% cover 40%; }
+  .home-spark polyline { stroke-dasharray: 100; animation: chart-draw linear both; animation-timeline: --spark-in; animation-range: entry 0% cover 40%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal-scroll, .ping, .belt-track { animation: none !important; }
@@ -554,6 +561,13 @@ table.data th { font-weight: 600; color: var(--text-2); }
   /* The belt stands still: show each tool once, wrapped. */
   .belt-track { flex-wrap: wrap; width: auto; max-width: 1200px; margin: 0 auto; padding: 0 24px; gap: 12px 32px; white-space: normal; }
   .belt-track > [aria-hidden="true"] { display: none; }
+  .chart-bar, .chart-line, .home-spark polyline, .home-marquee-track { animation: none !important; }
+  .chart-line, .home-spark polyline { stroke-dasharray: none; }
+  .chart-data summary::after { transition: none; }
+  /* The strip stands still like the landing belt: wrapped, the copy hidden. */
+  .home-marquee .home-live { flex-wrap: wrap; }
+  .home-marquee-track { width: auto; }
+  .home-marquee-track > [aria-hidden="true"] { display: none; }
 }
 
 .privacy-notice { position: relative; margin: 0 0 24px; padding: 16px 96px 16px 18px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
@@ -606,7 +620,7 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .chart-hit { fill: transparent; pointer-events: all; }
 .chart-line, .chart-dot { pointer-events: none; }
 .chart-cross { stroke: transparent; stroke-width: 1; pointer-events: none; }
-.chart-group:hover .chart-cross { stroke: var(--text-2); }
+.chart-group:hover .chart-cross, .chart-group.is-active .chart-cross { stroke: var(--text-2); }
 .chart-legend { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--text); font-size: 14px; }
 .chart-swatch { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border-radius: 2px; background: var(--chart-ink); }
 .chart-swatch.chart-mark-circle { border-radius: 50%; }
@@ -616,3 +630,18 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .chart-data[open] summary::after { transform: rotate(-135deg); }
 .chart-data summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .home-pulse-item { min-width: 0; }
+
+/* VNX-0704b: Live strip (JS adds .home-marquee), pause button, tooltip. Numbers keep a steady width while counting. */
+.home-numbers strong { font-variant-numeric: tabular-nums; }
+.home-motion-toggle { min-height: 44px; margin: 0 0 8px; padding: 8px 14px; color: var(--primary); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
+.home-motion-toggle[aria-pressed="true"] { background: var(--surface-2); }
+.home-motion-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.home-marquee { overflow: hidden; }
+.home-marquee-track { display: flex; width: max-content; animation: belt var(--marquee-s, 60s) linear infinite; }
+.home-marquee .home-live { flex-direction: row; flex-wrap: nowrap; gap: 12px; padding-right: 12px; }
+.home-marquee .home-live-item { flex: none; white-space: nowrap; }
+.home-marquee:hover .home-marquee-track { animation-play-state: paused; }
+.home-marquee:focus-within .home-marquee-track { animation: none; }
+.home-marquee.is-paused .home-marquee-track { animation-play-state: paused; }
+.chart-tip { position: fixed; z-index: 40; max-width: 280px; padding: 8px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); box-shadow: var(--shadow-2); font-size: 13px; pointer-events: none; }
+.chart-tip[hidden] { display: none; }

@@ -13,7 +13,10 @@ export const Numbers: FC<{ locale: Locale; tiles: readonly NumberTile[] }> = ({ 
       <ul class="home-numbers">
         {tiles.map((tile) => (
           <li data-stat={tile.key}>
-            <strong>{formatCount(locale, tile.value)}</strong>
+            <strong>
+              <span class="visually-hidden">{formatCount(locale, tile.value)}</span>
+              <span aria-hidden="true" data-count={tile.value}>{formatCount(locale, tile.value)}</span>
+            </strong>
             <span>{tr(NUMBER_LABEL[tile.key], { days: REQUEST_DAYS })}</span>
           </li>
         ))}
