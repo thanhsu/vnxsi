@@ -31,7 +31,7 @@
 
 Lựa chọn kỹ thuật của Planner ở chỗ ADR-012 im lặng hoặc roadmap mơ hồ. Mục 3 lệch roadmap, mục 9 và 10 mở rộng ADR về phía chặt hơn; Reviewer quyết.
 
-1. **Số migration `0017_user_identities.sql`, và luật merge.** `main` có tới `0013_ops_members.sql`; nhánh `feat/m7-metrics` (chưa merge) giữ `0014_product_stats`, `0015_view_dedupe`, `0016_public_stats`. EPIC 26 lấy `0017` để không trùng số với M7 bất kể ai merge trước. Luật: (a) M7 merge trước → không đổi gì; (b) EPIC 26 merge trước → vẫn dùng `0017`, M7 merge sau và D1 áp `0014`–`0016` khi chạy `db:migrate:remote` (wrangler áp mọi file chưa áp, không đòi liền số; hai bên không có phụ thuộc dữ liệu); (c) nếu `main` lúc merge đã có số ≥ `0017`, đổi tên file thành số kế tiếp và sửa mọi chỗ nhắc tên file trong plan, ghi vào báo cáo. Rebase lên `main` ngay trước merge; xung đột dự kiến chỉ ở `test/architecture.test.ts` (M7 sửa ~120 dòng) và dòng ghi chú migration trong `wrangler.jsonc`.
+1. **Số migration `0017_user_identities.sql`, và luật merge.** `main` có tới `0013_ops_members.sql`; nhánh `feat/m7-metrics` (chưa merge) giữ `0014_product_stats`, `0015_view_dedupe`, `0016_public_stats`. EPIC 26 lấy `0017` để không trùng số với M7 bất kể ai merge trước. Luật: (a) M7 merge trước → không đổi gì; (b) EPIC 26 merge trước → vẫn dùng `0017`, M7 merge sau và D1 áp `0014`–`0016` khi chạy `db:migrate:remote` (wrangler áp mọi file chưa áp, không đòi liền số; hai bên không có phụ thuộc dữ liệu); (c) nếu `main` lúc merge đã có số ≥ `0017`, đổi tên file thành số kế tiếp và sửa mọi chỗ nhắc tên file trong plan, ghi vào báo cáo. Rebase lên `main` ngay trước merge; xung đột dự kiến chỉ ở `test/architecture.test.ts` (M7 sửa ~120 dòng), dòng ghi chú migration trong `wrangler.jsonc` và `auth/middleware.ts` (`requireAdmin`, Task 5; xem nghĩa vụ rebase cuối Task 5).
 2. **Không thêm dependency: tự viết PKCE/OAuth bằng `fetch` + WebCrypto**, không dùng `arctic` hay thư viện tương tự. Lý do: Global Constraints của M0–EPIC 21 cấm dependency mới; phần cần viết nhỏ (S256 là một lần `crypto.subtle.digest`, đổi code lấy token là một `POST` form, GitHub `GET /user`, tất cả đã có trong runtime workerd); một thư viện vẫn bắt ta tự kiểm `iss`/`aud`/`exp`/`nonce` (arctic chỉ cung cấp `decodeIdToken` không kiểm gì), nên không tiết kiệm phần khó nhất; thêm một gói vào chuỗi cung ứng của luồng đăng nhập là rủi ro lớn hơn ~250 dòng code có test. ADR-012 cho phép thư viện nhỏ nhưng không bắt buộc. Quyết định đã duyệt R2 (Reviewer 2026-10-07). So sánh hằng thời gian (Task 2) dùng `crypto.subtle.timingSafeEqual` của workerd trên hai mảng byte cùng độ dài (hiện `src/` chưa có helper nào; viết một hàm nhỏ trong `domain/oauth.ts` hoặc `auth/crypto.ts`).
 3. **ID token: KHÔNG kiểm chữ ký bằng JWKS (lệch dòng roadmap VNX-2603 "kiểm ID token (JWKS, …)", đã được Reviewer duyệt ngày 2026-10-07, quyết định R1).** Căn cứ OIDC Core §3.1.3.7 mục 6: ID token nhận **trực tiếp từ token endpoint qua TLS** thì kiểm chữ ký là tùy chọn (MAY); Google ghi như vậy. Điều kiện bắt buộc, mỗi điều có test (Task 2, 3):
    - (a) ID token chỉ lấy từ JSON trả về của token endpoint, không bao giờ từ query, fragment hay authorize response;
@@ -2730,3 +2730,284 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Nghĩa vụ cho Task 11:** `label` của identity GitHub luôn là một login hợp lệ (bất biến do Task này giữ), nên huy hiệu có thể dựng `https://github.com/<label>` mà không cần kiểm lại; Task 11 vẫn mã hóa an toàn khi render.
 
 #### Kết quả review Task 4 (2026-10-07): Owner duyệt trực tiếp ("approve"); lượt review plan của Opus bị ngắt khi phiên khởi động lại. Các câu hỏi cấp plan (regex `login` so với luật username GitHub, GitHub có nhận `code_verifier` không, giá trị `X-GitHub-Api-Version`) chuyển sang review code của Task 4.
+
+---
+
+### Task 5: VNX-2604a — `requireOps` và `requireAdmin` chỉ nhận session `magic_link`
+
+**Files:**
+- Modify: `apps/web/src/domain/identity.ts` (thêm `isStaffSession`)
+- Modify: `apps/web/src/auth/ops.ts` (`requireOps`), `apps/web/src/auth/middleware.ts` (`requireAdmin`)
+- Modify: `apps/web/test/fixtures.ts` (`signIn` nhận `method`)
+- Modify (test): `apps/web/test/ops/guard.test.ts` (nhóm test mới "OAuth sessions never reach /ops")
+- Test (mới): `apps/web/test/auth/staff-session.test.ts` (`/admin`, `/me`, `/hub`, trang công khai, assertion nguồn)
+
+**Interfaces:**
+- Consumes: `SessionMethod`, `SESSION_METHODS` (`domain/identity.ts`); `SessionUser.method`, `createSession(db, userId, now, method)` (`auth/sessions.ts`, Task 1); `opsNotFound`, `resolveOpsRole`, `requireOps` (`auth/ops.ts`); `requireAdmin`, `requireUser` (`auth/middleware.ts`); `errorResponse(c, "forbidden", 403)`; `adminEmails` (`auth/admin.ts`); fixtures `signIn`, `makeBuilder`, `ensureUser`; helpers `getReq`, `formPost`, `testEnv`.
+- Produces: `isStaffSession(method: SessionMethod): boolean` trong `domain/identity.ts` (`method === "magic_link"`); `signIn(email, { admin?, locale?, method? })` trong fixtures.
+
+**Quyết định kỹ thuật:**
+- Hai guard gọi `isStaffSession`; `resolveOpsRole` và `adminEmails` (`auth/admin.ts`) **không** đụng `method` (quyết định 9, R4, F7). Header plan nhắc `isAdminUser`, nhưng hàm đó chưa có trên nhánh này (chỉ có ở `feat/m7-metrics`, `auth/admin.ts`); trên nhánh này `auth/admin.ts` chỉ có `adminEmails`. Test kiến trúc cấm `method` trong `auth/admin.ts` nên sau rebase M7 `isAdminUser` vẫn được bảo vệ.
+- Hành vi từ chối **đọc từ code thật**: `/ops/*` → `opsNotFound` (404 kín; `opsHeaders` thêm `no-store` và `noindex`); `/admin/*` → `errorResponse(c, "forbidden", 403)` (không redirect `/login`; redirect chỉ dành cho người chưa đăng nhập). Session OAuth là "đã đăng nhập" nên nhận đúng 403 như người đăng nhập không phải admin.
+- `requireOps` kiểm `method` **trước** `resolveOpsRole` (không đọc D1 khi đã biết từ chối). Phản hồi không phụ thuộc thứ tự vì mọi đường từ chối cùng trả `opsNotFound`.
+- Task này đứng trước mọi route tạo session OAuth, nên test tạo session thật bằng `createSession(db, userId, now, "oauth_github")` (qua `signIn(…, { method })`), không insert thô. Vòng lặp trên ba `oauth_*` lấy từ `SESSION_METHODS.filter((m) => m !== "magic_link")` để provider thêm sau tự được phủ.
+- `requireUser`, `requireBuilder` và mọi route không phải nhân viên không đổi.
+
+- [ ] **Step 1: Fixture và test thất bại**
+
+`apps/web/test/fixtures.ts`: thêm `import type { SessionMethod } from "../src/domain/identity.ts";` và sửa `signIn`:
+
+```ts
+export async function signIn(email: string, opts: { admin?: boolean; locale?: string; method?: SessionMethod } = {}): Promise<{ user: UserRow; cookie: string }> {
+  const user = await ensureUser(email, opts.locale);
+  if (opts.admin) await testEnv.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?1").bind(user.id).run();
+  return { user, cookie: `__Host-vnx_session=${await createSession(testEnv.DB, user.id, new Date(), opts.method)}` };
+}
+```
+
+`apps/web/test/ops/guard.test.ts`: thêm import `SESSION_METHODS` từ `../../src/domain/identity.ts` và `resolveOpsRole` vào import `../../src/auth/ops.ts`; thêm cuối file:
+
+```ts
+const OAUTH_METHODS = SESSION_METHODS.filter((m) => m !== "magic_link");
+
+describe("OAuth sessions never reach /ops (ADR-012 §6, decision 9)", () => {
+  it("has three OAuth methods to cover", () => {
+    expect(OAUTH_METHODS).toEqual(["oauth_google", "oauth_github", "oauth_linkedin"]);
+  });
+
+  it("gives an ADMIN_EMAILS owner with an oauth_* session the same sealed 404 as an anonymous visitor, on GET and POST", async () => {
+    const real = createApp();
+    const fake = opsApp();
+    // Control: the same user through a magic link still gets in.
+    const magic = await signIn(ROOT);
+    expect((await send(real, "/ops", { cookie: magic.cookie })).res.status).toBe(200);
+    expect((await send(fake, "/ops/fake", { cookie: magic.cookie })).body).toBe("view:owner");
+    expect((await send(fake, "/ops/fake", { cookie: magic.cookie, method: "POST" })).body).toBe("act:owner");
+
+    const cases: Array<[string, Opts]> = [
+      ["/ops", {}],
+      ["/ops/marketplace/builders", {}],
+      ["/ops/marketplace/builders/x/approve", { method: "POST" }],
+    ];
+    for (const method of OAUTH_METHODS) {
+      const oauth = await signIn(ROOT, { method });
+      for (const [path, opts] of cases) {
+        const anonymous = await denial(real, path, opts);
+        const got = await denial(real, path, { ...opts, cookie: oauth.cookie });
+        expect(anonymous.status, `${method} ${path}`).toBe(404);
+        expect(got, `${method} ${path}`).toEqual(anonymous);
+        expect(got.headers, `${method} ${path}`).toContainEqual(["cache-control", "no-store"]);
+        expect(got.headers, `${method} ${path}`).toContainEqual(["x-robots-tag", "noindex, nofollow"]);
+      }
+      // The guarded fake routes (view, team.manage, act) refuse too.
+      const fakes: Array<[string, Opts]> = [["/ops/fake", {}], ["/ops/fake/team", {}], ["/ops/fake", { method: "POST" }]];
+      for (const [path, opts] of fakes) {
+        expect(await denial(fake, path, { ...opts, cookie: oauth.cookie }), `${method} ${path}`).toEqual(await denial(fake, path, opts));
+      }
+    }
+  });
+
+  it("refuses an oauth_* session of an Ops member too, and a stale session naming the owner", async () => {
+    const operator = await member(`ops-guard-oauth-${tag()}@vnx.si`, "operator");
+    const oauth = await signIn(operator.user.email, { method: "oauth_google" });
+    const reference = await denial(opsApp(), "/ops/fake");
+    expect(await denial(opsApp(), "/ops/fake", { cookie: oauth.cookie })).toEqual(reference);
+    expect((await send(opsApp(), "/ops/fake", { cookie: operator.cookie })).body).toBe("view:operator");
+    const root = await ensureUser(ROOT);
+    expect(await denial(opsApp({ ...sessionUser(root), method: "oauth_linkedin" }), "/ops/fake")).toEqual(reference);
+  });
+
+  it("leaves the resolver alone: resolveOpsRole still names the role of a user whose session came from OAuth (M7 isStaff relies on it)", async () => {
+    const root = await ensureUser(ROOT);
+    expect(await resolveOpsRole(env, { ...sessionUser(root), method: "oauth_github" })).toBe("owner");
+    expect(await resolveOpsRole(env, sessionUser(root))).toBe("owner");
+  });
+});
+```
+
+`apps/web/test/auth/staff-session.test.ts` (mới):
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { readFlags, resetFlagCache } from "../../src/db/flags.ts";
+import { isStaffSession, SESSION_METHODS } from "../../src/domain/identity.ts";
+import { makeBuilder, signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+
+const SOURCES = import.meta.glob("../../src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+/** A source file with LF endings: src/auth/*.ts are CRLF on disk (core.autocrlf) and ?raw keeps the bytes (cf. test/legal/content.test.ts). */
+function source(path: string): string {
+  const raw = SOURCES[`../../src/${path}`];
+  expect(raw, path).toBeDefined();
+  return (raw as string).replace(/\r\n/g, "\n");
+}
+const OAUTH_METHODS = SESSION_METHODS.filter((m) => m !== "magic_link");
+const tag = () => crypto.randomUUID().slice(0, 8);
+
+const app = () => createApp();
+/** Status, headers and body with the request id (cf-ray) removed. */
+async function seen(req: (ray: string) => Request) {
+  const ray = `ray-${tag()}`;
+  const res = await app().request(req(ray), undefined, testEnv);
+  return { status: res.status, headers: [...res.headers.entries()].sort(), body: (await res.text()).replaceAll(ray, "") };
+}
+const get = (path: string, cookie: string) => (ray: string) => new Request(`https://vnx.si${path}`, { headers: { cookie, "cf-ray": ray } });
+const post = (path: string, cookie: string) => (ray: string) => formPost(path, { enabled: "1" }, { cookie, "cf-ray": ray });
+
+describe("isStaffSession", () => {
+  it("accepts magic_link and nothing else", () => {
+    expect(isStaffSession("magic_link")).toBe(true);
+    for (const method of OAUTH_METHODS) expect(isStaffSession(method), method).toBe(false);
+  });
+});
+
+describe("/admin refuses oauth_* sessions (decision 9)", () => {
+  it("denies an ADMIN_EMAILS admin with an oauth_* session exactly like a signed-in non-admin: 403, same bytes", async () => {
+    const plain = await signIn(`staff-plain-${tag()}@vnx.si`);
+    const magic = await signIn("owner@vnx.si", { admin: true });
+    // Control: the same admin through a magic link is let in (GET /admin redirects to /admin/builders).
+    expect((await app().request(getReq("/admin", magic.cookie), undefined, testEnv)).status).toBe(303);
+    for (const path of ["/admin", "/admin/flags", "/admin/builders"]) {
+      const reference = await seen(get(path, plain.cookie));
+      expect(reference.status, path).toBe(403);
+      for (const method of OAUTH_METHODS) {
+        const oauth = await signIn("owner@vnx.si", { admin: true, method });
+        expect(await seen(get(path, oauth.cookie)), `${method} ${path}`).toEqual(reference);
+      }
+    }
+  });
+
+  it("refuses an admin POST with an oauth_* session and changes nothing", async () => {
+    const oauth = await signIn("owner@vnx.si", { admin: true, method: "oauth_github" });
+    const target = await signIn(`staff-target-${tag()}@vnx.si`);
+    await testEnv.DB.prepare("DELETE FROM feature_flags").run();
+    resetFlagCache();
+    const audits = () => testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE actor_user_id = ?1").bind(oauth.user.id).first<{ n: number }>();
+    const before = await audits();
+    expect((await seen(post("/admin/flags/affiliate", oauth.cookie))).status).toBe(403);
+    expect((await readFlags(testEnv.DB)).affiliate).toBe(false);
+    expect((await seen(post(`/admin/users/${target.user.id}/suspend`, oauth.cookie))).status).toBe(403);
+    const row = await testEnv.DB.prepare("SELECT status FROM users WHERE id = ?1").bind(target.user.id).first<{ status: string }>();
+    expect(row?.status).toBe("active");
+    expect((await audits())?.n).toBe(before?.n);
+  });
+});
+
+describe("non-staff routes are unchanged for oauth_* sessions", () => {
+  it("serves /me, /hub and public pages", async () => {
+    const email = `staff-user-${tag()}@vnx.si`;
+    await makeBuilder(email, `staff-${tag()}`, "approved");
+    for (const method of OAUTH_METHODS) {
+      const { cookie } = await signIn(email, { method });
+      for (const path of ["/me", "/hub", "/", "/login"]) {
+        const res = await app().request(getReq(path, cookie), undefined, testEnv);
+        expect(res.status, `${method} ${path}`).toBe(200);
+      }
+    }
+  });
+});
+
+describe("where the method check lives (decision 9, R4, F7)", () => {
+  /** The text of a top-level function or const, from its start to the first line that is just `}` or `};`. */
+  function block(file: string, start: RegExp): string {
+    const src = source(file);
+    const at = src.search(start);
+    expect(at, `${file} ${start}`).toBeGreaterThanOrEqual(0);
+    const rest = src.slice(at);
+    const end = rest.search(/\n\};?\n/);
+    expect(end, `${file} ${start}: terminator not found`).toBeGreaterThan(0);
+    return rest.slice(0, end + 3);
+  }
+
+  it("the two guards call isStaffSession; the resolver, the admin e-mail helper and requireUser never read the method", () => {
+    const ops = block("auth/ops.ts", /export function requireOps/);
+    expect(ops).toContain("isStaffSession(");
+    expect(ops.indexOf("isStaffSession(")).toBeLessThan(ops.indexOf("resolveOpsRole("));
+    expect(block("auth/middleware.ts", /export const requireAdmin/)).toContain("isStaffSession(");
+    expect(block("auth/ops.ts", /export async function resolveOpsRole/)).not.toMatch(/method/i);
+    expect(block("auth/middleware.ts", /export const requireUser/)).not.toMatch(/method|isStaffSession/);
+    expect(source("auth/admin.ts")).not.toMatch(/method|isStaffSession/);
+  });
+
+  // Tripwire: a new legitimate caller of isStaffSession needs Reviewer sign-off (it changes who counts as staff).
+  it("no other file decides staff access from the session method", () => {
+    const users = Object.entries(SOURCES).filter(([, src]) => src.includes("isStaffSession"));
+    expect(users.map(([f]) => f.replace("../../src/", "")).sort()).toEqual(["auth/middleware.ts", "auth/ops.ts", "domain/identity.ts"]);
+  });
+});
+```
+
+(Đích ghi của POST là user thật (`signIn` mới) và cờ `affiliate` thật, nên nếu guard hở thì test thấy thay đổi thật. Nếu `/hub` của builder `approved` không trả 200 với fixture này, Implementer đối chiếu với `test/hub/*` và chọn fixture đúng, không đổi khẳng định.)
+
+- [ ] **Step 2: Chạy, thấy thất bại**
+
+Run: `npm test -w apps/web -- test/ops/guard.test.ts test/auth/staff-session.test.ts`
+Expected: FAIL. `isStaffSession` chưa có (import lỗi ở `staff-session.test.ts`); trong `guard.test.ts` các case `oauth_*` nhận 200 thay vì 404.
+
+- [ ] **Step 3: Cài đặt**
+
+`apps/web/src/domain/identity.ts`, ngay dưới `sessionMethodFor`:
+
+```ts
+/**
+ * Only a magic-link session reaches /ops and /admin (ADR-012 §6, plan decision 9). Called by the two guards, requireOps
+ * and requireAdmin, and nowhere else: never from resolveOpsRole or the admin e-mail helper, which M7's isStaff also uses
+ * to keep staff out of the statistics whatever way they signed in.
+ */
+export function isStaffSession(method: SessionMethod): boolean {
+  return method === "magic_link";
+}
+```
+
+`apps/web/src/auth/ops.ts`: thêm `import { isStaffSession } from "../domain/identity.ts";` và đổi thân `requireOps`:
+
+```ts
+export function requireOps(capability: OpsCapability): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    const user = c.get("user");
+    // An OAuth session is never staff (ADR-012 §6): the same sealed 404 as every other denial. Checked here, not in resolveOpsRole.
+    if (!user || !isStaffSession(user.method)) return opsNotFound(c);
+    const role = await resolveOpsRole(c.env, user);
+    if (!role || !can(role, capability)) return opsNotFound(c);
+    c.set("opsRole", role);
+    await next();
+  };
+}
+```
+
+`apps/web/src/auth/middleware.ts`: thêm `import { isStaffSession } from "../domain/identity.ts";` và đổi điều kiện của `requireAdmin`:
+
+```ts
+  // ADMIN_EMAILS is the source of truth: removing an e-mail revokes access on the next request.
+  // A session that did not come from a magic link gets the same 403 as any other non-admin (ADR-012 §6, decision 9).
+  if (!user.isAdmin || !isStaffSession(user.method) || !adminEmails(c.env).has(user.email)) return errorResponse(c, "forbidden", 403);
+```
+
+- [ ] **Step 4: Chạy, thấy pass**
+
+Run: `npm test -w apps/web -- test/ops/guard.test.ts test/auth/staff-session.test.ts test/auth/sessions.test.ts test/admin/flags.test.ts`
+Expected: PASS (các test `magic_link` cũ không đổi).
+
+- [ ] **Step 5: Kiểm toàn bộ, commit**
+
+Run: `npm run typecheck -w apps/web` rồi `npm test`. Expected: xanh. `git diff --stat` chỉ gồm các file ở mục Files.
+
+```bash
+git add apps/web/src/domain/identity.ts apps/web/src/auth/ops.ts apps/web/src/auth/middleware.ts apps/web/test/fixtures.ts apps/web/test/ops/guard.test.ts apps/web/test/auth/staff-session.test.ts
+git commit -m "feat(web): /ops and /admin accept only magic-link sessions (VNX-2604a)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận (mỗi cái một lệnh):**
+- Session `oauth_*` của owner `ADMIN_EMAILS` nhận 404 byte-giống người chưa đăng nhập (trừ request id) trên `/ops`, GET và POST `/ops/*`; cùng user với `magic_link` vẫn 200: `npm test -w apps/web -- test/ops/guard.test.ts -t "OAuth sessions never reach"`.
+- `/admin` với `oauth_*` của admin nhận 403 như user thường; `/me`, `/hub`, `/`, `/login` vẫn 200; `isStaffSession` đúng: `npm test -w apps/web -- test/auth/staff-session.test.ts`.
+- `resolveOpsRole`, `auth/admin.ts`, `requireUser` không tham chiếu `method`: test "where the method check lives" trong cùng file.
+
+**Kích cỡ ước tính:** mã nguồn ~20 dòng (identity 8, ops 6, middleware 4, fixtures 2), test ~160 dòng (guard ~55, staff-session ~105), không có locale. Dưới 600 dòng, không cần tách.
+
+**Nghĩa vụ cho task sau:** Task 6 chỉ tạo session `oauth_*` qua `sessionMethodFor(provider)`; không route nào được cho `method` khác `magic_link` truy cập `/ops` hoặc `/admin`. Khi rebase M7 (`feat/m7-metrics`):
+- (a) `requireAdmin` thành `if (!isAdminUser(user, c.env) || !isStaffSession(user.method)) return errorResponse(c, "forbidden", 403);`; kiểm `method` không bao giờ vào `isAdminUser`.
+- (b) Sửa các văn bản trên M7 gọi `isAdminUser` là "predicate của guard /admin": docstring `auth/admin.ts`, tiêu đề `test/auth/staff.test.ts:12`, comment `domain/visitor.ts:62`. Chúng phải nói guard CÒN đòi session `magic_link`, để không ai chuyển kiểm đó vào `isAdminUser` (F7).
+- (c) Thêm test: `isStaff(env, { ...ownerSessionUser, method: "oauth_github" })` và session `oauth_*` của một thành viên Ops đều trả `true`.
+
+#### Kết quả review Task 5 (Opus, 2026-10-07): APPROVE_WITH_CHANGES, đã sửa 1–5
