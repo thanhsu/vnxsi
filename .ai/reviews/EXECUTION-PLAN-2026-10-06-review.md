@@ -133,6 +133,12 @@ Các mâu thuẫn nhỏ hơn:
    - kiểm duyệt trước khi công khai.
 
    Các câu hỏi chi tiết sẽ đưa ra khi lên plan.
+
+   **2026-10-07, Owner trả lời thêm** (phụ lục `docs/superpowers/specs/2026-10-07-vnxsi-public-request-board-addendum.md`, Draft):
+   - Phản hồi: builder đã duyệt bấm "I'm interested" → vào hàng chờ Ops; admin vẫn mời tối đa 5 theo §5.7, 7.5, 7.6. Builder không gửi đề xuất trực tiếp.
+   - Ngân sách: chỉ hiện `budget_band` hiện có; không thêm trường số tiền chính xác.
+   - Trường: mọi trường (tiêu đề, mô tả đầy đủ, category, budget band, quốc gia, deadline, ngôn ngữ) công khai chỉ sau khi Ops kiểm duyệt (Ops được sửa vì quyền riêng tư hoặc từ chối). Danh tính client không bao giờ công khai.
+   - Index: request công khai đang mở được index và vào sitemap; rời trạng thái mở → `noindex`, ra khỏi sitemap, trang ghi "closed".
 5. Còn chờ: VNX Labs (câu 5) và các câu ưu tiên 2–3.
 
 ---
