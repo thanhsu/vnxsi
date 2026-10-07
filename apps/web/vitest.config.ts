@@ -21,6 +21,12 @@ export default defineConfig(async () => {
             // Pinned empty so a developer's .dev.vars key can never turn the suite into real mail (VNX-0803 F6).
             RESEND_API_KEY: "",
             TURNSTILE_DRIVER: "fake",
+            OAUTH_DRIVER: "fake",
+            // Pinned empty, like RESEND_API_KEY: a developer's .dev.vars credentials must never make the suite reach a real provider.
+            GOOGLE_CLIENT_ID: "",
+            GOOGLE_CLIENT_SECRET: "",
+            LINKEDIN_CLIENT_ID: "",
+            LINKEDIN_CLIENT_SECRET: "",
           },
         },
       }),

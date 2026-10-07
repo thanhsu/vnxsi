@@ -61,4 +61,8 @@
   // MAIL_DRIVER selects the mailer only while RESEND_API_KEY is unset (VNX-0803 F6): a real key always sends through
   // Resend, also in local dev. Local dev without a key: set MAIL_DRIVER=console in apps/web/.dev.vars.
   // Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.
+  //
+  // OAuth sign-in (EPIC 26, ADR-012): the client ids and secrets are wrangler secrets, never vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  // LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET (GitHub's two join with its adapter). Local dev: apps/web/.dev.vars. A provider missing
+  // either of its two is off whatever its feature flag says. The test driver for OAuth is a vitest binding only and never appears here.
 }

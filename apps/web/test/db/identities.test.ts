@@ -110,4 +110,19 @@ describe("user_identities (ADR-012 §2, §4)", () => {
     const { results } = await testEnv.DB.prepare("PRAGMA table_info(user_identities)").all<{ name: string }>();
     expect(results.map((r) => r.name)).toEqual(["id", "user_id", "provider", "provider_subject", "label", "show_on_profile", "linked_at", "last_used_at", "updated_at"]);
   });
+
+  it("refuses an empty label and one of 255 characters, in SQL and through linkIdentity, and accepts 254 (CHECK 1-254)", async () => {
+    const user = await newUser();
+    const insertLabel = (id: string, label: string) =>
+      testEnv.DB
+        .prepare("INSERT INTO user_identities (id, user_id, provider, provider_subject, label, linked_at, updated_at) VALUES (?1, ?2, 'google', ?1, ?3, ?4, ?4)")
+        .bind(id, user.id, label, NOW)
+        .run();
+    await expect(insertLabel("label-empty", "")).rejects.toThrow();
+    await expect(insertLabel("label-long", "x".repeat(255))).rejects.toThrow();
+    await expect(linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-empty", label: "", now: NOW })).rejects.toThrow();
+    await expect(linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-long", label: "x".repeat(255), now: NOW })).rejects.toThrow();
+    expect((await linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-max", label: "x".repeat(254), now: NOW })).ok).toBe(true);
+    expect(await listIdentitiesForUser(testEnv.DB, user.id)).toHaveLength(1);
+  });
 });

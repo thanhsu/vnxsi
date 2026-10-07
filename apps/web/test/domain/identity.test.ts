@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FLAG_KEYS } from "../../src/domain/flags.ts";
-import { IDENTITY_AUDIT, isOAuthProvider, isSessionMethod, OAUTH_PROVIDERS, PROVIDER_FLAG, SESSION_METHODS, sessionMethodFor } from "../../src/domain/identity.ts";
+import { IDENTITY_AUDIT, isOAuthProvider, isSessionMethod, OAUTH_PROVIDERS, PROVIDER_FLAG, PROVIDER_NAME, SESSION_METHODS, sessionMethodFor } from "../../src/domain/identity.ts";
 
 describe("OAuth providers (ADR-012 §1)", () => {
   it("are google, github and linkedin, in that order", () => {
@@ -38,5 +38,12 @@ describe("session methods (ADR-012 §2)", () => {
 describe("identity audit actions (ADR-012 §4)", () => {
   it("are fixed", () => {
     expect(IDENTITY_AUDIT).toEqual({ link: "auth.identity.link", unlink: "auth.identity.unlink" });
+  });
+});
+
+describe("provider display names (ADR-012 decision 12, F2)", () => {
+  it("are fixed and never translated", () => {
+    expect(PROVIDER_NAME).toEqual({ google: "Google", github: "GitHub", linkedin: "LinkedIn" });
+    expect(Object.keys(PROVIDER_NAME)).toEqual([...OAUTH_PROVIDERS]);
   });
 });

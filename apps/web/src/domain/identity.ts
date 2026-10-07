@@ -28,6 +28,9 @@ export const PROVIDER_FLAG: Record<OAuthProvider, FlagKey> = {
   linkedin: "oauth_linkedin",
 };
 
+/** Fixed display names; brand names are not translated (ADR-012, ADR-003). Also the `label` of an identity whose provider gave no e-mail (decision 12). */
+export const PROVIDER_NAME: Record<OAuthProvider, string> = { google: "Google", github: "GitHub", linkedin: "LinkedIn" };
+
 /** Audit actions of a link and an unlink. The row carries the provider only: no label, no subject, no token. */
 export const IDENTITY_AUDIT = { link: "auth.identity.link", unlink: "auth.identity.unlink" } as const;
 
