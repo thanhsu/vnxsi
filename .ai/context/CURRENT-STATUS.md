@@ -212,6 +212,8 @@ Owner, trước khi ElevenLabs chạy thật:
 - Văn bản từ textarea được chuẩn hóa CRLF → LF trước khi kiểm độ dài.
 - Header hiện link Builder Hub khi đã đăng nhập (người chưa là builder được đưa sang `/hub/apply`).
 
+- **Owner 2026-10-07 (ADR-012, tài khoản liên kết):** ADR-012 **Accepted**: liên kết Google, GitHub, LinkedIn từ `/me`; đăng nhập phụ chỉ cho tài khoản đã liên kết chủ động (không tự liên kết theo email, không tạo tài khoản mới); huy hiệu GitHub/LinkedIn builder tự bật trên `/b/:handle`, không vào xếp hạng; `/ops` chỉ nhận session `magic_link`. Thay một phần ADR-002, bổ sung ADR-010. Wave 1, **EPIC 26** (VNX-2601…2608), bật cả ba provider cùng lúc. Câu chữ bổ sung Privacy/Terms đã duyệt, nằm ở cuối `docs/legal/privacy.md` và `terms.md`, **chưa áp dụng** (VNX-2607 chép vào và phải merge trước khi bật flag). ADR-011 còn trống vì bản nháp `ADR-011-admin-access-layer.md` chưa commit ở `vnxsi-0803b`.
+
 ## Nghĩa vụ để lại
 - **Owner (ElevenLabs, 2026-10-06):** sửa ô Description của merchant ElevenLabs ở `/admin/merchants` (hoặc `/ops/monetization/merchants` sau khi deploy nhánh này) thành bản dưới. Bản này bỏ đoạn disclosure 4 thứ tiếng, vì câu disclosure đã dịch sẵn nằm trên khối offer; giữ câu nhãn hiệu. Mục đích: `meta description` và phần xem trước khi chia sẻ link bắt đầu bằng nội dung thật.
 
@@ -277,6 +279,8 @@ Owner, trước khi ElevenLabs chạy thật:
 - **Owner:** thu hồi / thay PAT GitHub đã dán vào hội thoại 2026-10-03, rồi cập nhật Git Credential Manager.
 - Trước M8: người bản xứ đọc lại `zh-Hans`, `zh-Hant`.
 - Trước Wave 3: nghiên cứu pháp nhân và cổng thanh toán.
+
+- **EPIC 26 (ADR-012):** Reviewer viết plan `docs/superpowers/plans/` trước khi bắt đầu, Owner chốt thứ tự so với M8. Owner làm VNX-2601: tạo ứng dụng OAuth Google, GitHub, LinkedIn (LinkedIn cần Company Page), callback `/auth/oauth/:provider/callback` cho prod và local, 6 secret qua `wrangler secret`.
 
 ## Ghi nhận (minor, chưa làm)
 
