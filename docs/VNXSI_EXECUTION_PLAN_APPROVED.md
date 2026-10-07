@@ -468,7 +468,7 @@ Open Templates is an approved acquisition and repeat-use pilot that sits beside 
 
 ## Product job and audience
 
-The primary audience is everyday professionals, SME operators, and freelancers. Developers and builders are a smaller secondary audience. Phase A targets 20–30 curated entries with an approximate 80/20 split: everyday/professional/SME workflows first, developer workflows second.
+The primary audience is everyday professionals, SME operators, and freelancers. Developers and builders are a smaller secondary audience. Phase A has a source-curated target of 25 entries: 10 adapted from `prompts.chat`, 10 from Fabric everyday patterns, and five from Fabric developer patterns. This is a target rather than a quota; a rights, safety, quality, or adaptation shortfall must be reported instead of filled with self-authored material.
 
 The intended journey is:
 
@@ -492,17 +492,21 @@ Phase A is a lean web distribution pilot. It is dependent on the marketplace/M7 
 Required preparation and deliverables:
 
 - Approve the companion spec and accept the architecture decisions for the Git catalogue exception to D1, the ADR-007 treatment of external links, the four-locale route/content boundary, and the privacy measurement boundary.
-- Curate 20–30 entries with one clear task, named inputs, an illustrative example, limitations, and a human output-check rubric. Every published entry needs one recorded real model/tool trial with normal and missing/ambiguous-input cases; a full cross-model evaluation is not required.
+- Curate a source-reviewed target of 25 entries in the `prompts-chat`, `fabric-everyday`, and `fabric-developer` directories, with one clear task, named inputs, provenance, source-specific licence evidence, an adaptation summary, an illustrative example, limitations, and a human output-check rubric. The current evidence pins `f/prompts.chat` at `7d3f248962d1dca209d59e033524bcb86c2b26b8` with `content/open-templates/notices/prompts-chat-license-snapshot.md`, and `danielmiessler/Fabric` at `c11e9b6cc065b5a2fad66c85ebbaa89ce9e99d38` with `content/open-templates/notices/fabric-MIT.txt`. Do not force the count when rights, safety, quality, or adaptation value is insufficient. Every published entry needs one recorded real model/tool trial with normal and missing/ambiguous-input cases; a full cross-model evaluation is not required.
 - Serve account-free browse, search, copy, and download on `/templates` with a generated portable Markdown pack. At most two tool-specific adapters may ship, only after actual client/version verification.
 - Keep one Git-versioned structured Markdown source for pages, search, packs, adapters, and later MCP output. The proposed MVP exception to the D1 sole-source rule is read-only and must be recorded before code.
 - **Open the public content repository before the Phase A public prelaunch.** Creating that external repository is a separate authorized execution task; this documentation work does not create it. If the repository is not open, the work may remain internal preparation but must not be marketed as an open-source public library.
-- Select one authoritative repository and publish a pinned release. The Worker consumes the pinned snapshot at build time and never fetches the public repository at request time. No two editable sources are permitted.
-- Resolve the content licence before public launch. CC BY 4.0 is the recommendation for template text, pending Owner acceptance; code/tooling licence decisions remain separate. Include attribution in entries and packs.
+- Select one authoritative repository and publish a pinned release. The Worker consumes the pinned snapshot at build time and never fetches the public repository at request time. No two editable sources are permitted. Archived self-authored drafts outside the catalogue are not a source or release input.
+- Resolve rights per upstream source before public launch. CC BY 4.0 is only a recommendation for original VNX editorial additions, pending Owner acceptance; it is not a blanket licence for adapted upstream material. Record source-specific attribution in entries and packs.
 - Keep marketplace links contextual and neutral. Paid organic ranking is prohibited. External repository, licence, tool, or partner links use `/go/` or an explicitly accepted ADR-007 editorial-link exception; monetized links carry disclosure.
+
+Conditional publish/deploy guidance is determined by output type and remains neutral: private notes, local files, and internal tool output receive no publish/deploy recommendation; public text/document exports may receive an editorial publishing suggestion after rights and review; static documentation/site output may mention Cloudflare Pages as a nonaffiliate candidate and GitHub Pages as an eligible nonaffiliate alternative after usage constraints are checked; audio/video scripts may optionally use ElevenLabs text-to-speech for production only when relevant. These recommendations never force hosting, distribution, or an affiliate conversion. Editorial recommendation text stays separate from monetization/partner resolution in the existing registry and database. The registry records the ElevenLabs entry as a draft with terms missing, so this set emits no affiliate URL or CTA; any runtime activation requires later backend configuration and validation. Affiliate tags never enter source metadata, upstream prompts, or exported packs.
 
 Phase A launch gates and signals:
 
-- All published entries pass the quality and rights gate; examples remain illustrative and no compatibility or output evidence is fabricated.
+- All published entries pass the quality, provenance, and source-specific rights gate; examples remain illustrative and no compatibility or output evidence is fabricated.
+- The source audit records the selected upstream path, full pinned `source_commit`, verified `upstream_license`, licence evidence, attribution, adaptation/change summary, and any unresolved question. A shortfall from the 25-entry target is reported rather than padded with new self-authored content.
+- Near-duplicate newsletter or summary entries are excluded unless their inputs, output contracts, and user decisions are materially different.
 - The source revision reproduces the web pages, index, pack, and metadata. UI strings have four-locale parity and English content is visible as such.
 - Privacy review confirms no raw search queries, PII, secrets, third-party tracker, or account-bound session is introduced. The existing M7 consent/GPC/go-live boundary is respected.
 - Editorial maintenance is budgeted at approximately 2–4 hours per week; freeze additions or remove stale entries if the budget is exceeded.
@@ -1489,7 +1493,7 @@ The principle:
 
 ### Open Templates — preparation only
 - approve the companion spec and the required D1, ADR-007, i18n, and privacy decisions
-- define the 20–30 entry inventory, editor, licence decision, and real-trial record
+- define the source-reviewed target inventory, editor, per-source licence evidence, provenance/change records, and real-trial record; do not count the archived prior drafts
 - prepare the authorized public-repository opening task; do not claim a public open-source launch yet
 - no Open Templates product code is authorized by this roadmap alone
 
@@ -1522,7 +1526,7 @@ Never falsify numbers to hit targets.
 
 ### Open Templates — Phase A web pilot
 - open the public content repository in a separate authorized execution task before public prelaunch
-- publish the pinned source/release model, 20–30 curated entries, account-free pages, copy/download flow, and portable pack
+- publish the pinned source/release model, accepted source-derived entries, account-free pages, copy/download flow, and portable pack; report any inventory shortfall instead of adding filler
 - ship zero to two tool adapters only after actual client/version QA
 - measure activation, pack adoption, and qualified internal referrals with explicit denominators
 - treat all thresholds as hypotheses; do not claim 30-day retention from M7 daily hashes
