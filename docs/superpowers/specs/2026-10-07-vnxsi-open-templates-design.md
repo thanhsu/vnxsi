@@ -67,9 +67,11 @@ Examples in a draft are illustrative. They must not be described as observed out
 
 ### 3.3 Content lifecycle
 
-`draft` entries are private to the review process. `reviewed` entries have passed schema, safety, rights, and editorial checks. `published` entries may appear on the site, in the portable pack, and in MCP responses. A material change to the template, examples, output contract, or supported adapter creates a new content version and returns the entry to review.
+`draft` entries are private to the review process. `reviewed` entries have passed schema, safety, rights, editorial, and real-trial checks. `published` entries may appear on the site, in the portable pack, and in MCP responses. A material change to the template, examples, output contract, or supported adapter creates a new content version and returns the entry to review.
 
 Contributions may be accepted as proposals, but nothing is published automatically. The MVP has editorial approval and a removal path for copied, unsafe, private, or misleading content.
+
+An unverified draft may remain in the review queue, but it cannot become a published, quality-checked entry until it meets the real-trial requirement in §6.
 
 ## 4. User experience and routes
 
@@ -153,8 +155,9 @@ Before publication, editorial review checks:
 4. The illustrative example is clearly labelled and uses synthetic or rights-cleared data.
 5. Limitations include likely failure modes, ambiguity, and when a user should not trust the output.
 6. The template is readable in portable Markdown and does not depend on hidden system prompts, a private account, or an undocumented tool feature.
-7. Tool/model claims name the exact client or model and date only after an actual, reproducible run. Otherwise the entry says it is unverified.
-8. Copy, download, localization, accessibility, canonical, and noindex behavior pass the later implementation checks.
+7. Every published template has at least one recorded real model/tool trial covering both a normal representative input and a missing or ambiguous-input case. The record names the model/tool, client or runtime version, date, source revision, output-check rubric, and observed result. This is the minimum quality trial; a full cross-model evaluation is not required.
+8. Illustrative examples remain labelled as illustrative. Client compatibility claims or badges are limited to adapters with actual client/version verification; no unverified draft is published as quality-checked.
+9. Copy, download, localization, accessibility, canonical, and noindex behavior pass the later implementation checks.
 
 The quality bar is evidence-based. A review date is not a claim that output is correct for every future model. Major model or client changes trigger re-review of affected entries and adapters.
 
@@ -236,20 +239,34 @@ Targets below are suggested decision thresholds, not forecasts or public claims.
 
 The original 30-day return idea is a research target, not an automatic launch gate. Existing daily visitor hashes rotate and cannot measure a person-level 30-day cohort. A future retention metric requires either a voluntary user panel/self-report or an explicitly privacy-approved persistent measurement design. If implemented, define the cohort as activated users whose first qualifying copy/download falls in the first 14 days, and define retention as at least one qualifying action on a later date through day 30; publish numerator and denominator and do not infer identity from anonymous downloads.
 
-## 12. Launch acceptance criteria
+## 12. Implementation-planning and public-launch gates
 
-The pilot is ready for a later implementation review only when all of these are true:
+This spec has two gates. The first allows a later implementation plan to be written; the second applies before the public pilot launches. The implementation-planning gate does not require the final catalogue, generated artifacts, or a running route to exist.
 
-1. The written spec and the open decisions in §13 have Owner approval.
-2. The catalogue contains 20–30 genuinely useful candidates, with the 80/20 audience mix and no filler; every published candidate passes the quality checklist.
-3. The source format can generate the page, search index, portable pack, and metadata from one pinned revision; no generated file is hand-maintained.
-4. Account-free browse, copy, and portable download behavior is specified and accessible. All UI keys have a four-locale parity plan, and English content is labelled.
-5. The recommended content licence is accepted or replaced by a recorded Owner decision. Rights and attribution rules are ready for contributors.
-6. The D1 exception, external-link treatment under ADR-007, and marketplace-link disclosure behavior are recorded before any code or external URL is published.
-7. Privacy review confirms that the event definitions do not retain raw queries, PII, secrets, or a false person-level retention claim. M7’s consent/GPC/go-live rules are respected.
-8. A named editor accepts the 2–4 hour/week operating budget. A stale-content and removal process exists.
-9. Portable Markdown is ready. There are zero to two adapters, each backed by actual client/version QA; no unverified format is advertised.
-10. MCP is explicitly out of the initial launch unless Phase B evidence, protocol review, and compatibility QA are separately approved.
+### 12.1 Implementation-planning gate
+
+A later implementation plan may start when all of these are true:
+
+1. The written spec has Owner approval.
+2. The architecture decisions required to implement the MVP have an accepted decision record; an unresolved architecture question blocks this gate. The required decisions cover the Git catalogue exception to D1, the ADR-007 treatment of external links, the four-locale route/content boundary, and the privacy measurement boundary.
+3. The plan names the source/release contract, the editorial owner, the §6 real-trial record, and the verification work needed before launch.
+4. The remaining product choices are bounded without pretending they are verified: candidate inventory, exact source directory, adapter targets, and MCP client support may be decided during implementation under the gates in this spec.
+
+No 20–30 published entries, generated page/search/pack artifacts, tested adapter, or deployed route is required at this gate.
+
+### 12.2 Public-launch gate
+
+The public pilot is ready only when all of these are true:
+
+1. The catalogue contains 20–30 genuinely useful candidates, with the 80/20 audience mix and no filler; every published candidate passes §6, including the recorded normal and missing/ambiguous-input trials and output-check rubric.
+2. The source format generates the page, search index, portable pack, and metadata from one pinned revision; no generated file is hand-maintained.
+3. Account-free browse, copy, and portable download flows are implemented, accessible, and verified. All UI keys have four-locale parity, and English content is labelled.
+4. The recommended content licence is accepted or replaced by a recorded Owner decision. Rights and attribution rules are ready for contributors.
+5. The D1 exception, external-link treatment under ADR-007, and marketplace-link disclosure behavior are recorded before any code or external URL is published.
+6. Privacy review confirms that the event definitions do not retain raw queries, PII, secrets, or a false person-level retention claim. M7’s consent/GPC/go-live rules are respected.
+7. A named editor accepts the 2–4 hour/week operating budget. A stale-content and removal process exists.
+8. Portable Markdown is ready. There are zero to two adapters, each backed by actual client/version QA; no unverified format is advertised.
+9. MCP is explicitly out of the initial launch unless Phase B evidence, protocol review, and compatibility QA are separately approved.
 
 ## 13. Deferred scope and open decisions
 

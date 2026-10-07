@@ -19,6 +19,8 @@ The unrelated untracked `docs/VNXSI_EXECUTION_PLAN_APPROVED.md` was preserved an
 - A practical pinned-release model for a possible future public content repository without a runtime fetch dependency.
 - A proposed read-only D1 exception for MVP content and an explicit ADR-007 decision point for external repository, licence, tool, and partner links.
 - A portable Markdown pack, at most two verified adapters, and no unverified compatibility claims.
+- A two-stage readiness gate: architecture/spec approval enables implementation planning; catalogue entries and generated artifacts are public-launch requirements.
+- A published-template QA requirement for one recorded real model/tool trial with normal and missing/ambiguous-input cases plus an output-check rubric; no full cross-model evaluation is required.
 - MCP as Phase B: stateless Streamable HTTP, bounded `search_templates`/`get_template`, no sessions, execution, arbitrary URL fetches, or all-harness support promise.
 - M7-compatible aggregate measurement, explicit denominator/cohort rules, and the limitation that daily rotating hashes cannot measure person-level 30-day retention.
 - Suggested pilot signals, editorial budget assumption, launch acceptance criteria, deferred scope, open decisions, and risks.
@@ -26,7 +28,7 @@ The unrelated untracked `docs/VNXSI_EXECUTION_PLAN_APPROVED.md` was preserved an
 ## Verification
 
 - Relative Markdown links: passed; all six related repository documents resolve.
-- Spec length: 280 lines.
+- Spec length: 297 lines.
 - Reserved-marker scan: passed; no unfinished-work markers remain in either assigned file.
 - `git diff HEAD^ HEAD --check`: passed with no output after the commit.
 - `npm run typecheck -w apps/web`: not run; documentation-only task.
