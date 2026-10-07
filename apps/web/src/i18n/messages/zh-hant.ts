@@ -949,6 +949,7 @@ export const zhHant: Messages = {
   "home.pulse.scarcest": "每個已上架產品對應需求最多",
   "home.pulse.growthTitle": "產品與 Builder，按週累計",
   "home.pulse.week": "週",
+  "home.chart.table": "以表格顯示資料",
   "home.builders.title": "Builder 排行",
   "home.builders.noPay": "沒有人能付錢出現在這裡。",
   "home.builders.name": "Builder",

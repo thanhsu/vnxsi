@@ -23,6 +23,29 @@ export function sparkPoints(values: readonly number[]): string {
 
 const MS = { day: 86_400_000, hour: 3_600_000, minute: 60_000 } as const;
 
+/** Normalised path length of the sparkline and chart lines: CSS draws them with one dash of this length (Task 8b). */
+export const PATH_LENGTH = 100;
+
+const ISO_WEEK = /^(\d{4})-W(\d{2})$/;
+/** The Monday (UTC) of an ISO week key `YYYY-Www`; null for anything else. Week 1 is the week that holds 4 January. */
+export function weekStart(week: string): Date | null {
+  const m = ISO_WEEK.exec(week);
+  if (!m) return null;
+  const jan4 = Date.UTC(Number(m[1]), 0, 4);
+  const monday = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * MS.day;
+  return new Date(monday + (Number(m[2]) - 1) * 7 * MS.day);
+}
+/** The week as its first day in the viewer's locale ("Sep 28"; with the year when `year`); the raw key only when it is not an ISO week. */
+export function formatWeek(locale: Locale, week: string, year = false): string {
+  const start = weekStart(week);
+  return start ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" }).format(start) : week;
+}
+/** Labels for a run of weeks; the year goes on every label when the run crosses a year boundary. */
+export function formatWeeks(locale: Locale, weeks: readonly string[]): string[] {
+  const years = new Set(weeks.map((w) => weekStart(w)?.getUTCFullYear()));
+  return weeks.map((w) => formatWeek(locale, w, years.size > 1));
+}
+
 /** "2 hours ago": the largest whole unit between `iso` and `now` (the viewer's locale). */
 export function relativeTime(locale: Locale, iso: string, now: Date): string {
   const diff = Date.parse(iso) - now.getTime();

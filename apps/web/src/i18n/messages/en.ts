@@ -947,6 +947,7 @@ export const en = {
   "home.pulse.scarcest": "Most requests per listed product",
   "home.pulse.growthTitle": "Products and builders, cumulative by week",
   "home.pulse.week": "Week",
+  "home.chart.table": "Show data as a table",
   "home.builders.title": "Top builders",
   "home.builders.noPay": "No one pays to appear here.",
   "home.builders.name": "Builder",

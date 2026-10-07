@@ -950,6 +950,7 @@ export const vi: Messages = {
   "home.pulse.scarcest": "Nhiều nhu cầu nhất trên mỗi sản phẩm đang đăng",
   "home.pulse.growthTitle": "Sản phẩm và builder, cộng dồn theo tuần",
   "home.pulse.week": "Tuần",
+  "home.chart.table": "Xem dữ liệu dạng bảng",
   "home.builders.title": "Builder hàng đầu",
   "home.builders.noPay": "Không ai trả tiền để có mặt ở đây.",
   "home.builders.name": "Builder",

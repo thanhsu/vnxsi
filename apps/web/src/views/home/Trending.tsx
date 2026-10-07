@@ -3,7 +3,7 @@ import { topBadge, type CatalogItem } from "../../domain/catalog.ts";
 import { SPARK_DAYS, type TrendingItem } from "../../domain/public-stats.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
-import { formatChange, SPARK_VIEWBOX, sparkPoints } from "../format.ts";
+import { formatChange, PATH_LENGTH, SPARK_VIEWBOX, sparkPoints } from "../format.ts";
 import { BADGE_KEY, CATEGORY_KEY } from "../labels.ts";
 
 type TileMeta = { slug: string; name: string; tagline: string; category: CatalogItem["category"]; builderName: string };
@@ -32,7 +32,7 @@ export const Trending: FC<{ locale: Locale; items: readonly TrendingItem[] }> = 
           <Meta locale={locale} item={item} />
           <p class="home-trend">
             <svg class="home-spark" viewBox={SPARK_VIEWBOX} role="img" aria-label={tr("home.trending.spark", { days: SPARK_DAYS })}>
-              <polyline points={sparkPoints(item.sparkline)} />
+              <polyline points={sparkPoints(item.sparkline)} pathLength={PATH_LENGTH} />
             </svg>
             {item.changePct !== null ? (
               <span>
