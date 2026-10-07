@@ -1,10 +1,10 @@
 # VNX.SI Open Templates — Design Spec
 
 - **Date:** 2026-10-07
-- **Status:** Draft — product direction approved; written-spec approval is pending.
+- **Status:** Product direction and preparation of the full plan authorized by Owner 2026-10-07; product implementation is not authorized. Written-spec approval remains required before implementation planning.
 - **Scope:** A small, English-first, open catalogue of practical AI templates on the VNX.SI site, with account-free browsing, copying, and downloading. The catalogue may later expose a read-only MCP endpoint.
 - **Does not authorize:** product code, migrations, an external repository, MCP deployment, a public submission system, or a launch. This document is a design contract for a later plan.
-- **Related:** [Product Charter](../../blueprint/01-PRODUCT-CHARTER.md), [Architecture](../../architecture/ARCHITECTURE.md), [ADR-003](../../adr/ADR-003-i18n.md), [ADR-006](../../adr/ADR-006-knowledge-packages.md), [ADR-007](../../adr/ADR-007-monetization.md), [MARKETING](../../MARKETING.md).
+- **Related:** [Product Charter](../../blueprint/01-PRODUCT-CHARTER.md), [Architecture](../../architecture/ARCHITECTURE.md), [ADR-003](../../adr/ADR-003-i18n.md), [ADR-006](../../adr/ADR-006-knowledge-packages.md), [ADR-007](../../adr/ADR-007-monetization.md).
 
 ## 1. Decision summary
 
@@ -104,17 +104,17 @@ Only published entries with a complete purpose, usable body, example, limitation
 
 ### 5.1 Single source
 
-For the MVP, the canonical catalogue is a Git-managed directory such as `content/open-templates/` in the VNX.SI repository. The exact path is an implementation-plan decision, but there must be one authoritative set of structured Markdown files. Pages, search data, the portable pack, adapters, and later MCP responses are generated from that set; no generated artifact is edited as a second source.
+For preparation and implementation, the catalogue is a Git-managed directory such as `content/open-templates/` in the VNX.SI repository. The exact path is an implementation-plan decision, but there must be one authoritative set of structured Markdown files. Pages, search data, the portable pack, adapters, and later MCP responses are generated from that set; no generated artifact is edited as a second source.
 
-An eventual separate public content repository is recommended for discoverability and community contribution. It must not become a runtime dependency:
+Opening a separate public content repository is a required Phase A prelaunch deliverable if VNX.SI promises an open-source public library. Creating that external repository is a separate authorized execution task; this documentation task does not create it. Until it is open and its first reviewed release is selected, the work may remain internal preparation but must not be marketed as the public open-source library. The public repository must not become a runtime dependency:
 
 1. A reviewed release or commit is selected as the catalogue revision.
 2. The VNX.SI build consumes that pinned revision and validates it before deployment.
 3. The Worker bundles the resulting content/index snapshot; requests never fetch the repository, Git hosting, or a raw URL.
 4. The site release records the source revision so a page, pack, and MCP response can be reproduced.
-5. One repository is authoritative after the move. The other side is a pinned release input or archival mirror, never a second place to edit content.
+5. One repository is authoritative after the public release decision. The other side is a pinned release input or archival mirror, never a second place to edit content.
 
-No external repository is created by this spec.
+The Phase A gate includes an explicit Owner-authorized repository-opening task and a recorded licence/attribution decision. No external repository is created by this spec.
 
 ### 5.2 Proposed Markdown contract
 
@@ -239,11 +239,37 @@ Targets below are suggested decision thresholds, not forecasts or public claims.
 
 The original 30-day return idea is a research target, not an automatic launch gate. Existing daily visitor hashes rotate and cannot measure a person-level 30-day cohort. A future retention metric requires either a voluntary user panel/self-report or an explicitly privacy-approved persistent measurement design. If implemented, define the cohort as activated users whose first qualifying copy/download falls in the first 14 days, and define retention as at least one qualifying action on a later date through day 30; publish numerator and denominator and do not infer identity from anonymous downloads.
 
-## 12. Implementation-planning and public-launch gates
+## 12. Product phases and dependencies
+
+The roadmap is sequential: preparation, the web/open-source pilot, bounded MCP, then evidence-driven expansion. These are product gates, not blanket implementation authorization. Marketplace supply, product verification, requests, and the M7 foundations remain the core dependency; Open Templates adds a distribution layer and does not replace them.
+
+### Phase 0 — preparation
+
+This is the current documentation phase. It delivers an Owner-approved written spec, accepted architecture decisions for the Git catalogue exception to D1, ADR-007 external-link treatment, the four-locale route/content boundary, and privacy measurement, plus a later implementation plan and task handoffs. It does not create product code, a public repository, or a deployed route. An unresolved architecture decision blocks the next phase.
+
+### Phase A — web pilot and open-source release
+
+Dependencies: Phase 0 approval, an Owner-accepted content licence, an editor and 2–4 hour/week maintenance budget, and a separately authorized task to open the public content repository before public prelaunch.
+
+Deliverables are 20–30 curated entries with an approximately 80/20 everyday-to-developer mix; English content behind the four-locale UI contract; account-free browse/search/copy/download; one portable Markdown pack; zero to two verified adapters; and a pinned, reproducible source release. Every published template requires one recorded real model/tool trial with normal and missing/ambiguous-input cases plus an output-check rubric. A full cross-model evaluation is not required. Marketplace/Build Kit links remain contextual, neutral, and subject to their own reviewed routes.
+
+The public repository opening is part of the Phase A prelaunch gate so the open-source promise cannot be silently deferred. Its creation is not authorized by this document. The Worker consumes a pinned release at build time and never fetches the repository at runtime; one repository is authoritative after the release decision.
+
+Phase A signals are hypotheses, not forecasts: activation events, pack adoption, qualified internal marketplace referrals, and editorial hours with explicit denominators. The daily-rotating M7 hash cannot prove person-level 30-day retention; use a voluntary panel or separately approved persistent measurement before defining that cohort.
+
+### Phase B — bounded read-only MCP
+
+Dependencies: Phase A evidence that the web/pack surface is useful, plus protocol and named-client/runtime verification. Deliver only stateless Streamable HTTP tools `search_templates` and `get_template` with bounded responses, protocol-aware Origin handling, no cookie/session/Turnstile dependency, no execution or arbitrary URL fetch, and no promise of all-harness compatibility.
+
+### Phase C — evidence-driven expansion
+
+Start only if Phase A/B shows repeat utility and the editorial budget remains viable. Candidate deliverables are reviewed community proposals, more templates, verified adapters, and human-reviewed translations for locales with demonstrated demand. Do not make translations, semantic search, accounts, ratings, personalization, or hosted execution automatic commitments.
+
+## 13. Implementation-planning and public-launch gates
 
 This spec has two gates. The first allows a later implementation plan to be written; the second applies before the public pilot launches. The implementation-planning gate does not require the final catalogue, generated artifacts, or a running route to exist.
 
-### 12.1 Implementation-planning gate
+### 13.1 Implementation-planning gate
 
 A later implementation plan may start when all of these are true:
 
@@ -254,27 +280,28 @@ A later implementation plan may start when all of these are true:
 
 No 20–30 published entries, generated page/search/pack artifacts, tested adapter, or deployed route is required at this gate.
 
-### 12.2 Public-launch gate
+### 13.2 Public-launch gate
 
 The public pilot is ready only when all of these are true:
 
 1. The catalogue contains 20–30 genuinely useful candidates, with the 80/20 audience mix and no filler; every published candidate passes §6, including the recorded normal and missing/ambiguous-input trials and output-check rubric.
-2. The source format generates the page, search index, portable pack, and metadata from one pinned revision; no generated file is hand-maintained.
-3. Account-free browse, copy, and portable download flows are implemented, accessible, and verified. All UI keys have four-locale parity, and English content is labelled.
-4. The recommended content licence is accepted or replaced by a recorded Owner decision. Rights and attribution rules are ready for contributors.
-5. The D1 exception, external-link treatment under ADR-007, and marketplace-link disclosure behavior are recorded before any code or external URL is published.
-6. Privacy review confirms that the event definitions do not retain raw queries, PII, secrets, or a false person-level retention claim. M7’s consent/GPC/go-live rules are respected.
-7. A named editor accepts the 2–4 hour/week operating budget. A stale-content and removal process exists.
-8. Portable Markdown is ready. There are zero to two adapters, each backed by actual client/version QA; no unverified format is advertised.
-9. MCP is explicitly out of the initial launch unless Phase B evidence, protocol review, and compatibility QA are separately approved.
+2. The public content repository has been opened through a separately authorized execution task, its first reviewed release is pinned, and one authoritative source is recorded. The Worker has no runtime repository dependency.
+3. The source format generates the page, search index, portable pack, and metadata from one pinned revision; no generated file is hand-maintained.
+4. Account-free browse, copy, and portable download flows are implemented, accessible, and verified. All UI keys have four-locale parity, and English content is labelled.
+5. The recommended content licence is accepted or replaced by a recorded Owner decision. Rights and attribution rules are ready for contributors.
+6. The D1 exception, external-link treatment under ADR-007, and marketplace-link disclosure behavior are recorded before any code or external URL is published.
+7. Privacy review confirms that the event definitions do not retain raw queries, PII, secrets, or a false person-level retention claim. M7’s consent/GPC/go-live rules are respected.
+8. A named editor accepts the 2–4 hour/week operating budget. A stale-content and removal process exists.
+9. Portable Markdown is ready. There are zero to two adapters, each backed by actual client/version QA; no unverified format is advertised.
+10. MCP is explicitly out of the initial launch unless Phase B evidence, protocol review, and compatibility QA are separately approved.
 
-## 13. Deferred scope and open decisions
+## 14. Deferred scope and open decisions
 
 | Decision | Owner decision required |
 |---|---|
 | Written design | Approve this draft as the basis for a later implementation plan. Product direction is already approved. |
 | Content licence | Accept CC BY 4.0 or name a replacement; decide whether examples need an additional attribution rule. |
-| Repository | Keep the MVP catalogue in the VNX.SI repository, then decide when a separate public repo becomes canonical and how its pinned releases are accepted. |
+| Repository | Open the public repository before Phase A prelaunch through a separately authorized task; record the canonical source and pinned release without adding a runtime dependency. |
 | External links | Register repository/licence/tool URLs through `/go/`, or approve a narrow ADR-007 editorial-link exception before exposing them. |
 | Initial inventory | Select the final 20–30 entries, editor, review cadence, and removal owner. |
 | Adapters | Select zero to two target clients and exact versions only after real QA; do not infer compatibility from brand names. |
@@ -283,7 +310,7 @@ The public pilot is ready only when all of these are true:
 
 Deferred from this pilot: accounts, favorites/sync, ratings, comments, public auto-publishing, CMS editing, semantic/vector search, hosted prompt execution, model inference, personalized recommendations, automatic translation, broad tool packs, paid placement, sponsored templates, and a template marketplace listing.
 
-## 14. Principal risks and mitigations
+## 15. Principal risks and mitigations
 
 | Risk | Mitigation in this design |
 |---|---|
