@@ -69,6 +69,51 @@ export function median(xs: number[]): number {
 /** `n` when it reaches `min`, else null. */
 export const countStat = (n: number, min: number): number | null => (n >= min ? n : null);
 
+// ---- Homepage "Numbers" and "Founding products" (VNX-0703) ----
+export const NUMBER_KEYS = ["count_products", "count_builders", "count_requests_30d", "count_countries"] as const satisfies readonly PublicStatKey[];
+export type NumberKey = (typeof NUMBER_KEYS)[number];
+/** Spec §5.9: the numbers row hides when fewer than two tiles are left. */
+export const MIN_NUMBER_TILES = 2;
+/** Owner Q1 (2026-10-05): the Founding products block shows the 6 newest first publications. */
+export const FOUNDING_LIMIT = 6;
+/** Owner 2026-10-06: the Founding products block waits until there are as many products as it shows. */
+export const FOUNDING_MIN = FOUNDING_LIMIT;
+export type NumberTile = { key: NumberKey; value: number; computedAt: string };
+
+/** The tiles whose key is fresh and not null, in NUMBER_KEYS order; null when fewer than MIN_NUMBER_TILES. */
+export function numberTiles(snapshot: PublicSnapshot): NumberTile[] | null {
+  const tiles = NUMBER_KEYS.flatMap((key): NumberTile[] => {
+    const hit = snapshot[key];
+    return hit ? [{ key, value: hit.value, computedAt: hit.computedAt }] : [];
+  });
+  return tiles.length >= MIN_NUMBER_TILES ? tiles : null;
+}
+
+/** What each homepage block gets: its data, or null (hide). Pure; `HomeBlocks` only maps fields to wrappers. */
+export type HomeView<F> = {
+  numbers: NumberTile[] | null;
+  live: PublicLiveEvent[] | null;
+  trending: TrendingItem[] | null;
+  founding: readonly F[] | null;
+  pulse: { categories: CategoryRow[] | null; scarcest: ScarcestCategory | null; growth: GrowthPoint[] | null } | null;
+  builders: TopBuilders | null;
+  products: TopProductsByCategory | null;
+};
+export function homeView<F>(snapshot: PublicSnapshot, founding: readonly F[]): HomeView<F> {
+  const trending = snapshot.trending?.value ?? null;
+  const categories = snapshot.request_by_category?.value ?? null;
+  const growth = snapshot.growth?.value ?? null;
+  return {
+    numbers: numberTiles(snapshot),
+    live: snapshot.live?.value ?? null,
+    trending,
+    founding: trending === null && founding.length >= FOUNDING_MIN ? founding : null,
+    pulse: categories || growth ? { categories, scarcest: snapshot.scarcest_category?.value ?? null, growth } : null,
+    builders: snapshot.top_builders?.value ?? null,
+    products: snapshot.top_products?.value ?? null,
+  };
+}
+
 // ---- Trending ----
 export type DayCounts = { views: number; demoClicks: number; inquiries: number };
 export const trendingScore = (c: DayCounts): number => c.inquiries * WEIGHT.inquiries + c.demoClicks * WEIGHT.demoClicks + c.views * WEIGHT.views;

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  MIN, STALE_AFTER_MS, FUTURE_SKEW_MS, addDays, changePercent, countStat, isFresh, isoWeek, isoWeekStart, lastDays, liveEvents, median, pickFresh,
+  FOUNDING_MIN, MIN, STALE_AFTER_MS, FUTURE_SKEW_MS, addDays, changePercent, countStat, isFresh, isoWeek, isoWeekStart, lastDays, liveEvents, median, pickFresh,
   rankTrending, requestByCategory, scarcestCategory, topBuilders, topProductsByCategory, trendingScore, weeklyGrowth,
-  type BuilderTally, type LiveEvent, type ProductCandidate, type TrendingCandidate,
+  homeView, numberTiles, type BuilderTally, type LiveEvent, type NumberKey, type ProductCandidate, type PublicSnapshot, type TrendingCandidate,
 } from "../../src/domain/public-stats.ts";
 
 const NOW = "2026-10-05T12:05:00.000Z";
@@ -278,5 +278,29 @@ describe("snapshot freshness (stale after 3 hours)", () => {
       NOW,
     );
     expect(snap).toEqual({ count_products: { value: 12, computedAt: at(60_000) } });
+  });
+});
+
+describe("numberTiles (spec §5.9): the numbers row needs two tiles", () => {
+  const snap = (keys: NumberKey[]): PublicSnapshot => Object.fromEntries(keys.map((k) => [k, { value: 12, computedAt: NOW }]));
+  it("is null under MIN_NUMBER_TILES tiles; otherwise the tiles in NUMBER_KEYS order", () => {
+    expect(numberTiles(snap([]))).toBeNull();
+    expect(numberTiles(snap(["count_countries"]))).toBeNull();
+    expect(numberTiles(snap(["count_countries", "count_products"]))?.map((x) => x.key)).toEqual(["count_products", "count_countries"]);
+  });
+});
+
+describe("homeView: what each homepage block gets, data or null", () => {
+  const some = (n: number) => Array.from({ length: n }, (_, i) => i);
+  it("founding needs FOUNDING_MIN items and only while Trending is absent", () => {
+    expect(homeView({}, some(FOUNDING_MIN - 1)).founding).toBeNull();
+    expect(homeView({}, some(FOUNDING_MIN)).founding).toHaveLength(FOUNDING_MIN);
+    const trending = { trending: { value: [], computedAt: NOW } } as unknown as PublicSnapshot;
+    expect(homeView(trending, some(FOUNDING_MIN)).founding).toBeNull();
+  });
+  it("every field is null for an empty snapshot; pulse needs chart 1 or chart 2", () => {
+    expect(Object.values(homeView({}, [])).every((v) => v === null)).toBe(true);
+    const growth = { growth: { value: [{ week: "w", products: 1, builders: 1 }], computedAt: NOW } } as PublicSnapshot;
+    expect(homeView(growth, []).pulse).toEqual({ categories: null, scarcest: null, growth: [{ week: "w", products: 1, builders: 1 }] });
   });
 });

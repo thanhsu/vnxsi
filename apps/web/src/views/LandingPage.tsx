@@ -1,4 +1,4 @@
-import type { FC } from "hono/jsx";
+import type { Child, FC } from "hono/jsx";
 import type { Utm, WaitlistErrors } from "../domain/waitlist-input.ts";
 import { ContactForm, emptyFeedbackValues } from "./contact/ContactForm.tsx";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
@@ -26,6 +26,8 @@ type Props = {
   deck: readonly DeckProduct[];
   /** The "Ask us" block (VNX-0710): ?asked=1 shows the thank-you notice; the form posts to /contact. */
   ask: { asked: boolean; siteKey: string | null; email: string };
+  /** The data blocks under the landing (VNX-0703, Owner A2); null/absent prints nothing. */
+  below?: Child | null;
 };
 
 /** schema.org Organization (plan VNX-0708): no logo, sameAs or ratings. */
@@ -77,7 +79,7 @@ const STEPS = [
 /** Tool names stay as written in every locale (plan VNX-0709 §8). */
 const TOOLS = ["Claude", "Codex", "Gemini", "Cursor", "Lovable", "Replit"];
 
-export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form, deck, ask }) => {
+export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, referrer, form, deck, ask, below }) => {
   const tr = translator(locale);
   const builderHref = builderCtaHref(locale, signedIn);
   const emailError = form?.errors?.email ? tr("landing.form.error.email") : null;
@@ -343,6 +345,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
           </div>
         </div>
       </section>
+      {below}
     </Layout>
   );
 };

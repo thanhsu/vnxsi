@@ -35,6 +35,8 @@ export const BADGE_SCORE_SQL = `COALESCE((SELECT MAX(CASE v.kind ${Object.entrie
   .join(" ")} END) FROM product_verifications v WHERE v.product_id = p.id AND v.revoked_at IS NULL), 0)`;
 const MIN_PRICE_SQL = "(SELECT MIN(t.price_cents) FROM pricing_tiers t WHERE t.product_id = p.id AND t.price_cents IS NOT NULL)";
 const COVER_SQL = "(SELECT m.r2_key FROM product_media m WHERE m.product_id = p.id ORDER BY m.sort, m.id LIMIT 1)";
+const ITEM_COLUMNS = `p.id, p.slug, p.name, p.tagline, p.category, b.handle AS builder_handle, b.name AS builder_name,
+  ${COVER_SQL} AS cover_key, ${MIN_PRICE_SQL} AS min_price_cents, ${BADGE_SCORE_SQL} AS badge_score`;
 
 /** SQL condition: some element of the JSON list in `column` matches the bound LIKE `pattern` (never the raw JSON text). */
 export function jsonListLike(column: string, pattern: string): string {
@@ -76,14 +78,25 @@ export async function searchProducts(db: D1Database, query: CatalogQuery): Promi
   const offset = (query.page - 1) * PAGE_SIZE;
   const list = db
     .prepare(
-      `${hits}SELECT p.id, p.slug, p.name, p.tagline, p.category, b.handle AS builder_handle, b.name AS builder_name,
-         ${COVER_SQL} AS cover_key, ${MIN_PRICE_SQL} AS min_price_cents, ${BADGE_SCORE_SQL} AS badge_score
+      `${hits}SELECT ${ITEM_COLUMNS}
        FROM ${from} WHERE ${filter} ORDER BY ${order} LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
     )
     .bind(...params);
   const count = db.prepare(`${hits}SELECT COUNT(*) AS n FROM ${from} WHERE ${filter}`).bind(...params);
   const [rows, total] = await db.batch([list, count]);
   return { items: ((rows?.results ?? []) as ItemRow[]).map(toItem), total: (total?.results[0] as { n: number } | undefined)?.n ?? 0 };
+}
+
+/**
+ * Homepage "Founding products" (Owner Q1): the newest first publications, newest first. Not a ranking: no badge, view or
+ * inquiry count reaches the order (ADR-004).
+ */
+export async function foundingProducts(db: D1Database, limit: number): Promise<CatalogItem[]> {
+  const { results } = await db
+    .prepare(`SELECT ${ITEM_COLUMNS} FROM products p ${JOINS} WHERE ${PUBLIC_PRODUCT} ORDER BY p.first_published_at DESC, p.id DESC LIMIT ?1`)
+    .bind(limit)
+    .all<ItemRow>();
+  return results.map(toItem);
 }
 
 type DeckDetailRow = { id: string; primary_lang: ProductLang; kind: BadgeKind | null };

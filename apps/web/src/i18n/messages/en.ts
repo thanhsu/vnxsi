@@ -924,6 +924,16 @@ export const en = {
   "legal.disclosure.description": "How VNX.SI may earn from partner links, and why rankings are never for sale.",
   "footer.disclosure": "Disclosure",
   "disclosure.noPartners": "None at the moment.",
+  "home.updatedHourly": "Updated hourly",
+  "home.numbers.title": "Numbers",
+  "home.numbers.products": "Products published",
+  "home.numbers.builders": "Builders approved",
+  "home.numbers.requests": "Requests in the last {days} days",
+  "home.numbers.countries": "Builder countries",
+  "home.trending.title": "Trending this week",
+  "home.trending.vsPrevious": "vs previous week",
+  "home.trending.spark": "Activity, last {days} days",
+  "home.founding.title": "Founding products",
 } as const;
 
 export type MessageKey = keyof typeof en;
