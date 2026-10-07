@@ -25,6 +25,8 @@ export default defineConfig(async () => {
             // Pinned empty, like RESEND_API_KEY: a developer's .dev.vars credentials must never make the suite reach a real provider.
             GOOGLE_CLIENT_ID: "",
             GOOGLE_CLIENT_SECRET: "",
+            GITHUB_CLIENT_ID: "",
+            GITHUB_CLIENT_SECRET: "",
             LINKEDIN_CLIENT_ID: "",
             LINKEDIN_CLIENT_SECRET: "",
           },

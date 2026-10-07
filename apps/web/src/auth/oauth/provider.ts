@@ -23,7 +23,8 @@ export interface ExchangeInput {
 }
 
 /** Fixed codes for logs and branching; never an error message or a provider response. */
-export type ExchangeFailure = "token_request" | "token_response" | `id_token_${IdTokenFailure}`;
+/** `profile_*` is GitHub's `GET /user` (plain OAuth 2.0 has no ID token). */
+export type ExchangeFailure = "token_request" | "token_response" | "profile_request" | "profile_response" | `id_token_${IdTokenFailure}`;
 export type ExchangeResult = { ok: true; identity: ProviderIdentity } | { ok: false; reason: ExchangeFailure };
 
 export interface ProviderClient {

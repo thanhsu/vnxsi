@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FakeOAuthProvider, FAKE_CLIENT_ID, issueFakeCode, resetFakeOAuth } from "../../src/auth/oauth/fake.ts";
+import { GithubClient } from "../../src/auth/oauth/github.ts";
 import { getOAuthProvider, isFakeOAuth, isProviderConfigured, oauthCredentials } from "../../src/auth/oauth/index.ts";
 import { OidcClient } from "../../src/auth/oauth/oidc.ts";
 import { OAUTH_PROVIDERS } from "../../src/domain/identity.ts";
@@ -16,12 +17,12 @@ const FAKE_SIBLING = /["']\.\/fake(?:\.ts)?["']/;
 const NOW = Date.parse("2026-10-07T10:00:00.000Z");
 const INPUT = { code: "", verifier: "v".repeat(43), nonce: "n".repeat(43), redirectUri: "https://vnx.si/auth/oauth/google/callback", now: NOW };
 const withEnv = (over: Partial<Bindings>) => ({ ...testEnv, ...over }) as Bindings;
-const REAL = { OAUTH_DRIVER: undefined, GOOGLE_CLIENT_ID: "gid", GOOGLE_CLIENT_SECRET: "gsecret", LINKEDIN_CLIENT_ID: "lid", LINKEDIN_CLIENT_SECRET: "lsecret" };
+const REAL = { OAUTH_DRIVER: undefined, GOOGLE_CLIENT_ID: "gid", GOOGLE_CLIENT_SECRET: "gsecret", GITHUB_CLIENT_ID: "hid", GITHUB_CLIENT_SECRET: "hsecret", LINKEDIN_CLIENT_ID: "lid", LINKEDIN_CLIENT_SECRET: "lsecret" };
 
 describe("test environment (decision 5)", () => {
   it("runs with the fake driver and no client credentials, so .dev.vars can never reach a real provider", () => {
     expect(testEnv.OAUTH_DRIVER).toBe("fake");
-    for (const key of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"] as const) expect(testEnv[key] ?? "", key).toBe("");
+    for (const key of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"] as const) expect(testEnv[key] ?? "", key).toBe("");
     expect(isFakeOAuth(testEnv)).toBe(true);
   });
 
@@ -99,9 +100,18 @@ describe("getOAuthProvider (decisions 5 and 6)", () => {
     }
   });
 
-  it("has no GitHub adapter yet (Task 4): GitHub is off outside the fake driver", () => {
-    expect(getOAuthProvider(withEnv(REAL), "github")).toBeNull();
-    expect(isProviderConfigured(withEnv(REAL), "github")).toBe(false);
+  it("returns the GitHub adapter when both credentials exist, and nothing when either is missing or blank", () => {
+    const env = withEnv(REAL);
+    expect(getOAuthProvider(env, "github")).toBeInstanceOf(GithubClient);
+    expect(getOAuthProvider(env, "github")).toMatchObject({ provider: "github", clientId: "hid" });
+    expect(isProviderConfigured(env, "github")).toBe(true);
+    for (const over of [{ GITHUB_CLIENT_ID: undefined }, { GITHUB_CLIENT_ID: "" }, { GITHUB_CLIENT_ID: "  " }, { GITHUB_CLIENT_SECRET: undefined }, { GITHUB_CLIENT_SECRET: " " }]) {
+      const broken = withEnv({ ...REAL, ...over });
+      expect(oauthCredentials(broken, "github"), JSON.stringify(over)).toBeNull();
+      expect(getOAuthProvider(broken, "github")).toBeNull();
+      expect(isProviderConfigured(broken, "github")).toBe(false);
+      expect(isProviderConfigured(broken, "google")).toBe(true);
+    }
   });
 
   it("passes the injected fetch to the real adapter", async () => {

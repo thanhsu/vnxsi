@@ -2,12 +2,13 @@ import { isFakeMail } from "../../email/index.ts";
 import type { OAuthProvider } from "../../domain/identity.ts";
 import type { Bindings } from "../../env.ts";
 import { FakeOAuthProvider } from "./fake.ts";
+import { GithubClient } from "./github.ts";
 import { OidcClient } from "./oidc.ts";
 import type { ProviderClient } from "./provider.ts";
 
 type OAuthEnv = Pick<
   Bindings,
-  "OAUTH_DRIVER" | "MAIL_DRIVER" | "RESEND_API_KEY" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "LINKEDIN_CLIENT_ID" | "LINKEDIN_CLIENT_SECRET"
+  "OAUTH_DRIVER" | "MAIL_DRIVER" | "RESEND_API_KEY" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET" | "LINKEDIN_CLIENT_ID" | "LINKEDIN_CLIENT_SECRET"
 >;
 
 // A bare `fetch` kept in a field and called as a method of another object makes workerd throw "Illegal invocation".
@@ -21,10 +22,14 @@ export function isFakeOAuth(env: Pick<Bindings, "OAUTH_DRIVER" | "MAIL_DRIVER" |
   return env.OAUTH_DRIVER === "fake" && isFakeMail(env);
 }
 
-/** The provider's client id and secret, or null when either is missing or blank (decision 6). GitHub's join in Task 4. */
+/** The provider's client id and secret, or null when either is missing or blank (decision 6). */
 export function oauthCredentials(env: OAuthEnv, provider: OAuthProvider): { clientId: string; clientSecret: string } | null {
   const [id, secret] =
-    provider === "google" ? [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET] : provider === "linkedin" ? [env.LINKEDIN_CLIENT_ID, env.LINKEDIN_CLIENT_SECRET] : [undefined, undefined];
+    provider === "google"
+      ? [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET]
+      : provider === "github"
+        ? [env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET]
+        : [env.LINKEDIN_CLIENT_ID, env.LINKEDIN_CLIENT_SECRET];
   const clientId = id?.trim();
   const clientSecret = secret?.trim();
   return clientId && clientSecret ? { clientId, clientSecret } : null;
@@ -39,6 +44,7 @@ export function isProviderConfigured(env: OAuthEnv, provider: OAuthProvider): bo
 export function getOAuthProvider(env: OAuthEnv, provider: OAuthProvider, fetchFn: typeof fetch = defaultFetch): ProviderClient | null {
   if (isFakeOAuth(env)) return new FakeOAuthProvider(provider);
   const credentials = oauthCredentials(env, provider);
-  if (!credentials || provider === "github") return null;
+  if (!credentials) return null;
+  if (provider === "github") return new GithubClient(credentials.clientId, credentials.clientSecret, fetchFn);
   return new OidcClient(provider, credentials.clientId, credentials.clientSecret, fetchFn);
 }
