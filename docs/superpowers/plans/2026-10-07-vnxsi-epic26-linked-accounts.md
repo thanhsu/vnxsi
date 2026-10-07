@@ -35,12 +35,12 @@ Lựa chọn kỹ thuật của Planner ở chỗ ADR-012 im lặng hoặc roadm
 2. **Không thêm dependency: tự viết PKCE/OAuth bằng `fetch` + WebCrypto**, không dùng `arctic` hay thư viện tương tự. Lý do: Global Constraints của M0–EPIC 21 cấm dependency mới; phần cần viết nhỏ (S256 là một lần `crypto.subtle.digest`, đổi code lấy token là một `POST` form, GitHub `GET /user`, tất cả đã có trong runtime workerd); một thư viện vẫn bắt ta tự kiểm `iss`/`aud`/`exp`/`nonce` (arctic chỉ cung cấp `decodeIdToken` không kiểm gì), nên không tiết kiệm phần khó nhất; thêm một gói vào chuỗi cung ứng của luồng đăng nhập là rủi ro lớn hơn ~250 dòng code có test. ADR-012 cho phép thư viện nhỏ nhưng không bắt buộc. Quyết định đã duyệt R2 (Reviewer 2026-10-07). So sánh hằng thời gian (Task 2) dùng `crypto.subtle.timingSafeEqual` của workerd trên hai mảng byte cùng độ dài (hiện `src/` chưa có helper nào; viết một hàm nhỏ trong `domain/oauth.ts` hoặc `auth/crypto.ts`).
 3. **ID token: KHÔNG kiểm chữ ký bằng JWKS (lệch dòng roadmap VNX-2603 "kiểm ID token (JWKS, …)", đã được Reviewer duyệt ngày 2026-10-07, quyết định R1).** Căn cứ OIDC Core §3.1.3.7 mục 6: ID token nhận **trực tiếp từ token endpoint qua TLS** thì kiểm chữ ký là tùy chọn (MAY); Google ghi như vậy. Điều kiện bắt buộc, mỗi điều có test (Task 2, 3):
    - (a) ID token chỉ lấy từ JSON trả về của token endpoint, không bao giờ từ query, fragment hay authorize response;
-   - (b) URL token endpoint là hằng số trong code (Google `https://oauth2.googleapis.com/token`, LinkedIn `https://www.linkedin.com/oauth/v2/accessToken`), không bao giờ từ input; `fetch` dùng `redirect: "error"`;
+   - (b) URL token endpoint là hằng số trong code (Google `https://oauth2.googleapis.com/token`, LinkedIn `https://www.linkedin.com/oauth/v2/accessToken`), không bao giờ từ input; `fetch` dùng `redirect: "manual"` và mọi 3xx bị từ chối (workerd không hỗ trợ `"error"`: "error won't be implemented since it does not make sense at the edge"; 3xx không phải `res.ok` nên thành `token_request`);
    - (c) `iss` khớp chính xác: Google `https://accounts.google.com` hoặc `accounts.google.com`; LinkedIn `https://www.linkedin.com/oauth`;
    - (d) `aud` bằng client ID, và `azp`, nếu có, cũng bằng client ID; `exp` còn hạn (dung sai 60 s); `nonce` khớp; có `sub`.
    Lợi: bỏ fetch/cache JWKS, code RS256, chế độ lỗi "JWKS không tải được thì không ai đăng nhập được". Mất: một lớp phòng thủ chiều sâu nếu có kẻ chen vào kênh TLS tới provider (không thực tế trong workerd). `verifyIdToken` là một bước có tên rõ để thêm kiểm chữ ký sau này (khi đó hàm thành async; chấp nhận đổi chữ ký nếu có ngày cần JWKS).
 4. **Một cookie `__Host-vnx_oauth`, không ký, mang `{ v:1, provider, intent, state, verifier, nonce, next, locale, sessionHash, exp }` (JSON → base64url).** Theo ADR-012 mục 1: HttpOnly, Secure, `SameSite=Lax` (callback là GET top-level từ provider, `Strict` sẽ làm cookie không được gửi), `Path=/`, 600 giây, xóa ngay khi callback chạy (dùng một lần; cũng xóa khi lỗi). Không ký vì `__Host-` chặn cookie tossing từ subdomain và kẻ giả mạo cookie của nạn nhân đã vượt qua mọi thứ khác; thêm khóa ký là thêm một secret phải quản lý. `state` kiểm bằng so sánh thời gian cố định với tham số `state` ở callback. Luồng liên kết: `POST …/link` (đã qua `originCheck`, cần session) ghi cookie `{ intent:"link", provider, sessionHash (S1, xem cuối mục), exp ≤ 120 giây }` rồi 303; `GET …/start` đọc cookie đó: nếu có intent `link` còn hạn, cùng provider và `sessionHash` khớp session hiện tại thì giữ intent `link`, ngược lại intent là `signin`; nó sinh `state`/PKCE/`nonce` và ghi lại cookie. Callback với intent `link` cần session hiện tại có `sessionHash` khớp, nếu không từ chối. `start` chỉ thấy intent `link` nếu POST đã ghi nó: không có tham số URL nào chọn intent. `sessionHash` = `sha256("oauth-link:" + raw session id)` (S1; không dùng `sessions.id_hash` nguyên văn). Callback từ chối khi `cookie.provider !== :provider` (F5).
-5. **Provider giả qua port + `OAUTH_DRIVER`.** `OAuthProvider` là interface (`buildAuthorizeUrl`, `exchange(code, verifier, nonce) → ProviderIdentity`); `getOAuthProvider(env, provider)` trả adapter thật, hoặc `FakeOAuthProvider` khi `env.OAUTH_DRIVER === "fake"` (cùng cách `MAIL_DRIVER`, `TURNSTILE_DRIVER`; `vitest.config.ts` đặt `OAUTH_DRIVER: "fake"`; `wrangler.jsonc` không có biến này, có test cấm). Adapter thật nhận `fetch` tiêm vào, nên test adapter dùng `fetch` giả trả JSON dựng sẵn. Test không bao giờ gọi mạng.
+5. **Provider giả qua port + `OAUTH_DRIVER`.** `OAuthProvider` là interface (`buildAuthorizeUrl`, `exchange(code, verifier, nonce) → ProviderIdentity`); `getOAuthProvider(env, provider)` trả adapter thật, hoặc `FakeOAuthProvider` khi `env.OAUTH_DRIVER === "fake"` **và** `isFakeMail(env)` (tức `MAIL_DRIVER=fake` không có `RESEND_API_KEY` thật, theo VNX-0803 F6) (cùng cách `MAIL_DRIVER`, `TURNSTILE_DRIVER`; `vitest.config.ts` đặt `OAUTH_DRIVER: "fake"`; `wrangler.jsonc` không có biến này, có test cấm). Adapter thật nhận `fetch` tiêm vào, nên test adapter dùng `fetch` giả trả JSON dựng sẵn. Test không bao giờ gọi mạng.
 6. **Ba khóa cờ `oauth_google`, `oauth_github`, `oauth_linkedin`, nối vào cuối `FLAG_KEYS`** (thứ tự quan trọng với test và với `/admin/flags`). `key` không có CHECK trong SQL nên không cần migration. Cờ chỉ là "được dùng"; provider chưa cấu hình (thiếu `<PROVIDER>_CLIENT_ID` hoặc `_SECRET`) cũng coi như tắt: nút ẩn, callback 404 (fail closed), kể cả khi cờ bật.
 7. **Audit chỉ ghi `{ provider }`**, không ghi `label` (là email của tài khoản provider, dữ liệu cá nhân), không `provider_subject`, không token. `entity = "user"`, `entityId = userId` (cùng `auth.login`). Link và unlink ghi cùng `db.batch` với thay đổi, bằng guard mới `AuditIdentityGuard` (Task 1); `auth.login` qua OAuth dùng `writeAudit` như đường magic link (`data: { method }`).
 8. **`SessionUser.method: SessionMethod` bắt buộc, `getSessionUser` fail closed:** hàng `sessions` có `method` ngoài danh sách (không thể có vì CHECK) thì coi như không có session. Không bao giờ trả về giá trị mặc định `magic_link` cho dữ liệu lạ, vì đó sẽ mở cửa vào `/ops`.
@@ -65,6 +65,7 @@ Không chặn Task 1. Đây là các quy tắc nghiệp vụ hoặc nội dung m
 - **CSP `form-action 'self'` và chuỗi redirect sau POST:** đã xử lý bằng quyết định 14 (R3): `start` với intent `link` trả trang trung gian 200, không redirect. Còn lại: bước kiểm tay ở VNX-2605a trên Chrome, Firefox, Safari là **xác nhận**, không còn là quyết định. Nút ở `/login` là `<a>`, không bao giờ form (form GET cũng bị chặn).
 - **GitHub và PKCE:** ADR yêu cầu PKCE S256 cho cả ba. GitHub OAuth App hỗ trợ `code_challenge` từ 2025; nếu một ứng dụng cũ bỏ qua tham số này thì luồng vẫn chạy (GitHub không ép), nhưng ta không dựa vào nó để chống chặn code: `state` + client secret vẫn là lớp chính. VNX-2601 ghi lại kết quả thử.
 - **LinkedIn:** `email` có thể thiếu (→ `label` là chữ "LinkedIn", quyết định 12). VNX-2601 phải xác nhận LinkedIn nhận `scope=openid+profile+email` (dấu cách mã hóa thành `+` bởi `URLSearchParams`) và trả lại `nonce` trong ID token; kiểm `nonce` giữ fail closed, nếu LinkedIn không trả thì quay lại Reviewer, không bỏ kiểm tra.
+- **LinkedIn và PKCE:** LinkedIn ghi tài liệu PKCE chủ yếu cho ứng dụng native (bật theo yêu cầu), nên với ứng dụng web confidential `code_challenge` có thể bị bỏ qua hoặc `code_verifier` bị từ chối. VNX-2601 phải thử với ứng dụng thật. Nếu LinkedIn từ chối `code_verifier`, KHÔNG bỏ PKCE trong code: đó là lệch ADR-012 §1, quay lại Reviewer và Owner.
 - **Hàng `user_identities` và `deleteGhostUsers`:** user có identity luôn đã đăng nhập (`last_login_at` khác null) nên `deleteGhostUsers` không chọn họ; không sửa hàm đó. Ghi vào "Ghi nhận" nếu về sau có luồng xóa tài khoản.
 
 ## Global Constraints
@@ -126,10 +127,10 @@ Mỗi task kết thúc bằng `npm run typecheck -w apps/web` và `npm test` xan
 ## Phạm vi các task sau (viết chi tiết ngay trước khi làm)
 
 - **Task 2 (VNX-2603a).** `domain/oauth.ts`: `generateState()`, `generateNonce()`, `generateVerifier()` (43–128 ký tự theo RFC 7636), `codeChallengeS256(verifier)`, `buildAuthorizeUrl(config, params)` (chỉ ghép tham số đã biết, `redirect_uri` từ `APP_ORIGIN`), `verifyIdToken(idToken, expected)` (giải base64url + JSON, kiểm `iss`, `aud`/`azp`, `exp` có dung sai 60 s, `nonce`, có `sub`; không kiểm chữ ký, quyết định 3), kiểu `OAuthCookie` và `parseOAuthCookie` (từ chối sai hình dạng, quá hạn). `auth/oauth-cookie.ts`: `OAUTH_COOKIE`, `readOAuthCookie`, `writeOAuthCookie`, `clearOAuthCookie` (Lax, 600 s). Test: vector RFC 7636 phụ lục B cho S256; mọi kiểu claim sai. Test thêm: `parseOAuthCookie` và nơi gọi nó từ chối khi `provider` trong cookie khác `:provider` (F5); `sessionHash = sha256("oauth-link:" + raw session id)` (S1); so sánh `state` bằng `crypto.subtle.timingSafeEqual` trên mảng byte cùng độ dài (R2); `verifyIdToken` thực thi điều kiện (c) và (d) của quyết định 3.
-- **Task 3 (VNX-2603b).** `auth/oauth/provider.ts` (interface và kiểu `ProviderIdentity = { subject, label }`), `auth/oauth/oidc.ts` (đổi `code`, gọi `verifyIdToken`, dùng chung Google và LinkedIn; cấu hình endpoint cố định theo provider), `auth/oauth/fake.ts` (`FakeOAuthProvider` với bảng `code → identity` do test đặt; mô phỏng `state`/PKCE/nonce đúng để bắt lỗi của lõi), `auth/oauth/index.ts` (`getOAuthProvider`, `isProviderConfigured`); `env.ts` thêm 6 secret tùy chọn và `OAUTH_DRIVER`; `vitest.config.ts` đặt `OAUTH_DRIVER: "fake"`. Test adapter bằng `fetch` giả: token endpoint trả ID token sai `aud` thì từ chối; không có chuỗi token nào xuất hiện trong log. `FakeOAuthProvider` từ chối `code` đã dùng (S2). Adapter kiểm điều kiện (a)–(b) của quyết định 3 (ID token chỉ từ JSON token endpoint, URL hằng số, `fetch` có `redirect: "error"`).
-- **Task 4 (VNX-2603c).** `auth/oauth/github.ts`: đổi `code` (+ `code_verifier`) ở `https://github.com/login/oauth/access_token` với `Accept: application/json`, rồi `GET https://api.github.com/user` (có `User-Agent`, `Authorization: Bearer`), lấy `id` (số → chuỗi) và `login`; bỏ token ngay. Test với `fetch` giả: `id` số thành `subject`, `login` đổi nhưng `subject` giữ nguyên; lỗi HTTP và thiếu `id` bị từ chối; token không bị log.
+- **Task 3 (VNX-2603b).** `auth/oauth/provider.ts` (interface và kiểu `ProviderIdentity = { subject, label }`), `auth/oauth/oidc.ts` (đổi `code`, gọi `verifyIdToken`, dùng chung Google và LinkedIn; cấu hình endpoint cố định theo provider), `auth/oauth/fake.ts` (`FakeOAuthProvider` với bảng `code → identity` do test đặt; mô phỏng `state`/PKCE/nonce đúng để bắt lỗi của lõi), `auth/oauth/index.ts` (`getOAuthProvider`, `isProviderConfigured`); `env.ts` thêm 6 secret tùy chọn và `OAUTH_DRIVER`; `vitest.config.ts` đặt `OAUTH_DRIVER: "fake"`. Test adapter bằng `fetch` giả: token endpoint trả ID token sai `aud` thì từ chối; không có chuỗi token nào xuất hiện trong log. `FakeOAuthProvider` từ chối `code` đã dùng (S2). Adapter kiểm điều kiện (a)–(b) của quyết định 3 (ID token chỉ từ JSON token endpoint, URL hằng số, `fetch` có `redirect: "manual"`, mọi 3xx bị từ chối).
+- **Task 4 (VNX-2603c).** `auth/oauth/github.ts`: đổi `code` (+ `code_verifier`) ở `https://github.com/login/oauth/access_token` với `Accept: application/json`, rồi `GET https://api.github.com/user` (có `User-Agent`, `Authorization: Bearer`), lấy `id` (số → chuỗi) và `login`; bỏ token ngay. Test với `fetch` giả: `id` số thành `subject`, `login` đổi nhưng `subject` giữ nguyên; lỗi HTTP và thiếu `id` bị từ chối; token không bị log. Hai `fetch` của GitHub (đổi `code` và `GET /user`) cũng dùng `redirect: "manual"`, mọi 3xx bị từ chối, và có test `new Request(url, init)` không ném lỗi (F1). Thêm `GITHUB_CLIENT_ID` và `GITHUB_CLIENT_SECRET` (tùy chọn ở `env.ts`, nhánh github của `oauthCredentials`), ghim `""` trong `vitest.config.ts` và mở rộng test "không có credential nào trong `testEnv`" ở `oauth-providers.test.ts` cho hai khóa này.
 - **Task 5 (VNX-2604a).** Sửa `auth/ops.ts` (`requireOps`) và `auth/middleware.ts` (`requireAdmin`) để từ chối `user.method !== "magic_link"` (quyết định 9); `resolveOpsRole` không đổi. Test: session `oauth_github` và `oauth_google` vào `/ops` nhận đúng bytes của `opsNotFound`; vào `/admin` nhận 403; `magic_link` không đổi; `resolveOpsRole` vẫn trả vai trò cho user có session OAuth. Quyết định rõ: kiểm vẫn ở `requireAdmin`, không chuyển vào `isAdminUser` sau khi rebase M7 (F7).
-- **Task 6 (VNX-2604b).** `routes/oauth.tsx`: `GET /auth/oauth/:provider/start` (cờ, cấu hình, sinh state/PKCE/nonce, ghi cookie, 302), `GET /auth/oauth/:provider/callback` (cờ tắt → 404 trước mọi việc khác; rate limit; cookie + `state`; `provider.exchange`; tìm `findIdentityByProviderSubject`; user `suspended` → 403 như magic link; chưa liên kết → trang chung; tìm thấy → `createSession(…, sessionMethodFor(provider))`, `touchIdentityLogin`, audit `auth.login` có `data.method`, cookie session, redirect `safeNext`). Header theo quyết định 11. View trang "chưa liên kết" (câu VI của ADR-012 mục 3; EN, zh-Hans, zh-Hant do Owner duyệt). Test dùng `FakeOAuthProvider`. Callback từ chối khi `cookie.provider !== :provider` (F5, có test). Đăng nhập OAuth gọi `markLogin` (`src/db/users.ts:40`) đúng như `completeLogin` (`src/routes/auth.tsx:43`) (F10). Thêm: assertion kiến trúc rằng `routes/oauth.tsx` và các import của nó không import `db/ops-members.ts`, và test user có lời mời Ops `pending` đăng nhập bằng OAuth không có hàng `ops_members` (F3). Test quét `console.error` ở mọi đường lỗi (F5). Nếu ước tính > 600 dòng khi viết section, tách (ví dụ route start và route callback riêng) (F9).
+- **Task 6 (VNX-2604b).** `routes/oauth.tsx`: `GET /auth/oauth/:provider/start` (cờ, cấu hình, sinh state/PKCE/nonce, ghi cookie, 302), `GET /auth/oauth/:provider/callback` (cờ tắt → 404 trước mọi việc khác; rate limit; cookie + `state`; `provider.exchange`; tìm `findIdentityByProviderSubject`; user `suspended` → 403 như magic link; chưa liên kết → trang chung; tìm thấy → `createSession(…, sessionMethodFor(provider))`, `touchIdentityLogin`, audit `auth.login` có `data.method`, cookie session, redirect `safeNext`). Header theo quyết định 11. View trang "chưa liên kết" (câu VI của ADR-012 mục 3; EN, zh-Hans, zh-Hant do Owner duyệt). Test dùng `FakeOAuthProvider`. Callback từ chối khi `cookie.provider !== :provider` (F5, có test). Đăng nhập OAuth gọi `markLogin` (`src/db/users.ts:40`) đúng như `completeLogin` (`src/routes/auth.tsx:43`) (F10). Thêm: assertion kiến trúc rằng `routes/oauth.tsx` và các import của nó không import `db/ops-members.ts`, và test user có lời mời Ops `pending` đăng nhập bằng OAuth không có hàng `ops_members` (F3). Test quét `console.error` ở mọi đường lỗi (F5). Test helper đọc flow cookie do `/start` đặt và luôn gọi `issueFakeCode` với đủ `verifier`, `nonce`, `redirectUri` (F3); `redirectUri` tính một lần bằng `oauthRedirectUri(env.APP_ORIGIN, provider)` và dùng cho cả authorize lẫn exchange, không bao giờ từ URL của request. Nếu ước tính > 600 dòng khi viết section, tách (ví dụ route start và route callback riêng) (F9).
 - **Task 7 (VNX-2604c).** `LoginPage` thêm nút cho provider có cờ bật và có cấu hình, dưới form email; logo SVG tự host, CSS class `oauth-*` (không inline); khóa i18n nhãn nút. Test: cờ tắt → không có nút; không `style=`/script nội tuyến (CSP). Nút ở `/login` là `<a href="/auth/oauth/:provider/start?next=…">`, không bao giờ form (form GET cũng bị `form-action` chặn); test `/login` không có `<form>` nào có action dưới `/auth/oauth/` (F1).
 - **Task 8 (VNX-2605a).** Mục trong `/me` liệt kê provider đã liên kết (kèm `label`) và chưa; `POST /me/identities/:provider/link` (cần session, ghi cookie intent `link`, 303 `/auth/oauth/:provider/start`); callback nhánh `link` (cần `sessionHash` khớp, `linkIdentity`, xung đột → thông báo chung, `already_linked` coi như thành công không gửi email); kiểm tay chuỗi redirect trên Chrome/Firefox/Safari, chọn trang trung gian nếu cần (quyết định 14). `db/identities.ts` thêm hàm đọc cho `/me` nếu `listIdentitiesForUser` chưa đủ; allowlist test kiến trúc thêm các file mới. Sửa so với bản nháp: không còn "chọn trang trung gian nếu cần". Theo quyết định 14 (R3), `start` với intent `link` luôn trả trang 200 có một `<a>`; test: `POST …/link` trả 303 với `Location` cùng site, `GET /start` với intent `link` trả 200 và không bao giờ 3xx ra ngoài; kiểm tay trên trình duyệt là xác nhận. Nếu ước tính > 600 dòng, tách nhánh `link` của callback thành task riêng (F9).
 - **Task 9 (VNX-2605b).** `POST /me/identities/:provider/unlink` (Origin, `unlinkIdentity`, luôn được phép); `email/templates/identity.ts` (`identityLinkedEmail`, `identityUnlinkedEmail`, 4 locale, escape HTML như `loginEmail`); gửi sau khi batch thành công tới `users.email` qua `getMailer`; cách xử lý lỗi gửi mail (ghi log, không hoàn tác; có dùng lại cơ chế gửi lại của `notify` hay không) quyết định khi viết section từ code thật. Test: email tới đúng `users.email` (không phải `label`), đúng locale, không chứa token.
@@ -1549,3 +1550,725 @@ Reviewer typecheck bản code của plan với types của nhánh (0 lỗi) và 
 Nghĩa vụ cho task sau:
 
 - **LOW-2 (Task 6 và Task 8):** chỉ truyền `linkSessionHash(raw)` vào `resolveStartIntent` / `flowMatchesSession` khi `c.get("user")` khác null (session còn sống, user `active`); ngược lại truyền `null`. Test: cookie intent + session hết hạn → `signin`.
+
+---
+
+### Task 3: VNX-2603b — Port nhà cung cấp, adapter Google và LinkedIn (OIDC), provider giả, `getOAuthProvider`
+
+**Files:**
+- Create: `apps/web/src/auth/oauth/provider.ts` (port và kiểu), `apps/web/src/auth/oauth/oidc.ts` (adapter Google, LinkedIn), `apps/web/src/auth/oauth/fake.ts` (`FakeOAuthProvider`), `apps/web/src/auth/oauth/index.ts` (`getOAuthProvider`, cấu hình)
+- Modify: `apps/web/src/domain/identity.ts` (thêm `PROVIDER_NAME`)
+- Modify: `apps/web/src/env.ts` (5 binding tùy chọn)
+- Modify: `apps/web/vitest.config.ts` (`OAUTH_DRIVER: "fake"` và ghim rỗng các client ID/secret)
+- Modify: `apps/web/test/env.d.ts` (khai báo `OAUTH_DRIVER`)
+- Modify: `apps/web/wrangler.jsonc` (chỉ ghi chú; không biến, không `OAUTH_DRIVER`)
+- Modify (test có sẵn): `apps/web/test/domain/identity.test.ts` (`PROVIDER_NAME`), `apps/web/test/db/identities.test.ts` (nghĩa vụ review VNX-2602: CHECK của `label`)
+- Test (mới): `apps/web/test/auth/oauth-oidc.test.ts`, `apps/web/test/auth/oauth-providers.test.ts`
+- Không có route, không khóa i18n, không migration.
+
+**Interfaces:**
+- Consumes: `OAuthProvider` (union tên provider), `PROVIDER_FLAG` (`domain/identity.ts`); `OAUTH_PROVIDER_SPECS`, `verifyIdToken`, `IdTokenFailure` (`domain/oauth.ts`); `isFakeMail` (`email/index.ts`); `Bindings` (`env.ts`); `testEnv`, `ensureUser`, `linkIdentity` (test).
+- Produces:
+  - `domain/identity.ts`: `PROVIDER_NAME: Record<OAuthProvider, string>` = `{ google: "Google", github: "GitHub", linkedin: "LinkedIn" }` (tên hiển thị cố định, không dịch).
+  - `auth/oauth/provider.ts`: `ProviderIdentity = { subject: string; label: string }`; `ExchangeInput = { code; verifier; nonce; redirectUri; now: number }`; `ExchangeFailure = "token_request" | "token_response" | \`id_token_${IdTokenFailure}\``; `ExchangeResult = { ok: true; identity: ProviderIdentity } | { ok: false; reason: ExchangeFailure }`; `interface ProviderClient { readonly provider: OAuthProvider; readonly clientId: string; exchange(input: ExchangeInput): Promise<ExchangeResult> }`.
+  - `auth/oauth/oidc.ts`: `OIDC_TOKEN_URLS`, `class OidcClient implements ProviderClient` (`new OidcClient(provider, clientId, clientSecret, fetchFn)`), `type OidcProvider = "google" | "linkedin"`.
+  - `auth/oauth/fake.ts`: `FAKE_CLIENT_ID`, `issueFakeCode(provider, identity, expect): string`, `resetFakeOAuth(): void`, `class FakeOAuthProvider implements ProviderClient`.
+  - `auth/oauth/index.ts`: `isFakeOAuth(env)`, `oauthCredentials(env, provider)`, `isProviderConfigured(env, provider): boolean`, `getOAuthProvider(env, provider, fetchFn?): ProviderClient | null` (null = chưa cấu hình, route trả 404).
+  - `env.ts` `Bindings`: `OAUTH_DRIVER?`, `GOOGLE_CLIENT_ID?`, `GOOGLE_CLIENT_SECRET?`, `LINKEDIN_CLIENT_ID?`, `LINKEDIN_CLIENT_SECRET?` (cả `string`).
+
+**Quyết định kỹ thuật:**
+- **Tên port: `ProviderClient`, không phải `OAuthProvider`** như header nói, vì `OAuthProvider` đã là kiểu union tên provider ở `domain/identity.ts` (Task 1). Chỉ đổi tên, không đổi vai trò.
+- **Adapter chỉ làm một việc:** đổi `code` lấy ID token và rút `{ subject, label }` ra. Nó **không đọc `access_token` hay `refresh_token`** trong JSON trả về, không có trường nào của kết quả chứa token, không `console.*` (test quét tĩnh `src/auth/oauth/*.ts` không có `console.`), không import `hono` hay `db/`. Lỗi trả về là mã cố định (`ExchangeFailure`), không bao giờ `String(err)` hay nội dung phản hồi của provider (Review Focus 9, F5).
+- **Quyết định 3 (a) và (b):** ID token chỉ lấy từ trường `id_token` của JSON do token endpoint trả; `ExchangeInput` không có trường nào để truyền ID token vào. URL token endpoint là hằng số `OIDC_TOKEN_URLS` (Google `https://oauth2.googleapis.com/token`, LinkedIn `https://www.linkedin.com/oauth/v2/accessToken`); `fetch` luôn `method: "POST"`, `redirect: "manual"` (workerd không hỗ trợ `"error"`, mọi lời gọi sẽ ném lỗi; với `"manual"` một 3xx trả về nguyên trạng, không phải `res.ok`, nên thành `token_request` và `fetch` chỉ được gọi một lần), `AbortSignal.timeout(8000)`. Client secret chỉ nằm trong thân form gửi tới đúng URL đó.
+- **`label` (quyết định 12, F2):** `claims.email` nếu có, không thì `PROVIDER_NAME[provider]` ("Google", "LinkedIn"); không bao giờ `name`. `verifyIdToken` đã bảo đảm email dài 1–254 nên `label` luôn thỏa CHECK `length(label) BETWEEN 1 AND 254`; test đi qua `linkIdentity` để chứng minh điều đó.
+- **Chọn driver theo tiền lệ VNX-0803 F6 (chặt hơn lời header):** `OAUTH_DRIVER=fake` chỉ có hiệu lực khi `isFakeMail(env)` đúng (tức là `MAIL_DRIVER=fake` **và** không có `RESEND_API_KEY` thật), cùng cách `TURNSTILE_DRIVER`. Production luôn có `RESEND_API_KEY`, nên một biến `OAUTH_DRIVER` lọt vào cũng không bật được provider giả, thứ chấp nhận mọi `code` đã phát. Ngoài ra `wrangler.jsonc` không bao giờ chứa `OAUTH_DRIVER` (test chặn), và `vitest.config.ts` đặt nó.
+- **Cấu hình thiếu = provider tắt (quyết định 6):** `oauthCredentials` trả `null` nếu thiếu hoặc rỗng (sau `trim`) client ID hoặc secret; `getOAuthProvider` trả `null`; `isProviderConfigured` là bản boolean cho view và route. GitHub chưa có adapter ở task này nên `getOAuthProvider(env, "github")` trả `null` (Task 4 thêm); riêng driver giả phục vụ cả ba provider.
+- **`fetch` mặc định phải được bọc** (`const defaultFetch: typeof fetch = (input, init) => fetch(input, init)`): giữ tham chiếu `fetch` trần rồi gọi như phương thức của đối tượng khác làm workerd ném "Illegal invocation".
+- **`FakeOAuthProvider` (S2):** `getOAuthProvider` tạo client mới cho mỗi request, nên bảng `code` là biến cấp module trong isolate (như `outbox` của `FakeMailer`). `issueFakeCode(provider, identity, expect)` phát một `code`, với `expect` BẮT BUỘC và đủ ba trường (F3); `exchange` xóa `code` **trước khi** kiểm gì khác (một `code` chỉ dùng được một lần, kể cả khi lần đó sai), từ chối `code` lạ, `code` của provider khác, `verifier` hoặc `redirectUri` không như `expect` (`token_request`) và `nonce` không như `expect` (`id_token_nonce`). Nhờ `expect`, test route ở Task 6 bắt được lỗi PKCE hoặc `nonce` của lõi mà provider giả không tự biết.
+- **`worker-configuration.d.ts` không đổi:** file đó bị `.gitignore`, do `wrangler types --strict-vars=false` sinh từ `vars` của `wrangler.jsonc`, mà secret không nằm trong `vars`; kiểu của secret là `Bindings` viết tay ở `env.ts`. Việc duy nhất kiểu cần là thêm năm trường tùy chọn ở `env.ts` và `OAUTH_DRIVER` ở `test/env.d.ts` (cho `cloudflare:workers` env trong test).
+- **Ghim rỗng trong `vitest.config.ts`:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` đặt `""` để `.dev.vars` của lập trình viên không bao giờ biến bộ test thành gọi provider thật (cùng ý với `RESEND_API_KEY: ""`).
+
+- [ ] **Step 1: `PROVIDER_NAME` (test fail rồi pass)**
+
+Thêm vào cuối `apps/web/test/domain/identity.test.ts` (cập nhật dòng import, thêm `PROVIDER_NAME`):
+
+```ts
+describe("provider display names (ADR-012 decision 12, F2)", () => {
+  it("are fixed and never translated", () => {
+    expect(PROVIDER_NAME).toEqual({ google: "Google", github: "GitHub", linkedin: "LinkedIn" });
+    expect(Object.keys(PROVIDER_NAME)).toEqual([...OAUTH_PROVIDERS]);
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/domain/identity.test.ts` → FAIL (`PROVIDER_NAME` chưa có). Thêm vào `apps/web/src/domain/identity.ts`, sau `PROVIDER_FLAG`:
+
+```ts
+/** Fixed display names; brand names are not translated (ADR-012, ADR-003). Also the `label` of an identity whose provider gave no e-mail (decision 12). */
+export const PROVIDER_NAME: Record<OAuthProvider, string> = { google: "Google", github: "GitHub", linkedin: "LinkedIn" };
+```
+
+Chạy lại → PASS.
+
+- [ ] **Step 2: Nghĩa vụ review VNX-2602: CHECK của `label` (test)**
+
+Thêm vào `describe("user_identities …")` của `apps/web/test/db/identities.test.ts`, sau `it` cuối (dùng `newUser`, `NOW`, `testEnv`, `linkIdentity` đã có trong file):
+
+```ts
+  it("refuses an empty label and one of 255 characters, in SQL and through linkIdentity, and accepts 254 (CHECK 1-254)", async () => {
+    const user = await newUser();
+    const insertLabel = (id: string, label: string) =>
+      testEnv.DB
+        .prepare("INSERT INTO user_identities (id, user_id, provider, provider_subject, label, linked_at, updated_at) VALUES (?1, ?2, 'google', ?1, ?3, ?4, ?4)")
+        .bind(id, user.id, label, NOW)
+        .run();
+    await expect(insertLabel("label-empty", "")).rejects.toThrow();
+    await expect(insertLabel("label-long", "x".repeat(255))).rejects.toThrow();
+    await expect(linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-empty", label: "", now: NOW })).rejects.toThrow();
+    await expect(linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-long", label: "x".repeat(255), now: NOW })).rejects.toThrow();
+    expect((await linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-max", label: "x".repeat(254), now: NOW })).ok).toBe(true);
+    expect(await listIdentitiesForUser(testEnv.DB, user.id)).toHaveLength(1);
+  });
+```
+
+Chạy: `npm test -w apps/web -- test/db/identities.test.ts` → PASS ngay (migration đã có CHECK; test này chốt hành vi, không cần code mới).
+
+- [ ] **Step 3: Test adapter OIDC (fail)**
+
+`apps/web/test/auth/oauth-oidc.test.ts`:
+
+```ts
+import { describe, expect, it, vi } from "vitest";
+import { OIDC_TOKEN_URLS, OidcClient, type OidcProvider } from "../../src/auth/oauth/oidc.ts";
+import { linkIdentity } from "../../src/db/identities.ts";
+import { PROVIDER_NAME } from "../../src/domain/identity.ts";
+import { base64UrlEncode, OAUTH_PROVIDER_SPECS } from "../../src/domain/oauth.ts";
+import { ensureUser } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+
+const NOW = Date.parse("2026-10-07T10:00:00.000Z");
+const NONCE = "n".repeat(43);
+const PROVIDERS: OidcProvider[] = ["google", "linkedin"];
+const INPUT = { code: "auth-code", verifier: "v".repeat(43), nonce: NONCE, redirectUri: "https://vnx.si/auth/oauth/google/callback", now: NOW };
+
+const enc = (value: unknown) => base64UrlEncode(new TextEncoder().encode(JSON.stringify(value)));
+const claimsFor = (provider: OidcProvider, over: Record<string, unknown> = {}) => ({
+  iss: OAUTH_PROVIDER_SPECS[provider].issuers[0],
+  aud: "client-id",
+  sub: "sub-1",
+  exp: NOW / 1000 + 600,
+  nonce: NONCE,
+  email: "lan@example.com",
+  name: "Lan Nguyen",
+  ...over,
+});
+const idToken = (claims: unknown) => `${enc({ alg: "RS256", typ: "JWT" })}.${enc(claims)}.c2ln`;
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const tokenJson = (claims: unknown) => ({ access_token: "ya29.SECRET-ACCESS", refresh_token: "1//SECRET-REFRESH", token_type: "Bearer", expires_in: 3599, id_token: idToken(claims) });
+
+type Call = { url: string; init: RequestInit };
+function stubFetch(respond: () => Response | Promise<Response>) {
+  const calls: Call[] = [];
+  const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init: init ?? {} });
+    return respond();
+  }) as typeof fetch;
+  return { fn, calls };
+}
+const client = (provider: OidcProvider, fn: typeof fetch) => new OidcClient(provider, "client-id", "client-secret", fn);
+
+describe("OidcClient token request (decision 3 (a), (b))", () => {
+  it("posts the code exchange to the constant token URL, without following redirects", async () => {
+    expect(OIDC_TOKEN_URLS).toEqual({ google: "https://oauth2.googleapis.com/token", linkedin: "https://www.linkedin.com/oauth/v2/accessToken" });
+    for (const provider of PROVIDERS) {
+      const { fn, calls } = stubFetch(() => json(tokenJson(claimsFor(provider))));
+      await client(provider, fn).exchange(INPUT);
+      expect(calls, provider).toHaveLength(1);
+      const [call] = calls;
+      expect(call?.url).toBe(OIDC_TOKEN_URLS[provider]);
+      expect(call?.init.method).toBe("POST");
+      expect(call?.init.redirect).toBe("manual");
+      expect(call?.init.signal).toBeInstanceOf(AbortSignal);
+      expect(Object.fromEntries(new URLSearchParams(String(call?.init.body)))).toEqual({
+        grant_type: "authorization_code",
+        code: "auth-code",
+        redirect_uri: INPUT.redirectUri,
+        client_id: "client-id",
+        client_secret: "client-secret",
+        code_verifier: INPUT.verifier,
+      });
+    }
+  });
+
+  it("takes the ID token only from the token endpoint JSON, whatever else the input carries", async () => {
+    const forged = idToken(claimsFor("google"));
+    const { fn } = stubFetch(() => json({ access_token: "a", token_type: "Bearer" }));
+    const result = await client("google", fn).exchange({ ...INPUT, idToken: forged } as never);
+    expect(result).toEqual({ ok: false, reason: "token_response" });
+  });
+});
+
+describe("OidcClient redirects and runtime options (F1)", () => {
+  it("treats any redirect from the token endpoint as a failed request, and calls fetch once (workerd supports manual, not error)", async () => {
+    for (const status of [301, 302, 307]) {
+      const { fn, calls } = stubFetch(() => new Response(null, { status, headers: { location: "https://evil.example/token" } }));
+      expect(await client("google", fn).exchange(INPUT), String(status)).toEqual({ ok: false, reason: "token_request" });
+      expect(calls, String(status)).toHaveLength(1);
+    }
+  });
+
+  it("builds options the workerd runtime accepts: a Request made from the captured call does not throw", async () => {
+    for (const provider of PROVIDERS) {
+      const { fn, calls } = stubFetch(() => json(tokenJson(claimsFor(provider))));
+      await client(provider, fn).exchange(INPUT);
+      const call = calls[0];
+      expect(call, provider).toBeDefined();
+      expect(() => new Request(call?.url ?? "", call?.init), provider).not.toThrow();
+    }
+  });
+});
+
+describe("OidcClient result (ADR-012 §1, decision 12, F2)", () => {
+  it("returns the subject and the e-mail as label, and nothing else: no token, no name", async () => {
+    for (const provider of PROVIDERS) {
+      const { fn } = stubFetch(() => json(tokenJson(claimsFor(provider))));
+      const result = await client(provider, fn).exchange(INPUT);
+      expect(result, provider).toEqual({ ok: true, identity: { subject: "sub-1", label: "lan@example.com" } });
+      const text = JSON.stringify(result);
+      for (const secret of ["SECRET", "Lan Nguyen", "auth-code", "client-secret"]) expect(text, `${provider} ${secret}`).not.toContain(secret);
+    }
+  });
+
+  it("falls back to the fixed provider name when there is no e-mail, never to the name claim", async () => {
+    for (const provider of PROVIDERS) {
+      const { fn } = stubFetch(() => json(tokenJson(claimsFor(provider, { email: undefined }))));
+      const result = await client(provider, fn).exchange(INPUT);
+      expect(result, provider).toEqual({ ok: true, identity: { subject: "sub-1", label: PROVIDER_NAME[provider] } });
+    }
+  });
+
+  it("always gives a label the database accepts (1-254 characters)", async () => {
+    const user = await ensureUser("oidc-label@vnx.si");
+    for (const [provider, email] of [["google", "x".repeat(254)], ["linkedin", undefined]] as const) {
+      const { fn } = stubFetch(() => json(tokenJson(claimsFor(provider, { email, sub: `label-${provider}` }))));
+      const result = await client(provider, fn).exchange(INPUT);
+      if (!result.ok) throw new Error(result.reason);
+      expect(result.identity.label.length).toBeGreaterThanOrEqual(1);
+      expect(result.identity.label.length).toBeLessThanOrEqual(254);
+      expect((await linkIdentity(testEnv.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: "2026-10-07T10:00:00.000Z" })).ok).toBe(true);
+    }
+  });
+});
+
+describe("OidcClient failures give fixed codes", () => {
+  it("maps a failed or non-2xx token request to token_request", async () => {
+    const cases: Array<() => Response | Promise<Response>> = [() => json({ error: "invalid_grant" }, 400), () => json({}, 500), () => { throw new TypeError("network failure"); }];
+    for (const respond of cases) {
+      const { fn } = stubFetch(respond);
+      expect(await client("google", fn).exchange(INPUT)).toEqual({ ok: false, reason: "token_request" });
+    }
+  });
+
+  it("maps an unreadable or incomplete token response to token_response", async () => {
+    const cases: Array<() => Response> = [
+      () => new Response("not json", { status: 200 }),
+      () => json([1, 2]),
+      () => json({ id_token: 5 }),
+      () => json({ access_token: "a" }),
+    ];
+    for (const respond of cases) {
+      const { fn } = stubFetch(respond);
+      expect(await client("linkedin", fn).exchange(INPUT)).toEqual({ ok: false, reason: "token_response" });
+    }
+  });
+
+  it("maps every claim defect to id_token_<reason>, for each provider", async () => {
+    const table: Array<[Record<string, unknown>, string]> = [
+      [{ iss: "https://evil.example" }, "id_token_issuer"],
+      [{ aud: "other-client" }, "id_token_audience"],
+      [{ azp: "other-client" }, "id_token_azp"],
+      [{ exp: NOW / 1000 - 120 }, "id_token_expired"],
+      [{ nonce: "m".repeat(43) }, "id_token_nonce"],
+      [{ sub: "" }, "id_token_subject"],
+    ];
+    for (const provider of PROVIDERS) {
+      for (const [over, reason] of table) {
+        const { fn } = stubFetch(() => json(tokenJson(claimsFor(provider, over))));
+        expect(await client(provider, fn).exchange(INPUT), `${provider} ${reason}`).toEqual({ ok: false, reason });
+      }
+    }
+  });
+
+  it("accepts only the issuer of its own provider", async () => {
+    const google = stubFetch(() => json(tokenJson(claimsFor("linkedin"))));
+    expect(await client("google", google.fn).exchange(INPUT)).toEqual({ ok: false, reason: "id_token_issuer" });
+    const linkedin = stubFetch(() => json(tokenJson(claimsFor("google"))));
+    expect(await client("linkedin", linkedin.fn).exchange(INPUT)).toEqual({ ok: false, reason: "id_token_issuer" });
+    const alt = stubFetch(() => json(tokenJson(claimsFor("google", { iss: "accounts.google.com" }))));
+    expect((await client("google", alt.fn).exchange(INPUT)).ok).toBe(true);
+  });
+
+  it("logs nothing on success or failure (Review Focus 9)", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined));
+    try {
+      for (const respond of [() => json(tokenJson(claimsFor("google"))), () => json({}, 500), () => new Response("x"), () => json(tokenJson(claimsFor("google", { nonce: "bad" })))]) {
+        await client("google", stubFetch(respond).fn).exchange(INPUT);
+      }
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-oidc.test.ts` → FAIL (module chưa có).
+
+- [ ] **Step 4: Port, adapter, env**
+
+`apps/web/src/auth/oauth/provider.ts`:
+
+```ts
+import type { OAuthProvider } from "../../domain/identity.ts";
+import type { IdTokenFailure } from "../../domain/oauth.ts";
+
+/**
+ * What the sign-in routes need from a provider (ADR-012 §1): trade the one-time `code` for the account's identity. Nothing
+ * else leaves an adapter: no access token, no refresh token, no ID token, no profile name (Review Focus 9, F2). Named
+ * ProviderClient because `OAuthProvider` is already the union of provider names (domain/identity.ts).
+ */
+export interface ProviderIdentity {
+  /** The provider's immutable account id (`sub`, or GitHub's numeric id as text). */
+  subject: string;
+  /** The e-mail, or the fixed provider name when there is none (Google, LinkedIn); the login for GitHub. Always 1-254 characters. */
+  label: string;
+}
+
+export interface ExchangeInput {
+  code: string;
+  verifier: string;
+  nonce: string;
+  redirectUri: string;
+  /** Epoch milliseconds; the caller's clock, so tests control `exp`. */
+  now: number;
+}
+
+/** Fixed codes for logs and branching; never an error message or a provider response. */
+export type ExchangeFailure = "token_request" | "token_response" | `id_token_${IdTokenFailure}`;
+export type ExchangeResult = { ok: true; identity: ProviderIdentity } | { ok: false; reason: ExchangeFailure };
+
+export interface ProviderClient {
+  readonly provider: OAuthProvider;
+  readonly clientId: string;
+  exchange(input: ExchangeInput): Promise<ExchangeResult>;
+}
+```
+
+`apps/web/src/auth/oauth/oidc.ts`:
+
+```ts
+import { PROVIDER_NAME } from "../../domain/identity.ts";
+import { OAUTH_PROVIDER_SPECS, verifyIdToken } from "../../domain/oauth.ts";
+import type { ExchangeFailure, ExchangeInput, ExchangeResult, ProviderClient } from "./provider.ts";
+
+export type OidcProvider = "google" | "linkedin";
+
+/** Constants, never built from input (decision 3 (b)). */
+export const OIDC_TOKEN_URLS: Record<OidcProvider, string> = {
+  google: "https://oauth2.googleapis.com/token",
+  linkedin: "https://www.linkedin.com/oauth/v2/accessToken",
+};
+
+const TIMEOUT_MS = 8000;
+
+/**
+ * Google and LinkedIn: OpenID Connect authorization-code exchange. The ID token is read only from the token endpoint's JSON
+ * (decision 3 (a)); its claims are checked by `verifyIdToken` and its signature is not (approved deviation R1). The access
+ * and refresh tokens in the same JSON are never read. No logging here: callers log the fixed failure code.
+ */
+export class OidcClient implements ProviderClient {
+  constructor(
+    readonly provider: OidcProvider,
+    readonly clientId: string,
+    private readonly clientSecret: string,
+    private readonly fetchFn: typeof fetch,
+  ) {}
+
+  async exchange(input: ExchangeInput): Promise<ExchangeResult> {
+    const fail = (reason: ExchangeFailure): ExchangeResult => ({ ok: false, reason });
+    let body: unknown;
+    try {
+      const fetchFn = this.fetchFn;
+      const res = await fetchFn(OIDC_TOKEN_URLS[this.provider], {
+        method: "POST",
+        redirect: "manual",
+        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: input.code,
+          redirect_uri: input.redirectUri,
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          code_verifier: input.verifier,
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) return fail("token_request");
+      try {
+        body = await res.json();
+      } catch {
+        return fail("token_response");
+      }
+    } catch {
+      return fail("token_request");
+    }
+    const idToken = typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>).id_token : undefined;
+    if (typeof idToken !== "string" || idToken === "") return fail("token_response");
+
+    const verified = verifyIdToken(idToken, { issuers: OAUTH_PROVIDER_SPECS[this.provider].issuers, audience: this.clientId, nonce: input.nonce, now: input.now });
+    if (!verified.ok) return fail(`id_token_${verified.reason}`);
+    // F2: the e-mail, else the fixed provider name; the `name` claim is never read.
+    return { ok: true, identity: { subject: verified.claims.subject, label: verified.claims.email ?? PROVIDER_NAME[this.provider] } };
+  }
+}
+```
+
+`apps/web/src/env.ts`: thêm vào `Bindings`, sau `TURNSTILE_DRIVER?: string;`:
+
+```ts
+  /** EPIC 26 (ADR-012): "fake" swaps in the test provider, and only next to the fake mailer (auth/oauth/index.ts). Never set in wrangler.jsonc. */
+  OAUTH_DRIVER?: string;
+  /** OAuth client credentials: `wrangler secret put …` and apps/web/.dev.vars only. A provider missing either of its two is off. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  LINKEDIN_CLIENT_ID?: string;
+  LINKEDIN_CLIENT_SECRET?: string;
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-oidc.test.ts` → PASS.
+
+- [ ] **Step 5: Test provider giả, factory, cấu hình (fail)**
+
+`apps/web/test/auth/oauth-providers.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { FakeOAuthProvider, FAKE_CLIENT_ID, issueFakeCode, resetFakeOAuth } from "../../src/auth/oauth/fake.ts";
+import { getOAuthProvider, isFakeOAuth, isProviderConfigured, oauthCredentials } from "../../src/auth/oauth/index.ts";
+import { OidcClient } from "../../src/auth/oauth/oidc.ts";
+import { OAUTH_PROVIDERS } from "../../src/domain/identity.ts";
+import type { Bindings } from "../../src/env.ts";
+import { testEnv } from "../helpers.ts";
+
+const WRANGLER = import.meta.glob("../../wrangler.jsonc", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const ADAPTERS = import.meta.glob("../../src/auth/oauth/*.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+
+const NOW = Date.parse("2026-10-07T10:00:00.000Z");
+const INPUT = { code: "", verifier: "v".repeat(43), nonce: "n".repeat(43), redirectUri: "https://vnx.si/auth/oauth/google/callback", now: NOW };
+const withEnv = (over: Partial<Bindings>) => ({ ...testEnv, ...over }) as Bindings;
+const REAL = { OAUTH_DRIVER: undefined, GOOGLE_CLIENT_ID: "gid", GOOGLE_CLIENT_SECRET: "gsecret", LINKEDIN_CLIENT_ID: "lid", LINKEDIN_CLIENT_SECRET: "lsecret" };
+
+describe("test environment (decision 5)", () => {
+  it("runs with the fake driver and no client credentials, so .dev.vars can never reach a real provider", () => {
+    expect(testEnv.OAUTH_DRIVER).toBe("fake");
+    for (const key of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"] as const) expect(testEnv[key] ?? "", key).toBe("");
+    expect(isFakeOAuth(testEnv)).toBe(true);
+  });
+
+  it("keeps the fake driver and every credential out of wrangler.jsonc", () => {
+    const raw = WRANGLER["../../wrangler.jsonc"] ?? "";
+    expect(raw.length).toBeGreaterThan(0);
+    expect(raw).not.toContain("OAUTH_DRIVER");
+    expect(raw).not.toMatch(/"(?:GOOGLE|GITHUB|LINKEDIN)_CLIENT_(?:ID|SECRET)"\s*:/);
+  });
+
+  it("lets only auth/oauth/index.ts import the fake provider (S1)", () => {
+    const sources = import.meta.glob("../../src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+    expect(Object.keys(sources).length).toBeGreaterThan(50);
+    for (const [file, src] of Object.entries(sources)) {
+      if (file === "../../src/auth/oauth/index.ts") continue;
+      const pattern = file.startsWith("../../src/auth/oauth/") ? /from\s+["']\.\/fake(?:\.ts)?["']/ : /from\s+["'][^"']*\/oauth\/fake(?:\.ts)?["']/;
+      expect(src, file).not.toMatch(pattern);
+    }
+  });
+
+  it("keeps adapters free of logging, Hono and the database (Review Focus 9)", () => {
+    const files = Object.entries(ADAPTERS);
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    for (const [file, src] of files) {
+      expect(src, `${file} logs`).not.toMatch(/\bconsole\./);
+      expect(src, `${file} imports hono`).not.toMatch(/from\s+["']hono/);
+      expect(src, `${file} imports db`).not.toMatch(/from\s+["'][^"']*\/db\//);
+    }
+  });
+});
+
+describe("getOAuthProvider (decisions 5 and 6)", () => {
+  it("returns the fake provider for every provider when the fake driver counts", () => {
+    for (const provider of OAUTH_PROVIDERS) {
+      const client = getOAuthProvider(testEnv, provider);
+      expect(client, provider).toBeInstanceOf(FakeOAuthProvider);
+      expect(client?.provider).toBe(provider);
+      expect(client?.clientId).toBe(FAKE_CLIENT_ID);
+      expect(isProviderConfigured(testEnv, provider)).toBe(true);
+    }
+  });
+
+  it("ignores the fake driver once a real mail key exists (VNX-0803 F6), so production never gets the fake provider", () => {
+    const env = withEnv({ ...REAL, OAUTH_DRIVER: "fake", RESEND_API_KEY: "re_live_key" });
+    expect(isFakeOAuth(env)).toBe(false);
+    expect(getOAuthProvider(env, "google")).toBeInstanceOf(OidcClient);
+    const bare = withEnv({ OAUTH_DRIVER: "fake", RESEND_API_KEY: "re_live_key", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" });
+    expect(getOAuthProvider(bare, "google")).toBeNull();
+  });
+
+  it("returns the real adapter for Google and LinkedIn when both credentials exist", () => {
+    const env = withEnv(REAL);
+    expect(getOAuthProvider(env, "google")).toMatchObject({ provider: "google", clientId: "gid" });
+    expect(getOAuthProvider(env, "google")).toBeInstanceOf(OidcClient);
+    expect(getOAuthProvider(env, "linkedin")).toMatchObject({ provider: "linkedin", clientId: "lid" });
+    expect(isProviderConfigured(env, "google")).toBe(true);
+  });
+
+  it("treats a missing, empty or blank client id or secret as the provider being off", () => {
+    for (const over of [{ GOOGLE_CLIENT_ID: undefined }, { GOOGLE_CLIENT_ID: "" }, { GOOGLE_CLIENT_ID: "   " }, { GOOGLE_CLIENT_SECRET: undefined }, { GOOGLE_CLIENT_SECRET: " " }]) {
+      const env = withEnv({ ...REAL, ...over });
+      expect(oauthCredentials(env, "google"), JSON.stringify(over)).toBeNull();
+      expect(getOAuthProvider(env, "google")).toBeNull();
+      expect(isProviderConfigured(env, "google")).toBe(false);
+      expect(isProviderConfigured(env, "linkedin")).toBe(true);
+    }
+  });
+
+  it("has no GitHub adapter yet (Task 4): GitHub is off outside the fake driver", () => {
+    expect(getOAuthProvider(withEnv(REAL), "github")).toBeNull();
+    expect(isProviderConfigured(withEnv(REAL), "github")).toBe(false);
+  });
+
+  it("passes the injected fetch to the real adapter", async () => {
+    const calls: string[] = [];
+    const fn = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response("{}", { status: 500 });
+    }) as typeof fetch;
+    const client = getOAuthProvider(withEnv(REAL), "google", fn);
+    expect(await client?.exchange({ ...INPUT, code: "c" })).toEqual({ ok: false, reason: "token_request" });
+    expect(calls).toEqual(["https://oauth2.googleapis.com/token"]);
+  });
+});
+
+describe("FakeOAuthProvider (decision 5, S2)", () => {
+  beforeEach(() => resetFakeOAuth());
+  const identity = { subject: "fake-sub", label: "lan@example.com" };
+  const EXPECT = { verifier: INPUT.verifier, nonce: INPUT.nonce, redirectUri: INPUT.redirectUri };
+
+  it("trades an issued code for the identity it was issued for", async () => {
+    const code = issueFakeCode("google", identity, EXPECT);
+    const result = await new FakeOAuthProvider("google").exchange({ ...INPUT, code });
+    expect(result).toEqual({ ok: true, identity });
+  });
+
+  it("works across new client instances in the same isolate, like one request after another", async () => {
+    const code = issueFakeCode("linkedin", identity, EXPECT);
+    expect((await getOAuthProvider(testEnv, "linkedin")?.exchange({ ...INPUT, code }))?.ok).toBe(true);
+  });
+
+  it("rejects a reused code (S2), and an unknown one", async () => {
+    const code = issueFakeCode("github", identity, EXPECT);
+    const fake = new FakeOAuthProvider("github");
+    expect((await fake.exchange({ ...INPUT, code })).ok).toBe(true);
+    expect(await fake.exchange({ ...INPUT, code })).toEqual({ ok: false, reason: "token_request" });
+    expect(await fake.exchange({ ...INPUT, code: "fake-code-unknown" })).toEqual({ ok: false, reason: "token_request" });
+  });
+
+  it("burns a code even when the attempt was wrong, and refuses another provider's code", async () => {
+    const code = issueFakeCode("google", identity, EXPECT);
+    expect(await new FakeOAuthProvider("github").exchange({ ...INPUT, code })).toEqual({ ok: false, reason: "token_request" });
+    expect(await new FakeOAuthProvider("google").exchange({ ...INPUT, code })).toEqual({ ok: false, reason: "token_request" });
+  });
+
+  it("enforces the verifier, redirect URI and nonce a test says the flow must present", async () => {
+    const ok = issueFakeCode("google", identity, EXPECT);
+    expect((await new FakeOAuthProvider("google").exchange({ ...INPUT, code: ok })).ok).toBe(true);
+    const badVerifier = issueFakeCode("google", identity, EXPECT);
+    expect(await new FakeOAuthProvider("google").exchange({ ...INPUT, code: badVerifier, verifier: "w".repeat(43) })).toEqual({ ok: false, reason: "token_request" });
+    const badRedirect = issueFakeCode("google", identity, EXPECT);
+    expect(await new FakeOAuthProvider("google").exchange({ ...INPUT, code: badRedirect, redirectUri: "https://evil.example/cb" })).toEqual({ ok: false, reason: "token_request" });
+    const badNonce = issueFakeCode("google", identity, EXPECT);
+    expect(await new FakeOAuthProvider("google").exchange({ ...INPUT, code: badNonce, nonce: "m".repeat(43) })).toEqual({ ok: false, reason: "id_token_nonce" });
+  });
+
+  it("returns a copy of the identity and nothing that looks like a token", async () => {
+    const code = issueFakeCode("google", identity, EXPECT);
+    const result = await new FakeOAuthProvider("google").exchange({ ...INPUT, code });
+    if (!result.ok) throw new Error(result.reason);
+    expect(Object.keys(result.identity).sort()).toEqual(["label", "subject"]);
+    result.identity.label = "changed";
+    expect(identity.label).toBe("lan@example.com");
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-providers.test.ts` → FAIL (module và cấu hình chưa có).
+
+- [ ] **Step 6: Provider giả, factory, cấu hình test**
+
+`apps/web/src/auth/oauth/fake.ts`:
+
+```ts
+import type { OAuthProvider } from "../../domain/identity.ts";
+import type { ExchangeInput, ExchangeResult, ProviderClient, ProviderIdentity } from "./provider.ts";
+
+/** The provider for tests (decision 5): no network, one-time codes the test issues. Only reachable through `getOAuthProvider` when `isFakeOAuth` holds. */
+export const FAKE_CLIENT_ID = "fake-client-id";
+
+/**
+ * What the flow under test must present for the code to be accepted. All three are required (F3): a test that cannot say what
+ * the core should send is not testing the core.
+ */
+export interface FakeExpect {
+  verifier: string;
+  nonce: string;
+  redirectUri: string;
+}
+
+type Issued = { provider: OAuthProvider; identity: ProviderIdentity; expect: FakeExpect };
+
+// One table per isolate, like the fake mailer's outbox: `getOAuthProvider` builds a new client on every request.
+const issued = new Map<string, Issued>();
+
+export function issueFakeCode(provider: OAuthProvider, identity: ProviderIdentity, expect: FakeExpect): string {
+  const code = `fake-code-${crypto.randomUUID()}`;
+  issued.set(code, { provider, identity: { ...identity }, expect });
+  return code;
+}
+
+export function resetFakeOAuth(): void {
+  issued.clear();
+}
+
+export class FakeOAuthProvider implements ProviderClient {
+  readonly clientId = FAKE_CLIENT_ID;
+  constructor(readonly provider: OAuthProvider) {}
+
+  async exchange(input: ExchangeInput): Promise<ExchangeResult> {
+    const entry = issued.get(input.code);
+    // S2: a code works once, even when this attempt turns out wrong (a real provider burns it too).
+    issued.delete(input.code);
+    if (!entry || entry.provider !== this.provider) return { ok: false, reason: "token_request" };
+    const { verifier, nonce, redirectUri } = entry.expect;
+    if (verifier !== input.verifier || redirectUri !== input.redirectUri) return { ok: false, reason: "token_request" };
+    if (nonce !== input.nonce) return { ok: false, reason: "id_token_nonce" };
+    return { ok: true, identity: { ...entry.identity } };
+  }
+}
+```
+
+`apps/web/src/auth/oauth/index.ts`:
+
+```ts
+import { isFakeMail } from "../../email/index.ts";
+import type { OAuthProvider } from "../../domain/identity.ts";
+import type { Bindings } from "../../env.ts";
+import { FakeOAuthProvider } from "./fake.ts";
+import { OidcClient } from "./oidc.ts";
+import type { ProviderClient } from "./provider.ts";
+
+type OAuthEnv = Pick<
+  Bindings,
+  "OAUTH_DRIVER" | "MAIL_DRIVER" | "RESEND_API_KEY" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "LINKEDIN_CLIENT_ID" | "LINKEDIN_CLIENT_SECRET"
+>;
+
+// A bare `fetch` kept in a field and called as a method of another object makes workerd throw "Illegal invocation".
+const defaultFetch: typeof fetch = (input, init) => fetch(input, init);
+
+/**
+ * The fake provider counts only next to the fake mailer, which itself only counts without a real mail key (VNX-0803 F6):
+ * production always has RESEND_API_KEY, so a stray OAUTH_DRIVER cannot switch it on. The fake accepts any code it issued.
+ */
+export function isFakeOAuth(env: Pick<Bindings, "OAUTH_DRIVER" | "MAIL_DRIVER" | "RESEND_API_KEY">): boolean {
+  return env.OAUTH_DRIVER === "fake" && isFakeMail(env);
+}
+
+/** The provider's client id and secret, or null when either is missing or blank (decision 6). GitHub's join in Task 4. */
+export function oauthCredentials(env: OAuthEnv, provider: OAuthProvider): { clientId: string; clientSecret: string } | null {
+  const [id, secret] =
+    provider === "google" ? [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET] : provider === "linkedin" ? [env.LINKEDIN_CLIENT_ID, env.LINKEDIN_CLIENT_SECRET] : [undefined, undefined];
+  const clientId = id?.trim();
+  const clientSecret = secret?.trim();
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+/** False means the provider is off whatever its feature flag says: no button, callback 404. */
+export function isProviderConfigured(env: OAuthEnv, provider: OAuthProvider): boolean {
+  return getOAuthProvider(env, provider) !== null;
+}
+
+/** The client for `provider`, or null when it is not configured. `fetchFn` is for tests of the real adapters. */
+export function getOAuthProvider(env: OAuthEnv, provider: OAuthProvider, fetchFn: typeof fetch = defaultFetch): ProviderClient | null {
+  if (isFakeOAuth(env)) return new FakeOAuthProvider(provider);
+  const credentials = oauthCredentials(env, provider);
+  if (!credentials || provider === "github") return null;
+  return new OidcClient(provider, credentials.clientId, credentials.clientSecret, fetchFn);
+}
+```
+
+`apps/web/vitest.config.ts`, trong `bindings`, sau `TURNSTILE_DRIVER: "fake",`:
+
+```ts
+            OAUTH_DRIVER: "fake",
+            // Pinned empty, like RESEND_API_KEY: a developer's .dev.vars credentials must never make the suite reach a real provider.
+            GOOGLE_CLIENT_ID: "",
+            GOOGLE_CLIENT_SECRET: "",
+            LINKEDIN_CLIENT_ID: "",
+            LINKEDIN_CLIENT_SECRET: "",
+```
+
+`apps/web/test/env.d.ts`: thêm `OAUTH_DRIVER: string;` sau `TURNSTILE_DRIVER: string;`.
+
+`apps/web/wrangler.jsonc`: thêm vào cuối khối ghi chú, ngay trước dấu `}` đóng (sau dòng `// Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.`), không thêm biến nào:
+
+```jsonc
+  //
+  // OAuth sign-in (EPIC 26, ADR-012): the client ids and secrets are wrangler secrets, never vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  // LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET (GitHub's two join with its adapter). Local dev: apps/web/.dev.vars. A provider missing
+  // either of its two is off whatever its feature flag says. The test driver for OAuth is a vitest binding only and never appears here.
+```
+
+Chú ý: ghi chú này **không được chứa** chuỗi `OAUTH_DRIVER` (test chặn toàn file).
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-providers.test.ts test/auth/oauth-oidc.test.ts test/domain/identity.test.ts test/db/identities.test.ts` → PASS.
+
+- [ ] **Step 7: Kiểm toàn bộ và commit**
+
+```
+npm run typecheck -w apps/web
+npm test
+```
+
+Kỳ vọng: typecheck sạch (`typeof fetch`, `AbortSignal.timeout`, kiểu template literal `id_token_${IdTokenFailure}`); toàn bộ test xanh, gồm `test/architecture.test.ts` (không SQL mới; `src/auth/oauth/*` không chạm bảng) và `test/i18n/parity.test.ts` (không có khóa mới). `git diff --stat -- package.json package-lock.json apps/web/package.json` rỗng (không dependency mới).
+
+```
+git add apps/web/src/auth/oauth/provider.ts apps/web/src/auth/oauth/oidc.ts apps/web/src/auth/oauth/fake.ts apps/web/src/auth/oauth/index.ts apps/web/src/domain/identity.ts apps/web/src/env.ts apps/web/vitest.config.ts apps/web/test/env.d.ts apps/web/wrangler.jsonc apps/web/test/domain/identity.test.ts apps/web/test/db/identities.test.ts apps/web/test/auth/oauth-oidc.test.ts apps/web/test/auth/oauth-providers.test.ts
+git commit -m "feat(web): OAuth provider port, Google and LinkedIn adapters, fake provider (VNX-2603b)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Tiêu chí chấp nhận của task (mỗi dòng một lệnh):**
+
+| # | Tiêu chí | Lệnh |
+|---|---|---|
+| 1 | Token request: URL hằng số, `POST`, `redirect: "manual"` và mọi 3xx bị từ chối (`fetch` gọi đúng một lần), timeout, đúng sáu trường form, `new Request(url, init)` không ném lỗi trong workerd; ID token chỉ từ JSON token endpoint | `npm test -w apps/web -- test/auth/oauth-oidc.test.ts` |
+| 2 | Kết quả chỉ `{ subject, label }`; không token, không `name`; `label` = email, không thì "Google"/"LinkedIn"; luôn thỏa CHECK 1–254 (đi qua `linkIdentity`) | `npm test -w apps/web -- test/auth/oauth-oidc.test.ts` |
+| 3 | Mọi lỗi là mã cố định; mọi lỗi claim ra `id_token_<reason>`; mỗi adapter chỉ nhận `iss` của provider mình; không `console.*` nào | `npm test -w apps/web -- test/auth/oauth-oidc.test.ts test/auth/oauth-providers.test.ts` |
+| 4 | Provider giả chỉ bật khi `OAUTH_DRIVER=fake` và `MAIL_DRIVER=fake` không có `RESEND_API_KEY` thật; `wrangler.jsonc` không có `OAUTH_DRIVER` và không có client ID/secret | `npm test -w apps/web -- test/auth/oauth-providers.test.ts` |
+| 5 | Thiếu hoặc rỗng client ID hoặc secret thì `getOAuthProvider` là `null` (provider tắt); GitHub `null` ngoài driver giả cho tới Task 4 | `npm test -w apps/web -- test/auth/oauth-providers.test.ts` |
+| 6 | Provider giả từ chối `code` dùng lại hoặc lạ hoặc của provider khác (S2), và kiểm `verifier`/`redirectUri`/`nonce` (cả ba bắt buộc ở `issueFakeCode`) | `npm test -w apps/web -- test/auth/oauth-providers.test.ts` |
+| 7 | `label` rỗng và 255 ký tự bị CHECK từ chối, 254 được (nghĩa vụ review VNX-2602) | `npm test -w apps/web -- test/db/identities.test.ts` |
+| 8 | Không dependency mới | `git diff --stat -- package.json package-lock.json apps/web/package.json` rỗng |
+| 9 | Typecheck và toàn bộ test xanh | `npm run typecheck -w apps/web` và `npm test` |
+
+**Kích cỡ ước tính:** mã nguồn ~240 dòng (`provider.ts` 40, `oidc.ts` 75, `fake.ts` 45, `index.ts` 55, `env.ts`/`identity.ts`/vitest/wrangler ~25), test ~330 dòng, không có locale. Dưới 600 dòng, không cần tách.
+
+#### Kết quả review Task 3 (Opus, 2026-10-07): APPROVE_WITH_CHANGES, đã sửa F1–F4, S1
