@@ -134,10 +134,10 @@ status: published
 license: CC-BY-4.0
 reviewed_at: 2026-10-07
 tested_tools: []
-source_revision: release-commit-sha
+source_revision: generated-at-release
 ```
 
-The body sections are `Use this when`, `Inputs`, `Template`, `Illustrative example`, `Check the result`, `Limitations`, and `Change log`. `tested_tools` remains empty until a real test is recorded. The example `source_revision` value above is documentation syntax, not a test result or a value to publish.
+The body sections are `Use this when`, `Inputs`, `Template`, `Illustrative example`, `Check the result`, `Limitations`, and `Change log`. `tested_tools` remains empty until a real test is recorded. `source_revision` is generated release metadata attached to the rendered record or pack from the selected source revision; it is not a self-referential hash committed inside the source file, and the source file does not need its own final Git SHA.
 
 ### 5.3 Licence and rights
 

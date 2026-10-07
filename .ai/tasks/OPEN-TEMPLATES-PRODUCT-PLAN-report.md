@@ -10,7 +10,7 @@ Integrated the approved Open Templates direction into the global VNX.SI product 
 - Branch: `docs/open-templates-product-plan`
 - Base: local `main` at `d35264f`
 - Cherry-picked documentation commits only: `1635ae8`, `f6db89c`
-- New commit: `docs(plan): integrate Open Templates roadmap` (hash reported in the parent handoff)
+- New commits: `docs(plan): integrate Open Templates roadmap`, followed by `docs(plan): address Open Templates merge review` (hash reported in the parent handoff)
 
 The exact root untracked plan was copied before editing; its initial SHA-256 matched the worktree copy. The root checkout and `docs/VNXSI_EXECUTION_PLAN_APPROVED.md` were left unchanged.
 
@@ -30,12 +30,13 @@ The earlier `.ai/tasks/OPEN-TEMPLATES-DESIGN-report.md` was preserved from the a
 - Integrated Open Templates into analytics events, north-star/success definitions, data-seeding rules, roadmap stages, and conditional implementation priorities.
 - Added the daily-hash retention limitation, denominator-based pilot signals, editorial budget assumption, and no-fabricated-market-data rule.
 - Companion spec status now records authorization to prepare the full plan while keeping product implementation unauthorized. Its new phased roadmap makes the public repository opening a Phase A prelaunch dependency and preserves the no-runtime-repository-fetch model.
+- Corrected the global plan to name five primary journeys, place Phase A preparation before SEO expansion and global launch, label weekly returning users unavailable until approved cohort instrumentation exists, and clarify that `source_revision` is generated release metadata rather than a self-referential source-file SHA.
 
 ## Verification
 
 - Exact plan copy before editing: root/worktree SHA-256 matched.
-- Relative Markdown links: passed; the global plan has two and the companion spec has five resolvable repository links.
-- `git diff HEAD^ HEAD --check`: passed with no output after the commit.
+- Relative Markdown links: passed after the merge-review corrections; the global plan has two and the companion spec has five resolvable repository links.
+- `git diff --check` and `git diff HEAD^ HEAD --check`: passed with no output after the follow-up commit.
 - `npm run typecheck -w apps/web`: not run; no product code changed.
 - `npm test`: not run; no product code changed.
 

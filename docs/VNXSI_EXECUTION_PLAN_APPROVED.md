@@ -13,7 +13,7 @@
 
 VNX.SI should not behave like a simple directory and should not depend on an empty marketplace.
 
-The product should become a connected ecosystem with four primary user journeys:
+The product should become a connected ecosystem with five primary user journeys:
 
 1. **Discover** working software.
 2. **Buy / Customize** an existing product.
@@ -1392,10 +1392,12 @@ Open Templates:
 - Phase B MCP calls by tool and day
 
 Pulse:
-- weekly returning users
+- weekly returning users (unavailable with current daily-rotating hashes; requires approved cohort instrumentation)
 - ranking → entity page CTR
 - Pulse → marketplace click
 - Pulse → affiliate click
+
+Until approved cohort instrumentation exists, report daily aggregate visits and actions only; do not label them as returning users.
 
 SEO:
 - indexed useful pages
@@ -1607,11 +1609,11 @@ If engineering starts after those gates:
 14. Ranking methodology.
 15. Analytics instrumentation.
 16. Outreach and claim flow.
-17. Expand SEO surfaces.
-18. Global launch.
-19. Open Templates Phase A preparation and web pilot, including the authorized public-repository opening before its public prelaunch.
-20. Open Templates Phase B MCP only after Phase A evidence and protocol/client QA.
-21. Open Templates Phase C community/translations/adapters only after a separate usefulness and capacity decision.
+17. Open Templates Phase A preparation and web pilot, including the authorized public-repository opening before its public prelaunch.
+18. Expand SEO surfaces.
+19. Global launch.
+20. Open Templates Phase B MCP only after Phase A evidence and protocol/client QA (conditional; not a global-launch dependency).
+21. Open Templates Phase C community/translations/adapters only after a separate usefulness and capacity decision (conditional; not a global-launch dependency).
 
 ---
 
