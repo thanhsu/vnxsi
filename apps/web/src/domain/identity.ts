@@ -21,6 +21,15 @@ export function sessionMethodFor(provider: OAuthProvider): SessionMethod {
   return `oauth_${provider}`;
 }
 
+/**
+ * Only a magic-link session reaches /ops and /admin (ADR-012 §6, plan decision 9). Called by the two guards, requireOps
+ * and requireAdmin, and nowhere else: never from resolveOpsRole or the admin e-mail helper, which M7's isStaff also uses
+ * to keep staff out of the statistics whatever way they signed in.
+ */
+export function isStaffSession(method: SessionMethod): boolean {
+  return method === "magic_link";
+}
+
 /** Each provider has its own feature flag: off hides the button and makes the callback 404 (ADR-012 §1). */
 export const PROVIDER_FLAG: Record<OAuthProvider, FlagKey> = {
   google: "oauth_google",
