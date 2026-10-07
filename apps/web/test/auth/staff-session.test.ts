@@ -96,8 +96,8 @@ describe("where the method check lives (decision 9, R4, F7)", () => {
     expect(ops.indexOf("isStaffSession(")).toBeLessThan(ops.indexOf("resolveOpsRole("));
     expect(block("auth/middleware.ts", /export const requireAdmin/)).toContain("isStaffSession(");
     expect(block("auth/ops.ts", /export async function resolveOpsRole/)).not.toMatch(/method/i);
-    expect(block("auth/middleware.ts", /export const requireUser/)).not.toMatch(/method|isStaffSession/);
-    expect(source("auth/admin.ts")).not.toMatch(/method|isStaffSession/);
+    expect(block("auth/middleware.ts", /export const requireUser/)).not.toMatch(/method|isStaffSession/i);
+    expect(source("auth/admin.ts")).not.toMatch(/method|isStaffSession/i);
   });
 
   // Tripwire: a new legitimate caller of isStaffSession needs Reviewer sign-off (it changes who counts as staff).
