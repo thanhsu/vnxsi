@@ -84,6 +84,7 @@ describe("OidcClient redirects and runtime options (F1)", () => {
       const call = calls[0];
       expect(call, provider).toBeDefined();
       expect(() => new Request(call?.url ?? "", call?.init), provider).not.toThrow();
+      expect(new Request(call?.url ?? "", call?.init).redirect, provider).toBe("manual");
     }
   });
 });

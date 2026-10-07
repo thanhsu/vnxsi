@@ -9,6 +9,10 @@ import { testEnv } from "../helpers.ts";
 const WRANGLER = import.meta.glob("../../wrangler.jsonc", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const ADAPTERS = import.meta.glob("../../src/auth/oauth/*.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
+// Any import specifier (static or dynamic) that resolves to auth/oauth/fake, from anywhere; and "./fake" from a sibling inside auth/oauth/.
+const FAKE_SPECIFIER = /["'][^"']*\boauth\/fake(?:\.ts)?["']/;
+const FAKE_SIBLING = /["']\.\/fake(?:\.ts)?["']/;
+
 const NOW = Date.parse("2026-10-07T10:00:00.000Z");
 const INPUT = { code: "", verifier: "v".repeat(43), nonce: "n".repeat(43), redirectUri: "https://vnx.si/auth/oauth/google/callback", now: NOW };
 const withEnv = (over: Partial<Bindings>) => ({ ...testEnv, ...over }) as Bindings;
@@ -33,8 +37,17 @@ describe("test environment (decision 5)", () => {
     expect(Object.keys(sources).length).toBeGreaterThan(50);
     for (const [file, src] of Object.entries(sources)) {
       if (file === "../../src/auth/oauth/index.ts") continue;
-      const pattern = file.startsWith("../../src/auth/oauth/") ? /from\s+["']\.\/fake(?:\.ts)?["']/ : /from\s+["'][^"']*\/oauth\/fake(?:\.ts)?["']/;
-      expect(src, file).not.toMatch(pattern);
+      expect(src, file).not.toMatch(FAKE_SPECIFIER);
+      if (file.startsWith("../../src/auth/oauth/")) expect(src, file).not.toMatch(FAKE_SIBLING);
+    }
+  });
+
+  it("the fake-import patterns catch static, dynamic, relative-up and sibling specifiers, and not the fake mailer (M1)", () => {
+    for (const hit of ['from "../oauth/fake.ts"', 'import("./oauth/fake")', 'import("../auth/oauth/fake.ts")', "from '../../auth/oauth/fake'"]) expect(hit, hit).toMatch(FAKE_SPECIFIER);
+    for (const hit of ['from "./fake.ts"', 'import("./fake")', "from './fake'"]) expect(hit, hit).toMatch(FAKE_SIBLING);
+    for (const miss of ['from "../email/fake.ts"', 'import("./fake-mailer.ts")']) {
+      expect(miss, miss).not.toMatch(FAKE_SPECIFIER);
+      expect(miss, miss).not.toMatch(FAKE_SIBLING);
     }
   });
 

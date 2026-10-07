@@ -15,3 +15,8 @@ All code and tests copied from the amended plan; no deviations.
 
 ## Ghi nhận
 None.
+
+## Fix round R1
+- M1: the S1 scan in `test/auth/oauth-providers.test.ts` now uses `FAKE_SPECIFIER = /["'][^"']*\boauth\/fake(?:\.ts)?["']/` for every file in `src/` except `auth/oauth/index.ts` (static and dynamic specifiers, any relative path), plus `FAKE_SIBLING = /["']\.\/fake(?:\.ts)?["']/` for files inside `src/auth/oauth/`. A new in-test assertion shows the patterns hit synthetic strings for each blind spot (`from "../oauth/fake.ts"`, `import("./oauth/fake")`, `import("../auth/oauth/fake.ts")`, `import("./fake")`) and miss `from "../email/fake.ts"` and `"./fake-mailer.ts"`. The real scan stays green (no false positive on email/fake).
+- M2: `test/auth/oauth-oidc.test.ts` also asserts `new Request(call.url, call.init).redirect` is `"manual"`.
+- Run: focused oidc and providers tests: 2 files, 29 tests passed; typecheck no errors. Full suite not run. No source changes.
