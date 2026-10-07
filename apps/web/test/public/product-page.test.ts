@@ -19,7 +19,9 @@ describe("/p/:slug (spec §5.2, §8.8)", () => {
       expect(html, text).toContain(text);
     }
     expect(html).toContain('href="/b/pp-full"');
-    expect(html).toMatch(/<a href="https:\/\/demo\.example" rel="nofollow ugc noopener"/);
+    expect(html).toContain(`<a href="/go/p/${live.slug}/demo?src=product_page" rel="nofollow ugc noopener" class="btn" target="_blank"`);
+    expect(html).not.toContain("https://demo.example");
+    expect(html).not.toContain(`/go/p/${live.slug}/site`);
     expect(html).toContain(`src="/media/products/${product.id}/01J0000000000000000000000C.png"`);
     expect(html).toContain(`<link rel="canonical" href="https://vnx.si/p/${live.slug}"`);
     expect(html).toContain(`hreflang="vi" href="https://vnx.si/vi/p/${live.slug}"`);

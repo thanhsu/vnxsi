@@ -150,10 +150,12 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m6-request.md` (Owner duyệt 202
 | VNX-0703 | Homepage SSR: các khối kèm ngưỡng | AGENT |
 | VNX-0704 | Homepage: animation, chart, tooltip, bảng dữ liệu, reduced-motion | AGENT |
 | VNX-0705 | `/for-builders`, `/terms`, `/privacy` | AGENT |
-| VNX-0706 | Cutover: thay landing cũ, gỡ `/api/waitlist` (giữ bảng) | AGENT, HIGH-RISK |
+| VNX-0706 | ~~Cutover: thay landing cũ, gỡ `/api/waitlist`~~ Owner 2026-10-05 (A2): **không cutover trong M7**; giữ landing VNX-0708 ở `/`, khối số liệu đặt dưới landing; thay `/` sang homepage số liệu sau khi dữ liệu qua ngưỡng. Còn lại: skip link, độ tương phản, vùng chạm 44 px (plan M7) | AGENT |
+
+Plan: `docs/superpowers/plans/2026-10-05-vnxsi-m7-metrics.md` (Owner duyệt 2026-10-05; migration `0014`–`0016`).
 
 **Cổng ra M7:**
-- Mọi khối homepage ẩn đúng khi dưới ngưỡng.
+- Mọi khối số liệu (dưới landing, Owner A2) ẩn đúng khi dưới ngưỡng.
 - Không có số liệu nào không truy được về dữ liệu.
 
 ## M8 — Ra mắt

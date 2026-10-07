@@ -175,7 +175,7 @@ Nếu bản dịch khác bản tiếng Anh, bản tiếng Anh được áp dụn
 ## Bổ sung ADR-012 (tài khoản liên kết): bản nháp, chưa áp dụng
 
 - **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Chưa áp dụng:** chưa phải chính sách đang hiệu lực cho tới VNX-2607.
-- **Cách áp dụng:** task VNX-2607 chép các đoạn dưới đây vào đúng chỗ trong phần `## EN` và `## VI` ở trên và vào `src/legal/content.ts`, rồi đối chiếu lại với code thật (tên cột, tên cookie, thời hạn). VNX-2607 phải merge trước khi bật flag provider nào trên production. Không chép sớm hơn: trang này chỉ ghi điều code thật sự làm.
+- **Cách áp dụng:** task VNX-2607 chép các đoạn dưới đây vào đúng chỗ trong phần `## EN` và `## VI` ở trên và vào `src/legal/content.ts`, rồi đối chiếu lại với code thật (tên cột, tên cookie, thời hạn). VNX-2607 phải merge trước khi bật flag provider nào trên production. Không chép sớm hơn: trang này chỉ ghi điều code thật sự làm. **Lưu ý M7:** từ `PRIVACY_NOTICE_GO_LIVE` − 14 ngày, `/privacy` hiện `docs/legal/privacy-m7.md` (hằng số `privacyEnM7`, `privacyViM7`); VNX-2607 phải chép vào cả hai tệp và cả bốn hằng số, hoặc gộp hai phiên bản trước.
 - **Căn cứ:** ADR-012 mục 1 (dữ liệu nhận và scope), 2 (bảng `user_identities`, `sessions.method`), 4 (email báo liên kết), 5 (huy hiệu).
 
 ### EN

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { validatePublicUrl } from "../../src/domain/product-url.ts";
 import { parseProductName, parseStep, stepValuesFromBody, stepValuesFromProduct, STEP_FIELDS, TEXT_STEPS } from "../../src/domain/product-input.ts";
 import type { Product } from "../../src/domain/product.ts";
 
@@ -100,5 +101,23 @@ describe("product step input", () => {
     expect(parseProductName("  Kit ")).toEqual({ ok: true, name: "Kit" });
     expect(parseProductName(" ")).toEqual({ ok: false, error: "required" });
     expect(parseProductName("x".repeat(81))).toEqual({ ok: false, error: "too_long" });
+  });
+});
+
+describe("product URL fields (VNX-0707b)", () => {
+  it("the demo step accepts only a public https URL, as the redirect does (M4)", () => {
+    for (const bad of ["http://spa.example", "//evil.com", "https://127.0.0.1/", "https://[::1]/", "https://localhost/", "https://u@evil.com/", "https://spa.example:8443/", "https://spa.example/a\\b", "javascript:alert(1)", "https://intranet/"]) {
+      expect(parseStep("demo", { demoUrl: bad, websiteUrl: "" }), bad).toEqual({ ok: false, errors: { demoUrl: "url" } });
+      expect(parseStep("demo", { demoUrl: "", websiteUrl: bad }), bad).toEqual({ ok: false, errors: { websiteUrl: "url" } });
+    }
+  });
+  it("keeps the trimmed text, not the normalized href (a re-save must not look like a change)", () => {
+    expect(parseStep("demo", { demoUrl: "  https://spa.example  ", websiteUrl: "https://www.example.com/a?b=1" })).toEqual({ ok: true, fields: { demoUrl: "https://spa.example", websiteUrl: "https://www.example.com/a?b=1" } });
+  });
+  it("every URL the editor accepts the redirect accepts too", () => {
+    for (const ok of ["https://spa.example", "https://spa.example/", "https://a.b.example/x?y=1#z", "https://spa.example:443/"]) {
+      expect(parseStep("demo", { demoUrl: ok, websiteUrl: "" }).ok, ok).toBe(true);
+      expect(validatePublicUrl(ok).ok, ok).toBe(true);
+    }
   });
 });
