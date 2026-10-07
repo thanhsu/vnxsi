@@ -132,3 +132,20 @@ Chúng tôi có thể cập nhật điều khoản này. Chúng tôi sẽ đổi
 - Mục 5 (quyền hiển thị nội dung builder) và mục 11 (giới hạn trách nhiệm) là chỗ nên có người chuyên môn đọc nhất.
 - Mục 12 hứa "báo cho người dùng đã đăng nhập" với thay đổi quan trọng: hiện chưa có cơ chế; làm bằng email thủ công hoặc banner khi cần.
 - Mục 2 ghi "hiện chưa xử lý thanh toán": phải sửa khi Wave 3 có thanh toán.
+
+---
+
+## Bổ sung ADR-012 (tài khoản liên kết): bản nháp, chưa áp dụng
+
+- **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Chưa áp dụng:** chưa phải điều khoản đang hiệu lực cho tới VNX-2607.
+- **Cách áp dụng:** task VNX-2607 thay mục 4 trong phần `## EN` và `## VI` ở trên và trong `src/legal/content.ts`, cùng lúc với Privacy. Mục 3 giữ nguyên (email vẫn bắt buộc, vì tài khoản chỉ tạo được bằng email).
+
+### EN
+
+**Mục 4, thay đoạn văn bằng:**
+You sign in with a one-time link sent to your email. Once signed in, you can link a Google, GitHub or LinkedIn account and use it to sign in too. Keep your email account and any linked accounts secure; anyone who can use them can sign in as you. We email you whenever an account is linked or unlinked. Tell us at contact@vnx.si if you think someone else has used your account.
+
+### VI
+
+**Mục 4, thay đoạn văn bằng:**
+Bạn đăng nhập bằng link dùng một lần gửi tới email. Sau khi đăng nhập, bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập. Hãy giữ an toàn hộp thư và các tài khoản đã liên kết; ai dùng được chúng đều có thể đăng nhập như bạn. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn.

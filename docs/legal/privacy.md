@@ -169,3 +169,59 @@ Nếu bản dịch khác bản tiếng Anh, bản tiếng Anh được áp dụn
 - Mục 6 và 7 có hai con số cần bạn chốt: **12 tháng** giữ waitlist sau khi chợ mở, **30 ngày** trả lời yêu cầu. Nghị định 13/2023 của Việt Nam có thời hạn riêng cho một số yêu cầu; nên hỏi người chuyên môn.
 - Câu "Bộ đếm giới hạn … được xóa định kỳ" chỉ đúng khi cron VNX-0505 chạy. Không go-live trước khi có cron đó.
 - Nhật ký lỗi của Workers (observability) có thể chứa đường dẫn và metadata request; đã gộp vào "Cloudflare (hosting … security)". Nếu muốn nói rõ hơn thì thêm một dòng ở mục 4.
+
+---
+
+## Bổ sung ADR-012 (tài khoản liên kết): bản nháp, chưa áp dụng
+
+- **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Chưa áp dụng:** chưa phải chính sách đang hiệu lực cho tới VNX-2607.
+- **Cách áp dụng:** task VNX-2607 chép các đoạn dưới đây vào đúng chỗ trong phần `## EN` và `## VI` ở trên và vào `src/legal/content.ts`, rồi đối chiếu lại với code thật (tên cột, tên cookie, thời hạn). VNX-2607 phải merge trước khi bật flag provider nào trên production. Không chép sớm hơn: trang này chỉ ghi điều code thật sự làm.
+- **Căn cứ:** ADR-012 mục 1 (dữ liệu nhận và scope), 2 (bảng `user_identities`, `sessions.method`), 4 (email báo liên kết), 5 (huy hiệu).
+
+### EN
+
+**Mục 2, thêm sau gạch "Sign-in":**
+- **Linked accounts:** if you link a Google, GitHub or LinkedIn account to your VNX.SI account, we store which service it is, the ID that service gives your account, and a label so you can recognise it (the email address for Google and LinkedIn, the username for GitHub), plus when you linked it and when you last signed in with it. When you sign in with one of these services, it sends us your basic profile; we keep only what is listed here. We never receive or store the password of that account, and we do not keep the access keys the service gives us.
+
+**Mục 2, sửa gạch "Sign-in" thành:**
+- **Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash), including whether you signed in by email link or with a linked account.
+
+**Mục 3, thêm gạch sau "To sign you in and keep you signed in.":**
+- To let you sign in with an account you have linked and, if you are a builder and choose to, to show on your public profile that you own a GitHub or LinkedIn account.
+
+**Mục 4, thêm hai gạch sau "Builder profiles and approved products are public.":**
+- Your linked accounts are shown only to you. A builder can choose to show their GitHub username, or the fact that their LinkedIn account is verified, on their public profile. Google accounts are never shown, and builders never see a client's linked accounts.
+- When you sign in with Google, GitHub or LinkedIn, that service knows you signed in to VNX.SI and handles that under its own privacy policy.
+
+**Mục 5, thêm gạch:**
+- `__Host-vnx_oauth`: keeps a sign-in with Google, GitHub or LinkedIn secure while you go to that service and back, for up to 10 minutes.
+
+**Mục 6, thêm gạch sau "Sign-in links …":**
+- Linked accounts: until you unlink them or your account is deleted.
+
+**Mục 8, thay bằng:**
+Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. We email you whenever an account is linked to or unlinked from yours. No system is perfectly secure; tell us at contact@vnx.si if you find a problem.
+
+### VI
+
+**Mục 2, thêm sau gạch "Đăng nhập":**
+- **Tài khoản liên kết:** nếu bạn liên kết tài khoản Google, GitHub hoặc LinkedIn với tài khoản VNX.SI, chúng tôi lưu đó là dịch vụ nào, mã định danh dịch vụ đó cấp cho tài khoản của bạn, và một nhãn để bạn nhận ra (email với Google và LinkedIn, tên người dùng với GitHub), cùng thời điểm liên kết và lần gần nhất bạn đăng nhập bằng nó. Khi bạn đăng nhập bằng một trong các dịch vụ này, dịch vụ gửi cho chúng tôi thông tin hồ sơ cơ bản; chúng tôi chỉ giữ những gì ghi ở đây. Chúng tôi không bao giờ nhận hay lưu mật khẩu của tài khoản đó, và không giữ khóa truy cập mà dịch vụ cấp cho chúng tôi.
+
+**Mục 2, sửa gạch "Đăng nhập" thành:**
+- **Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash), gồm cả việc bạn đăng nhập bằng link qua email hay bằng tài khoản liên kết.
+
+**Mục 3, thêm gạch sau "Đăng nhập và giữ bạn đăng nhập.":**
+- Cho bạn đăng nhập bằng tài khoản đã liên kết và, nếu bạn là builder và tự chọn, hiện trên hồ sơ công khai rằng bạn sở hữu tài khoản GitHub hoặc LinkedIn.
+
+**Mục 4, thêm hai gạch sau "Hồ sơ builder và sản phẩm đã duyệt là công khai.":**
+- Tài khoản liên kết của bạn chỉ hiện cho chính bạn. Builder có thể chọn hiện tên người dùng GitHub, hoặc việc tài khoản LinkedIn đã được xác minh, trên hồ sơ công khai. Tài khoản Google không bao giờ được hiện, và builder không bao giờ thấy tài khoản liên kết của client.
+- Khi bạn đăng nhập bằng Google, GitHub hoặc LinkedIn, dịch vụ đó biết bạn đã đăng nhập vào VNX.SI và xử lý việc này theo chính sách quyền riêng tư của họ.
+
+**Mục 5, thêm gạch:**
+- `__Host-vnx_oauth`: giữ an toàn cho lượt đăng nhập bằng Google, GitHub hoặc LinkedIn trong lúc bạn sang dịch vụ đó và quay lại, tối đa 10 phút.
+
+**Mục 6, thêm gạch sau "Link đăng nhập …":**
+- Tài khoản liên kết: tới khi bạn hủy liên kết hoặc tài khoản của bạn bị xóa.
+
+**Mục 8, thay bằng:**
+Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết với tài khoản của bạn. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề.
