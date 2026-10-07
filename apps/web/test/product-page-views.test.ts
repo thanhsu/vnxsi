@@ -4,7 +4,7 @@ import { setBuilderStatus } from "../src/db/builders.ts";
 import { visitorCookieMaxAge, visitorHash } from "../src/domain/visitor.ts";
 import type { Bindings } from "../src/env.ts";
 import { resetNoSaltWarning } from "../src/http/visitor.ts";
-import { makeBuilder, makeDraft, makeLiveProduct, signIn } from "./fixtures.ts";
+import { ensureUser, makeBuilder, makeDraft, makeLiveProduct, signIn } from "./fixtures.ts";
 import { setCookieValue, testEnv } from "./helpers.ts";
 
 const SALT = "product-views-test-salt-0000000000";
@@ -32,6 +32,14 @@ async function live() {
   const email = `pv${n}@vnx.si`;
   const { builder, product } = await makeLiveProduct(email, `pv${n}`, `pv${n} product`, { fields: { demoUrl: "https://demo.example.com/" } });
   return { email, builder, product, slug: product.slug };
+}
+/** A signed-in Ops member (default Viewer, the lowest role) who is NOT users.is_admin. */
+async function opsMember(email: string, role = "viewer") {
+  const owner = await ensureUser("owner@vnx.si");
+  const { user, cookie } = await signIn(email);
+  const now = new Date().toISOString();
+  await testEnv.DB.prepare("INSERT INTO ops_members (user_id, role, granted_by, granted_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)").bind(user.id, role, owner.id, now).run();
+  return { user, cookie };
 }
 const views = async (productId: string) =>
   (await testEnv.DB.prepare("SELECT COALESCE(SUM(views), 0) AS n FROM product_daily_stats WHERE product_id = ?1").bind(productId).first<{ n: number }>())?.n ?? 0;
@@ -246,14 +254,29 @@ describe("the cookie exists only on GET /p/:slug 200", { timeout: 30_000 }, () =
     expect(await dedupeRows(draft.product.id)).toHaveLength(0);
   });
 
-  it("/go/p/, /admin, /hub and /me never set it, even for a counted visitor", async () => {
+  it("an Ops Viewer (not is_admin) is staff: /p/ counts nothing and sets no cookie, and neither does their /go/p/ click", async () => {
+    const { product, slug } = await live();
+    const viewer = await opsMember("pv-ops-viewer@vnx.si");
+    expect(viewer.user.is_admin).toBeFalsy();
+    const res = await call(`/p/${slug}`, { headers: browser({ cookie: `${viewer.cookie}; ${COOKIE}=${VID}` }) });
+    expect([res.status, hasVid(res)]).toEqual([200, false]);
+    expect(await views(product.id)).toBe(0);
+    expect(await dedupeRows(product.id)).toHaveLength(0);
+    const go = await call(`/go/p/${slug}/demo`, { headers: browser({ cookie: `${viewer.cookie}; ${COOKIE}=${VID}` }) });
+    expect([go.status, hasVid(go)]).toEqual([302, false]);
+    expect(await views(product.id)).toBe(0);
+    expect(await dedupeRows(product.id)).toHaveLength(0);
+  });
+
+  it("/go/p/, /admin, /hub, /me and /ops never set it, even for a counted visitor", async () => {
     const { slug } = await live();
+    const ops = await opsMember("pv-ops-nav@vnx.si");
     await makeBuilder("pv-hub@vnx.si", "pv-hub", "approved");
     const user = await signIn("pv-hub@vnx.si");
     const admin = await signIn("owner@vnx.si", { admin: true });
     const go = await call(`/go/p/${slug}/demo`, { headers: browser() });
     expect([go.status, hasVid(go)]).toEqual([302, false]);
-    for (const [path, cookie] of [["/hub", user.cookie], ["/me", user.cookie], ["/admin", admin.cookie]] as const) {
+    for (const [path, cookie] of [["/hub", user.cookie], ["/me", user.cookie], ["/admin", admin.cookie], ["/ops", ops.cookie]] as const) {
       const res = await call(path, { headers: browser({ cookie }) });
       expect([path, hasVid(res)]).toEqual([path, false]);
     }

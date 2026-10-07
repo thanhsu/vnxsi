@@ -61,6 +61,9 @@ export async function searchBuilders(db: D1Database, query: DirectoryQuery): Pro
   }
   if (query.country) where.push(`b.country = ${bind(query.country)}`);
   if (query.availability) where.push(`b.availability = ${bind(query.availability)}`);
+  if (query.tool !== undefined) {
+    where.push(`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(b.ai_tools) THEN b.ai_tools ELSE '[]' END) WHERE value = ${bind(query.tool)} COLLATE NOCASE)`);
+  }
   const filter = where.join(" AND ");
   const from = "builders b JOIN users u ON u.id = b.user_id";
   // page is an integer 1–9999 from parsePage.

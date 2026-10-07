@@ -1,5 +1,5 @@
 import type { Locale } from "./locales.ts";
-import { en, type MessageKey, type Messages } from "./messages/en.ts";
+import { en, isOpsKey, type MessageKey, type Messages } from "./messages/en.ts";
 import { vi } from "./messages/vi.ts";
 import { zhHans } from "./messages/zh-hans.ts";
 import { zhHant } from "./messages/zh-hant.ts";
@@ -8,8 +8,9 @@ const CATALOG: Record<Locale, Messages> = { en, vi, "zh-Hans": zhHans, "zh-Hant"
 
 export type Params = Record<string, string | number>;
 
+/** ops.* keys exist in EN only (ADR-010 §1), so they are always read from EN. */
 export function t(locale: Locale, key: MessageKey, params?: Params): string {
-  const raw = CATALOG[locale][key] || en[key];
+  const raw = isOpsKey(key) ? en[key] : CATALOG[locale][key] || en[key];
   if (!params) return raw;
   return raw.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match));
 }

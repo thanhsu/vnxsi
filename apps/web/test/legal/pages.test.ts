@@ -175,7 +175,7 @@ describe("legal pages (VNX-0705a)", { timeout: 30_000 }, () => {
   it("Media kit: shows a colour swatch next to each of the three brand colours", async () => {
     const main = mainOf(await (await get("/media-kit")).text());
     for (const hex of ["#0D1526", "#1D4ED8", "#F4F5F7"]) {
-      expect(main, hex).toMatch(new RegExp(`<span class="swatch" style="background-color:${hex}" aria-hidden="true"></span><code>${hex}</code>`));
+      expect(main, hex).toMatch(new RegExp(`<span class="swatch" data-color="${hex}" aria-hidden="true"></span><code>${hex}</code>`));
     }
     expect(main.match(/class="swatch"/g)).toHaveLength(3);
   });

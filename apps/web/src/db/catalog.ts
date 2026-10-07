@@ -70,6 +70,9 @@ export async function searchProducts(db: D1Database, query: CatalogQuery): Promi
   if (query.badge) where.push(`EXISTS (SELECT 1 FROM product_verifications v WHERE v.product_id = p.id AND v.kind = ${bind(query.badge)} AND v.revoked_at IS NULL)`);
   if (query.minCents !== null) where.push(`${MIN_PRICE_SQL} >= ${bind(query.minCents)}`);
   if (query.maxCents !== null) where.push(`${MIN_PRICE_SQL} <= ${bind(query.maxCents)}`);
+  if (query.tool !== undefined) {
+    where.push(`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.tech_stack) THEN p.tech_stack ELSE '[]' END) WHERE value = ${bind(query.tool)} COLLATE NOCASE)`);
+  }
   const filter = where.join(" AND ");
 
   const order = [...(fts ? ["hits.rank"] : []), "badge_score DESC", "p.published_at DESC", "p.id DESC"].join(", ");

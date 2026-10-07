@@ -39,6 +39,8 @@ export function renderRobots(origin: string): string {
     "Disallow: /media",
     // Outbound-click redirects (monetization addendum, spec §8.8); no locale prefix.
     "Disallow: /go/",
+    // Ops console (spec §5, ADR-010): canonical English, no locale prefix; the prefix rule also covers "/ops/".
+    "Disallow: /ops",
     ...[...disallow].map((p) => `Disallow: ${p}`),
     "",
     `Sitemap: ${origin}/sitemap.xml`,

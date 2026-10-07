@@ -340,6 +340,19 @@ export async function listInquiriesToRemind(db: D1Database, openedBefore: string
   return results.map(toSummary);
 }
 
+/**
+ * Ops Overview queue (VNX-2503): inquiries still `open` (the builder has not replied) that were opened before
+ * `openedBefore`, the M5 reminder mark (now − REMIND_AFTER_MS), and the oldest opening. Read only.
+ */
+export async function countOverdueInquiries(db: D1Database, openedBefore: string): Promise<{ count: number; oldest: string | null }> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n, MIN(opened_at) AS oldest FROM inquiries WHERE status = 'open' AND opened_at < ?1")
+    .bind(openedBefore)
+    .first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("inquiry queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
 export async function markReminded(db: D1Database, id: string, now: string): Promise<void> {
   await db.prepare("UPDATE inquiries SET builder_reminded_at = ?2 WHERE id = ?1 AND builder_reminded_at IS NULL").bind(id, now).run();
 }

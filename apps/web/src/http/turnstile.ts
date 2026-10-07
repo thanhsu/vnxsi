@@ -1,3 +1,4 @@
+import { isFakeMail } from "../email/index.ts";
 import type { Bindings } from "../env.ts";
 
 export const TURNSTILE_FIELD = "cf-turnstile-response";
@@ -5,11 +6,11 @@ export const TURNSTILE_FIELD = "cf-turnstile-response";
 export const FAKE_TURNSTILE_PASS = "test-pass";
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-type TurnstileEnv = Pick<Bindings, "TURNSTILE_DRIVER" | "TURNSTILE_SITE_KEY" | "TURNSTILE_SECRET" | "MAIL_DRIVER">;
+type TurnstileEnv = Pick<Bindings, "TURNSTILE_DRIVER" | "TURNSTILE_SITE_KEY" | "TURNSTILE_SECRET" | "MAIL_DRIVER" | "RESEND_API_KEY">;
 
-// The fake driver counts only next to the fake mailer: production never runs that mailer, while the test env shares
-// APP_ORIGIN with production, so the origin cannot be the signal.
-const isFake = (env: TurnstileEnv) => env.TURNSTILE_DRIVER === "fake" && env.MAIL_DRIVER === "fake";
+// The fake driver counts only next to the fake mailer, which itself only counts without a real mail key (VNX-0803 F6):
+// production never runs that mailer, while the test env shares APP_ORIGIN with production, so the origin cannot be the signal.
+const isFake = (env: TurnstileEnv) => env.TURNSTILE_DRIVER === "fake" && isFakeMail(env);
 
 /** The site key to render, or null when Turnstile is not fully configured (the signed-out form then fails closed). */
 export function turnstileSiteKey(env: TurnstileEnv): string | null {

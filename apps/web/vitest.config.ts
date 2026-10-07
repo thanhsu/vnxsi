@@ -18,6 +18,8 @@ export default defineConfig(async () => {
             APP_ORIGIN: "https://vnx.si",
             ADMIN_EMAILS: "owner@vnx.si",
             MAIL_DRIVER: "fake",
+            // Pinned empty so a developer's .dev.vars key can never turn the suite into real mail (VNX-0803 F6).
+            RESEND_API_KEY: "",
             TURNSTILE_DRIVER: "fake",
           },
         },

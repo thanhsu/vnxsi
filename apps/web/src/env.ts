@@ -1,6 +1,7 @@
 import type { Locale } from "./i18n/locales.ts";
 import type { Builder } from "./domain/builder.ts";
 import type { SessionUser } from "./auth/sessions.ts";
+import type { OpsRole } from "./domain/ops.ts";
 
 export interface Bindings {
   DB: D1Database;
@@ -28,5 +29,7 @@ export type AppEnv = {
     user: SessionUser | null;
     /** Only set after `requireBuilder`. */
     builder: Builder;
+    /** Only set after `requireOps` (auth/ops.ts): the role resolved for this request. */
+    opsRole: OpsRole;
   };
 };

@@ -10,7 +10,8 @@ export type InlineToken = { kind: "text" | "code" | "strong" | "email"; text: st
 const CONTACT = "contact@vnx.si";
 // Only three marks exist (plan VNX-0705a): `code`, **bold** and the contact address. Everything else stays text.
 const MARKS = /`([^`]+)`|\*\*([^*]+)\*\*|(?<![\w.@+-])contact@vnx\.si(?![\w@-]|\.\w)/g;
-const HEX = /^#[0-9A-Fa-f]{6}$/;
+/** The media kit's three brand colours (docs/legal/media-kit.md); each has a .swatch[data-color] rule in app.css. */
+const BRAND_COLORS: ReadonlySet<string> = new Set(["#0D1526", "#1D4ED8", "#F4F5F7"]);
 
 export function parseInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
@@ -34,11 +35,12 @@ export const InlineText: FC<{ text: string }> = ({ text }) => (
       if (tok.kind === "strong") return <strong>{tok.text}</strong>;
       if (tok.kind === "email") return <a href={`mailto:${CONTACT}`}>{CONTACT}</a>;
       if (tok.kind === "code") {
-        // Media kit brand colours: a swatch beside the code. HEX guarantees the style value is a plain colour.
-        if (HEX.test(tok.text)) {
+        // Media kit brand colours: a swatch beside the code. Only the three brand colours have a CSS rule
+        // (.swatch[data-color=…] in app.css); no inline style, so the CSP needs no 'unsafe-inline' (VNX-0803 F2).
+        if (BRAND_COLORS.has(tok.text.toUpperCase())) {
           return (
             <>
-              <span class="swatch" style={`background-color:${tok.text}`} aria-hidden="true"></span>
+              <span class="swatch" data-color={tok.text.toUpperCase()} aria-hidden="true"></span>
               <code>{tok.text}</code>
             </>
           );

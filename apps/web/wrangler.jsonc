@@ -43,7 +43,7 @@
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
   //   0. wrangler r2 bucket create vnxsi-media      (once)
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags, 0011_partners, 0012_outbound_clicks, 0014_product_stats, 0015_view_dedupe, 0016_public_stats)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags, 0011_partners, 0012_outbound_clicks, 0013_ops_members, 0014_product_stats, 0015_view_dedupe, 0016_public_stats)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy
@@ -60,7 +60,8 @@
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //
-  // MAIL_DRIVER selects the mailer. Local dev: set MAIL_DRIVER=console in apps/web/.dev.vars.
+  // MAIL_DRIVER selects the mailer only while RESEND_API_KEY is unset (VNX-0803 F6): a real key always sends through
+  // Resend, also in local dev. Local dev without a key: set MAIL_DRIVER=console in apps/web/.dev.vars.
   // Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.
   //
   // ANALYTICS_SALT (M7): `wrangler secret put ANALYTICS_SALT` with a random value of 32+ characters (e.g. `openssl rand -hex 32`). Local dev:
