@@ -20,3 +20,19 @@ export function sparkPoints(values: readonly number[]): string {
   const step = values.length > 1 ? (SPARK.width - 2 * SPARK.pad) / (values.length - 1) : 0;
   return values.map((v, i) => `${round(SPARK.pad + i * step)},${round(SPARK.height - SPARK.pad - (v / max) * (SPARK.height - 2 * SPARK.pad))}`).join(" ");
 }
+
+const MS = { day: 86_400_000, hour: 3_600_000, minute: 60_000 } as const;
+
+/** "2 hours ago": the largest whole unit between `iso` and `now` (the viewer's locale). */
+export function relativeTime(locale: Locale, iso: string, now: Date): string {
+  const diff = Date.parse(iso) - now.getTime();
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  for (const unit of ["day", "hour", "minute"] as const) if (Math.abs(diff) >= MS[unit]) return rtf.format(Math.trunc(diff / MS[unit]), unit);
+  return rtf.format(0, "minute");
+}
+
+/** A median reply time given in minutes, shown in the largest whole unit ("10 min", "2 hr", "3 days"). */
+export function formatDuration(locale: Locale, minutes: number): string {
+  const unit = minutes * MS.minute >= MS.day ? "day" : minutes * MS.minute >= MS.hour ? "hour" : "minute";
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short" }).format(Math.floor((minutes * MS.minute) / MS[unit]));
+}

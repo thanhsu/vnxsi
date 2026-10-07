@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { searchProducts } from "../../src/db/catalog.ts";
 import { writePublicStat } from "../../src/db/public-stats.ts";
 import { parseCatalogQuery } from "../../src/domain/catalog.ts";
-import { FOUNDING_LIMIT, FOUNDING_MIN, STALE_AFTER_MS, rankTrending } from "../../src/domain/public-stats.ts";
+import { FOUNDING_LIMIT, FOUNDING_MIN, MIN, STALE_AFTER_MS, rankTrending } from "../../src/domain/public-stats.ts";
 import { DECK_SIZE } from "../../src/views/landing/Deck.tsx";
 import { makeLiveProduct } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
@@ -48,7 +48,7 @@ describe("Founding products and the hero (Owner Q1 2026-10-05, minimum 2026-10-0
   it("a stale Trending with enough published products shows Founding", async () => {
     await seedSnapshot();
     const old = new Date(Date.now() - STALE_AFTER_MS - 60_000).toISOString();
-    await writePublicStat(DB, "trending", rankTrending(trendingCandidates(6), new Date()), old);
+    await writePublicStat(DB, "trending", rankTrending(trendingCandidates(MIN.trendingItems), new Date()), old);
     const html = await getHome();
     expect(block(html, "home-trending")).toBe("");
     expect(block(html, "home-founding")).not.toBe("");

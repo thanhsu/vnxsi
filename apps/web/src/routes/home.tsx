@@ -24,10 +24,10 @@ export async function loadHomeData(db: D1Database, now: Date): Promise<HomeData 
 }
 
 /** Renders to a string INSIDE the try: hono builds JSX lazily, so a malformed snapshot value would otherwise throw after the try. */
-export async function renderHome(locale: Locale, data: HomeData | null): Promise<Child | null> {
+export async function renderHome(locale: Locale, data: HomeData | null, now: Date): Promise<Child | null> {
   if (data === null) return null;
   try {
-    return raw(await (<HomeBlocks locale={locale} view={homeView(data.snapshot, data.founding)} />).toString());
+    return raw(await (<HomeBlocks locale={locale} view={homeView(data.snapshot, data.founding)} now={now} />).toString());
   } catch (err) {
     fail(err);
     return null;
@@ -37,5 +37,5 @@ export async function renderHome(locale: Locale, data: HomeData | null): Promise
 /** The data blocks under the landing at `/` (Owner A2). Never rejects. */
 export async function homeBlocks(c: Context<AppEnv>): Promise<Child | null> {
   const now = new Date();
-  return renderHome(c.get("locale"), await loadHomeData(c.env.DB, now));
+  return renderHome(c.get("locale"), await loadHomeData(c.env.DB, now), now);
 }

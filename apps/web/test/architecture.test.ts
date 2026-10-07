@@ -123,6 +123,9 @@ const RANKING_FILES = [
   // VNX-0703a: homepage data blocks (Trending, Founding products).
   "../src/routes/home.tsx",
   "../src/views/home/Trending.tsx",
+  // VNX-0703b: Top builders and Top products.
+  "../src/views/home/TopBuilders.tsx",
+  "../src/views/home/TopProducts.tsx",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
@@ -221,7 +224,7 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   });
 
   it("the homepage ranking files are listed and mention no money (VNX-0703)", () => {
-    for (const file of ["../src/routes/home.tsx", "../src/views/home/Trending.tsx"]) {
+    for (const file of ["../src/routes/home.tsx", "../src/views/home/Trending.tsx", "../src/views/home/TopBuilders.tsx", "../src/views/home/TopProducts.tsx"]) {
       expect(RANKING_FILES, file).toContain(file);
       expect(sources[file] ?? "", file).not.toMatch(/sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|outbound_clicks/i);
     }

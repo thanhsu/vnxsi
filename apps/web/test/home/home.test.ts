@@ -3,7 +3,7 @@ import { writePublicStat } from "../../src/db/public-stats.ts";
 import { testEnv } from "../helpers.ts";
 import { MIN, NUMBER_KEYS, STALE_AFTER_MS, countStat, rankTrending } from "../../src/domain/public-stats.ts";
 import { LOCALES, localizedPath } from "../../src/i18n/locales.ts";
-import { en, type MessageKey } from "../../src/i18n/messages/en.ts";
+import { en } from "../../src/i18n/messages/en.ts";
 import { vi as viMessages } from "../../src/i18n/messages/vi.ts";
 import { zhHans } from "../../src/i18n/messages/zh-hans.ts";
 import { zhHant } from "../../src/i18n/messages/zh-hant.ts";
@@ -92,7 +92,7 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
     expect(html).not.toContain(t("en", "home.updatedHourly"));
     await seedSnapshot();
     html = await getHome();
-    for (const id of ["home-numbers", "home-trending"]) expect(block(html, id), id).not.toBe("");
+    for (const id of ["home-numbers", "home-live", "home-trending", "home-pulse", "home-builders", "home-products"]) expect(block(html, id), id).not.toBe("");
   });
 
   it("reads public_stats exactly once per request, signed in, with and without Trending, in at most 8 statements", async () => {
@@ -147,7 +147,7 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
     await seedSnapshot();
     for (const locale of LOCALES) {
       const html = await getHome(localizedPath(locale, "/"));
-      const region = html.slice(html.indexOf('class="lp-section home-block'), html.indexOf("</main>")).replace(/<[^>]*>/g, " ").replace(String(t(locale, "home.builders.noPay" as MessageKey)), "");
+      const region = html.slice(html.indexOf('class="lp-section home-block'), html.indexOf("</main>")).replace(/<[^>]*>/g, " ").replace(t(locale, "home.builders.noPay"), "");
       expect(region.length, locale).toBeGreaterThan(0);
       expect(region, locale).not.toMatch(/sponsor|advert|promot|paid|quảng cáo|trả tiền|赞助|贊助|广告|廣告|付费|付費/i);
     }
@@ -156,8 +156,8 @@ describe("homepage blocks under the landing (VNX-0703a)", () => {
   it("every home.* key is used by a view, and the home views hold no digit (no invented number)", () => {
     const views = import.meta.glob("../../src/views/home/*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
     const files = Object.entries(views);
-    expect(files.length).toBeGreaterThanOrEqual(4);
-    const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/^import .*$/gm, "").replace(/<\/?h[1-6]\b/g, "");
+    expect(files.length).toBeGreaterThanOrEqual(8);
+    const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\bfrom\s+"[^"]*"/g, "").replace(/<\/?h[1-6]\b/g, "");
     for (const [file, src] of files) expect(code(src), file).not.toMatch(/\d/);
     const shared = import.meta.glob("../../src/views/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
     const all = Object.values(shared).join("\n");
