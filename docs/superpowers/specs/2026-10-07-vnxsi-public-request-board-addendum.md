@@ -1,7 +1,7 @@
 # VNX.SI — Phụ lục spec: Bảng request công khai
 
 - **Ngày:** 2026-10-07
-- **Trạng thái:** **Thiết kế Approved** (Owner 2026-10-07: "approve all", duyệt phụ lục và toàn bộ khuyến nghị ở mục 17). **Câu chữ EN mục 12.2–12.4: APPROVED** (Owner 2026-10-07). **Bản VI mục 12.6: chờ Owner duyệt.** Không sửa `docs/legal/*` hay `src/legal/content.ts` trước khi bản VI được duyệt; không bật cờ `request_board` trước khi người có chuyên môn pháp lý đọc lại (Q16).
+- **Trạng thái:** **Thiết kế Approved** (Owner 2026-10-07: "approve all", duyệt phụ lục và toàn bộ khuyến nghị ở mục 17). **Câu chữ EN mục 12.2–12.4: APPROVED** (Owner 2026-10-07). **Bản VI mục 12.6: APPROVED** (Owner 2026-10-07). Câu chữ chỉ chép vào `docs/legal/*` và `src/legal/content.ts` ở VNX-2707b; không bật cờ `request_board` trước khi người có chuyên môn pháp lý đọc lại (Q16).
 - **Bổ sung cho:** [spec Wave 1](2026-10-03-vnxsi-marketplace-wave1-design.md). Sau khi được duyệt, phụ lục có cùng cấp với spec; chỗ nào phụ lục ghi "thay mục X" thì phụ lục thắng.
 - **Căn cứ:**
   - [Review execution plan](../../../.ai/reviews/EXECUTION-PLAN-2026-10-06-review.md): C1, mục 4.1, mục 7 câu 4.
@@ -276,9 +276,9 @@ Công thức **không đổi**. Interest hiện ở khối riêng, không cộng
 - HTML khi đã đăng nhập: `no-store` (VNX-0803 F8).
 - Nội dung do client và Ops viết render văn bản thuần (§8.6); cấm `dangerouslySetInnerHTML`.
 
-## 12. Privacy và Terms (EN **APPROVED** 2026-10-07; VI chờ duyệt)
+## 12. Privacy và Terms (EN và VI **APPROVED** 2026-10-07)
 
-> **Trạng thái:** bản EN (12.2–12.4) Owner duyệt nguyên văn 2026-10-07. Bản VI (12.6) chờ Owner duyệt. Không chép vào `docs/legal/*` hay `src/legal/content.ts` trước khi bản VI được duyệt. Không phải tư vấn pháp lý; nên nhờ người có chuyên môn đọc lại (NĐ 13/2023, GDPR).
+> **Trạng thái:** bản EN (12.2–12.4) Owner duyệt nguyên văn 2026-10-07. Bản VI (12.6) Owner duyệt nguyên văn 2026-10-07. Chỉ chép vào `docs/legal/*` và `src/legal/content.ts` ở VNX-2707b. Không phải tư vấn pháp lý; nên nhờ người có chuyên môn đọc lại (NĐ 13/2023, GDPR).
 
 ### 12.1 Thay đổi so với lời hứa hiện tại
 
@@ -338,7 +338,7 @@ For public requests we rely on your consent. You can withdraw it at any time fro
 - **Báo trước (Privacy §10, Terms §12):** người đã đăng nhập thấy thông báo trước khi thay đổi có hiệu lực, theo khuôn VNX-0701c (Q15: số ngày và cơ chế). Cờ `request_board` chỉ bật từ ngày có hiệu lực.
 - Ngày "Last updated" của Privacy và Terms đổi sang ngày có hiệu lực.
 
-### 12.6 Bản VI đề xuất (chờ Owner duyệt)
+### 12.6 Bản VI (APPROVED 2026-10-07)
 
 Dịch sát bản EN đã duyệt. Thuật ngữ theo bản VI hiện có: "request" = **nhu cầu**, "inquiry" = **yêu cầu**, "public request board" = **bảng nhu cầu công khai**. Bản tiếng Anh vẫn có hiệu lực khi hai bản khác nhau.
 
