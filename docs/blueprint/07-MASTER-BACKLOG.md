@@ -317,3 +317,18 @@ Spec `docs/superpowers/specs/2026-10-05-vnxsi-ops-console-design.md`. O1 plan `d
 | VNX-2507 | Audit log | AGENT | ⏳ |
 | VNX-2508 | Chuyển hướng `/admin`, link email/cron, màn hình EPIC 21 | AGENT, HIGH-RISK | ⏳ |
 | VNX-2509 | Rà giao diện, a11y | AGENT | ⏳ |
+
+## EPIC 26 — Tài khoản liên kết (ADR-012)
+
+Wave 1 (Owner 2026-10-07). Thứ tự và cổng ra ở [../roadmap/WAVE1-ROADMAP.md](../roadmap/WAVE1-ROADMAP.md). Liên kết Google, GitHub, LinkedIn từ trang tài khoản; đăng nhập phụ cho tài khoản đã có; huy hiệu xác minh builder tự bật.
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2601 | Owner tạo 3 ứng dụng OAuth (Google Cloud consent screen, GitHub OAuth App, LinkedIn app gắn Company Page), callback `/auth/oauth/:provider/callback` cho prod và local, đặt 6 secret bằng `wrangler secret` | HUMAN, HIGH-RISK | ⏳ |
+| VNX-2602 | Migration kế tiếp: bảng `user_identities` (2 ràng buộc UNIQUE), cột `sessions.method` mặc định `magic_link`; `db/identities`; 3 flag provider | AGENT, FOUNDATION, HIGH-RISK | ⏳ |
+| VNX-2603 | Lõi OAuth: cookie `__Host-vnx_oauth`, `state`, PKCE S256, `nonce`, kiểm ID token (JWKS, `iss`/`aud`/`exp`); port provider với adapter Google, GitHub, LinkedIn và provider giả cho test; không lưu token | AGENT, FOUNDATION, HIGH-RISK | ⏳ |
+| VNX-2604 | Đăng nhập: nút provider ở `/login`, start/callback intent `signin`, trang "chưa liên kết" chung, chặn user `suspended`, rate limit, audit `auth.login` có `method`; resolver Ops chỉ nhận session `magic_link` | AGENT, HIGH-RISK | ⏳ |
+| VNX-2605 | `/me` mục "Đăng nhập & tài khoản liên kết": liên kết (POST có Origin check → 303 → GET start), hủy liên kết, xung đột identity, audit, email báo 4 locale | AGENT, HIGH-RISK | ⏳ |
+| VNX-2606 | Huy hiệu: bật/tắt `show_on_profile` ở `/hub/profile`, hiện trên `/b/:handle` (GitHub có link, LinkedIn không link, Google không bao giờ); không vào xếp hạng | AGENT | ⏳ |
+| VNX-2607 | Chép bổ sung ADR-012 vào phần `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code; merge trước khi bật flag | AGENT | ⏳ |
+| VNX-2608 | Owner bật 3 flag trên production, thử đăng nhập và liên kết với tài khoản thật | HUMAN, HIGH-RISK | ⏳ |

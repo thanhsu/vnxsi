@@ -169,6 +169,25 @@ Plan: `docs/superpowers/plans/2026-10-04-vnxsi-m6-request.md` (Owner duyệt 202
 
 **Cổng ra Wave 1:** đạt điều kiện sang Wave 2 ở spec mục 2 (~100 product published).
 
+## EPIC 26 — Tài khoản liên kết Google, GitHub, LinkedIn (ADR-012)
+
+Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR-012 Accepted 2026-10-07. Plan riêng ở `docs/superpowers/plans/`, viết trước khi bắt đầu epic. Thứ tự so với M8 do Owner chốt khi duyệt plan. Phụ thuộc: VNX-2602 → 2603 → 2604, 2605 → 2606; VNX-2601 trước khi thử trên môi trường thật; VNX-2607 trước VNX-2608.
+
+| Task | Nội dung | Tag |
+|---|---|---|
+| VNX-2601 | Owner tạo 3 ứng dụng OAuth (Google Cloud consent screen, GitHub OAuth App, LinkedIn app gắn Company Page), callback `/auth/oauth/:provider/callback` cho prod và local, đặt 6 secret bằng `wrangler secret` | HUMAN, HIGH-RISK |
+| VNX-2602 | Migration kế tiếp: bảng `user_identities` (2 ràng buộc UNIQUE), cột `sessions.method` mặc định `magic_link`; `db/identities`; 3 flag provider | AGENT, FOUNDATION, HIGH-RISK |
+| VNX-2603 | Lõi OAuth: cookie `__Host-vnx_oauth`, `state`, PKCE S256, `nonce`, kiểm ID token (JWKS, `iss`/`aud`/`exp`); port provider với adapter Google, GitHub, LinkedIn và provider giả cho test; không lưu token | AGENT, FOUNDATION, HIGH-RISK |
+| VNX-2604 | Đăng nhập: nút provider ở `/login`, start/callback intent `signin`, trang "chưa liên kết" chung, chặn user `suspended`, rate limit, audit `auth.login` có `method`; resolver Ops chỉ nhận session `magic_link` | AGENT, HIGH-RISK |
+| VNX-2605 | `/me` mục "Đăng nhập & tài khoản liên kết": liên kết (POST có Origin check → 303 → GET start), hủy liên kết, xung đột identity, audit, email báo 4 locale | AGENT, HIGH-RISK |
+| VNX-2606 | Huy hiệu: bật/tắt `show_on_profile` ở `/hub/profile`, hiện trên `/b/:handle` (GitHub có link, LinkedIn không link, Google không bao giờ); không vào xếp hạng | AGENT |
+| VNX-2607 | Chép bổ sung ADR-012 vào phần `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code; merge trước khi bật flag | AGENT |
+| VNX-2608 | Owner bật 3 flag trên production, thử đăng nhập và liên kết với tài khoản thật | HUMAN, HIGH-RISK |
+
+**Cổng ra EPIC 26:**
+- Toàn bộ test ở mục "Được bảo đảm bởi" của ADR-012 xanh.
+- `/privacy` và `/terms` trên production đã có bổ sung ADR-012 trước khi flag provider nào được bật.
+
 ## Wave 2 (chưa lên lịch)
 
 AI Discovery, solution options, AI builder matching (shadow → assisted → auto), estimate, listing assistant, moderation. Tất cả theo `docs/architecture/AI-ARCHITECTURE.md`; quyết định ADR-005/006 khi brainstorm Wave 2.
