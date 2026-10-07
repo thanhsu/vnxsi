@@ -24,14 +24,14 @@ Trạng thái: **PROPOSED**, chờ Owner ký. Mỗi dòng có giá trị, điể
 ## Bảo mật
 
 - Mọi request đổi dữ liệu qua origin check; cookie `__Host-`; token/session chỉ lưu hash.
-- Rate limit: đăng nhập 5/giờ/email, 20/giờ/IP; Inquiry 10/giờ/IP; request 3/ngày/email.
+- Rate limit: đăng nhập 5/giờ/email, 20/giờ/IP; Inquiry 10/giờ/IP; request 3/ngày/email; interest vào request công khai 10/ngày/builder, tối đa 30 `pending` cùng lúc trên request đang mở (không Turnstile).
 - Không bí mật trong repo; gitleaks trong CI; dependency-review chặn từ mức moderate.
 - Upload: kiểm magic bytes, ≤ 2 MB, chỉ JPEG/PNG/WebP.
 - Review bảo mật toàn nhánh trước mỗi lần deploy production lớn (VNX-0803).
 
 ## Riêng tư
 
-- Builder không thấy email client. Request không có trang công khai.
+- Builder không thấy email client. Request mặc định riêng tư; chỉ lên trang công khai khi client opt-in riêng từng request, qua kiểm duyệt, gỡ được bất cứ lúc nào, danh tính không bao giờ công khai (xem [phụ lục bảng request](../superpowers/specs/2026-10-07-vnxsi-public-request-board-addendum.md)).
 - Số liệu công khai gộp nhóm < 3 vào "Other".
 - Đếm lượt xem bằng cookie ngẫu nhiên, không gắn danh tính, không đếm bot/chủ product/admin.
 - Không gửi PII vào model AI (Wave 2).
