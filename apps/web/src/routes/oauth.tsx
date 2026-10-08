@@ -23,7 +23,7 @@ const HOUR = 3600;
 const MAX_CODE_CHARS = 2048;
 
 /** The only things the callback ever logs (Review Focus 9): fixed codes, never a message, a URL or a provider reply. */
-type OAuthFailure = "no_cookie" | "wrong_phase" | "state_mismatch" | "provider_denied" | "missing_code" | "link_unsupported" | "rate_limited" | "internal" | ExchangeFailure;
+type OAuthFailure = "no_cookie" | "wrong_phase" | "state_mismatch" | "provider_denied" | "missing_code" | "link_unsupported" | "rate_limited" | "user_inactive" | "internal" | ExchangeFailure;
 
 /**
  * The URL of start and callback carries `state` and (callback) the one-time `code`, and the callback decides who is signed in.
@@ -42,8 +42,12 @@ async function enabledProvider(c: Context<AppEnv>): Promise<{ provider: OAuthPro
   return client ? { provider: name, client } : null;
 }
 
-function failed(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, locale: Locale = "en", status: 400 | 429 = 400, event: "oauth.callback_failed" | "oauth.start_failed" = "oauth.callback_failed") {
+function logFailure(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, event: "oauth.callback_failed" | "oauth.start_failed" = "oauth.callback_failed") {
   console.error(JSON.stringify({ requestId: c.get("requestId"), event, provider, code }));
+}
+
+function failed(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, locale: Locale = "en", status: 400 | 429 = 400, event: "oauth.callback_failed" | "oauth.start_failed" = "oauth.callback_failed") {
+  logFailure(c, provider, code, event);
   return page(c, <OAuthErrorPage locale={locale} origin={new URL(c.req.url).origin} />, status);
 }
 
@@ -104,7 +108,10 @@ export function registerOAuthRoutes(app: Hono<AppEnv>) {
       const identity = await findIdentityByProviderSubject(c.env.DB, provider, result.identity.subject);
       if (!identity) return await page(c, <OAuthNotLinkedPage locale={flow.locale} origin={new URL(c.req.url).origin} />);
       const user = await findUserById(c.env.DB, identity.userId);
-      if (!user || user.status !== "active") return await errorResponse(c, "forbidden", 403);
+      if (!user || user.status !== "active") {
+        logFailure(c, provider, "user_inactive");
+        return await errorResponse(c, "forbidden", 403);
+      }
 
       const now = new Date(nowMs);
       const iso = now.toISOString();

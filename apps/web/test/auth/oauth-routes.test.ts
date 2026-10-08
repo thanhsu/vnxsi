@@ -258,7 +258,7 @@ describe("callback: not linked (ADR-012 §3.2; Review Focus 2)", () => {
       expect(r.html).toContain("Sign in with an email link");
     }
     expect(normalize(stranger.html)).toBe(normalize(lookalike.html));
-    expect(stranger.html).not.toContain(known);
+    expect(lookalike.html).not.toContain(known);
     expect(stranger.html).not.toContain(strangerId.label);
     expect(await countWhere("SELECT count(*) AS n FROM users")).toBe(users);
     expect(await allSessions()).toBe(sessions);

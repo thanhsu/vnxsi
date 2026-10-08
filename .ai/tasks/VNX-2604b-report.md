@@ -20,3 +20,9 @@ Diff (excluding locales): 636 lines (< 700 limit).
 
 ## Ghi nhan
 - None beyond the plan's listed obligations (Task 7 `lang` casing, Task 8 link branches, VNX-2608 429 monitoring).
+
+## Fix round R1
+- M1: new fixed code `user_inactive`; `logFailure()` extracted from `failed()` and used for the suspended/missing-user 403, which keeps its `errorResponse(c, "forbidden", 403)` response. The suspended-user test now uses `expectOneLog("user_inactive", ...)`.
+- M2: the "not.toContain(known)" assertion now checks `lookalike.html` (the stranger one was replaced, since `known` was never in that page for a meaningful reason).
+- Tests: `npm test -w apps/web -- test/auth/oauth-routes.test.ts test/architecture.test.ts` -> 2 files, 52 passed. `npm run typecheck -w apps/web` -> 0 errors.
+- Corrections to the earlier report: the new files are LF in git; CRLF exists only in the working tree via autocrlf. Also, no RED run was observed for the original task.
