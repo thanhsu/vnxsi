@@ -26,6 +26,7 @@
 - Ba quyết định triển khai (2026-10-07): làm trong **Wave 1** thành EPIC 26; **bật cả ba provider cùng lúc** (mỗi provider vẫn có cờ riêng để tắt khẩn cấp); câu chữ Privacy và Terms đã duyệt (cuối `docs/legal/privacy.md` và `terms.md`, mục "Bổ sung ADR-012"), chỉ chép vào trang đang hiệu lực ở VNX-2607, và VNX-2607 phải merge trước khi bật bất kỳ cờ provider nào trên production.
 - **(2026-10-07) Thứ tự so với M8:** làm ngay, merge với cờ tắt, bật (VNX-2608) sau khi ra mắt ổn định.
 - **(2026-10-08) Câu chữ Task 6** (trang "chưa liên kết", trang lỗi, nút đăng nhập bằng email) duyệt nguyên văn 4 locale; zh-Hant dùng 連結 cho liên kết tài khoản; giữ "trang tài khoản" tới Task 8.
+- **(2026-10-08) Task 8:** mục `/me` "Đăng nhập & tài khoản liên kết" chỉ hiện khi có ít nhất một provider khả dụng (cờ bật và đã cấu hình) hoặc user có ít nhất một identity; hàng đã liên kết vẫn hiện khi cờ của nó tắt (để còn hủy liên kết), lệch ADR-012 §4 "cho mọi user"; câu chữ `/me`, trang trung gian, thông báo (kể cả `taken` nói "đã liên kết với tài khoản VNX.SI khác" kèm contact@vnx.si) và câu `oauth.notLinked.body` mới Owner duyệt nguyên văn 4 locale.
 - **(2026-10-07) Email báo liên kết/hủy liên kết** gồm: tên provider, `label`, thời điểm (UTC), và câu "Không phải bạn? Đăng nhập bằng link qua email, hủy liên kết ở `/me` và viết cho contact@vnx.si". Email chỉ gửi tới `users.email` của chính chủ.
 
 ## Quyết định thiết kế của Reviewer (Opus đã duyệt có chỉnh, 2026-10-07)
@@ -40,7 +41,7 @@ Lựa chọn kỹ thuật của Planner ở chỗ ADR-012 im lặng hoặc roadm
    - (c) `iss` khớp chính xác: Google `https://accounts.google.com` hoặc `accounts.google.com`; LinkedIn `https://www.linkedin.com/oauth`;
    - (d) `aud` bằng client ID, và `azp`, nếu có, cũng bằng client ID; `exp` còn hạn (dung sai 60 s); `nonce` khớp; có `sub`.
    Lợi: bỏ fetch/cache JWKS, code RS256, chế độ lỗi "JWKS không tải được thì không ai đăng nhập được". Mất: một lớp phòng thủ chiều sâu nếu có kẻ chen vào kênh TLS tới provider (không thực tế trong workerd). `verifyIdToken` là một bước có tên rõ để thêm kiểm chữ ký sau này (khi đó hàm thành async; chấp nhận đổi chữ ký nếu có ngày cần JWKS).
-4. **Một cookie `__Host-vnx_oauth`, không ký, mang `{ v:1, provider, intent, state, verifier, nonce, next, locale, sessionHash, exp }` (JSON → base64url).** Theo ADR-012 mục 1: HttpOnly, Secure, `SameSite=Lax` (callback là GET top-level từ provider, `Strict` sẽ làm cookie không được gửi), `Path=/`, 600 giây, xóa ngay khi callback chạy (dùng một lần; cũng xóa khi lỗi). Không ký vì `__Host-` chặn cookie tossing từ subdomain và kẻ giả mạo cookie của nạn nhân đã vượt qua mọi thứ khác; thêm khóa ký là thêm một secret phải quản lý. `state` kiểm bằng so sánh thời gian cố định với tham số `state` ở callback. Luồng liên kết: `POST …/link` (đã qua `originCheck`, cần session) ghi cookie `{ intent:"link", provider, sessionHash (S1, xem cuối mục), exp ≤ 120 giây }` rồi 303; `GET …/start` đọc cookie đó: nếu có intent `link` còn hạn, cùng provider và `sessionHash` khớp session hiện tại thì giữ intent `link`, ngược lại intent là `signin`; nó sinh `state`/PKCE/`nonce` và ghi lại cookie. Callback với intent `link` cần session hiện tại có `sessionHash` khớp, nếu không từ chối. `start` chỉ thấy intent `link` nếu POST đã ghi nó: không có tham số URL nào chọn intent. `sessionHash` = `sha256("oauth-link:" + raw session id)` (S1; không dùng `sessions.id_hash` nguyên văn). Callback từ chối khi `cookie.provider !== :provider` (F5).
+4. **Một cookie `__Host-vnx_oauth`, không ký, mang `{ v:1, provider, intent, state, verifier, nonce, next, locale, sessionHash, exp }` (JSON → base64url).** Theo ADR-012 mục 1: HttpOnly, Secure, `SameSite=Lax` (callback là GET top-level từ provider, `Strict` sẽ làm cookie không được gửi), `Path=/`, 600 giây, xóa ngay khi callback chạy (dùng một lần; cũng xóa khi lỗi). Không ký vì `__Host-` chặn cookie tossing từ subdomain và kẻ giả mạo cookie của nạn nhân đã vượt qua mọi thứ khác; thêm khóa ký là thêm một secret phải quản lý. `state` kiểm bằng so sánh thời gian cố định với tham số `state` ở callback. Luồng liên kết: `POST …/link` (đã qua `originCheck`, cần session) ghi cookie `{ intent:"link", provider, sessionHash (S1, xem cuối mục), exp ≤ 120 giây }` rồi 303; `GET …/start` đọc cookie đó: nếu có intent `link` còn hạn, cùng provider và `sessionHash` khớp session hiện tại thì giữ intent `link`, ngược lại intent là `signin`; nó sinh `state`/PKCE/`nonce` và ghi lại cookie. Callback với intent `link` cần session hiện tại có `sessionHash` khớp, nếu không từ chối. `start` chỉ thấy intent `link` nếu POST đã ghi nó: không có tham số URL nào chọn intent. `sessionHash` = `sha256("oauth-link:" + raw session id)` (S1; không dùng `sessions.id_hash` nguyên văn). Callback từ chối khi `cookie.provider !== :provider` (F5). **Mở rộng (Task 8, review MEDIUM-2, Owner 2026-10-08):** `start` cũng coi một flow cookie `intent: "link"` còn hạn, cùng provider và gắn với đúng session đang sống, như một intent: nó hiện lại trang trung gian với `state` mới (tải lại trang không rơi về `signin`); flow cookie `signin`, flow `link` của session khác, hoặc session đã hết hạn vẫn là `signin`. `resolveStartIntent` không đổi; điều kiện thêm nằm ở route.
 5. **Provider giả qua port + `OAUTH_DRIVER`.** `OAuthProvider` là interface (`buildAuthorizeUrl`, `exchange(code, verifier, nonce) → ProviderIdentity`); `getOAuthProvider(env, provider)` trả adapter thật, hoặc `FakeOAuthProvider` khi `env.OAUTH_DRIVER === "fake"` **và** `isFakeMail(env)` (tức `MAIL_DRIVER=fake` không có `RESEND_API_KEY` thật, theo VNX-0803 F6) (cùng cách `MAIL_DRIVER`, `TURNSTILE_DRIVER`; `vitest.config.ts` đặt `OAUTH_DRIVER: "fake"`; `wrangler.jsonc` không có biến này, có test cấm). Adapter thật nhận `fetch` tiêm vào, nên test adapter dùng `fetch` giả trả JSON dựng sẵn. Test không bao giờ gọi mạng.
 6. **Ba khóa cờ `oauth_google`, `oauth_github`, `oauth_linkedin`, nối vào cuối `FLAG_KEYS`** (thứ tự quan trọng với test và với `/admin/flags`). `key` không có CHECK trong SQL nên không cần migration. Cờ chỉ là "được dùng"; provider chưa cấu hình (thiếu `<PROVIDER>_CLIENT_ID` hoặc `_SECRET`) cũng coi như tắt: nút ẩn, callback 404 (fail closed), kể cả khi cờ bật.
 7. **Audit chỉ ghi `{ provider }`**, không ghi `label` (là email của tài khoản provider, dữ liệu cá nhân), không `provider_subject`, không token. `entity = "user"`, `entityId = userId` (cùng `auth.login`). Link và unlink ghi cùng `db.batch` với thay đổi, bằng guard mới `AuditIdentityGuard` (Task 1); `auth.login` qua OAuth dùng `writeAudit` như đường magic link (`data: { method }`).
@@ -4122,3 +4123,1080 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **VNX-2608:** thử tay các nút trên Chrome, Firefox, Safari (điều hướng `<a>` tới `start`, rồi 302 sang provider).
 
 #### Kết quả review Task 7 (Opus, 2026-10-08): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, LOW-1, LOW-2, S1, S2; câu chữ Owner duyệt 2026-10-08
+
+### Task 8 (tách đôi, F9): VNX-2605a-1 và VNX-2605a-2 — Liên kết tài khoản từ `/me`
+
+**Vì sao tách (F9).** Ước tính gộp ≈ 500 dòng cho 2605a-1 cộng ≈ 340 cho 2605a-2, tổng ≈ 840 (mã và test, không tính locale), vượt ngưỡng ~600. Cắt theo đường nối tự nhiên: **2605a-1** = mục ở `/me`, `POST …/link`, trang trung gian ở `start` (mọi thứ trước khi người dùng rời site); **2605a-2** = nhánh `link` của callback, xung đột, thông báo ở `/me` (mọi thứ sau khi provider trả về). Mỗi nửa tự xanh và commit riêng; giữa hai commit luồng chưa chạy hết (callback còn `link_unsupported`), nhưng cả ba cờ tắt nên không ai thấy, và hai commit merge cùng nhau (Owner 2026-10-07: merge khi xong, cờ tắt).
+
+**Quyết định kỹ thuật chung (Planner; Reviewer kiểm):**
+1. **Nút hủy liên kết ở Task 9, không ở đây.** `POST …/unlink` thuộc VNX-2605b; một nút không có route là mã chết. 8a-1 hiện hàng đã liên kết kèm `label` và **không có hành động**; Task 9 thêm `<form>` vào ô hành động của đúng hàng đó (cột đã có trong `LinkedAccounts`). Hệ quả có chủ ý: giữa 8a-1 và Task 9, người dùng đã liên kết chưa gỡ được qua UI; chấp nhận vì cờ tắt và các task merge cùng nhánh.
+2. **Khi nào hiện mục và nút (Owner 2026-10-08, lệch ADR-012 §4 "cho mọi user").** Mục hiện CHỈ khi có ít nhất một provider khả dụng (cờ bật và đã cấu hình, cùng quy tắc `/login` và `start`, quyết định 6) HOẶC user có ít nhất một identity; ngược lại không có `<section id="identities">`. Hàng chỉ gồm provider đã liên kết hoặc khả dụng. Hàng đã liên kết hiện kể cả khi cờ tắt (để còn hủy liên kết sau một lần tắt khẩn cấp, Task 9). Nút "Liên kết" chỉ ở hàng khả dụng và chưa liên kết. Logic khả dụng nằm một chỗ là `availableProviders(c)` trong `routes/oauth.tsx` (chuyển từ `loginProviders` của `routes/auth.tsx`, Task 7; `auth.tsx` gọi hàm mới, `/login` không đổi hành vi).
+3. **`label` chỉ hiện ở `/me` của chính chủ** (Hono escape HTML). `routes/me.tsx` vào allowlist kiến trúc `IDENTITY_ALLOWED` (dòng chú thích của test đã ghi "2605a: routes/me.tsx").
+4. **Các hàng theo thứ tự `OAUTH_PROVIDERS` (`google`, `github`, `linkedin`)**, chỉ hàng đã liên kết hoặc khả dụng; hàng khả dụng chưa liên kết hiện "Chưa liên kết" và nút. `LinkedAccounts` trả `null` khi không có hàng nào. Dùng `<table class="data">` như `RequestList`: không CSS mới.
+5. **Locale đi qua `?lang=<Locale id>` của `start`** (đã có từ Task 6/7). `POST /me/identities/:provider/link` đăng ký bằng `onLocalized`, form trỏ `localizedPath(locale, …)`, 303 về `/auth/oauth/:provider/start?lang=<locale>`. Cookie intent không mang locale. `lang` chỉ chọn ngôn ngữ, **không bao giờ** chọn intent (Review Focus 5).
+6. **Với intent `link`, `next` bị bỏ** (đích luôn là `/me`): flow cookie `link` có `next: null`.
+7. **Tải lại trang trung gian hiện lại trang với `state` mới (review MEDIUM-2).** Flow cookie `link` còn hạn, gắn với đúng session đang sống, được `start` coi như intent (điều kiện kiểm tường minh `cookie.phase === "flow" && cookie.intent === "link" && flowMatchesSession(cookie, sessionHash)`; phải kiểm `intent === "link"` vì `flowMatchesSession` đúng với mọi flow `signin`). Nhờ vậy nút Back hay tải lại không biến luồng liên kết thành `signin` 302; mỗi lần hiện lại là một flow mới, flow cũ bị ghi đè. `resolveStartIntent` không đổi. Có test (hiện lại 200 với `state` mới; flow `signin` 302; flow `link` của session khác hoặc session hết hạn 302).
+8. **Trang trung gian truyền `signedIn` cho `Layout`** (review MEDIUM-1): người dùng luôn đang đăng nhập ở đây, nên thanh điều hướng đúng. Hệ quả: trang có `<form method="post" action="/logout">` của `Layout`. Test không cấm mọi `<form>` mà khẳng định mọi `<form` đều có `action="/logout"` (không action nào bắt đầu bằng `http`, `//` hay `/auth/oauth/`), cộng "đúng một link ra ngoài site".
+9. **Câu `oauth.notLinked.body` của Task 6 đổi, Owner duyệt nguyên văn 2026-10-08** (bảng ở 8a-1): gọi trang bằng tên menu thật (`nav.me`: "Inquiries & requests", "Yêu cầu và nhu cầu", 咨询与需求, 詢問與需求; đã đối chiếu với 4 file locale, khớp) và gọi đúng tên mục.
+
+#### Task 8a-1: VNX-2605a-1 — Mục "Đăng nhập & tài khoản liên kết" ở `/me`, `POST …/link`, trang trung gian ở `start`
+
+**Phạm vi:** (1) `/me` có `<section id="identities">` khi có provider khả dụng hoặc identity đã liên kết (Owner 2026-10-08); (2) `POST /me/identities/:provider/link` (bốn locale) ghi cookie intent rồi 303 về `start` cùng site; (3) `start` với intent `link` hợp lệ cho phiên đang sống **luôn** trả 200 một trang có đúng một `<a>` sang provider (quyết định 14, R3); (4) `availableProviders(c)` dùng chung; (5) đổi câu `oauth.notLinked.body` ở 4 locale (Owner đã duyệt). Không migration, không dependency. `callback` giữ nguyên (`link_unsupported`, bỏ ở 8a-2).
+
+**Files:**
+- Create: `apps/web/src/views/me/LinkedAccounts.tsx`
+- Modify: `apps/web/src/routes/oauth.tsx` (export `enabledProvider`, thêm `availableProviders`; nhánh `link` của `start`; không động vào `callback`)
+- Modify: `apps/web/src/routes/auth.tsx` (bỏ `loginProviders`, gọi `availableProviders`; xóa import không còn dùng)
+- Modify: `apps/web/src/routes/me.tsx` (đọc danh tính và provider khả dụng, `<LinkedAccounts>`, `POST …/link`)
+- Modify: `apps/web/src/views/auth.tsx` (thêm `OAuthLinkPage`)
+- Modify: 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts` (7 khóa mới + 1 khóa đổi câu)
+- Modify (test): `apps/web/test/architecture.test.ts` (`IDENTITY_ALLOWED` thêm `../src/routes/me.tsx`), `apps/web/test/oauth-flow.ts` (helper `linkViaStart`, `externalLinks`), `apps/web/test/auth/oauth-routes.test.ts` (đổi một test `start`, đổi một chuỗi vi)
+- Create (test): `apps/web/test/me/identities.test.ts`, `apps/web/test/auth/oauth-link-start.test.ts`
+
+**Interfaces:**
+- Consumes (tên thật):
+  - `domain/identity.ts`: `OAUTH_PROVIDERS`, `PROVIDER_FLAG`, `PROVIDER_NAME`, `isOAuthProvider`, `type OAuthProvider`, `type UserIdentity`.
+  - `db/identities.ts`: `listIdentitiesForUser(db, userId)`; `db/flags.ts`: `isFlagEnabled`, `resetFlagCache`; `auth/oauth/index.ts`: `isProviderConfigured`.
+  - `domain/oauth.ts`: `newLinkIntent({ provider, sessionHash }, now)` (hạn 120 s, `LINK_INTENT_TTL_MS`), `resolveStartIntent`, `newFlowCookie` (đã bắt buộc `sessionHash` cho `link`, cấm cho `signin`), `parseOAuthCookie`, `OAUTH_PROVIDER_SPECS`.
+  - `auth/oauth-cookie.ts`: `writeOAuthCookie`, `readOAuthCookie`, `linkSessionHash(raw)`; `auth/cookies.ts`: `readSessionCookie`; `auth/middleware.ts`: `requireUser`.
+  - `http/localized.ts`: `onLocalized`; `originCheck` và `requestBodyLimit` (64 KB) đã gắn toàn cục ở `app.ts`, không gắn lại.
+  - `views/error-response.tsx`: `errorResponse(c, "notFound", 404)`; `views/render.ts`: `page`; `views/Layout.tsx`.
+  - Test: `signIn(email, { method })` (`test/fixtures.ts`), `enableProvider`, `linkedUser`, `startOAuth` (`test/oauth-flow.ts`), `formPost`, `getReq`, `setCookieValue`, `testEnv` (`test/helpers.ts`).
+- Produces:
+  - `routes/oauth.tsx`: `export async function enabledProvider(c)` (đã có, thêm `export`); `export async function availableProviders(c: Context<AppEnv>): Promise<OAuthProvider[]>`.
+  - `views/me/LinkedAccounts.tsx`: `LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdentity[]; linkable: readonly OAuthProvider[] }>`.
+  - `views/auth.tsx`: `OAuthLinkPage: FC<{ locale: Locale; origin: string; provider: OAuthProvider; authorizeUrl: string }>`.
+  - `test/oauth-flow.ts`: `linkViaStart(provider, sessionCookie, extraQuery?): Promise<LinkedStart>`, `externalLinks(html): URL[]`.
+  - Khóa i18n mới (7): `me.identities.title`, `.intro`, `.linked`, `.notLinked`, `.link`, `oauth.link.body`, `oauth.link.cta`. Khóa đổi câu: `oauth.notLinked.body`.
+
+**Câu chữ giao diện: Owner duyệt nguyên văn 2026-10-08** (thuật ngữ: vi "liên kết", "hủy liên kết", "Đăng nhập bằng …"; zh-Hans 关联, 取消关联, 登录, 账号 cho tài khoản của provider, 账户 cho VNX.SI; zh-Hant 連結, 取消連結, 登入, 帳號, 帳戶; tên provider không dịch):
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `me.identities.title` | Sign-in & linked accounts | Đăng nhập & tài khoản liên kết | 登录与关联账号 | 登入與連結帳號 |
+| `me.identities.intro` | Link Google, GitHub or LinkedIn to sign in with it. You can always still sign in with an email link. | Liên kết Google, GitHub hoặc LinkedIn để đăng nhập bằng tài khoản đó. Đăng nhập bằng link qua email vẫn luôn dùng được. | 关联 Google、GitHub 或 LinkedIn 账号后，即可用它登录。邮箱登录始终可用。 | 連結 Google、GitHub 或 LinkedIn 帳號後，即可用它登入。電子郵件登入始終可用。 |
+| `me.identities.linked` | Linked | Đã liên kết | 已关联 | 已連結 |
+| `me.identities.notLinked` | Not linked | Chưa liên kết | 未关联 | 未連結 |
+| `me.identities.link` | Link {provider} | Liên kết {provider} | 关联 {provider} 账号 | 連結 {provider} 帳號 |
+| `oauth.link.body` | Next, {provider} will ask you to sign in and allow VNX.SI. You'll then come back to VNX.SI, and that {provider} account will be linked to your VNX.SI account. | Tiếp theo, {provider} sẽ yêu cầu bạn đăng nhập và cho phép VNX.SI. Sau đó bạn quay lại VNX.SI, và tài khoản {provider} đó sẽ được liên kết với tài khoản VNX.SI của bạn. | 接下来，{provider} 会请你登录并授权 VNX.SI。之后你将回到 VNX.SI，该 {provider} 账号会关联到你的 VNX.SI 账户。 | 接下來，{provider} 會請你登入並授權 VNX.SI。之後你將回到 VNX.SI，該 {provider} 帳號會連結到你的 VNX.SI 帳戶。 |
+| `oauth.link.cta` | Continue to {provider} | Tiếp tục tới {provider} | 继续前往 {provider} | 繼續前往 {provider} |
+
+Trang trung gian dùng `me.identities.link` làm `<h1>` và tiêu đề, `oauth.link.body` làm đoạn giải thích, `oauth.link.cta` làm chữ của link duy nhất. `label` ở hàng đã liên kết hiện sau chữ "Đã liên kết" chỉ khi khác tên provider (Google, LinkedIn không có email thì `label` bằng tên provider, quyết định 12).
+
+**Thay câu Task 6 `oauth.notLinked.body` (Owner duyệt nguyên văn 2026-10-08; nháy kiểu chữ “ ”):**
+
+| | Cũ | Mới |
+|---|---|---|
+| en | This account isn't linked to VNX.SI yet. Sign in with an email link, then link it from your account page. | This account isn't linked to VNX.SI yet. Sign in with an email link, then link it under “Sign-in & linked accounts” on your Inquiries & requests page. |
+| vi | Tài khoản này chưa được liên kết. Đăng nhập bằng link qua email, rồi liên kết từ trang tài khoản. | Tài khoản này chưa được liên kết. Đăng nhập bằng link qua email, rồi liên kết ở mục “Đăng nhập & tài khoản liên kết” trong trang Yêu cầu và nhu cầu. |
+| zh-Hans | 此账号尚未关联。请先用邮箱登录，再在账户页面关联此账号。 | 此账号尚未关联。请先用邮箱登录，再到“咨询与需求”页面的“登录与关联账号”中关联此账号。 |
+| zh-Hant | 此帳號尚未連結。請先用電子郵件登入，再到帳戶頁面連結此帳號。 | 此帳號尚未連結。請先用電子郵件登入，再到「詢問與需求」頁面的「登入與連結帳號」中連結此帳號。 |
+
+- [ ] **Step 1: Helper test (`apps/web/test/oauth-flow.ts`, thêm cuối file; thêm `formPost` vào import từ `./helpers.ts`)**
+
+```ts
+export interface LinkedStart {
+  /** The `POST /me/identities/:provider/link` response. */
+  post: Response;
+  /** The `GET /auth/oauth/:provider/start` the browser makes after the 303, carrying the session and the intent cookie. */
+  start: Response;
+  html: string;
+  /** `Cookie` header value for the flow cookie `start` wrote, or "" when it wrote none. */
+  flowCookie: string;
+  flow: FlowCookie | null;
+}
+
+/** Off-site `<a href>` of a page, entities decoded as a browser does. */
+export function externalLinks(html: string): URL[] {
+  return [...html.matchAll(/<a\b[^>]*\bhref="(https?:\/\/[^"]+)"/g)].map((m) => new URL((m[1] ?? "").replaceAll("&amp;", "&")));
+}
+
+/** The whole link start the way a browser does it: press "Link" (POST), follow the 303 to the same-site start. */
+/** `postPrefix` picks the locale the way a browser does: the form posts to `/vi/me/…`. Never append a second `lang` to the start URL: Hono reads the FIRST value. */
+export async function linkViaStart(provider: OAuthProvider, session: string, opts: { postPrefix?: string; extraQuery?: string } = {}): Promise<LinkedStart> {
+  const post = await createApp().request(formPost(`${opts.postPrefix ?? ""}/me/identities/${provider}/link`, {}, { cookie: session }), undefined, testEnv);
+  const intent = setCookieValue(post, OAUTH_COOKIE) ?? "";
+  const target = new URL(post.headers.get("location") ?? "/", "https://vnx.si");
+  const start = await createApp().request(getReq(`${target.pathname}${target.search}${opts.extraQuery ?? ""}`, `${session}; ${OAUTH_COOKIE}=${intent}`), undefined, testEnv);
+  const raw = setCookieValue(start, OAUTH_COOKIE) ?? "";
+  const flow = parseOAuthCookie(raw, { provider, now: Date.now() });
+  return { post, start, html: await start.clone().text(), flowCookie: raw ? `${OAUTH_COOKIE}=${raw}` : "", flow: flow && flow.phase === "flow" ? flow : null };
+}
+```
+
+- [ ] **Step 2: Test hỏng trước, mục `/me` và `POST …/link` (`apps/web/test/me/identities.test.ts`)**
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { linkSessionHash, OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import { OAUTH_PROVIDERS, PROVIDER_NAME } from "../../src/domain/identity.ts";
+import { parseOAuthCookie } from "../../src/domain/oauth.ts";
+import type { Bindings } from "../../src/env.ts";
+import { signIn } from "../fixtures.ts";
+import { formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
+import { enableProvider, linkedUser } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}-${Math.random().toString(36).slice(2, 8)}`;
+const emailOf = (who: string) => `${who}-${tag()}@example.com`;
+const withoutCredentials = { ...testEnv, OAUTH_DRIVER: undefined } as Bindings;
+/** Hono escapes & ' " < >; a browser shows the characters (pattern of test/landing/page.test.ts). */
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
+beforeEach(async () => {
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+});
+
+async function meHtml(cookie: string, path = "/me", env: Bindings = testEnv) {
+  const res = await createApp().request(getReq(path, cookie), undefined, env);
+  return { res, html: decode(await res.text()) };
+}
+const sectionOf = (html: string) => html.match(/<section id="identities">.*?<\/section>/s)?.[0] ?? "";
+const rowsOf = (html: string) => sectionOf(html).match(/<tr>.*?<\/tr>/gs) ?? [];
+const postLink = (provider: string, cookie: string, path = `/me/identities/${provider}/link`, headers: Record<string, string> = {}) =>
+  createApp().request(formPost(path, {}, { cookie, ...headers }), undefined, testEnv);
+
+describe("/me: Sign-in & linked accounts (VNX-2605a-1; visibility decided by the Owner 2026-10-08)", () => {
+  it("is absent while every flag is off and the user has no linked account", async () => {
+    for (const method of ["magic_link", "oauth_github"] as const) {
+      const { cookie } = await signIn(emailOf("lan"), { method });
+      const { res, html } = await meHtml(cookie);
+      expect(res.status).toBe(200);
+      expect(html).not.toContain('id="identities"');
+      expect(html).not.toContain("Sign-in & linked accounts");
+      expect(html).not.toContain("/identities/");
+    }
+  });
+
+  it("one flag on: the section shows only that provider, with its Link button (every signed-in user)", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    for (const method of ["magic_link", "oauth_google"] as const) {
+      const { cookie } = await signIn(emailOf("lan"), { method });
+      const html = (await meHtml(cookie)).html;
+      expect(sectionOf(html)).toContain("Sign-in & linked accounts");
+      const rows = rowsOf(html);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toContain("GitHub");
+      expect(rows[0]).toContain("Not linked");
+      expect(rows[0]).toContain('action="/me/identities/github/link"');
+      expect(rows[0]).toContain('method="post"');
+      expect(rows[0]).toContain("Link GitHub");
+    }
+  });
+
+  it("a flag on but the provider not configured: not available, so no section", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    const { cookie } = await signIn(emailOf("lan"));
+    const html = (await meHtml(cookie, "/me", withoutCredentials)).html;
+    expect(html).not.toContain('id="identities"');
+  });
+
+  it("every flag off and one linked account: the section shows only that row, with the label and no Link button", async () => {
+    const label = `lan-${tag()}@gmail.example`;
+    const email = emailOf("lan");
+    await linkedUser(email, "google", { subject: `sub-${tag()}`, label });
+    const { cookie } = await signIn(email);
+    const html = (await meHtml(cookie)).html;
+    const rows = rowsOf(html);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain("Google");
+    expect(rows[0]).toContain("Linked");
+    expect(rows[0]).toContain(label);
+    expect(sectionOf(html)).not.toContain("<form");
+    expect(sectionOf(html)).not.toContain("GitHub");
+    const { cookie: other } = await signIn(emailOf("minh"));
+    expect((await meHtml(other)).html).not.toContain(label);
+  });
+
+  it("a linked provider whose flag is off stays visible next to a linkable one, in catalogue order", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "linkedin", { subject: `sub-${tag()}`, label: "LinkedIn" });
+    await enableProvider("github");
+    resetFlagCache();
+    const { cookie } = await signIn(email);
+    const rows = rowsOf((await meHtml(cookie)).html);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("GitHub");
+    expect(rows[0]).toContain("Link GitHub");
+    expect(rows[1]).toContain("LinkedIn");
+    expect(rows[1]).toContain("Linked");
+    expect(rows[1]).not.toContain("<form");
+  });
+
+  it("a label equal to the provider name is not repeated, and unlink is Task 9's: nothing mentions it", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "linkedin", { subject: `sub-${tag()}`, label: "LinkedIn" });
+    const { cookie } = await signIn(email);
+    const html = (await meHtml(cookie)).html;
+    expect((rowsOf(html)[0] ?? "").match(/LinkedIn/g)).toHaveLength(1);
+    expect(sectionOf(html)).not.toContain("unlink");
+  });
+
+  it("is localized in all four locales, and /me is not no-referrer", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    const { cookie } = await signIn(emailOf("lan"));
+    const titles: Array<[string, string]> = [["/me", "Sign-in & linked accounts"], ["/vi/me", "Đăng nhập & tài khoản liên kết"], ["/zh-hans/me", "登录与关联账号"], ["/zh-hant/me", "登入與連結帳號"]];
+    for (const [path, title] of titles) {
+      const { res, html } = await meHtml(cookie, path);
+      expect(sectionOf(html), path).toContain(title);
+      expect(res.headers.get("referrer-policy")).not.toBe("no-referrer");
+    }
+  });
+});
+
+, () => {
+  it("303 to the same-site start, with an intent cookie bound to this session and living at most 120 s", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    const res = await postLink("github", cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/auth/oauth/github/start?lang=en");
+    const raw = setCookieValue(res, OAUTH_COOKIE) ?? "";
+    const intent = parseOAuthCookie(raw, { provider: "github", now: Date.now() });
+    if (intent?.phase !== "intent") throw new Error("no intent cookie");
+    expect(intent.intent).toBe("link");
+    expect(intent.sessionHash).toBe(await linkSessionHash(cookie.split("=")[1] ?? ""));
+    expect(intent.exp - Date.now()).toBeLessThanOrEqual(120_000);
+    const line = res.headers.getSetCookie().find((l) => l.startsWith(`${OAUTH_COOKIE}=`)) ?? "";
+    expect(line).toMatch(/HttpOnly/i);
+    expect(line).toMatch(/Secure/i);
+    expect(line).toMatch(/SameSite=Lax/i);
+    expect(line).toMatch(/Path=\//);
+    expect(Number(/Max-Age=(\d+)/i.exec(line)?.[1])).toBeLessThanOrEqual(120);
+  });
+
+  it.each([["/vi/me", "vi"], ["/zh-hans/me", "zh-Hans"], ["/zh-hant/me", "zh-Hant"]])("%s: lang is the Locale id", async (prefix, lang) => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"));
+    const res = await postLink("google", cookie, `${prefix}/identities/google/link`);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/auth/oauth/google/start?lang=${lang}`);
+  });
+
+  it("never redirects off-site: the Location is a path on this site, whatever the request", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    const res = await postLink("github", cookie, "/me/identities/github/link?next=https://evil.example&redirect=//evil.example");
+    const location = res.headers.get("location") ?? "";
+    expect(location.startsWith("/auth/oauth/github/start")).toBe(true);
+    expect(location.startsWith("//")).toBe(false);
+    expect(location).not.toContain("evil");
+  });
+
+  it("refuses a missing or foreign Origin (403) and writes no cookie", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    for (const headers of [{ origin: "https://evil.example" }, { origin: "null" }]) {
+      const res = await postLink("github", cookie, "/me/identities/github/link", headers);
+      expect(res.status).toBe(403);
+      expect(setCookieValue(res, OAUTH_COOKIE)).toBeNull();
+    }
+    const noOrigin = await createApp().request(new Request("https://vnx.si/me/identities/github/link", { method: "POST", headers: { cookie } }), undefined, testEnv);
+    expect(noOrigin.status).toBe(403);
+    expect(setCookieValue(noOrigin, OAUTH_COOKIE)).toBeNull();
+  });
+
+  it("is 404 with no cookie when the flag is off, the provider is not configured, or the name is not a provider", async () => {
+    const { cookie } = await signIn(emailOf("lan"));
+    expect((await postLink("github", cookie)).status).toBe(404);
+    await enableProvider("github");
+    resetFlagCache();
+    const unconfigured = await createApp().request(formPost("/me/identities/github/link", {}, { cookie }), undefined, withoutCredentials);
+    expect(unconfigured.status).toBe(404);
+    expect(setCookieValue(unconfigured, OAUTH_COOKIE)).toBeNull();
+    expect((await postLink("facebook", cookie)).status).toBe(404);
+    expect((await postLink("google", cookie)).status).toBe(404);
+  });
+
+  it("needs a session: signed out goes to /login and no OAuth cookie is written", async () => {
+    await enableProvider("github");
+    const res = await createApp().request(formPost("/me/identities/github/link", {}), undefined, testEnv);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/login");
+    expect(setCookieValue(res, OAUTH_COOKIE)).toBeNull();
+  });
+
+  it("keeps the 64 KB body limit", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    const big = new Request("https://vnx.si/me/identities/github/link", {
+      method: "POST",
+      headers: { origin: "https://vnx.si", cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: `x=${"a".repeat(70 * 1024)}`,
+    });
+    expect((await createApp().request(big, undefined, testEnv)).status).toBe(413);
+  });
+});
+```
+
+- [ ] **Step 3: Test hỏng trước, trang trung gian (`apps/web/test/auth/oauth-link-start.test.ts`)**
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { linkSessionHash, OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
+import { resetFakeOAuth } from "../../src/auth/oauth/fake.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import { OAUTH_PROVIDERS, PROVIDER_NAME } from "../../src/domain/identity.ts";
+import { OAUTH_PROVIDER_SPECS, parseOAuthCookie } from "../../src/domain/oauth.ts";
+import { signIn } from "../fixtures.ts";
+import { getReq, setCookieValue, testEnv } from "../helpers.ts";
+import { enableProvider, externalLinks, linkViaStart, startOAuth } from "../oauth-flow.ts";
+
+let counter = 0;
+const emailOf = (who: string) => `${who}-${++counter}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+
+beforeEach(async () => {
+  resetFakeOAuth();
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("start with a link intent: the intermediate page (decision 14, R3; Review Focus 12)", () => {
+  it.each(OAUTH_PROVIDERS)("%s: POST answers 303, then start answers 200, never a 3xx, with one plain link to the provider and no form but the logout one", async (provider) => {
+    await enableProvider(provider);
+    const { cookie } = await signIn(emailOf("lan"));
+    const linked = await linkViaStart(provider, cookie);
+    expect(linked.post.status).toBe(303);
+    expect(linked.start.status).toBe(200);
+    expect(linked.start.headers.get("location")).toBeNull();
+    const links = externalLinks(linked.html);
+    expect(links).toHaveLength(1);
+    expect(links[0]?.origin).toBe(new URL(OAUTH_PROVIDER_SPECS[provider].authorizeUrl).origin);
+    expect(links[0]?.searchParams.get("state")).toBe(linked.flow?.state);
+    expect(links[0]?.searchParams.get("redirect_uri")).toBe(`${testEnv.APP_ORIGIN}/auth/oauth/${provider}/callback`);
+    // The page is signed in, so Layout adds its logout form; no other form, none off-site, none towards /auth/oauth/.
+    const actions = [...linked.html.matchAll(/<form\b[^>]*\baction="([^"]*)"/g)].map((m) => m[1] ?? "");
+    expect((linked.html.match(/<form\b/g) ?? []).length).toBe(actions.length);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.every((a) => a === "/logout")).toBe(true);
+    expect(linked.html).toContain('action="/logout"');
+    expect(linked.html).toContain(`Link ${PROVIDER_NAME[provider]}`);
+    expect(linked.html).toContain(`Continue to ${PROVIDER_NAME[provider]}`);
+  });
+
+  it("is hardened: no-store, Referrer-Policy same-origin, no inline script or style", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    const { start, html } = await linkViaStart("github", cookie);
+    expect(start.headers.get("cache-control")).toBe("no-store");
+    expect(start.headers.get("referrer-policy")).toBe("same-origin");
+    expect(html).not.toMatch(/<script\b/i);
+    expect(html).not.toMatch(/\sstyle=/i);
+    expect(html).not.toMatch(/\son[a-z]+=/i);
+    expect(html).not.toMatch(/http-equiv="refresh"/i);
+  });
+
+  it("writes a link flow cookie bound to this session, with no next, and the locale of lang", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    const linked = await linkViaStart("github", cookie, { extraQuery: "&next=/hub" });
+    expect(linked.flow).toMatchObject({ phase: "flow", intent: "link", provider: "github", next: null, locale: "en" });
+    expect(linked.flow?.sessionHash).toBe(await linkSessionHash(cookie.split("=")[1] ?? ""));
+    expect(linked.flow?.state).toMatch(/^[A-Za-z0-9_-]{43,}$/);
+  });
+
+  it("is localized, and the provider name is not translated", async () => {
+    await enableProvider("linkedin");
+    const { cookie } = await signIn(emailOf("lan"));
+    const expected: Array<[string, string, string]> = [["/vi/me", "Tiếp tục tới LinkedIn", "Liên kết LinkedIn"], ["/zh-hans/me", "继续前往 LinkedIn", "关联 LinkedIn 账号"], ["/zh-hant/me", "繼續前往 LinkedIn", "連結 LinkedIn 帳號"]];
+    for (const [prefix, cta, title] of expected) {
+      const post = await createApp().request(new Request(`https://vnx.si${prefix}/identities/linkedin/link`, { method: "POST", headers: { origin: "https://vnx.si", cookie } }), undefined, testEnv);
+      const intent = setCookieValue(post, OAUTH_COOKIE) ?? "";
+      const res = await createApp().request(getReq(post.headers.get("location") ?? "", `${cookie}; ${OAUTH_COOKIE}=${intent}`), undefined, testEnv);
+      const html = await res.text();
+      expect(html, prefix).toContain(cta);
+      expect(html, prefix).toContain(title);
+    }
+  });
+
+  it("no URL parameter chooses the intent: no intent cookie means a 302 sign-in, whatever the query", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    for (const query of ["?intent=link", "?link=1", "?mode=link&lang=en"]) {
+      const res = await createApp().request(getReq(`/auth/oauth/github/start${query}`, cookie), undefined, testEnv);
+      expect(res.status, query).toBe(302);
+    }
+    expect((await startOAuth("github", "?intent=link", cookie)).flow.intent).toBe("signin");
+  });
+
+  it("a link intent counts only for the session that asked, only for its provider, and only while the session lives", async () => {
+    await enableProvider("github");
+    await enableProvider("google");
+    const lan = await signIn(emailOf("lan"));
+    const minh = await signIn(emailOf("minh"));
+    const raw = setCookieValue((await linkViaStart("github", lan.cookie)).post, OAUTH_COOKIE) ?? "";
+    // Another user's session carrying Lan's intent cookie.
+    const other = await createApp().request(getReq("/auth/oauth/github/start", `${minh.cookie}; ${OAUTH_COOKIE}=${raw}`), undefined, testEnv);
+    expect(other.status).toBe(302);
+    // The right session, but a start for another provider.
+    const wrongProvider = await createApp().request(getReq("/auth/oauth/google/start", `${lan.cookie}; ${OAUTH_COOKIE}=${raw}`), undefined, testEnv);
+    expect(wrongProvider.status).toBe(302);
+    // The right session after it expired (Task 2 LOW-2).
+    await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE user_id = ?1").bind(lan.user.id, "2020-01-01T00:00:00.000Z").run();
+    const expired = await createApp().request(getReq("/auth/oauth/github/start", `${lan.cookie}; ${OAUTH_COOKIE}=${raw}`), undefined, testEnv);
+    expect(expired.status).toBe(302);
+  });
+
+  it("signing in is unchanged: no session and no cookie still gets a 302 to the provider", async () => {
+    await enableProvider("github");
+    const started = await startOAuth("github");
+    expect(started.res.status).toBe(302);
+    expect(started.flow.intent).toBe("signin");
+    expect(started.authorize.origin).toBe("https://github.com");
+  });
+
+  it("reloading the page (Back, refresh) shows it again with a fresh state: a live link flow of this session counts like an intent", async () => {
+    await enableProvider("github");
+    const { cookie } = await signIn(emailOf("lan"));
+    const first = await linkViaStart("github", cookie);
+    const reload = await createApp().request(getReq("/auth/oauth/github/start?lang=en", `${cookie}; ${first.flowCookie}`), undefined, testEnv);
+    expect(reload.status).toBe(200);
+    expect(reload.headers.get("location")).toBeNull();
+    const raw = setCookieValue(reload, OAUTH_COOKIE) ?? "";
+    const flow = parseOAuthCookie(raw, { provider: "github", now: Date.now() });
+    if (flow?.phase !== "flow") throw new Error("no flow cookie");
+    expect(flow).toMatchObject({ intent: "link", sessionHash: first.flow?.sessionHash });
+    expect(flow.state).not.toBe(first.flow?.state);
+    const links = externalLinks(await reload.text());
+    expect(links).toHaveLength(1);
+    expect(links[0]?.searchParams.get("state")).toBe(flow.state);
+  });
+
+  it("a sign-in flow cookie, another session's link flow, or an expired session is a 302 sign-in", async () => {
+    await enableProvider("github");
+    const lan = await signIn(emailOf("lan"));
+    const minh = await signIn(emailOf("minh"));
+    const signinFlow = await startOAuth("github");
+    const signedIn = await createApp().request(getReq("/auth/oauth/github/start", `${lan.cookie}; ${signinFlow.cookie}`), undefined, testEnv);
+    expect(signedIn.status, "signin flow cookie").toBe(302);
+    const lansFlow = await linkViaStart("github", lan.cookie);
+    const other = await createApp().request(getReq("/auth/oauth/github/start", `${minh.cookie}; ${lansFlow.flowCookie}`), undefined, testEnv);
+    expect(other.status, "another session's link flow").toBe(302);
+    await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE user_id = ?1").bind(lan.user.id, "2020-01-01T00:00:00.000Z").run();
+    const expired = await createApp().request(getReq("/auth/oauth/github/start", `${lan.cookie}; ${lansFlow.flowCookie}`), undefined, testEnv);
+    expect(expired.status, "expired session").toBe(302);
+  });
+});
+```
+
+- [ ] **Step 4: Chạy, thấy đỏ**
+
+`npm test -w apps/web -- test/me/identities.test.ts test/auth/oauth-link-start.test.ts` → FAIL (không có `<section id="identities">`; `POST /me/identities/…` 404; `start` với intent `link` trả 400, không phải 200).
+
+- [ ] **Step 5: Mã**
+
+`apps/web/src/routes/oauth.tsx`: (a) đổi `async function enabledProvider` thành `export async function enabledProvider`; (b) thêm ngay sau nó (import thêm `OAUTH_PROVIDERS` từ `../domain/identity.ts`, `isProviderConfigured` từ `../auth/oauth/index.ts`, `OAuthLinkPage` từ `../views/auth.tsx`):
+
+```ts
+/** The providers a person may use right now: flag on AND configured (decision 6). `/login` and `/me` both ask this. */
+export async function availableProviders(c: Context<AppEnv>): Promise<OAuthProvider[]> {
+  const shown: OAuthProvider[] = [];
+  for (const provider of OAUTH_PROVIDERS) {
+    if ((await isFlagEnabled(c.env.DB, PROVIDER_FLAG[provider])) && isProviderConfigured(c.env, provider)) shown.push(provider);
+  }
+  return shown;
+}
+```
+(c) Trong `start`, thay khối từ `const raw = readSessionCookie(c);` đến `return c.redirect(url, 302);` bằng:
+
+```ts
+    // Task 2 LOW-2: a link intent counts only for a session that is alive now (`user` is null for an expired or suspended one).
+    const raw = readSessionCookie(c);
+    const sessionHash = c.get("user") && raw ? await linkSessionHash(raw) : null;
+    // An intent from POST …/link, or (MEDIUM-2) a live LINK flow of this very session (Back, refresh). Check `intent === "link"`
+    // explicitly: `flowMatchesSession` is true for every signin flow. Import `flowMatchesSession` from ../domain/oauth.ts.
+    const cookie = readOAuthCookie(c, provider, now);
+    const linking = sessionHash !== null && (resolveStartIntent(cookie, sessionHash, now) === "link" || (cookie?.phase === "flow" && cookie.intent === "link" && flowMatchesSession(cookie, sessionHash)));
+    const next = linking ? null : safeNext(c.req.query("next"));
+    const lang = c.req.query("lang");
+    const locale = isLocale(lang) ? lang : localeFromPath(next ?? "/").locale;
+    const state = generateState();
+    const verifier = generateVerifier();
+    const nonce = generateNonce();
+    writeOAuthCookie(c, newFlowCookie({ provider, intent: linking ? "link" : "signin", state, verifier, nonce, next, locale, sessionHash: linking ? sessionHash : null }, now), now);
+    const url = buildAuthorizeUrl({ provider, clientId: client.clientId, redirectUri: oauthRedirectUri(c.env.APP_ORIGIN, provider), state, challenge: await codeChallengeS256(verifier), nonce });
+    // Decision 14 (R3): a link NEVER redirects. `form-action 'self'` covers the redirect chain of the POST that led here in Chrome;
+    // clicking this link is a new navigation. The flow cookie replaces the intent cookie (one use).
+    if (linking) return page(c, <OAuthLinkPage locale={locale} origin={new URL(c.req.url).origin} provider={provider} authorizeUrl={url} />);
+    return c.redirect(url, 302);
+```
+`callback`, `OAuthFailure` không đổi trong 8a-1.
+
+`apps/web/src/routes/auth.tsx`: xóa hàm `loginProviders`; mọi chỗ gọi `loginProviders(c)` đổi thành `availableProviders(c)` (`import { availableProviders } from "./oauth.tsx";`); xóa các import chỉ `loginProviders` dùng: `isProviderConfigured`, `isFlagEnabled`, `OAUTH_PROVIDERS`, `type OAuthProvider`, `PROVIDER_FLAG` (kiểm từng tên bằng `grep -n` trong file; repo không bật `noUnusedLocals` nên typecheck KHÔNG báo import thừa, phải tự dọn). Test Task 7 không đổi.
+
+`apps/web/src/views/auth.tsx` (thêm cuối file):
+
+```tsx
+/** Decision 14 (R3): the one step between the "Link" button and the provider. One plain link, no form, no script, no refresh. */
+export const OAuthLinkPage: FC<Base & { provider: OAuthProvider; authorizeUrl: string }> = (props) => {
+  const tr = translator(props.locale);
+  const provider = PROVIDER_NAME[props.provider];
+  return (
+    <Layout locale={props.locale} title={tr("me.identities.link", { provider })} origin={props.origin} rest="/me" noindex signedIn>
+      <section class="card">
+        <h1>{tr("me.identities.link", { provider })}</h1>
+        <p>{tr("oauth.link.body", { provider })}</p>
+        <a class="btn" href={props.authorizeUrl}>
+          {tr("oauth.link.cta", { provider })}
+        </a>
+      </section>
+    </Layout>
+  );
+};
+```
+
+`apps/web/src/views/me/LinkedAccounts.tsx` (tạo mới):
+
+```tsx
+import type { FC } from "hono/jsx";
+import { OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_NAME, type UserIdentity } from "../../domain/identity.ts";
+import { localizedPath, type Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+
+/**
+ * The owner's own page (ADR-012 §4): the providers that are linked or linkable (Owner 2026-10-08), nothing at all when there are none.
+ * `label` is shown here and nowhere else. `linkable` is the flag-and-credentials rule decided by the route; a linked row shows whatever the flag says. Unlink is VNX-2605b: it adds a form to the last cell.
+ */
+export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdentity[]; linkable: readonly OAuthProvider[] }> = ({ locale, identities, linkable }) => {
+  const tr = translator(locale);
+  const rows = OAUTH_PROVIDERS.filter((p) => identities.some((i) => i.provider === p) || linkable.includes(p));
+  if (rows.length === 0) return null;
+  return (
+    <section id="identities">
+      <h2>{tr("me.identities.title")}</h2>
+      <p class="muted">{tr("me.identities.intro")}</p>
+      <div class="table-wrap">
+        <table class="data">
+          <tbody>
+            {rows.map((provider) => {
+              const name = PROVIDER_NAME[provider];
+              const linked = identities.find((i) => i.provider === provider);
+              return (
+                <tr>
+                  <td>{name}</td>
+                  <td>
+                    {linked ? tr("me.identities.linked") : tr("me.identities.notLinked")}
+                    {linked && linked.label !== name ? <span class="muted"> · {linked.label}</span> : null}
+                  </td>
+                  <td>
+                    {!linked && linkable.includes(provider) ? (
+                      <form method="post" action={localizedPath(locale, `/me/identities/${provider}/link`)}>
+                        <button class="btn btn-ghost" type="submit">
+                          {tr("me.identities.link", { provider: name })}
+                        </button>
+                      </form>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
+```
+
+`apps/web/src/routes/me.tsx`: thêm import (`listIdentitiesForUser`, `readSessionCookie`, `linkSessionHash`, `writeOAuthCookie`, `newLinkIntent`, `availableProviders`, `enabledProvider`, `LinkedAccounts`); trong `GET /me` thêm hai phần tử vào `Promise.all` (`listIdentitiesForUser(c.env.DB, user.id)`, `availableProviders(c)`) và, sau `<section>` inquiries, `<LinkedAccounts locale={locale} identities={identities} linkable={linkable} />`. Thêm route trong `registerMeRoutes`, sau `GET /me`:
+
+```ts
+  // ADR-012 §4: "Link" is a POST (the Origin check is global). It writes one 120 s cookie for THIS session and sends the browser to the
+  // same-site start. It never redirects off-site (`form-action 'self'`); start shows the page with the link to the provider.
+  onLocalized(app, "post", "/me/identities/:provider/link", requireUser, async (c) => {
+    const found = await enabledProvider(c);
+    const raw = readSessionCookie(c);
+    if (!found || !raw) return errorResponse(c, "notFound", 404);
+    const now = Date.now();
+    writeOAuthCookie(c, newLinkIntent({ provider: found.provider, sessionHash: await linkSessionHash(raw) }, now), now);
+    return c.redirect(`/auth/oauth/${found.provider}/start?lang=${c.get("locale")}`, 303);
+  });
+```
+
+- [ ] **Step 6: Khóa i18n.** Thêm 7 khóa của bảng vào 4 file (`me.identities.*` ngay sau `me.requests.empty`; `oauth.link.*` ngay sau `oauth.signInWith`). Đổi `oauth.notLinked.body` theo cột "Mới" (đã duyệt).
+
+- [ ] **Step 7: Sửa test cũ và allowlist.** (a) `test/architecture.test.ts`: `IDENTITY_ALLOWED` thêm `"../src/routes/me.tsx"`. (b) `test/auth/oauth-routes.test.ts`: test "refuses a live link intent until Task 8 (link_unsupported) …" (≈ dòng 121) đổi tên thành "a live link intent gets the intermediate page" và thân: `status` 200, `location` null, `expectHardened(res)`, `setCookieValue(res, OAUTH_COOKIE)` khác null, `expect(logged()).toHaveLength(0)` (không còn `expectOneLog`). Test callback "refuses a flow cookie whose intent is link until Task 8" giữ nguyên (đổi ở 8a-2). (c) dòng ≈ 271 đổi chuỗi vi thành câu mới: `Tài khoản này chưa được liên kết. Đăng nhập bằng link qua email, rồi liên kết ở mục “Đăng nhập & tài khoản liên kết” trong trang Yêu cầu và nhu cầu.`; HTML escape `&` thành `&amp;`, nên giải entity (`&#39; &quot; &lt; &gt; &amp;`) trước khi `toContain`.
+
+- [ ] **Step 8: Xanh**
+
+`npm test -w apps/web -- test/me test/auth test/i18n test/architecture.test.ts test/http` → PASS (login-oauth-buttons, login-flow, oauth-routes không đổi hành vi).
+
+- [ ] **Step 9: Kiểm tay (xác nhận quyết định 14; không thay test)**
+
+`npm run dev` với `.dev.vars` có `MAIL_DRIVER=fake`, `OAUTH_DRIVER=fake`; bật `oauth_github` ở `/admin/flags`; đăng nhập bằng magic link; trên Chrome, Firefox và Safari: ở `/me` bấm "Link GitHub" → thấy trang "Link GitHub / Continue to GitHub" (không bị chặn, không có lỗi CSP trong console) → bấm "Continue to GitHub" → trình duyệt tới `github.com/login/oauth/authorize?...` (chưa có client thật nên GitHub báo lỗi ứng dụng là bình thường; cần xác nhận điều hướng xảy ra). Tải lại trang trung gian và nút Back: xác nhận hiện lại trang với `state` mới, không rơi về `signin` (quyết định 7). Ghi kết quả 3 trình duyệt vào báo cáo.
+
+- [ ] **Step 10: Tiêu chí chấp nhận (`ID` = `test/me/identities.test.ts`, `LS` = `test/auth/oauth-link-start.test.ts`)**
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | Cờ tắt và không identity: không có mục; một cờ bật: chỉ hàng đó, có nút; hàng đã liên kết hiện một mình khi cờ tắt | `npm test -w apps/web -- ID -t "is absent while every flag is off"`, `-t "one flag on"`, `-t "every flag off and one linked account"` |
+| 2 | Cờ bật nhưng chưa cấu hình: không mục; hàng đã liên kết (cờ tắt) cạnh hàng khả dụng, đúng thứ tự | `-t "not configured"` và `-t "stays visible next to a linkable one"` |
+| 3 | `label` chỉ của chủ, không nút khi đã liên kết, không `unlink` | `-t "every flag off and one linked account"` và `-t "not repeated"` |
+| 4 | `POST …/link`: 303 cùng site, cookie 120 s gắn session, không off-site | `-t "303 to the same-site start"` và `-t "never redirects off-site"` |
+| 5 | Origin, 404 (cờ, cấu hình, tên lạ), cần session, body 64 KB | `-t "refuses a missing or foreign Origin"`, `-t "is 404"`, `-t "needs a session"`, `-t "64 KB"` |
+| 6 | `start` + intent `link`: 200, không 3xx, đúng một `<a>` ra ngoài, mọi `<form>` đều `action="/logout"` | `npm test -w apps/web -- LS -t "answers 303, then start answers 200"` |
+| 7 | no-store, `same-origin`, không script/style/handler nội tuyến | `-t "is hardened"` |
+| 8 | Không tham số URL nào chọn intent; intent chỉ cho đúng session, provider, còn sống; tải lại hiện lại trang với state mới; flow `signin`, flow session khác, session hết hạn: 302 | `-t "no URL parameter"`, `-t "counts only for the session"`, `-t "reloading the page"`, `-t "sign-in flow cookie, another session"` |
+| 9 | `signin` không đổi | `-t "signing in is unchanged"` và `npm test -w apps/web -- test/auth/oauth-routes.test.ts test/auth/login-oauth-buttons.test.ts` |
+| 10 | 4 locale và parity | `-t "localized"` và `npm test -w apps/web -- test/i18n/parity.test.ts` |
+| 11 | Ranh giới module | `npm test -w apps/web -- test/architecture.test.ts` |
+| 12 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test` |
+
+(Thay `ID`, `LS` bằng đường dẫn đầy đủ khi chạy.)
+
+- [ ] **Step 11: Typecheck, toàn bộ test, commit**
+
+```bash
+git add apps/web/src/views/me/LinkedAccounts.tsx apps/web/src/views/auth.tsx apps/web/src/routes/oauth.tsx apps/web/src/routes/auth.tsx apps/web/src/routes/me.tsx \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/architecture.test.ts apps/web/test/oauth-flow.ts apps/web/test/auth/oauth-routes.test.ts \
+  apps/web/test/me/identities.test.ts apps/web/test/auth/oauth-link-start.test.ts
+git commit -m "feat(web): linked accounts section on /me, link POST and interstitial (VNX-2605a-1)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Kích cỡ ước tính:** mã ≈ 135 dòng (`LinkedAccounts` 50, `me.tsx` 25, `oauth.tsx` 30, `views/auth.tsx` 20, `auth.tsx` −8/+3), test ≈ 360 dòng (hai file mới ≈ 320, helper ≈ 30, sửa ≈ 15), locale 7 khóa × 4 file (+ 1 câu đổi). Tổng ≈ 500 không tính locale: không tách thêm.
+
+**Nghĩa vụ cho 8a-2 và Task 9:**
+- **8a-2:** thay nhánh `link_unsupported` của `callback`; `/me` đọc `?link=` và hiện thông báo; flow cookie `link` đã đúng hình (`sessionHash` có, `next: null`).
+- **Task 9:** thêm form `POST …/unlink` vào ô thứ ba của hàng đã liên kết trong `LinkedAccounts` (hàng này hiện kể cả khi cờ tắt); test "nothing mentions it" của 8a-1 đổi theo. Thuật ngữ hủy liên kết: vi "hủy liên kết", zh-Hans 取消关联, zh-Hant 取消連結.
+- **Kiểm tay (Step 9) và tải lại trang trung gian (quyết định 7)** ghi vào báo cáo; VNX-2608 lặp lại với provider thật.
+
+#### Task 8b: VNX-2605a-2 — Nhánh `link` của callback, xung đột, thông báo ở `/me`
+
+**Phạm vi:** (1) `callback` với flow cookie `intent: "link"` thay `link_unsupported`: cần phiên đang sống khớp `sessionHash` (`flowMatchesSession`), đổi `code`, gọi `linkIdentity` (Task 1), 303 về `/me` kèm `?link=<kết quả>`; (2) `/me` hiện thông báo theo `?link=`; (3) xung đột trả thông báo chung không nói ai sở hữu. **Không** tạo session, **không** đổi `sessions.method`, **không** gửi email (Task 9). Không migration, không dependency.
+
+**Files:**
+- Modify: `apps/web/src/routes/oauth.tsx` (hàm `finishLink`, nhánh trong `callback`, `OAuthFailure`)
+- Modify: `apps/web/src/routes/me.tsx` (đọc `?link=`, truyền `notice`)
+- Modify: `apps/web/src/views/me/LinkedAccounts.tsx` (prop `notice`, khối thông báo)
+- Modify: 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts` (4 khóa)
+- Modify (test): `apps/web/test/auth/oauth-routes.test.ts` (xóa test callback "refuses a flow cookie whose intent is link until Task 8")
+- Create (test): `apps/web/test/auth/oauth-link.test.ts`
+
+**Interfaces:**
+- Consumes (tên thật):
+  - `db/identities.ts`: `linkIdentity(db, { userId, provider, subject, label, now }): Promise<LinkResult>`, `LinkResult = { ok: true; identity } | { ok: false; reason: "already_linked" | "provider_account_taken" | "user_has_provider" }`. Khi `ok`, audit `auth.identity.link` `{ provider }` đã ghi cùng `db.batch`; khi từ chối không ghi gì.
+  - `domain/oauth.ts`: `flowMatchesSession(flow, sessionHash)`, `type FlowCookie`; `auth/oauth-cookie.ts`: `linkSessionHash`; `auth/cookies.ts`: `readSessionCookie`; `c.get("user")` (null cho phiên hết hạn hoặc user không `active`, nghĩa vụ Task 2 LOW-2).
+  - `routes/oauth.tsx`: `failed`, `logFailure`, `harden`, `MAX_CODE_CHARS`; `i18n/locales.ts`: `localizedPath`.
+  - Test (từ 8a-1): `linkViaStart`; `issueCodeFor`, `callbackReq`, `clearedOAuthCookie`, `linkedUser`, `enableProvider`; `signIn`, `ensureUser`; `issueFakeCode`, `resetFakeOAuth`.
+- Produces:
+  - `routes/oauth.tsx` (không export): `finishLink(c, { provider, client, flow, nowMs })`, `backToMe`; `OAuthFailure` bỏ `"link_unsupported"`, thêm `"session_mismatch"` và `"link_conflict"`.
+  - `views/me/LinkedAccounts.tsx`: `export type LinkNotice = "ok" | "taken" | "hasProvider" | "failed"`; prop `notice?: LinkNotice`.
+  - `?link=` là tập đóng bốn giá trị; giá trị khác bị bỏ.
+  - Khóa i18n mới (4): `me.identities.notice.ok`, `.taken`, `.hasProvider`, `.failed`.
+
+**Quyết định kỹ thuật (Planner; Reviewer kiểm):**
+1. **Kết quả đi qua `?link=<ok|taken|hasProvider|failed>` trên 303 về `/me`, không qua cookie hay session.** Chỉ một từ cố định trong whitelist, không phản chiếu input. Ai gửi nạn nhân link `/me?link=ok` chỉ làm hiện câu "đã liên kết" ở trang của nạn nhân: không đổi dữ liệu, không lộ gì. Chấp nhận.
+2. **Callback `link` kiểm phiên TRƯỚC khi đổi `code`.** Phiên không khớp (hết hạn, đăng xuất, đổi người, user bị khóa) → trang lỗi chung 400 (`OAuthErrorPage`), mã log `session_mismatch`, không gọi `exchange`, cookie xóa. Lý do: không tiêu `code` và không hỏi provider khi không có ai để gắn. Trang "We couldn't sign you in" hơi lệch chữ cho luồng liên kết, nhưng phiên đã mất thì "đăng nhập lại" là lời khuyên đúng.
+3. **Provider từ chối và lỗi `exchange` trong luồng `link`** (người dùng bấm "Cancel" ở provider, `code` hỏng) → 303 `/me?link=failed` (người dùng còn đăng nhập, về lại trang của họ), log đúng mã cố định như Task 6 (`provider_denied`, `missing_code`, `ExchangeFailure`). `state` sai, không cookie, hết hạn, rate limit vẫn là trang lỗi chung của Task 6: lúc đó chưa biết đó là luồng nào.
+4. **Ba kết quả của `linkIdentity`:** `ok` và `already_linked` → `link=ok` (cùng người, cùng tài khoản: thành công, idempotent, không audit thứ hai; Task 9 không gửi email cho `already_linked`); `provider_account_taken` → `link=taken`, câu (Owner 2026-10-08) nói tài khoản đó đã liên kết với một tài khoản VNX.SI khác và kèm contact@vnx.si, **không nói là tài khoản nào hay của ai**; `user_has_provider` → `link=hasProvider` (nói về chính tài khoản của người dùng: họ đã có một tài khoản của provider đó, hãy gỡ rồi liên kết lại; không rò gì về người khác). Cả hai xung đột log mã `link_conflict` (không subject, không label, không user id).
+5. **Callback `link` không đụng `sessions`:** không `markLogin`, `writeSessionCookie`, `createSession`, không audit `auth.login`. Test đếm hàng `sessions` trước và sau, khẳng định không có `Set-Cookie` của `__Host-vnx_session`, và `sessions.method` không đổi. Luồng `link` không bao giờ đăng nhập ai: nếu `subject` đã thuộc user khác, kết quả là `taken`, không bao giờ có session của user kia.
+6. **`label` lấy từ `result.identity.label`** (adapter đã chuẩn hóa 1–254 ký tự, quyết định 12); không so với `users.email`.
+7. **Móc cho Task 9:** `finishLink` giữ một chỗ duy nhất sau `linkIdentity`, có chú thích `VNX-2605b: the "account linked" e-mail goes here, only when linked.ok`. Task 9 thêm đúng một lời gọi `await notifyIdentityLinked(...)` ở đó (lỗi gửi mail được ghi log, không hoàn tác liên kết, không đổi `?link=`). 8b không để hàm rỗng.
+8. **Thông báo là `<p class="notice" role="alert">`** (thành công: `class="notice good" role="status"`; lớp `.good` đã có ở `app.css`) ngay dưới `<h2>` của mục `identities`; không hộp thoại hay trang riêng.
+
+**Câu chữ giao diện: Owner duyệt nguyên văn 2026-10-08:**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `me.identities.notice.ok` | Account linked. You can now sign in with it. | Đã liên kết tài khoản. Từ giờ bạn có thể đăng nhập bằng tài khoản này. | 账号已关联，现在可以用它登录。 | 帳號已連結，現在可以用它登入。 |
+| `me.identities.notice.taken` | That account is already linked to another VNX.SI account, so it can't be linked here. Link a different account, or write to contact@vnx.si if you need help. | Tài khoản đó đã được liên kết với một tài khoản VNX.SI khác nên không thể liên kết ở đây. Hãy liên kết một tài khoản khác, hoặc viết cho contact@vnx.si nếu bạn cần hỗ trợ. | 该账号已关联到另一个 VNX.SI 账户，无法在此关联。请关联其他账号；如需帮助，请发邮件至 contact@vnx.si。 | 該帳號已連結到另一個 VNX.SI 帳戶，無法在此連結。請連結其他帳號；如需協助，請寄信至 contact@vnx.si。 |
+| `me.identities.notice.hasProvider` | Your VNX.SI account already has a different account from that provider linked. To switch, unlink that one first, then link the new one. | Tài khoản VNX.SI của bạn đã liên kết một tài khoản khác của nhà cung cấp này. Muốn đổi, hãy hủy liên kết tài khoản đó trước, rồi liên kết tài khoản mới. | 你的 VNX.SI 账户已关联该平台的另一个账号。如需更换，请先取消关联原账号，再关联新账号。 | 你的 VNX.SI 帳戶已連結該平台的另一個帳號。如需更換，請先取消連結原帳號，再連結新帳號。 |
+| `me.identities.notice.failed` | We couldn't link that account. Please try again. | Không liên kết được tài khoản đó. Hãy thử lại. | 无法关联该账号，请重试。 | 無法連結該帳號，請再試一次。 |
+
+`.hasProvider` nhắc "hủy liên kết", nút chỉ có từ Task 9 (cùng nhánh, merge cùng nhau). Thông báo hiện trong mục `identities`, mà mục chỉ hiện khi có provider khả dụng hoặc identity (quyết định của Owner ở 8a-1); sau một lượt liên kết thành công user luôn có identity, nên thông báo luôn thấy được.
+
+- [ ] **Step 1: Test hỏng trước (`apps/web/test/auth/oauth-link.test.ts`)**
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { linkSessionHash, OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
+import { issueFakeCode, resetFakeOAuth } from "../../src/auth/oauth/fake.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import type { OAuthProvider } from "../../src/domain/identity.ts";
+import { encodeOAuthCookie, newFlowCookie, oauthRedirectUri } from "../../src/domain/oauth.ts";
+import { ensureUser, signIn } from "../fixtures.ts";
+import { getReq, testEnv } from "../helpers.ts";
+import { callbackReq, clearedOAuthCookie, enableProvider, linkedUser, linkViaStart } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}-${Math.random().toString(36).slice(2, 8)}`;
+const emailOf = (who: string) => `${who}-${tag()}@example.com`;
+const identityOf = () => ({ subject: `sub-${tag()}`, label: `login-${tag()}` });
+const count = async (sql: string, ...binds: unknown[]) => (await testEnv.DB.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0;
+const sessionsOf = (userId: string) => count("SELECT count(*) AS n FROM sessions WHERE user_id = ?1", userId);
+const linkAudits = (userId: string) => count("SELECT count(*) AS n FROM audit_log WHERE actor_user_id = ?1 AND action = 'auth.identity.link'", userId);
+const identitiesOf = (userId: string) => count("SELECT count(*) AS n FROM user_identities WHERE user_id = ?1", userId);
+const redirectUri = (provider: OAuthProvider) => oauthRedirectUri(testEnv.APP_ORIGIN, provider);
+
+const spies: Array<ReturnType<typeof vi.spyOn>> = [];
+beforeEach(async () => {
+  resetFakeOAuth();
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+  for (const method of ["error", "warn", "log", "info", "debug"] as const) spies.push(vi.spyOn(console, method).mockImplementation(() => {}));
+});
+afterEach(() => spies.splice(0).forEach((spy) => spy.mockRestore()));
+const logged = () => spies.flatMap((spy) => spy.mock.calls).map((args) => args.map(String).join(" "));
+const loggedCodes = () => logged().map((line) => (JSON.parse(line) as { code: string }).code);
+
+/** The user is signed in (magic link), presses Link, comes back from the provider with a code for `identity`. */
+async function comeBack(provider: OAuthProvider, session: string, identity: { subject: string; label: string }, postPrefix = "") {
+  const link = await linkViaStart(provider, session, { postPrefix });
+  if (!link.flow) throw new Error("no link flow");
+  const code = issueFakeCode(provider, identity, { verifier: link.flow.verifier, nonce: link.flow.nonce, redirectUri: redirectUri(provider) });
+  return { link, code, res: await callbackReq(provider, { code, state: link.flow.state }, `${session}; ${link.flowCookie}`) };
+}
+/** Hono escapes & ' " < >; a browser shows the characters (pattern of test/landing/page.test.ts:15). */
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const meHtml = async (path: string, cookie: string) => decode(await (await createApp().request(getReq(path, cookie), undefined, testEnv)).text());
+/** The 303 back to /me is hardened and clears the OAuth cookie, whatever the outcome (LOW-2). */
+function expectBack(res: Response, location: string) {
+  expect(res.status).toBe(303);
+  expect(res.headers.get("location")).toBe(location);
+  expect(clearedOAuthCookie(res)).not.toBeNull();
+  expect(res.headers.get("cache-control")).toBe("no-store");
+  expect(res.headers.get("referrer-policy")).toBe("same-origin");
+}
+
+describe("callback with a link flow (ADR-012 §4)", () => {
+  it("links the account to the signed-in user, audits, and redirects to /me with a success notice", async () => {
+    await enableProvider("github");
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const id = identityOf();
+    const before = await sessionsOf(user.id);
+    const { res } = await comeBack("github", cookie, id);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/me?link=ok");
+    expect(await identitiesOf(user.id)).toBe(1);
+    const row = await testEnv.DB.prepare("SELECT provider, provider_subject, label, show_on_profile FROM user_identities WHERE user_id = ?1").bind(user.id).first();
+    expect(row).toEqual({ provider: "github", provider_subject: id.subject, label: id.label, show_on_profile: 0 });
+    expect(await linkAudits(user.id)).toBe(1);
+    const audit = await testEnv.DB.prepare("SELECT data FROM audit_log WHERE actor_user_id = ?1 AND action = 'auth.identity.link'").bind(user.id).first<{ data: string }>();
+    expect(JSON.parse(audit?.data ?? "{}")).toEqual({ provider: "github" });
+    expect(clearedOAuthCookie(res)).not.toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("referrer-policy")).toBe("same-origin");
+    // No sign-in: no new session, no session cookie, the method is the one it was.
+    expect(await sessionsOf(user.id)).toBe(before);
+    expect(res.headers.getSetCookie().some((l) => l.startsWith("__Host-vnx_session="))).toBe(false);
+    expect(await count("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method <> 'magic_link'", user.id)).toBe(0);
+    expect(logged()).toHaveLength(0);
+  });
+
+  it.each([["", "/me?link=ok"], ["/vi", "/vi/me?link=ok"], ["/zh-hans", "/zh-hans/me?link=ok"], ["/zh-hant", "/zh-hant/me?link=ok"]])("redirects to the locale of the flow (POST prefix %j)", async (prefix, location) => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"));
+    const { res } = await comeBack("google", cookie, identityOf(), prefix);
+    expect(res.headers.get("location")).toBe(location);
+  });
+
+  it("works from an OAuth session too, and keeps its method", async () => {
+    await enableProvider("google");
+    const { user, cookie } = await signIn(emailOf("lan"), { method: "oauth_github" });
+    const { res } = await comeBack("google", cookie, identityOf());
+    expect(res.headers.get("location")).toBe("/me?link=ok");
+    expect(await count("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'oauth_github'", user.id)).toBe(1);
+    expect(await sessionsOf(user.id)).toBe(1);
+  });
+
+  it("the same account again is a success without a second audit row", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const id = identityOf();
+    const { user } = await linkedUser(email, "github", id);
+    const { cookie } = await signIn(email);
+    const audits = await linkAudits(user.id);
+    const { res } = await comeBack("github", cookie, id);
+    expect(res.headers.get("location")).toBe("/me?link=ok");
+    expect(await identitiesOf(user.id)).toBe(1);
+    expect(await linkAudits(user.id)).toBe(audits);
+  });
+
+  it("an account another user holds: 'taken', nothing changes, nobody is signed in, the owner is never named", async () => {
+    await enableProvider("github");
+    const id = identityOf();
+    const owner = await linkedUser(emailOf("owner"), "github", id);
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const ownerSessions = await sessionsOf(owner.user.id);
+    const { res } = await comeBack("github", cookie, id);
+    expectBack(res, "/me?link=taken");
+    expect(await identitiesOf(user.id)).toBe(0);
+    expect(await linkAudits(user.id)).toBe(0);
+    expect(await sessionsOf(owner.user.id)).toBe(ownerSessions);
+    expect(res.headers.getSetCookie().some((l) => l.startsWith("__Host-vnx_session="))).toBe(false);
+    const page = await meHtml("/me?link=taken", cookie);
+    expect(page).toContain("That account is already linked to another VNX.SI account");
+    expect(page).toContain("contact@vnx.si");
+    for (const secret of [owner.user.email, owner.user.id, id.subject, id.label]) {
+      expect(page).not.toContain(secret);
+      expect(logged().join("\n")).not.toContain(secret);
+    }
+    expect(loggedCodes()).toEqual(["link_conflict"]);
+  });
+
+  it("the 'taken' answer is the same whoever holds the account", async () => {
+    await enableProvider("github");
+    const a = identityOf();
+    const b = identityOf();
+    await linkedUser(emailOf("alice"), "github", a);
+    await linkedUser(emailOf("bob"), "github", b);
+    const { cookie } = await signIn(emailOf("lan"));
+    const first = (await comeBack("github", cookie, a)).res;
+    const second = (await comeBack("github", cookie, b)).res;
+    expect(first.headers.get("location")).toBe(second.headers.get("location"));
+  });
+
+  it("a user who already has another account of that provider gets 'hasProvider' and keeps the old one", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const old = identityOf();
+    const { user } = await linkedUser(email, "github", old);
+    const { cookie } = await signIn(email);
+    const { res } = await comeBack("github", cookie, identityOf());
+    expectBack(res, "/me?link=hasProvider");
+    expect(await identitiesOf(user.id)).toBe(1);
+    expect((await testEnv.DB.prepare("SELECT provider_subject AS s FROM user_identities WHERE user_id = ?1").bind(user.id).first<{ s: string }>())?.s).toBe(old.subject);
+  });
+
+  it("refuses when the session is not the one that asked: no exchange, no link, generic error page, cookie cleared", async () => {
+    await enableProvider("github");
+    const lan = await signIn(emailOf("lan"));
+    const minh = await signIn(emailOf("minh"));
+    const link = await linkViaStart("github", lan.cookie);
+    if (!link.flow) throw new Error("no link flow");
+    const code = issueFakeCode("github", identityOf(), { verifier: link.flow.verifier, nonce: link.flow.nonce, redirectUri: redirectUri("github") });
+    spies.forEach((s) => s.mockClear());
+    for (const session of [`${minh.cookie}; `, ""]) {
+      const res = await callbackReq("github", { code, state: link.flow.state }, `${session}${link.flowCookie}`);
+      expect(res.status).toBe(400);
+      expect(res.headers.get("location")).toBeNull();
+      expect(clearedOAuthCookie(res)).not.toBeNull();
+    }
+    expect(await identitiesOf(lan.user.id)).toBe(0);
+    expect(await identitiesOf(minh.user.id)).toBe(0);
+    expect(loggedCodes()).toEqual(["session_mismatch", "session_mismatch"]);
+    // The code was never spent: the right session can still use it.
+    const again = await callbackReq("github", { code, state: link.flow.state }, `${lan.cookie}; ${link.flowCookie}`);
+    expect(again.headers.get("location")).toBe("/me?link=ok");
+  });
+
+  it("refuses when the session expired between start and callback", async () => {
+    await enableProvider("github");
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const link = await linkViaStart("github", cookie);
+    if (!link.flow) throw new Error("no link flow");
+    await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE user_id = ?1").bind(user.id, "2020-01-01T00:00:00.000Z").run();
+    const code = issueFakeCode("github", identityOf(), { verifier: link.flow.verifier, nonce: link.flow.nonce, redirectUri: redirectUri("github") });
+    const res = await callbackReq("github", { code, state: link.flow.state }, `${cookie}; ${link.flowCookie}`);
+    expect(res.status).toBe(400);
+    expect(await identitiesOf(user.id)).toBe(0);
+  });
+
+  it("a link flow whose hash is for another session is not accepted even with a valid state", async () => {
+    await enableProvider("github");
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const flow = newFlowCookie({ provider: "github", intent: "link", state: "s".repeat(43), verifier: "v".repeat(43), nonce: "n".repeat(43), next: null, locale: "en", sessionHash: await linkSessionHash("another-session") }, Date.now());
+    const code = issueFakeCode("github", identityOf(), { verifier: flow.verifier, nonce: flow.nonce, redirectUri: redirectUri("github") });
+    const res = await callbackReq("github", { code, state: flow.state }, `${cookie}; ${OAUTH_COOKIE}=${encodeOAuthCookie(flow)}`);
+    expect(res.status).toBe(400);
+    expect(await identitiesOf(user.id)).toBe(0);
+  });
+
+  it("the provider's refusal and a bad code come back to /me with 'failed', one fixed log code each, cookie cleared", async () => {
+    await enableProvider("github");
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const denied = await linkViaStart("github", cookie);
+    spies.forEach((s) => s.mockClear());
+    const res = await callbackReq("github", { error: "access_denied", state: denied.flow?.state ?? "" }, `${cookie}; ${denied.flowCookie}`);
+    expectBack(res, "/me?link=failed");
+    const bad = await linkViaStart("github", cookie);
+    const res2 = await callbackReq("github", { code: "no-such-code", state: bad.flow?.state ?? "" }, `${cookie}; ${bad.flowCookie}`);
+    expectBack(res2, "/me?link=failed");
+    expect(loggedCodes()).toEqual(["provider_denied", "token_request"]);
+    expect(logged().join("\n")).not.toContain("no-such-code");
+    expect(await identitiesOf(user.id)).toBe(0);
+  });
+
+  it("a wrong state is the generic page (it is not known to be a link yet) and links nothing", async () => {
+    await enableProvider("github");
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const link = await linkViaStart("github", cookie);
+    const res = await callbackReq("github", { code: "x", state: "y".repeat(43) }, `${cookie}; ${link.flowCookie}`);
+    expect(res.status).toBe(400);
+    expect(await identitiesOf(user.id)).toBe(0);
+  });
+
+  it("does not look at the e-mail of the provider account: a matching users.email still links only the signed-in user", async () => {
+    await enableProvider("google");
+    const victim = await ensureUser(emailOf("victim"));
+    const { user, cookie } = await signIn(emailOf("lan"));
+    const { res } = await comeBack("google", cookie, { subject: `sub-${tag()}`, label: victim.email });
+    expect(res.headers.get("location")).toBe("/me?link=ok");
+    expect(await identitiesOf(user.id)).toBe(1);
+    expect(await identitiesOf(victim.id)).toBe(0);
+  });
+});
+
+describe("/me notices for ?link= (VNX-2605a-2)", () => {
+  it.each([
+    ["/me", "ok", "Account linked. You can now sign in with it."],
+    ["/vi/me", "taken", "Tài khoản đó đã được liên kết với một tài khoản VNX.SI khác nên không thể liên kết ở đây."],
+    ["/zh-hans/me", "hasProvider", "你的 VNX.SI 账户已关联该平台的另一个账号。"],
+    ["/zh-hant/me", "failed", "無法連結該帳號，請再試一次。"],
+  ])("%s?link=%s shows its message in the identities section", async (path, value, text) => {
+    await enableProvider("github");
+    resetFlagCache();
+    const { cookie } = await signIn(emailOf("lan"));
+    const html = await meHtml(`${path}?link=${value}`, cookie);
+    expect(html.match(/<section id="identities">.*?<\/section>/s)?.[0]).toContain(text);
+  });
+
+  it("shows nothing for an unknown value and reflects nothing", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    const { cookie } = await signIn(emailOf("lan"));
+    const html = await meHtml("/me?link=%3Cb%3Eevil%3C/b%3E", cookie);
+    expect(html).not.toContain("evil");
+    expect(html).not.toContain('class="notice');
+    expect(await meHtml("/me", cookie)).not.toContain('role="status"');
+  });
+});
+```
+
+- [ ] **Step 2: Chạy, thấy đỏ**
+
+`npm test -w apps/web -- test/auth/oauth-link.test.ts` → FAIL (callback trả 400 `link_unsupported`; `/me` chưa hiện thông báo).
+
+- [ ] **Step 3: Mã**
+
+`apps/web/src/routes/oauth.tsx`. Đổi kiểu (import thêm `flowMatchesSession` và `type FlowCookie` từ `../domain/oauth.ts`, `linkIdentity` từ `../db/identities.ts`, `type LinkNotice` không cần ở đây):
+
+```ts
+type OAuthFailure = "no_cookie" | "wrong_phase" | "state_mismatch" | "provider_denied" | "missing_code" | "session_mismatch" | "link_conflict" | "rate_limited" | "user_inactive" | "internal" | ExchangeFailure;
+```
+Thêm trước `registerOAuthRoutes`:
+
+```ts
+type LinkNotice = "ok" | "taken" | "hasProvider" | "failed";
+
+/** Back to the owner's page with one fixed word; `/me` shows the message for it. The URL carries no code, state or id. */
+const backToMe = (c: Context<AppEnv>, locale: Locale, notice: LinkNotice) => c.redirect(`${localizedPath(locale, "/me")}?link=${notice}`, 303);
+
+/**
+ * The `link` flow of the callback (ADR-012 §4). It needs the session that asked, checked BEFORE the code is spent, and attaches the
+ * provider account to THAT user and nothing else: no session is created or changed, no one is signed in, no e-mail is compared.
+ */
+async function finishLink(c: Context<AppEnv>, input: { provider: OAuthProvider; client: ProviderClient; flow: FlowCookie; nowMs: number }) {
+  const { provider, client, flow, nowMs } = input;
+  const user = c.get("user");
+  const raw = readSessionCookie(c);
+  // `user` is null for an expired or suspended session (Task 2 LOW-2).
+  if (!user || !raw || !flowMatchesSession(flow, await linkSessionHash(raw))) return failed(c, provider, "session_mismatch", flow.locale);
+
+  const code = c.req.query("code");
+  if (c.req.query("error") !== undefined) {
+    logFailure(c, provider, "provider_denied");
+    return backToMe(c, flow.locale, "failed");
+  }
+  if (!code || code.length > MAX_CODE_CHARS) {
+    logFailure(c, provider, "missing_code");
+    return backToMe(c, flow.locale, "failed");
+  }
+  const result = await client.exchange({ code, verifier: flow.verifier, nonce: flow.nonce, redirectUri: oauthRedirectUri(c.env.APP_ORIGIN, provider), now: nowMs });
+  if (!result.ok) {
+    logFailure(c, provider, result.reason);
+    return backToMe(c, flow.locale, "failed");
+  }
+
+  const linked = await linkIdentity(c.env.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: new Date(nowMs).toISOString() });
+  // VNX-2605b: the "account linked" e-mail goes here, only when linked.ok (not for already_linked).
+  if (linked.ok || linked.reason === "already_linked") return backToMe(c, flow.locale, "ok");
+  logFailure(c, provider, "link_conflict");
+  return backToMe(c, flow.locale, linked.reason === "user_has_provider" ? "hasProvider" : "taken");
+}
+```
+Trong `callback`, thay hai dòng "Task 8 adds the link branch … `link_unsupported`" bằng:
+
+```ts
+      if (flow.intent === "link") return await finishLink(c, { provider, client, flow, nowMs });
+```
+Nhánh `signin` phía sau không đổi.
+
+`apps/web/src/views/me/LinkedAccounts.tsx`: thêm `export type LinkNotice = "ok" | "taken" | "hasProvider" | "failed";`, prop `notice?: LinkNotice`, bảng khóa và khối ngay dưới `<h2>`:
+
+```tsx
+const NOTICE_KEY = {
+  ok: "me.identities.notice.ok",
+  taken: "me.identities.notice.taken",
+  hasProvider: "me.identities.notice.hasProvider",
+  failed: "me.identities.notice.failed",
+} as const;
+```
+```tsx
+      {notice ? (
+        <p class={notice === "ok" ? "notice good" : "notice"} role={notice === "ok" ? "status" : "alert"}>
+          {tr(NOTICE_KEY[notice])}
+        </p>
+      ) : null}
+```
+`apps/web/src/routes/me.tsx`: `const notice = (["ok", "taken", "hasProvider", "failed"] as const).find((v) => v === c.req.query("link"));` rồi `<LinkedAccounts locale={locale} identities={identities} linkable={linkable} notice={notice} />`.
+
+- [ ] **Step 4: Sửa test cũ và khóa i18n.** `test/auth/oauth-routes.test.ts`: xóa test "refuses a flow cookie whose intent is link until Task 8 …" (đã thay bằng khối trên); bỏ import hết dùng (`linkSessionHash`, `newFlowCookie`… nếu typecheck báo). Thêm 4 khóa vào 4 file, ngay sau `me.identities.link`.
+
+- [ ] **Step 5: Xanh**
+
+`npm test -w apps/web -- test/auth test/me test/i18n test/architecture.test.ts` → PASS. Kiểm tay: lặp lại Step 9 của 8a-1 (chuỗi đủ chạy ở VNX-2608; với provider giả chỉ tới bước "Continue").
+
+- [ ] **Step 6: Tiêu chí chấp nhận (`LK` = `test/auth/oauth-link.test.ts`)**
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | Liên kết đúng user, audit `{ provider }`, 303 `/me?link=ok`, cookie xóa, header | `npm test -w apps/web -- LK -t "links the account to the signed-in user"` |
+| 2 | Locale của flow quyết định đích; phiên OAuth giữ method | `-t "locale of the flow"` và `-t "keeps its method"` |
+| 3 | Không tạo session, không đăng nhập ai (kể cả chủ tài khoản bị xung đột) | các test trên cộng `-t "taken"` |
+| 4 | Xung đột: thông báo chung, không lộ chủ, cùng kết quả cho mọi chủ; `hasProvider` giữ cái cũ | `-t "taken"` và `-t "hasProvider"` |
+| 5 | `already_linked` thành công, không audit thứ hai | `-t "same account again"` |
+| 6 | Phiên sai hoặc mất: kiểm trước `exchange`, `code` không bị tiêu | `-t "session is not the one that asked"`, `-t "session expired"`, `-t "hash is for another session"` |
+| 7 | Provider từ chối, `code` hỏng: về `/me?link=failed`, mã log cố định, không rò | `-t "provider's refusal"` |
+| 8 | Không so email provider với `users.email` | `-t "does not look at the e-mail"` |
+| 9 | Thông báo `/me` 4 locale, tập đóng, không phản chiếu | `-t "notices for ?link="` |
+| 10 | Callback `signin` và mọi lỗi Task 6 không đổi | `npm test -w apps/web -- test/auth/oauth-routes.test.ts` |
+| 11 | Parity và ranh giới module | `npm test -w apps/web -- test/i18n/parity.test.ts test/architecture.test.ts` |
+| 12 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test` |
+
+(Thay `LK` bằng đường dẫn đầy đủ khi chạy.)
+
+- [ ] **Step 7: Typecheck, toàn bộ test, commit**
+
+```bash
+git add apps/web/src/routes/oauth.tsx apps/web/src/routes/me.tsx apps/web/src/views/me/LinkedAccounts.tsx \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/auth/oauth-routes.test.ts apps/web/test/auth/oauth-link.test.ts
+git commit -m "feat(web): link branch of the OAuth callback with generic conflict notice (VNX-2605a-2)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Kích cỡ ước tính:** mã ≈ 80 dòng (`oauth.tsx` 50, `me.tsx` 3, `LinkedAccounts` 20, bỏ ≈ 8), test ≈ 260 dòng, locale 4 khóa × 4 file. Tổng ≈ 340 không tính locale: không tách.
+
+**Nghĩa vụ cho Task 9:**
+- **Móc email:** một lời gọi trong `finishLink`, đúng chỗ chú thích `VNX-2605b`, chỉ khi `linked.ok`; lỗi gửi mail ghi log, không hoàn tác, không đổi `?link=`. Route `unlink` gọi email gỡ liên kết tương tự.
+- **Form `POST …/unlink`** vào ô thứ ba của hàng đã liên kết trong `LinkedAccounts`; hàng đã liên kết với cờ tắt vẫn gỡ được. Thông báo sau khi gỡ: mở rộng tập đóng của `?link=` (cập nhật test "unknown value") hoặc tham số riêng.
+- **VNX-2608:** thử luồng đủ với tài khoản thật cho ba provider trên Chrome, Firefox, Safari; xác nhận `taken` bằng hai tài khoản VNX.SI.
+- **Ghi nhận / kiểm tay VNX-2608 (LOW-3, review):** (a) sau một lượt liên kết xong, Back hai lần tới `start` mà không còn cookie: kết quả là 302 `signin` (đúng thiết kế, flow cookie đã xóa). (b) Nếu provider tự động chấp thuận, lượt `signin` ấy tạo session `oauth_*` mới thay session magic link, nên nhân viên mất quyền vào `/ops` cho tới lần magic link kế tiếp (đúng quyết định 9, nhưng gây bất ngờ; ghi vào "Ghi nhận" của `CURRENT-STATUS.md`). (c) `POST …/link` khi chưa đăng nhập được chuyển tới `/login?next=…`; sau khi đăng nhập `next` là một GET tới đường dẫn POST nên trả 404 (cùng hành vi mọi POST khác sau `requireUser`; không sửa ở đây).
+- **Thuật ngữ cho Task 9 (hủy liên kết):** vi "hủy liên kết", zh-Hans 取消关联, zh-Hant 取消連結.
+
+#### Kết quả review Task 8 (Opus, 2026-10-08): APPROVE_WITH_CHANGES (a-1, a-2), đã sửa MEDIUM-1..4, LOW-1..3; câu chữ và hiển thị mục /me do Owner duyệt 2026-10-08
