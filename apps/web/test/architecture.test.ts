@@ -183,7 +183,7 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
 // ADR-012 §5, ADR-004: linked identities are read and written only by their module. Ranking, public and builder-facing code
 // never touch the table. Each task adds the files it creates (2604b: routes/oauth.tsx; 2605a: routes/me.tsx; 2606b: routes/builder-profile.tsx, ...).
 // db/audit.ts is on the list only because the identity audit guard reads `id` and `user_id` of the row; it reads nothing else.
-const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts"]);
+const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts", "../src/routes/oauth.tsx"]);
 
 describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => {
   it("the allowlist holds only files that exist, and no ranking file is on it", () => {
@@ -204,5 +204,46 @@ describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => 
       expect(src, `${file} imports db/identities`).not.toMatch(/from\s+["'][^"']*\/db\/identities\.ts["']/);
       expect(src, `${file} touches user_identities`).not.toMatch(/\b(?:FROM|JOIN|INTO|UPDATE)\s+user_identities\b/);
     }
+  });
+});
+
+// ADR-012 §6, F3: the OAuth callback never looks up or accepts an Ops invitation (that stays a magic-link act, ADR-010 §3).
+const OAUTH_ROUTE = "../src/routes/oauth.tsx";
+
+/** Files reachable from `entry` through value imports (`import type` is erased, so it is not a dependency). */
+function reachableFrom(entry: string): Set<string> {
+  const seen = new Set<string>();
+  const queue = [entry];
+  while (queue.length) {
+    const file = queue.pop() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const src = sources[file] ?? "";
+    for (const m of src.matchAll(/^\s*(?:import|export)\s+(?!type\b)[^"';]*?from\s+["'](\.[^"']+)["']/gm)) {
+      const parts = file.slice(0, file.lastIndexOf("/")).split("/");
+      for (const seg of (m[1] ?? "").split("/")) {
+        if (seg === "..") parts.pop();
+        else if (seg !== ".") parts.push(seg);
+      }
+      const target = parts.join("/");
+      if (sources[target]) queue.push(target);
+    }
+  }
+  return seen;
+}
+
+describe("OAuth callback never touches Ops invites (ADR-012 §6, F3)", () => {
+  it("routes/oauth.tsx exists and reaches neither db/ops-members.ts nor auth/ops.ts", () => {
+    expect(sources[OAUTH_ROUTE]).toBeDefined();
+    const reached = reachableFrom(OAUTH_ROUTE);
+    expect(reached.has("../src/db/identities.ts")).toBe(true); // the walk really follows imports
+    // Positive control (L6): the same walk does find ops-members.ts from the Ops console route, so a `false` above means something.
+    expect(reachableFrom("../src/routes/ops.tsx").has("../src/db/ops-members.ts")).toBe(true);
+    expect(reached.has("../src/db/ops-members.ts")).toBe(false);
+    expect(reached.has("../src/auth/ops.ts")).toBe(false);
+  });
+
+  it("routes/oauth.tsx never reads an e-mail to find a user, nor mentions Ops invites", () => {
+    expect(sources[OAUTH_ROUTE] ?? "").not.toMatch(/findUserByEmail|createUser|ops_member|OpsInvite/);
   });
 });

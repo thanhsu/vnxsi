@@ -10,6 +10,7 @@ import { securityHeaders } from "./http/security-headers.ts";
 import { localeFromPath } from "./i18n/locales.ts";
 import { localeMiddleware } from "./i18n/middleware.ts";
 import { registerAuthRoutes } from "./routes/auth.tsx";
+import { registerOAuthRoutes } from "./routes/oauth.tsx";
 import { registerApplyRoutes } from "./routes/hub-apply.tsx";
 import { registerHubRoutes } from "./routes/hub.tsx";
 import { registerHubInquiryRoutes } from "./routes/hub-inquiries.tsx";
@@ -64,6 +65,7 @@ export function createApp() {
   registerLandingRoutes(app);
   registerLegalRoutes(app);
   registerContactRoutes(app);
+  registerOAuthRoutes(app);
   registerAuthRoutes(app);
   registerJoinRoutes(app);
   registerApplyRoutes(app);

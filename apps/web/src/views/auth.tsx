@@ -96,3 +96,35 @@ export const ConfirmLinkPage: FC<Base & { token: string; next: string | null; pu
     </Layout>
   );
 };
+
+/** ADR-012 §3.2: the same bytes for every unlinked provider account. Takes no e-mail, label, id or request reference, so it cannot differ. */
+export const OAuthNotLinkedPage: FC<Base> = (props) => {
+  const tr = translator(props.locale);
+  return (
+    <Layout locale={props.locale} title={tr("oauth.notLinked.title")} origin={props.origin} rest="/login" noindex>
+      <section class="card">
+        <h1>{tr("oauth.notLinked.title")}</h1>
+        <p>{tr("oauth.notLinked.body")}</p>
+        <a class="btn" href={localizedPath(props.locale, "/login")}>
+          {tr("oauth.cta.emailLink")}
+        </a>
+      </section>
+    </Layout>
+  );
+};
+
+/** One page for every other failure (bad state, denied, provider error, rate limit): it never says which. */
+export const OAuthErrorPage: FC<Base> = (props) => {
+  const tr = translator(props.locale);
+  return (
+    <Layout locale={props.locale} title={tr("oauth.error.title")} origin={props.origin} rest="/login" noindex>
+      <section class="card">
+        <h1>{tr("oauth.error.title")}</h1>
+        <p>{tr("oauth.error.body")}</p>
+        <a class="btn" href={localizedPath(props.locale, "/login")}>
+          {tr("oauth.cta.emailLink")}
+        </a>
+      </section>
+    </Layout>
+  );
+};
