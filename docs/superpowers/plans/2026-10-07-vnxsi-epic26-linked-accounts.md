@@ -113,13 +113,14 @@ Không chặn Task 1. Đây là các quy tắc nghiệp vụ hoặc nội dung m
 | 4 | VNX-2603c | Adapter GitHub (`access_token` + `GET /user`, `id` số, `login`), ghi chú `wrangler.jsonc` về 6 secret | 3 | 9 |
 | 5 | VNX-2604a | `requireOps` và `requireAdmin` chỉ nhận `magic_link`; test 404 kín và `isStaff` | 1 | 7 |
 | 6 | VNX-2604b | `GET /auth/oauth/:provider/start`, `GET …/callback` (intent `signin`): cờ, rate limit, state, user `suspended`, trang "chưa liên kết", session `oauth_*`, audit `auth.login` có `method`, `touchIdentityLogin` | 3, 4, 5 | 1, 2, 3, 10, 12 |
-| 7 | VNX-2604c | Nút provider ở `/login` (theo cờ + cấu hình), logo tự host, CSS | 6 | 10, 12 |
+| 7 | VNX-2604c | Nút provider ở `/login` (theo cờ + cấu hình), CSS; **chỉ chữ, logo tách sang VNX-2604d** (lệch "logo tự host" của dòng này, Reviewer duyệt 2026-10-08) | 6 | 10, 12 |
 | 8 | VNX-2605a | `/me` mục "Đăng nhập & tài khoản liên kết" (liệt kê), `POST …/link` (Origin, intent vào cookie, 303), nhánh `link` ở callback, xung đột identity; kiểm tay chuỗi redirect | 6 | 4, 5, 12 |
 | 9 | VNX-2605b | `POST …/unlink`; email báo liên kết và hủy liên kết 4 locale (`email/templates/identity.ts`) | 8 | 6 |
 | 10 | VNX-2606a | `setShowOnProfile` và công tắc ở `/hub/profile` (theo câu hỏi mở 5) | 1 | 8 |
 | 11 | VNX-2606b | Huy hiệu trên `/b/:handle` (GitHub link, LinkedIn nhãn, Google không); test không lộ client và không vào xếp hạng | 10, 8 | 8 |
 | 12 | VNX-2607 | Chép bổ sung ADR-012 vào `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code thật (tên cột, cookie, thời hạn); merge trước khi bật cờ | 9, 11 | — |
-| — | VNX-2608 | **HUMAN, HIGH-RISK.** Owner bật 3 cờ trên production, thử đăng nhập và liên kết bằng tài khoản thật | 2601, 12 | — |
+| — | VNX-2604d | Logo chính thức trong nút `/login` (file do Owner giao ở VNX-2601), CSS `.oauth-logo`, test file tồn tại. Phải xong **trước** VNX-2608 (Owner 2026-10-08, ADR-012 "Hệ quả": nút theo guideline thương hiệu của từng provider) | 2601, 7 | 10, 12 |
+| — | VNX-2608 | **HUMAN, HIGH-RISK.** Owner bật 3 cờ trên production, thử đăng nhập và liên kết bằng tài khoản thật | 2601, 12, 2604d | — |
 
 Mỗi task kết thúc bằng `npm run typecheck -w apps/web` và `npm test` xanh rồi mới commit.
 
@@ -3789,3 +3790,335 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **Task 12 (VNX-2607):** đối chiếu cookie `__Host-vnx_oauth` 10 phút và audit `auth.login` chỉ `{ method }` với addendum Privacy.
 
 #### Kết quả review Task 6 (Opus, 2026-10-07): APPROVE_WITH_CHANGES, đã sửa H1, M1, M2, L1–L6, S1, S4; câu chữ Owner duyệt 2026-10-08
+
+### Task 7: VNX-2604c — Nút đăng nhập Google, GitHub, LinkedIn ở `/login`
+
+**Phạm vi:** `LoginPage` hiện nút của provider có cờ bật **và** có credential, dưới form email. Nút là `<a>` tới `GET /auth/oauth/:provider/start?lang=<Locale>&next=<safeNext>` (Task 6). Không route mới, không migration, không logo bên thứ ba (xem "Quyết định kỹ thuật" 1). Trang `/login` khi cả ba cờ tắt giữ nguyên từng byte.
+
+**Files:**
+- Modify: `apps/web/src/views/auth.tsx` (hàm `oauthStartPath`, prop `providers` của `LoginPage`, khối nút)
+- Modify: `apps/web/src/routes/auth.tsx` (hàm `loginProviders(c)`; truyền `providers` ở 4 chỗ render `LoginPage`: GET `/login` và 3 nhánh lỗi của POST `/login`)
+- Modify: `apps/web/public/assets/app.css` (3 dòng `.oauth*`, sau `.field [aria-invalid="true"]`, trong khối "Forms, cards, notices")
+- Modify: 4 file `apps/web/src/i18n/messages/{en,vi,zh-hans,zh-hant}.ts` (2 khóa, ngay sau `oauth.cta.emailLink`)
+- Create (test): `apps/web/test/auth/login-oauth-buttons.test.ts`
+
+**Interfaces:**
+- Consumes (tên thật trong code):
+  - `domain/identity.ts`: `OAUTH_PROVIDERS` (thứ tự `google`, `github`, `linkedin`), `PROVIDER_FLAG`, `PROVIDER_NAME`, `type OAuthProvider`.
+  - `db/flags.ts`: `isFlagEnabled(db, key)` (cache 60 s, fail closed), `resetFlagCache`; `auth/oauth/index.ts`: `isProviderConfigured(env, provider)` (cùng quy tắc "đã cấu hình" mà `getOAuthProvider` và `enabledProvider` của `routes/oauth.tsx` dùng, quyết định 6).
+  - `http/next.ts`: `safeNext`; `i18n/locales.ts`: `type Locale`; `i18n/t.ts`: `translator` (tham số `{provider}`).
+  - Test: `test/oauth-flow.ts` (`enableProvider`, `startOAuth`), `test/helpers.ts` (`getReq`, `formPost`, `testEnv`).
+- Produces:
+  - `views/auth.tsx`: `oauthStartPath(provider: OAuthProvider, locale: Locale, next: string | null): string`; `LoginPage` nhận thêm `providers?: readonly OAuthProvider[]` (mặc định không có nút).
+  - `routes/auth.tsx` (không export): `loginProviders(c: Context<AppEnv>): Promise<OAuthProvider[]>`.
+  - CSS: `.oauth`, `.oauth-or` (không class nào khác).
+  - Khóa i18n: `oauth.or`, `oauth.signInWith`.
+
+**Quyết định kỹ thuật (Planner; Reviewer kiểm):**
+1. **Logo: nút chỉ có chữ ở task này; logo là một việc nhỏ riêng sau khi Owner giao file (khuyến nghị).** Quyết định 13 cấm Implementer tự vẽ logo; file chính thức chỉ có sau VNX-2601 (Owner). Hai phương án: (A) chữ trước, logo thêm sau; (B) `<img>` trỏ file Owner sẽ thả vào, kèm test file tồn tại. (B) làm task đỏ cho tới khi Owner giao và buộc một sự kiện vận hành vào đường code; còn `<img>` trỏ file thiếu mà không có test thì ra ảnh vỡ trên production. Chọn (A): nút `<a class="btn btn-ghost">` có chữ "Sign in with {provider}" đã đủ dùng, có tên truy cập được; không thêm file nào dưới `public/assets/brand/oauth/` (thư mục chưa tồn tại, task này không tạo). **Lệch so với bảng thứ tự dòng 7 ("logo tự host"): phạm vi chỉ-chữ này do Reviewer duyệt 2026-10-08; VNX-2604d là điều kiện tiên quyết của VNX-2608 (Owner 2026-10-08, xem "Nghĩa vụ").** Việc theo sau (VNX-2604d, ước lượng ≈ 40 dòng là **tạm thời**, ước lượng lại khi có file chính thức và yêu cầu guideline của Google về màu và padding): Owner bỏ 3 SVG vào `public/assets/brand/oauth/{google,github,linkedin}.svg`; thêm `<img class="oauth-logo" src="/assets/brand/oauth/<provider>.svg" alt="" width="20" height="20">` vào nút (logo trang trí, `alt=""` vì chữ đã nêu tên), một dòng CSS `.oauth-logo`, và test file tồn tại; CSP `img-src 'self'` đã đủ. Task này không để sẵn móc nào cho logo (không `PROVIDER_LOGO`, không class `oauth-logo`) để tránh code chết.
+2. **Nhãn nút: một khóa `oauth.signInWith` "Sign in with {provider}", không "Continue with".** Lý do: nút chỉ đăng nhập vào tài khoản đã liên kết, không bao giờ tạo tài khoản (ADR-012 §3); "Continue with" gợi ý đăng ký. Khớp thuật ngữ Owner đã duyệt ở Task 6 (vi "Đăng nhập bằng …", zh-Hans 登录, zh-Hant 登入). Tên provider lấy từ `PROVIDER_NAME` (không dịch) qua tham số `{provider}`: một khóa thay vì ba. Dải phân cách "hoặc" là khóa `oauth.or`.
+3. **Nút là `<a>`, không bao giờ `<form>`** (Review Focus 12, Rủi ro đã biết): `form-action 'self'` chặn cả form GET qua chuỗi redirect. Test khẳng định `/login` có đúng một `<form>` và nó không trỏ `/auth/oauth/`.
+4. **Cờ và cấu hình đọc ở route, không ở view.** `loginProviders(c)` giữ thứ tự `OAUTH_PROVIDERS`, lọc `isFlagEnabled(db, PROVIDER_FLAG[p]) && isProviderConfigured(c.env, p)`. View thuần: nhận danh sách, không biết gì về cờ. D1 lỗi → cờ tắt → không nút (fail closed), `/login` vẫn dùng được bằng email.
+5. **Cả ba nhánh lỗi của `POST /login` (400, 429, 502) cũng truyền `providers`**, vì người nhập sai email phải còn thấy nút; nếu không trang đổi hình giữa GET và POST lỗi. `LoginSentPage` (200 sau khi gửi email) không có nút.
+6. **`next`:** lấy từ prop `next` của `LoginPage` (route đã `safeNext(c.req.query("next"))` hoặc `safeNext(form.next)`); `oauthStartPath` chạy `safeNext` lần nữa (nhiều lớp), rồi `URLSearchParams` mã hóa. `next` rỗng hoặc không hợp lệ: bỏ hẳn tham số. `lang` luôn có và là **id `Locale`** (`en`, `vi`, `zh-Hans`, `zh-Hant`), không phải tiền tố URL (`zh-hans`): `isLocale` ở `start` phân biệt hoa thường (nghĩa vụ Task 6). Thứ tự tham số cố định: `lang` rồi `next`. Hono escape `&` thành `&amp;` trong thuộc tính; trình duyệt giải lại, nên test cũng phải giải trước khi `new URL`.
+7. **Khối nút là một `<div class="oauth">` không lồng `<div>`** (dải "hoặc" là `<p class="oauth-or">`, các nút là `<a>` con trực tiếp), để test cắt khối bằng một regex và so phần còn lại với trang khi cờ tắt. Khối chỉ render khi có ít nhất một provider; ngược lại là `null`, không để lại khoảng trắng, nên trang cờ tắt giống hệt trang hiện tại từng byte. `Layout` không chứa request id nên không cần chuẩn hóa gì khi so.
+8. **CSS dùng lại `.btn btn-ghost`** (đã có `min-height: 44px` của VNX-0706, viền rõ trên nền thẻ, hover) và vòng focus chung `:focus-visible { outline: 3px solid var(--primary) }` (`app.css:105`): không thêm quy tắc focus, kích thước hay màu cho nút. Chỉ thêm `.oauth` (cột, khoảng cách) và `.oauth-or` (đường kẻ hai bên bằng `::before/::after`). Không `style=`.
+9. **Test dùng `OAUTH_DRIVER: "fake"` của `testEnv`** (mọi provider "đã cấu hình" khi dùng provider giả), nên cờ là thứ đổi kết quả; ca "cờ bật mà thiếu credential" dùng `{ ...testEnv, OAUTH_DRIVER: undefined }` như Task 6. Mỗi test xóa cờ `oauth_%` và gọi `resetFlagCache()`.
+
+**Câu chữ giao diện (Owner duyệt nguyên văn 2026-10-08):**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `oauth.or` | or | hoặc | 或 | 或 |
+| `oauth.signInWith` | Sign in with {provider} | Đăng nhập bằng {provider} | 使用 {provider} 账号登录 | 使用 {provider} 帳號登入 |
+
+Tên provider (Google, GitHub, LinkedIn) không dịch. `{provider}` là chỗ thay thế của `t()`; có dấu cách giữa chữ Hán và tên Latin.
+
+- [ ] **Step 1: Test hỏng trước (`apps/web/test/auth/login-oauth-buttons.test.ts`)**
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import { OAUTH_PROVIDERS, PROVIDER_NAME, type OAuthProvider } from "../../src/domain/identity.ts";
+import type { Bindings } from "../../src/env.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+import { enableProvider, startOAuth } from "../oauth-flow.ts";
+
+const withoutCredentials = { ...testEnv, OAUTH_DRIVER: undefined } as Bindings;
+const BLOCK = /<div class="oauth">.*?<\/div>/s;
+const LINK = /<a [^>]*href="(\/auth\/oauth\/[^"]+)"[^>]*>([^<]*)<\/a>/g;
+
+beforeEach(async () => {
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+});
+
+async function loginHtml(path = "/login", env: Bindings = testEnv): Promise<{ res: Response; html: string }> {
+  const res = await createApp().request(getReq(path), undefined, env);
+  return { res, html: await res.text() };
+}
+
+/** Every link to /auth/oauth/ on the page: its URL (entities decoded, as a browser does) and its text. */
+function oauthLinks(html: string) {
+  return [...html.matchAll(LINK)].map((m) => ({ href: (m[1] ?? "").replaceAll("&amp;", "&"), text: m[2] ?? "" }));
+}
+
+async function enableAll() {
+  for (const p of OAUTH_PROVIDERS) await enableProvider(p);
+  resetFlagCache();
+}
+
+describe("/login provider buttons (VNX-2604c)", () => {
+  it("shows no button, and the same bytes, while the three flags are off", async () => {
+    for (const path of ["/login", "/vi/login", "/zh-hans/login", "/zh-hant/login"]) {
+      const { res, html } = await loginHtml(path);
+      expect(res.status).toBe(200);
+      expect(html, path).not.toContain("/auth/oauth/");
+      expect(html, path).not.toContain("oauth");
+      // Nothing between the form and the end of the card: the page is the one VNX-0506 shipped.
+      expect(html, path).toMatch(/<\/button><\/form><\/section>/);
+    }
+  });
+
+  it("with every flag on, the page minus the block is the flags-off page", async () => {
+    const off = (await loginHtml("/vi/login?next=/hub")).html;
+    await enableAll();
+    const on = (await loginHtml("/vi/login?next=/hub")).html;
+    expect(on).toMatch(BLOCK);
+    expect(on.replace(BLOCK, "")).toBe(off);
+  });
+
+  it.each(OAUTH_PROVIDERS)("%s: button only when its own flag is on", async (provider: OAuthProvider) => {
+    expect(oauthLinks((await loginHtml()).html)).toEqual([]);
+    await enableProvider(provider);
+    resetFlagCache();
+    const links = oauthLinks((await loginHtml()).html);
+    expect(links).toHaveLength(1);
+    expect(links[0]?.href.startsWith(`/auth/oauth/${provider}/start?`)).toBe(true);
+    expect(links[0]?.text).toBe(`Sign in with ${PROVIDER_NAME[provider]}`);
+  });
+
+  it.each(OAUTH_PROVIDERS)("%s: flag on but no credentials means no button (decision 6)", async (provider: OAuthProvider) => {
+    await enableProvider(provider);
+    resetFlagCache();
+    expect(oauthLinks((await loginHtml("/login", withoutCredentials)).html)).toEqual([]);
+    expect(oauthLinks((await loginHtml("/login", testEnv)).html)).toHaveLength(1);
+  });
+
+  it("all on: three plain links in catalogue order, below the e-mail form, and no form posts to /auth/oauth/", async () => {
+    await enableAll();
+    const { html } = await loginHtml();
+    expect(oauthLinks(html).map((l) => l.text)).toEqual(["Sign in with Google", "Sign in with GitHub", "Sign in with LinkedIn"]);
+    expect(html.indexOf("</form>")).toBeLessThan(html.indexOf('class="oauth"'));
+    const forms = [...html.matchAll(/<form\b[^>]*>/g)].map((m) => m[0]);
+    expect(forms).toHaveLength(1);
+    expect(forms[0]).toContain('action="/login"');
+    expect(forms.some((f) => f.includes("/auth/oauth/"))).toBe(false);
+    expect(html).toContain('<p class="oauth-or">or</p>');
+  });
+
+  it("sends the Locale id as lang, and start reads it back, in all four locales", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    const cases = [["/login", "en"], ["/vi/login", "vi"], ["/zh-hans/login", "zh-Hans"], ["/zh-hant/login", "zh-Hant"]] as const;
+    for (const [path, lang] of cases) {
+      const link = oauthLinks((await loginHtml(path)).html)[0];
+      const url = new URL(link?.href ?? "", "https://vnx.si");
+      expect(url.searchParams.get("lang"), path).toBe(lang);
+      expect((await startOAuth("github", url.search)).flow.locale, path).toBe(lang);
+    }
+  });
+
+  it("passes a safe next, URL-encoded, through to the flow; drops an unsafe one", async () => {
+    await enableProvider("google");
+    resetFlagCache();
+    const next = "/hub?a=1&b=2";
+    const link = oauthLinks((await loginHtml(`/login?next=${encodeURIComponent(next)}`)).html)[0];
+    expect(link?.href).toBe(`/auth/oauth/google/start?lang=en&next=${encodeURIComponent(next)}`);
+    expect((await startOAuth("google", new URL(link?.href ?? "", "https://vnx.si").search)).flow.next).toBe(next);
+
+    for (const bad of ["//evil.example", "https://evil.example/x", "/\\evil", "javascript:alert(1)"]) {
+      const l = oauthLinks((await loginHtml(`/login?next=${encodeURIComponent(bad)}`)).html)[0];
+      expect(l?.href, bad).toBe("/auth/oauth/google/start?lang=en");
+    }
+  });
+
+  it("keeps the buttons on the error page of a bad e-mail (POST /login, 400)", async () => {
+    await enableProvider("linkedin");
+    resetFlagCache();
+    const res = await createApp().request(formPost("/vi/login", { email: "not-an-email", next: "/hub" }), undefined, testEnv);
+    expect(res.status).toBe(400);
+    const links = oauthLinks(await res.text());
+    expect(links).toHaveLength(1);
+    expect(links[0]?.text).toBe("Đăng nhập bằng LinkedIn");
+    expect(links[0]?.href).toBe("/auth/oauth/linkedin/start?lang=vi&next=%2Fhub");
+  });
+
+  it("keeps the buttons on the rate-limited page (POST /login, 429)", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    const statuses: number[] = [];
+    let last = "";
+    for (let i = 0; i < 6; i++) {
+      const res = await createApp().request(formPost("/login", { email: "flood-oauth@vnx.si" }), undefined, testEnv);
+      statuses.push(res.status);
+      last = await res.text();
+    }
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+    expect(oauthLinks(last)).toHaveLength(1);
+  });
+
+  it("is accessible and CSP-clean: button class, provider in the name, no inline style, script, image or svg", async () => {
+    await enableAll();
+    const { res, html } = await loginHtml();
+    const block = BLOCK.exec(html)?.[0] ?? "";
+    expect(block).toContain('class="btn btn-ghost"');
+    for (const p of OAUTH_PROVIDERS) expect(block).toContain(PROVIDER_NAME[p]);
+    expect(block).not.toMatch(/style=|<script|<img|<svg|\son\w+=|<form|<button/i);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    // A reminder for VNX-2604d: official logos are self-hosted <img>, so img-src must stay 'self'.
+    expect(csp).toContain("img-src 'self'");
+    expect(csp).toContain("form-action 'self'");
+  });
+
+  it("states the text in all four locales", async () => {
+    await enableProvider("github");
+    resetFlagCache();
+    const expected = { "/login": ["Sign in with GitHub", "or"], "/vi/login": ["Đăng nhập bằng GitHub", "hoặc"], "/zh-hans/login": ["使用 GitHub 账号登录", "或"], "/zh-hant/login": ["使用 GitHub 帳號登入", "或"] } as const;
+    for (const [path, [label, or]] of Object.entries(expected)) {
+      const { html } = await loginHtml(path);
+      expect(oauthLinks(html)[0]?.text, path).toBe(label);
+      expect(html, path).toContain(`<p class="oauth-or">${or}</p>`);
+    }
+  });
+});
+```
+
+Chạy: `npm test -w apps/web -- test/auth/login-oauth-buttons.test.ts`. Kỳ vọng: đỏ ở mọi ca có nút (không có `<a>` tới `/auth/oauth/`, thiếu `oauth.or`/`oauth.signInWith`). Ca "cờ tắt" có thể đã xanh vì chưa có nút: đó là hàng rào chống hồi quy, đúng.
+
+- [ ] **Step 2: Khóa i18n (4 locale)**
+
+Thêm vào mỗi file, ngay sau `"oauth.cta.emailLink"`, đúng bảng trên (Owner đã duyệt). `en.ts`:
+
+```ts
+  "oauth.or": "or",
+  "oauth.signInWith": "Sign in with {provider}",
+```
+
+`vi.ts`: `"oauth.or": "hoặc"`, `"oauth.signInWith": "Đăng nhập bằng {provider}"`. `zh-hans.ts`: `"oauth.or": "或"`, `"oauth.signInWith": "使用 {provider} 账号登录"`. `zh-hant.ts`: `"oauth.or": "或"`, `"oauth.signInWith": "使用 {provider} 帳號登入"`.
+
+Chạy: `npm test -w apps/web -- test/i18n/parity.test.ts` → PASS.
+
+- [ ] **Step 3: `views/auth.tsx`**
+
+Thêm import và hàm, rồi sửa `LoginPage`:
+
+```tsx
+import { type OAuthProvider, PROVIDER_NAME } from "../domain/identity.ts";
+import { safeNext } from "../http/next.ts";
+
+/** Where a provider button goes. `lang` is the Locale id (case matters to `start`); `next` is re-checked and URL-encoded (VNX-2604c). */
+export function oauthStartPath(provider: OAuthProvider, locale: Locale, next: string | null): string {
+  const query = new URLSearchParams({ lang: locale });
+  const safe = safeNext(next);
+  if (safe) query.set("next", safe);
+  return `/auth/oauth/${provider}/start?${query.toString()}`;
+}
+```
+
+`LoginPage`: kiểu prop thành `FC<Base & { email?: string; next?: string | null; error?: string; providers?: readonly OAuthProvider[] }>`, và ngay sau `</form>` (trước `</section>`):
+
+```tsx
+        {props.providers?.length ? (
+          <div class="oauth">
+            <p class="oauth-or">{tr("oauth.or")}</p>
+            {props.providers.map((provider) => (
+              <a class="btn btn-ghost" href={oauthStartPath(provider, props.locale, props.next ?? null)}>
+                {tr("oauth.signInWith", { provider: PROVIDER_NAME[provider] })}
+              </a>
+            ))}
+          </div>
+        ) : null}
+```
+
+`<a>` là con trực tiếp của `.oauth`, không bọc `<div>` hay `<ul>` (quyết định 7). Không `rel`/`target`: điều hướng cùng site.
+
+- [ ] **Step 4: `routes/auth.tsx`**
+
+Thêm import (`isFlagEnabled` từ `../db/flags.ts`, `isProviderConfigured` từ `../auth/oauth/index.ts`, `OAUTH_PROVIDERS`, `PROVIDER_FLAG`, `type OAuthProvider` từ `../domain/identity.ts`) và hàm cạnh `origin`:
+
+```ts
+/** The providers whose button `/login` shows: flag on AND configured, the rule `routes/oauth.tsx` applies to start and callback (decision 6). */
+async function loginProviders(c: Context<AppEnv>): Promise<OAuthProvider[]> {
+  const shown: OAuthProvider[] = [];
+  for (const provider of OAUTH_PROVIDERS) {
+    if ((await isFlagEnabled(c.env.DB, PROVIDER_FLAG[provider])) && isProviderConfigured(c.env, provider)) shown.push(provider);
+  }
+  return shown;
+}
+```
+
+Sửa 4 chỗ gọi `LoginPage` thành có `providers`. GET `/login` thành `async (c) => page(c, <LoginPage … providers={await loginProviders(c)} />)`. Ở POST `/login` KHÔNG tính `providers` trước khi kiểm hợp lệ (request thành công không cần đọc cờ). Thêm hàm cục bộ cạnh `tr`:
+
+```tsx
+    const retry = async (status: 400 | 429 | 502, email: string, error: string) =>
+      page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={error} providers={await loginProviders(c)} />, status);
+```
+
+và dùng `retry` cho ba nhánh lỗi (400 với `typed`, 429, 502) thay cho ba lời gọi `page(c, <LoginPage …/>, status)` hiện có; `LoginSentPage` không có nút.
+
+- [ ] **Step 5: CSS (`public/assets/app.css`)**
+
+Thêm ngay sau quy tắc `.field` cuối cùng (`.field [aria-invalid="true"] { … }`), vẫn trong khối "Forms, cards, notices":
+
+```css
+.oauth { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.oauth-or { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--muted); font-size: 14px; }
+.oauth-or::before, .oauth-or::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border); }
+```
+
+Không thêm quy tắc focus, kích thước hay màu cho nút (quyết định 8).
+
+- [ ] **Step 6: Xanh từng file**
+
+`npm test -w apps/web -- test/auth/login-oauth-buttons.test.ts` → PASS; rồi `npm test -w apps/web -- test/auth test/i18n test/architecture.test.ts` (login-flow, oauth-routes không đổi hành vi) → PASS.
+
+- [ ] **Step 7: Tiêu chí chấp nhận (mỗi cái một lệnh; ký hiệu `T` = `test/auth/login-oauth-buttons.test.ts`)**
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | Cờ tắt: không nút, `/login` giống hệt từng byte (4 locale) | `npm test -w apps/web -- T -t "no button, and the same bytes"` và `-t "minus the block"` |
+| 2 | Mỗi provider bật/tắt riêng; cờ bật mà thiếu credential thì ẩn | `-t "button only when its own flag"` và `-t "no credentials"` |
+| 3 | `<a>` thuần, không `<form>` nào trỏ `/auth/oauth/`, nằm dưới form email, thứ tự cố định | `-t "three plain links"` |
+| 4 | `lang` đúng id `Locale` ở 4 locale và `start` đọc lại đúng | `-t "Locale id as lang"` |
+| 5 | `next` qua `safeNext`, mã hóa, tới được flow cookie; next xấu bị bỏ | `-t "safe next"` |
+| 6 | Trang lỗi của POST `/login` (400 và 429) vẫn có nút | `-t "error page of a bad e-mail"` và `-t "rate-limited page"` |
+| 7 | CSP và a11y: không inline/ảnh/svg, tên có provider, lớp `btn btn-ghost` (44 px, focus chung) | `-t "accessible and CSP-clean"` |
+| 8 | Câu chữ 4 locale; parity | `-t "all four locales"` và `npm test -w apps/web -- test/i18n/parity.test.ts` |
+| 9 | Không đổi hành vi magic link và route OAuth | `npm test -w apps/web -- test/auth/login-flow.test.ts test/auth/oauth-routes.test.ts` |
+| 10 | Typecheck và toàn bộ test | `npm run typecheck -w apps/web` và `npm test` |
+
+(Thay `T` bằng đường dẫn đầy đủ khi chạy.)
+
+- [ ] **Step 8: Typecheck, toàn bộ test, commit**
+
+Chạy `npm run typecheck -w apps/web` (0 lỗi) và `npm test` (xanh), rồi:
+
+```bash
+git add apps/web/src/views/auth.tsx apps/web/src/routes/auth.tsx apps/web/public/assets/app.css \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/auth/login-oauth-buttons.test.ts
+git commit -m "feat(web): provider sign-in buttons on /login behind flags (VNX-2604c)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Kích cỡ ước tính:** mã nguồn ~45 dòng (`views/auth.tsx` ~22, `routes/auth.tsx` ~20, CSS 3), test ~150 dòng, locale 2 khóa × 4 file. Tổng ~200 dòng không tính locale: **không tách**.
+
+**Nghĩa vụ cho task sau:**
+- **VNX-2604d là điều kiện tiên quyết của VNX-2608 (Owner 2026-10-08):** không bật cờ nào trên production khi nút chưa có logo chính thức theo guideline của từng provider (ADR-012 "Hệ quả"). Việc: sau khi Owner giao logo ở VNX-2601, thêm 3 SVG chính thức vào `public/assets/brand/oauth/`, `<img alt="" width height>` trong nút, `.oauth-logo`, test file tồn tại. Implementer không tự vẽ logo.
+- **Task 8:** `/me` không dùng lại `oauthStartPath`: liên kết đi qua `POST /me/identities/:provider/link`, không qua nút này.
+- **VNX-2608:** thử tay các nút trên Chrome, Firefox, Safari (điều hướng `<a>` tới `start`, rồi 302 sang provider).
+
+#### Kết quả review Task 7 (Opus, 2026-10-08): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, LOW-1, LOW-2, S1, S2; câu chữ Owner duyệt 2026-10-08
