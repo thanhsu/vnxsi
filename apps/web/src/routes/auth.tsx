@@ -4,14 +4,17 @@ import { adminEmails } from "../auth/admin.ts";
 import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "../auth/cookies.ts";
 import { sha256Hex } from "../auth/crypto.ts";
 import { readInviteCookie, writeInviteCookie } from "../auth/invite-cookie.ts";
+import { isProviderConfigured } from "../auth/oauth/index.ts";
 import { createSession, deleteSession } from "../auth/sessions.ts";
 import { type ConsumedToken, consumeLoginToken, createLoginToken, describeToken, peekLoginToken, type TokenPurpose } from "../auth/tokens.ts";
 import { writeAudit } from "../db/audit.ts";
+import { isFlagEnabled } from "../db/flags.ts";
 import { findInquiryById } from "../db/inquiries.ts";
 import { findRequestById } from "../db/requests.ts";
 import { createUser, findUserByEmail, markLogin, type UserRow } from "../db/users.ts";
 import { getMailer } from "../email/index.ts";
 import { loginEmail } from "../email/templates/login.ts";
+import { OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG } from "../domain/identity.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
@@ -30,6 +33,15 @@ const HOUR = 3600;
 
 function origin(c: Context<AppEnv>) {
   return new URL(c.req.url).origin;
+}
+
+/** The providers whose button `/login` shows: flag on AND configured, the rule `routes/oauth.tsx` applies to start and callback (decision 6). */
+async function loginProviders(c: Context<AppEnv>): Promise<OAuthProvider[]> {
+  const shown: OAuthProvider[] = [];
+  for (const provider of OAUTH_PROVIDERS) {
+    if ((await isFlagEnabled(c.env.DB, PROVIDER_FLAG[provider])) && isProviderConfigured(c.env, provider)) shown.push(provider);
+  }
+  return shown;
 }
 
 /** Purposes the confirmation link accepts. */
@@ -78,8 +90,8 @@ async function invalidLink(c: Context<AppEnv>, raw: string) {
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
-  onLocalized(app, "get", "/login", (c) =>
-    page(c, <LoginPage locale={c.get("locale")} origin={origin(c)} next={safeNext(c.req.query("next"))} />),
+  onLocalized(app, "get", "/login", async (c) =>
+    page(c, <LoginPage locale={c.get("locale")} origin={origin(c)} next={safeNext(c.req.query("next"))} providers={await loginProviders(c)} />),
   );
 
   onLocalized(app, "post", "/login", async (c) => {
@@ -87,10 +99,12 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const tr = translator(locale);
     const form = await c.req.parseBody();
     const next = safeNext(form.next);
+    const retry = async (status: 400 | 429 | 502, email: string, error: string) =>
+      page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={error} providers={await loginProviders(c)} />, status);
     const parsed = LoginForm.safeParse({ email: form.email });
     if (!parsed.success) {
       const typed = typeof form.email === "string" ? form.email : "";
-      return page(c, <LoginPage locale={locale} origin={origin(c)} email={typed} next={next} error={tr("login.error.email")} />, 400);
+      return retry(400, typed, tr("login.error.email"));
     }
     const email = parsed.data.email;
     const now = new Date();
@@ -98,7 +112,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const byEmail = await hitRateLimit(c.env.DB, `login:email:${await sha256Hex(email)}`, 5, HOUR, now.getTime());
     const byIp = await hitRateLimit(c.env.DB, `login:ip:${ip}`, 20, HOUR, now.getTime());
     if (!byEmail.allowed || !byIp.allowed) {
-      return page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={tr("login.error.rateLimited")} />, 429);
+      return retry(429, email, tr("login.error.rateLimited"));
     }
 
     const token = await createLoginToken(c.env.DB, { email, purpose: "login", locale, inviteCodeHash: readInviteCookie(c) }, now);
@@ -109,7 +123,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
       await getMailer(c.env).send({ to: email, ...loginEmail(locale, link.toString()) });
     } catch (err) {
       console.error(JSON.stringify({ requestId: c.get("requestId"), event: "login.mail_failed", error: String(err) }));
-      return page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={tr("login.error.sendFailed")} />, 502);
+      return retry(502, email, tr("login.error.sendFailed"));
     }
     return page(c, <LoginSentPage locale={locale} origin={origin(c)} email={email} />);
   });

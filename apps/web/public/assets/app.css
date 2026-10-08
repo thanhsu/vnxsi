@@ -208,6 +208,9 @@ details > summary::-webkit-details-marker { display: none; }
 .field textarea { min-height: 140px; resize: vertical; }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--primary); }
 .field [aria-invalid="true"] { border-color: var(--error); }
+.oauth { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.oauth-or { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--muted); font-size: 14px; }
+.oauth-or::before, .oauth-or::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border); }
 fieldset.field { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px; }
 .choice { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .error-msg { color: var(--error); }

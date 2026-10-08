@@ -44,6 +44,8 @@ export const zhHans: Messages = {
   "oauth.error.title": "无法登录",
   "oauth.error.body": "此次登录未成功。请重试，或改用邮箱登录。",
   "oauth.cta.emailLink": "用邮箱登录",
+  "oauth.or": "或",
+  "oauth.signInWith": "使用 {provider} 账号登录",
   "email.login.subject": "你的 VNX.SI 登录链接",
   "email.login.intro": "点击下方链接登录 VNX.SI。链接仅可使用一次，15 分钟后失效。",
   "email.login.ignore": "如果这不是你本人的操作，请忽略此邮件。",

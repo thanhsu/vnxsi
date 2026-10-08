@@ -44,6 +44,8 @@ export const vi: Messages = {
   "oauth.error.title": "Không đăng nhập được",
   "oauth.error.body": "Lượt đăng nhập này không thành công. Hãy thử lại, hoặc đăng nhập bằng link qua email.",
   "oauth.cta.emailLink": "Đăng nhập bằng link qua email",
+  "oauth.or": "hoặc",
+  "oauth.signInWith": "Đăng nhập bằng {provider}",
   "email.login.subject": "Link đăng nhập VNX.SI của bạn",
   "email.login.intro": "Bấm vào link dưới đây để đăng nhập VNX.SI. Link dùng được một lần và hết hạn sau 15 phút.",
   "email.login.ignore": "Nếu bạn không yêu cầu, hãy bỏ qua email này.",

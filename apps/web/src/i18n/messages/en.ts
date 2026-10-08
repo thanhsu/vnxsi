@@ -42,6 +42,8 @@ export const en = {
   "oauth.error.title": "We couldn't sign you in",
   "oauth.error.body": "That sign-in didn't work. Please try again, or sign in with an email link.",
   "oauth.cta.emailLink": "Sign in with an email link",
+  "oauth.or": "or",
+  "oauth.signInWith": "Sign in with {provider}",
   "email.login.subject": "Your VNX.SI sign-in link",
   "email.login.intro": "Click the link below to sign in to VNX.SI. It works once and expires in 15 minutes.",
   "email.login.ignore": "If you didn't ask for this, you can ignore this email.",

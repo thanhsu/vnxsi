@@ -1,11 +1,21 @@
 import type { FC } from "hono/jsx";
+import { type OAuthProvider, PROVIDER_NAME } from "../domain/identity.ts";
+import { safeNext } from "../http/next.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { Layout } from "./Layout.tsx";
 
 type Base = { locale: Locale; origin: string };
 
-export const LoginPage: FC<Base & { email?: string; next?: string | null; error?: string }> = (props) => {
+/** Where a provider button goes. `lang` is the Locale id (case matters to `start`); `next` is re-checked and URL-encoded (VNX-2604c). */
+export function oauthStartPath(provider: OAuthProvider, locale: Locale, next: string | null): string {
+  const query = new URLSearchParams({ lang: locale });
+  const safe = safeNext(next);
+  if (safe) query.set("next", safe);
+  return `/auth/oauth/${provider}/start?${query.toString()}`;
+}
+
+export const LoginPage: FC<Base & { email?: string; next?: string | null; error?: string; providers?: readonly OAuthProvider[] }> = (props) => {
   const tr = translator(props.locale);
   return (
     <Layout locale={props.locale} title={tr("login.title")} origin={props.origin} rest="/login" noindex>
@@ -36,6 +46,16 @@ export const LoginPage: FC<Base & { email?: string; next?: string | null; error?
             {tr("login.submit")}
           </button>
         </form>
+        {props.providers?.length ? (
+          <div class="oauth">
+            <p class="oauth-or">{tr("oauth.or")}</p>
+            {props.providers.map((provider) => (
+              <a class="btn btn-ghost" href={oauthStartPath(provider, props.locale, props.next ?? null)}>
+                {tr("oauth.signInWith", { provider: PROVIDER_NAME[provider] })}
+              </a>
+            ))}
+          </div>
+        ) : null}
       </section>
     </Layout>
   );

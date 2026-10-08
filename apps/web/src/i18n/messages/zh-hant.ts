@@ -44,6 +44,8 @@ export const zhHant: Messages = {
   "oauth.error.title": "無法登入",
   "oauth.error.body": "此次登入未成功。請再試一次，或改用電子郵件登入。",
   "oauth.cta.emailLink": "用電子郵件登入",
+  "oauth.or": "或",
+  "oauth.signInWith": "使用 {provider} 帳號登入",
   "email.login.subject": "你的 VNX.SI 登入連結",
   "email.login.intro": "點擊下方連結登入 VNX.SI。連結僅能使用一次，15 分鐘後失效。",
   "email.login.ignore": "如果這不是你本人的操作，請忽略此郵件。",
