@@ -118,17 +118,17 @@ describe("start (ADR-012 §1, §3)", () => {
     expect(started.flow.intent).toBe("signin");
   });
 
-  it("refuses a live link intent until Task 8 (link_unsupported), clears the cookie, logs one fixed code", async () => {
+  it("a live link intent gets the intermediate page", async () => {
     await enableProvider("github");
     const { cookie } = await signIn(emailOf("lan"));
     const intent = await linkIntentCookie(cookie, "github");
     forgetLogs();
     const res = await createApp().request(getReq("/auth/oauth/github/start", `${cookie}; ${intent}`), undefined, testEnv);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
     expectHardened(res);
-    expect(clearedOAuthCookie(res)).not.toBeNull();
-    expectOneLog("link_unsupported", [], "oauth.start_failed");
+    expect(setCookieValue(res, OAUTH_COOKIE)).not.toBeNull();
+    expect(logged()).toHaveLength(0);
   });
 });
 
@@ -268,7 +268,8 @@ describe("callback: not linked (ADR-012 §3.2; Review Focus 2)", () => {
   it("is in the visitor's language from the flow cookie, with the approved Vietnamese sentence", async () => {
     await enableProvider("google");
     const { html } = await notLinked("google", identityOf(), "vi");
-    expect(html).toContain("Tài khoản này chưa được liên kết. Đăng nhập bằng link qua email, rồi liên kết từ trang tài khoản.");
+    const text = html.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    expect(text).toContain("Tài khoản này chưa được liên kết. Đăng nhập bằng link qua email, rồi liên kết ở mục “Đăng nhập & tài khoản liên kết” trong trang Yêu cầu và nhu cầu.");
   });
 
   it("loads nothing inline (CSP)", async () => {

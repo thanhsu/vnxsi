@@ -1,8 +1,12 @@
 import type { Context, Hono } from "hono";
+import { readSessionCookie } from "../auth/cookies.ts";
 import { requireUser } from "../auth/middleware.ts";
+import { linkSessionHash, writeOAuthCookie } from "../auth/oauth-cookie.ts";
+import { listIdentitiesForUser } from "../db/identities.ts";
 import { listClientInquiries, listMessages } from "../db/inquiries.ts";
 import { listClientRequests } from "../db/requests.ts";
 import type { InquirySummary } from "../domain/inquiry.ts";
+import { newLinkIntent } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
@@ -11,11 +15,13 @@ import { requestOrigin } from "../http/origin.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
 import { InquiryThread } from "../views/InquiryThread.tsx";
+import { LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
 import { RequestList } from "../views/me/RequestList.tsx";
 import { Layout } from "../views/Layout.tsx";
 import { page } from "../views/render.ts";
 import { loadForSide, postInquiryAction, type ThreadExtra } from "./hub-inquiries.tsx";
 import { openPendingInquiry } from "./inquiry-confirm.ts";
+import { availableProviders, enabledProvider } from "./oauth.tsx";
 
 async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: ThreadExtra = {}, status: 200 | 400 = 200) {
   const locale = c.get("locale");
@@ -51,7 +57,7 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
     const locale = c.get("locale");
     const tr = translator(locale);
     const user = c.get("user")!;
-    const [inquiries, requests] = await Promise.all([listClientInquiries(c.env.DB, user.id), listClientRequests(c.env.DB, user.id)]);
+    const [inquiries, requests, identities, linkable] = await Promise.all([listClientInquiries(c.env.DB, user.id), listClientRequests(c.env.DB, user.id), listIdentitiesForUser(c.env.DB, user.id), availableProviders(c)]);
     return page(
       c,
       <Layout locale={locale} title={`${tr("me.title")} · VNX.SI`} origin={requestOrigin(c)} rest="/me" noindex signedIn>
@@ -67,9 +73,20 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
           <h2>{tr("me.inquiries.title")}</h2>
           <InquiryList locale={locale} items={inquiries} viewer="client" base="/me/inquiries" />
         </section>
+        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} />
       </Layout>,
     );
+  });
 
+  // ADR-012 §4: "Link" is a POST (the Origin check is global). It writes one 120 s cookie for THIS session and sends the browser to the
+  // same-site start. It never redirects off-site (`form-action 'self'`); start shows the page with the link to the provider.
+  onLocalized(app, "post", "/me/identities/:provider/link", requireUser, async (c) => {
+    const found = await enabledProvider(c);
+    const raw = readSessionCookie(c);
+    if (!found || !raw) return errorResponse(c, "notFound", 404);
+    const now = Date.now();
+    writeOAuthCookie(c, newLinkIntent({ provider: found.provider, sessionHash: await linkSessionHash(raw) }, now), now);
+    return c.redirect(`/auth/oauth/${found.provider}/start?lang=${c.get("locale")}`, 303);
   });
 
   onLocalized(app, "get", "/me/inquiries/:id", requireUser, async (c) => {

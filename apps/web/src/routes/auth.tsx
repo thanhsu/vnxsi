@@ -4,17 +4,14 @@ import { adminEmails } from "../auth/admin.ts";
 import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "../auth/cookies.ts";
 import { sha256Hex } from "../auth/crypto.ts";
 import { readInviteCookie, writeInviteCookie } from "../auth/invite-cookie.ts";
-import { isProviderConfigured } from "../auth/oauth/index.ts";
 import { createSession, deleteSession } from "../auth/sessions.ts";
 import { type ConsumedToken, consumeLoginToken, createLoginToken, describeToken, peekLoginToken, type TokenPurpose } from "../auth/tokens.ts";
 import { writeAudit } from "../db/audit.ts";
-import { isFlagEnabled } from "../db/flags.ts";
 import { findInquiryById } from "../db/inquiries.ts";
 import { findRequestById } from "../db/requests.ts";
 import { createUser, findUserByEmail, markLogin, type UserRow } from "../db/users.ts";
 import { getMailer } from "../email/index.ts";
 import { loginEmail } from "../email/templates/login.ts";
-import { OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG } from "../domain/identity.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
@@ -25,6 +22,7 @@ import { ConfirmLinkPage, InvalidLinkPage, LoginPage, LoginSentPage } from "../v
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
 import { openPendingInquiry } from "./inquiry-confirm.ts";
+import { availableProviders } from "./oauth.tsx";
 import { openPendingRequest } from "./request-confirm.ts";
 
 const LoginForm = z.object({ email: z.string().trim().toLowerCase().pipe(z.email().max(254)) });
@@ -33,15 +31,6 @@ const HOUR = 3600;
 
 function origin(c: Context<AppEnv>) {
   return new URL(c.req.url).origin;
-}
-
-/** The providers whose button `/login` shows: flag on AND configured, the rule `routes/oauth.tsx` applies to start and callback (decision 6). */
-async function loginProviders(c: Context<AppEnv>): Promise<OAuthProvider[]> {
-  const shown: OAuthProvider[] = [];
-  for (const provider of OAUTH_PROVIDERS) {
-    if ((await isFlagEnabled(c.env.DB, PROVIDER_FLAG[provider])) && isProviderConfigured(c.env, provider)) shown.push(provider);
-  }
-  return shown;
 }
 
 /** Purposes the confirmation link accepts. */
@@ -91,7 +80,7 @@ async function invalidLink(c: Context<AppEnv>, raw: string) {
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/login", async (c) =>
-    page(c, <LoginPage locale={c.get("locale")} origin={origin(c)} next={safeNext(c.req.query("next"))} providers={await loginProviders(c)} />),
+    page(c, <LoginPage locale={c.get("locale")} origin={origin(c)} next={safeNext(c.req.query("next"))} providers={await availableProviders(c)} />),
   );
 
   onLocalized(app, "post", "/login", async (c) => {
@@ -100,7 +89,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const form = await c.req.parseBody();
     const next = safeNext(form.next);
     const retry = async (status: 400 | 429 | 502, email: string, error: string) =>
-      page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={error} providers={await loginProviders(c)} />, status);
+      page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={error} providers={await availableProviders(c)} />, status);
     const parsed = LoginForm.safeParse({ email: form.email });
     if (!parsed.success) {
       const typed = typeof form.email === "string" ? form.email : "";

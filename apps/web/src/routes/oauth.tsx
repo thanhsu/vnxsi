@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { adminEmails } from "../auth/admin.ts";
 import { readSessionCookie, writeSessionCookie } from "../auth/cookies.ts";
-import { getOAuthProvider } from "../auth/oauth/index.ts";
+import { getOAuthProvider, isProviderConfigured } from "../auth/oauth/index.ts";
 import type { ExchangeFailure, ProviderClient } from "../auth/oauth/provider.ts";
 import { clearOAuthCookie, linkSessionHash, readOAuthCookie, writeOAuthCookie } from "../auth/oauth-cookie.ts";
 import { createSession } from "../auth/sessions.ts";
@@ -9,13 +9,13 @@ import { writeAudit } from "../db/audit.ts";
 import { isFlagEnabled } from "../db/flags.ts";
 import { findIdentityByProviderSubject, touchIdentityLogin } from "../db/identities.ts";
 import { findUserById, markLogin } from "../db/users.ts";
-import { isOAuthProvider, type OAuthProvider, PROVIDER_FLAG, sessionMethodFor } from "../domain/identity.ts";
-import { buildAuthorizeUrl, checkCallbackState, codeChallengeS256, generateNonce, generateState, generateVerifier, newFlowCookie, oauthRedirectUri, resolveStartIntent } from "../domain/oauth.ts";
+import { isOAuthProvider, OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG, sessionMethodFor } from "../domain/identity.ts";
+import { buildAuthorizeUrl, checkCallbackState, codeChallengeS256, generateNonce, generateState, generateVerifier, flowMatchesSession, newFlowCookie, oauthRedirectUri, resolveStartIntent } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { isLocale, type Locale, localeFromPath, localizedPath } from "../i18n/locales.ts";
 import { safeNext } from "../http/next.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
-import { OAuthErrorPage, OAuthNotLinkedPage } from "../views/auth.tsx";
+import { OAuthErrorPage, OAuthLinkPage, OAuthNotLinkedPage } from "../views/auth.tsx";
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
 
@@ -35,11 +35,20 @@ function harden(c: Context<AppEnv>) {
 }
 
 /** The provider, when it exists, its flag is on and its credentials are set (decision 6); otherwise null and the caller answers 404. */
-async function enabledProvider(c: Context<AppEnv>): Promise<{ provider: OAuthProvider; client: ProviderClient } | null> {
+export async function enabledProvider(c: Context<AppEnv>): Promise<{ provider: OAuthProvider; client: ProviderClient } | null> {
   const name = c.req.param("provider");
   if (!isOAuthProvider(name) || !(await isFlagEnabled(c.env.DB, PROVIDER_FLAG[name]))) return null;
   const client = getOAuthProvider(c.env, name);
   return client ? { provider: name, client } : null;
+}
+
+/** The providers a person may use right now: flag on AND configured (decision 6). `/login` and `/me` both ask this. */
+export async function availableProviders(c: Context<AppEnv>): Promise<OAuthProvider[]> {
+  const shown: OAuthProvider[] = [];
+  for (const provider of OAUTH_PROVIDERS) {
+    if ((await isFlagEnabled(c.env.DB, PROVIDER_FLAG[provider])) && isProviderConfigured(c.env, provider)) shown.push(provider);
+  }
+  return shown;
 }
 
 function logFailure(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, event: "oauth.callback_failed" | "oauth.start_failed" = "oauth.callback_failed") {
@@ -61,19 +70,21 @@ export function registerOAuthRoutes(app: Hono<AppEnv>) {
     // Task 2 LOW-2: a link intent counts only for a session that is alive now (`user` is null for an expired or suspended one).
     const raw = readSessionCookie(c);
     const sessionHash = c.get("user") && raw ? await linkSessionHash(raw) : null;
-    if (resolveStartIntent(readOAuthCookie(c, provider, now), sessionHash, now) === "link") {
-      // Task 8 replaces this branch with the intermediate page (decision 14).
-      clearOAuthCookie(c);
-      return failed(c, provider, "link_unsupported", "en", 400, "oauth.start_failed");
-    }
-    const next = safeNext(c.req.query("next"));
+    // An intent from POST …/link, or (MEDIUM-2) a live LINK flow of this very session (Back, refresh). Check `intent === "link"`
+    // explicitly: `flowMatchesSession` is true for every signin flow.
+    const cookie = readOAuthCookie(c, provider, now);
+    const linking = sessionHash !== null && (resolveStartIntent(cookie, sessionHash, now) === "link" || (cookie?.phase === "flow" && cookie.intent === "link" && flowMatchesSession(cookie, sessionHash)));
+    const next = linking ? null : safeNext(c.req.query("next"));
     const lang = c.req.query("lang");
     const locale = isLocale(lang) ? lang : localeFromPath(next ?? "/").locale;
     const state = generateState();
     const verifier = generateVerifier();
     const nonce = generateNonce();
-    writeOAuthCookie(c, newFlowCookie({ provider, intent: "signin", state, verifier, nonce, next, locale, sessionHash: null }, now), now);
+    writeOAuthCookie(c, newFlowCookie({ provider, intent: linking ? "link" : "signin", state, verifier, nonce, next, locale, sessionHash: linking ? sessionHash : null }, now), now);
     const url = buildAuthorizeUrl({ provider, clientId: client.clientId, redirectUri: oauthRedirectUri(c.env.APP_ORIGIN, provider), state, challenge: await codeChallengeS256(verifier), nonce });
+    // Decision 14 (R3): a link NEVER redirects. `form-action 'self'` covers the redirect chain of the POST that led here in Chrome;
+    // clicking this link is a new navigation. The flow cookie replaces the intent cookie (one use).
+    if (linking) return page(c, <OAuthLinkPage locale={locale} origin={new URL(c.req.url).origin} provider={provider} authorizeUrl={url} />);
     return c.redirect(url, 302);
   });
 

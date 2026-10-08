@@ -148,3 +148,20 @@ export const OAuthErrorPage: FC<Base> = (props) => {
     </Layout>
   );
 };
+
+/** Decision 14 (R3): the one step between the "Link" button and the provider. One plain link, no script, no refresh; the only form is Layout's logout. */
+export const OAuthLinkPage: FC<Base & { provider: OAuthProvider; authorizeUrl: string }> = (props) => {
+  const tr = translator(props.locale);
+  const provider = PROVIDER_NAME[props.provider];
+  return (
+    <Layout locale={props.locale} title={tr("me.identities.link", { provider })} origin={props.origin} rest="/me" noindex signedIn>
+      <section class="card">
+        <h1>{tr("me.identities.link", { provider })}</h1>
+        <p>{tr("oauth.link.body", { provider })}</p>
+        <a class="btn" href={props.authorizeUrl}>
+          {tr("oauth.link.cta", { provider })}
+        </a>
+      </section>
+    </Layout>
+  );
+};

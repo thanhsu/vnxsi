@@ -7,7 +7,7 @@ import { PROVIDER_FLAG, type OAuthProvider } from "../src/domain/identity.ts";
 import { type FlowCookie, oauthRedirectUri, parseOAuthCookie } from "../src/domain/oauth.ts";
 import type { Bindings } from "../src/env.ts";
 import { ensureUser } from "./fixtures.ts";
-import { getReq, setCookieValue, testEnv } from "./helpers.ts";
+import { formPost, getReq, setCookieValue, testEnv } from "./helpers.ts";
 
 export async function enableProvider(provider: OAuthProvider) {
   const admin = await ensureUser("oauth-flags@example.com");
@@ -56,4 +56,32 @@ export function callbackReq(provider: string, params: Record<string, string>, co
 /** The Set-Cookie line that deletes the OAuth cookie, or null. */
 export function clearedOAuthCookie(res: Response): string | null {
   return res.headers.getSetCookie().find((line) => line.startsWith(`${OAUTH_COOKIE}=`) && /Max-Age=0/i.test(line)) ?? null;
+}
+
+export interface LinkedStart {
+  /** The `POST /me/identities/:provider/link` response. */
+  post: Response;
+  /** The `GET /auth/oauth/:provider/start` the browser makes after the 303, carrying the session and the intent cookie. */
+  start: Response;
+  html: string;
+  /** `Cookie` header value for the flow cookie `start` wrote, or "" when it wrote none. */
+  flowCookie: string;
+  flow: FlowCookie | null;
+}
+
+/** Off-site `<a href>` of a page, entities decoded as a browser does. */
+export function externalLinks(html: string): URL[] {
+  return [...html.matchAll(/<a\b[^>]*\bhref="(https?:\/\/[^"]+)"/g)].map((m) => new URL((m[1] ?? "").replaceAll("&amp;", "&")));
+}
+
+/** The whole link start the way a browser does it: press "Link" (POST), follow the 303 to the same-site start. */
+/** `postPrefix` picks the locale the way a browser does: the form posts to `/vi/me/…`. Never append a second `lang` to the start URL: Hono reads the FIRST value. */
+export async function linkViaStart(provider: OAuthProvider, session: string, opts: { postPrefix?: string; extraQuery?: string } = {}): Promise<LinkedStart> {
+  const post = await createApp().request(formPost(`${opts.postPrefix ?? ""}/me/identities/${provider}/link`, {}, { cookie: session }), undefined, testEnv);
+  const intent = setCookieValue(post, OAUTH_COOKIE) ?? "";
+  const target = new URL(post.headers.get("location") ?? "/", "https://vnx.si");
+  const start = await createApp().request(getReq(`${target.pathname}${target.search}${opts.extraQuery ?? ""}`, `${session}; ${OAUTH_COOKIE}=${intent}`), undefined, testEnv);
+  const raw = setCookieValue(start, OAUTH_COOKIE) ?? "";
+  const flow = parseOAuthCookie(raw, { provider, now: Date.now() });
+  return { post, start, html: await start.clone().text(), flowCookie: raw ? `${OAUTH_COOKIE}=${raw}` : "", flow: flow && flow.phase === "flow" ? flow : null };
 }
