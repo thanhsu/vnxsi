@@ -26,3 +26,9 @@ Status: DONE_WITH_CONCERNS (full suite left to the controller; Step 9 manual 3-b
 - Working copies are CRLF while blobs are LF (autocrlf); edits preserved CRLF. Git warns only.
 - `npm run typecheck` runs `wrangler types`; it left no tracked change.
 - Step 9 (manual Chrome/Firefox/Safari check of the interstitial, reload and Back) is not done; to repeat with real providers in VNX-2608.
+
+## Fix round R1
+Test-only, no source change.
+- M1: `oauth-link-start.test.ts` adds `expect(raw).not.toBe("")` before the 302 assertions in "counts only for the session that asked", and `expect(lansFlow.flow?.intent).toBe("link")` in "a sign-in flow cookie, another session's link flow...".
+- M3: `identities.test.ts` "is 404 with no cookie" now asserts no `__Host-vnx_oauth` Set-Cookie for every 404 case (flag off, unconfigured, `facebook`, other provider off).
+- Run (apps/web): `npx vitest run --maxWorkers=1 --no-file-parallelism test/me/identities.test.ts test/auth/oauth-link-start.test.ts` -> 2 files, 27 tests pass. `npm run typecheck` -> 0 `error TS`.

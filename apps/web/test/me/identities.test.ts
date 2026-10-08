@@ -174,14 +174,20 @@ describe("POST /me/identities/:provider/link (VNX-2605a-1)", () => {
 
   it("is 404 with no cookie when the flag is off, the provider is not configured, or the name is not a provider", async () => {
     const { cookie } = await signIn(emailOf("lan"));
-    expect((await postLink("github", cookie)).status).toBe(404);
+    const flagOff = await postLink("github", cookie);
+    expect(flagOff.status).toBe(404);
+    expect(setCookieValue(flagOff, OAUTH_COOKIE)).toBeNull();
     await enableProvider("github");
     resetFlagCache();
     const unconfigured = await createApp().request(formPost("/me/identities/github/link", {}, { cookie }), undefined, withoutCredentials);
     expect(unconfigured.status).toBe(404);
     expect(setCookieValue(unconfigured, OAUTH_COOKIE)).toBeNull();
-    expect((await postLink("facebook", cookie)).status).toBe(404);
-    expect((await postLink("google", cookie)).status).toBe(404);
+    const unknown = await postLink("facebook", cookie);
+    expect(unknown.status).toBe(404);
+    expect(setCookieValue(unknown, OAUTH_COOKIE)).toBeNull();
+    const otherOff = await postLink("google", cookie);
+    expect(otherOff.status).toBe(404);
+    expect(setCookieValue(otherOff, OAUTH_COOKIE)).toBeNull();
   });
 
   it("needs a session: signed out goes to /login and no OAuth cookie is written", async () => {

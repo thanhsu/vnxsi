@@ -94,6 +94,7 @@ describe("start with a link intent: the intermediate page (decision 14, R3; Revi
     const lan = await signIn(emailOf("lan"));
     const minh = await signIn(emailOf("minh"));
     const raw = setCookieValue((await linkViaStart("github", lan.cookie)).post, OAUTH_COOKIE) ?? "";
+    expect(raw).not.toBe("");
     // Another user's session carrying Lan's intent cookie.
     const other = await createApp().request(getReq("/auth/oauth/github/start", `${minh.cookie}; ${OAUTH_COOKIE}=${raw}`), undefined, testEnv);
     expect(other.status).toBe(302);
@@ -139,6 +140,7 @@ describe("start with a link intent: the intermediate page (decision 14, R3; Revi
     const signedIn = await createApp().request(getReq("/auth/oauth/github/start", `${lan.cookie}; ${signinFlow.cookie}`), undefined, testEnv);
     expect(signedIn.status, "signin flow cookie").toBe(302);
     const lansFlow = await linkViaStart("github", lan.cookie);
+    expect(lansFlow.flow?.intent).toBe("link");
     const other = await createApp().request(getReq("/auth/oauth/github/start", `${minh.cookie}; ${lansFlow.flowCookie}`), undefined, testEnv);
     expect(other.status, "another session's link flow").toBe(302);
     await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE user_id = ?1").bind(lan.user.id, "2020-01-01T00:00:00.000Z").run();
