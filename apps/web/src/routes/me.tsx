@@ -57,6 +57,7 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
     const locale = c.get("locale");
     const tr = translator(locale);
     const user = c.get("user")!;
+    const notice = (["ok", "taken", "hasProvider", "failed"] as const).find((v) => v === c.req.query("link"));
     const [inquiries, requests, identities, linkable] = await Promise.all([listClientInquiries(c.env.DB, user.id), listClientRequests(c.env.DB, user.id), listIdentitiesForUser(c.env.DB, user.id), availableProviders(c)]);
     return page(
       c,
@@ -73,7 +74,7 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
           <h2>{tr("me.inquiries.title")}</h2>
           <InquiryList locale={locale} items={inquiries} viewer="client" base="/me/inquiries" />
         </section>
-        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} />
+        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} notice={notice} />
       </Layout>,
     );
   });

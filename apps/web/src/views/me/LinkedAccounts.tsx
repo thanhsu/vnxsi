@@ -3,17 +3,31 @@ import { OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_NAME, type UserIdentity }
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 
+export type LinkNotice = "ok" | "taken" | "hasProvider" | "failed";
+
+const NOTICE_KEY = {
+  ok: "me.identities.notice.ok",
+  taken: "me.identities.notice.taken",
+  hasProvider: "me.identities.notice.hasProvider",
+  failed: "me.identities.notice.failed",
+} as const;
+
 /**
  * The owner's own page (ADR-012 §4): the providers that are linked or linkable (Owner 2026-10-08), nothing at all when there are none.
  * `label` is shown here and nowhere else. `linkable` is the flag-and-credentials rule decided by the route; a linked row shows whatever the flag says. Unlink is VNX-2605b: it adds a form to the last cell.
  */
-export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdentity[]; linkable: readonly OAuthProvider[] }> = ({ locale, identities, linkable }) => {
+export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdentity[]; linkable: readonly OAuthProvider[]; notice?: LinkNotice }> = ({ locale, identities, linkable, notice }) => {
   const tr = translator(locale);
   const rows = OAUTH_PROVIDERS.filter((p) => identities.some((i) => i.provider === p) || linkable.includes(p));
   if (rows.length === 0) return null;
   return (
     <section id="identities">
       <h2>{tr("me.identities.title")}</h2>
+      {notice ? (
+        <p class={notice === "ok" ? "notice good" : "notice"} role={notice === "ok" ? "status" : "alert"}>
+          {tr(NOTICE_KEY[notice])}
+        </p>
+      ) : null}
       <p class="muted">{tr("me.identities.intro")}</p>
       <div class="table-wrap">
         <table class="data">

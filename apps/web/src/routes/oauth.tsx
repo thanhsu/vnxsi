@@ -7,10 +7,10 @@ import { clearOAuthCookie, linkSessionHash, readOAuthCookie, writeOAuthCookie } 
 import { createSession } from "../auth/sessions.ts";
 import { writeAudit } from "../db/audit.ts";
 import { isFlagEnabled } from "../db/flags.ts";
-import { findIdentityByProviderSubject, touchIdentityLogin } from "../db/identities.ts";
+import { findIdentityByProviderSubject, linkIdentity, touchIdentityLogin } from "../db/identities.ts";
 import { findUserById, markLogin } from "../db/users.ts";
 import { isOAuthProvider, OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG, sessionMethodFor } from "../domain/identity.ts";
-import { buildAuthorizeUrl, checkCallbackState, codeChallengeS256, generateNonce, generateState, generateVerifier, flowMatchesSession, newFlowCookie, oauthRedirectUri, resolveStartIntent } from "../domain/oauth.ts";
+import { buildAuthorizeUrl, checkCallbackState, codeChallengeS256, generateNonce, generateState, generateVerifier, flowMatchesSession, newFlowCookie, oauthRedirectUri, resolveStartIntent, type FlowCookie } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { isLocale, type Locale, localeFromPath, localizedPath } from "../i18n/locales.ts";
 import { safeNext } from "../http/next.ts";
@@ -23,7 +23,7 @@ const HOUR = 3600;
 const MAX_CODE_CHARS = 2048;
 
 /** The only things the callback ever logs (Review Focus 9): fixed codes, never a message, a URL or a provider reply. */
-type OAuthFailure = "no_cookie" | "wrong_phase" | "state_mismatch" | "provider_denied" | "missing_code" | "link_unsupported" | "rate_limited" | "user_inactive" | "internal" | ExchangeFailure;
+type OAuthFailure = "no_cookie" | "wrong_phase" | "state_mismatch" | "provider_denied" | "missing_code" | "session_mismatch" | "link_conflict" | "rate_limited" | "user_inactive" | "internal" | ExchangeFailure;
 
 /**
  * The URL of start and callback carries `state` and (callback) the one-time `code`, and the callback decides who is signed in.
@@ -51,13 +51,51 @@ export async function availableProviders(c: Context<AppEnv>): Promise<OAuthProvi
   return shown;
 }
 
-function logFailure(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, event: "oauth.callback_failed" | "oauth.start_failed" = "oauth.callback_failed") {
-  console.error(JSON.stringify({ requestId: c.get("requestId"), event, provider, code }));
+function logFailure(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure) {
+  console.error(JSON.stringify({ requestId: c.get("requestId"), event: "oauth.callback_failed", provider, code }));
 }
 
-function failed(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, locale: Locale = "en", status: 400 | 429 = 400, event: "oauth.callback_failed" | "oauth.start_failed" = "oauth.callback_failed") {
-  logFailure(c, provider, code, event);
+function failed(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure, locale: Locale = "en", status: 400 | 429 = 400) {
+  logFailure(c, provider, code);
   return page(c, <OAuthErrorPage locale={locale} origin={new URL(c.req.url).origin} />, status);
+}
+
+type LinkNotice = "ok" | "taken" | "hasProvider" | "failed";
+
+/** Back to the owner's page with one fixed word; `/me` shows the message for it. The URL carries no code, state or id. */
+const backToMe = (c: Context<AppEnv>, locale: Locale, notice: LinkNotice) => c.redirect(`${localizedPath(locale, "/me")}?link=${notice}`, 303);
+
+/**
+ * The `link` flow of the callback (ADR-012 §4). It needs the session that asked, checked BEFORE the code is spent, and attaches the
+ * provider account to THAT user and nothing else: no session is created or changed, no one is signed in, no e-mail is compared.
+ */
+async function finishLink(c: Context<AppEnv>, input: { provider: OAuthProvider; client: ProviderClient; flow: FlowCookie; nowMs: number }) {
+  const { provider, client, flow, nowMs } = input;
+  const user = c.get("user");
+  const raw = readSessionCookie(c);
+  // `user` is null for an expired or suspended session (Task 2 LOW-2).
+  if (!user || !raw || !flowMatchesSession(flow, await linkSessionHash(raw))) return failed(c, provider, "session_mismatch", flow.locale);
+
+  const code = c.req.query("code");
+  if (c.req.query("error") !== undefined) {
+    logFailure(c, provider, "provider_denied");
+    return backToMe(c, flow.locale, "failed");
+  }
+  if (!code || code.length > MAX_CODE_CHARS) {
+    logFailure(c, provider, "missing_code");
+    return backToMe(c, flow.locale, "failed");
+  }
+  const result = await client.exchange({ code, verifier: flow.verifier, nonce: flow.nonce, redirectUri: oauthRedirectUri(c.env.APP_ORIGIN, provider), now: nowMs });
+  if (!result.ok) {
+    logFailure(c, provider, result.reason);
+    return backToMe(c, flow.locale, "failed");
+  }
+
+  const linked = await linkIdentity(c.env.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: new Date(nowMs).toISOString() });
+  // VNX-2605b: the "account linked" e-mail goes here, only when linked.ok (not for already_linked).
+  if (linked.ok || linked.reason === "already_linked") return backToMe(c, flow.locale, "ok");
+  logFailure(c, provider, "link_conflict");
+  return backToMe(c, flow.locale, linked.reason === "user_has_provider" ? "hasProvider" : "taken");
 }
 
 export function registerOAuthRoutes(app: Hono<AppEnv>) {
@@ -104,8 +142,7 @@ export function registerOAuthRoutes(app: Hono<AppEnv>) {
       const check = checkCallbackState(readOAuthCookie(c, provider, nowMs), c.req.query("state"));
       if (!check.ok) return await failed(c, provider, check.reason);
       const { flow } = check;
-      // Task 8 adds the link branch; until then nothing but a sign-in is accepted.
-      if (flow.intent !== "signin") return await failed(c, provider, "link_unsupported", flow.locale);
+      if (flow.intent === "link") return await finishLink(c, { provider, client, flow, nowMs });
 
       const code = c.req.query("code");
       if (c.req.query("error") !== undefined) return await failed(c, provider, "provider_denied", flow.locale);

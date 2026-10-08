@@ -215,21 +215,6 @@ describe("callback: sign in (ADR-012 §3)", () => {
     expect(await countWhere("SELECT count(*) AS n FROM ops_members WHERE user_id = ?1", user.id)).toBe(0);
     expect((await findPendingOpsInvite(testEnv.DB, user.email))?.status).toBe("pending");
   });
-
-  it("refuses a flow cookie whose intent is link until Task 8, without calling the provider, logging link_unsupported", async () => {
-    await enableProvider("github");
-    const id = identityOf();
-    const { cookie: session } = await signIn(emailOf("lan"));
-    const raw = session.split("=")[1] ?? "";
-    const link = newFlowCookie({ provider: "github", intent: "link", state: "s".repeat(43), verifier: "v".repeat(43), nonce: "n".repeat(43), next: null, locale: "en", sessionHash: await linkSessionHash(raw) }, Date.now());
-    const code = issueFakeCode("github", id, { verifier: link.verifier, nonce: link.nonce, redirectUri: oauthRedirectUri(testEnv.APP_ORIGIN, "github") });
-    forgetLogs();
-    const res = await callbackReq("github", { code, state: link.state }, `${session}; ${OAUTH_COOKIE}=${encodeOAuthCookie(link)}`);
-    expect(res.status).toBe(400);
-    expect(clearedOAuthCookie(res)).not.toBeNull();
-    expect(await identitiesWithSubject(id.subject)).toBe(0);
-    expectOneLog("link_unsupported", [link.state, link.verifier, link.nonce, id.subject]);
-  });
 });
 
 describe("callback: not linked (ADR-012 §3.2; Review Focus 2)", () => {
