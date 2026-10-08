@@ -181,6 +181,7 @@ Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR
 | VNX-2604 | Đăng nhập: nút provider ở `/login`, start/callback intent `signin`, trang "chưa liên kết" chung, chặn user `suspended`, rate limit, audit `auth.login` có `method`; resolver Ops chỉ nhận session `magic_link` | AGENT, HIGH-RISK |
 | VNX-2605 | `/me` mục "Đăng nhập & tài khoản liên kết": liên kết (POST có Origin check → 303 → GET start), hủy liên kết, xung đột identity, audit, email báo 4 locale | AGENT, HIGH-RISK |
 | VNX-2606 | Huy hiệu: bật/tắt `show_on_profile` ở `/hub/profile`, hiện trên `/b/:handle` (GitHub có link, LinkedIn không link, Google không bao giờ); không vào xếp hạng | AGENT |
+| VNX-2604d | Logo chính thức của Google, GitHub, LinkedIn trong nút `/login` (file SVG do Owner giao ở VNX-2601, theo brand guideline từng provider); **điều kiện bắt buộc trước VNX-2608** (Owner 2026-10-08) | AGENT |
 | VNX-2607 | Chép bổ sung ADR-012 vào phần `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code; merge trước khi bật flag | AGENT |
 | VNX-2608 | Owner bật 3 flag trên production, thử đăng nhập và liên kết với tài khoản thật | HUMAN, HIGH-RISK |
 
