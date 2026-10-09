@@ -1,6 +1,6 @@
 # VNX-0805 — Runbook deploy và script smoke · Plan
 
-- **Trạng thái:** Draft (chờ Owner duyệt)
+- **Trạng thái:** **APPROVED** (Opus duyệt thay Owner theo ủy quyền M6+, 2026-10-09). Câu hỏi mở đã chốt: OQ-1 runbook ghi cửa sổ Time Travel theo gói (Free 7 ngày, Paid 30 ngày) kèm cách xem gói ở dashboard, không khẳng định gói hiện tại; OQ-2 có, thêm `test:scripts` vào CI; OQ-3 giữ `--slug`, mặc định tắt; OQ-4 runbook tiếng Việt, lệnh giữ nguyên.
 - **Roadmap:** `docs/roadmap/WAVE1-ROADMAP.md` → M8, VNX-0805 (AGENT)
 - **Spec:** spec Wave 1 §8.8 (robots, noindex) và phần header bảo mật; không thêm hành vi sản phẩm mới
 - **ADR:** ADR-010 (Ops console kín, `/ops` 404), ADR-004 (không ảnh hưởng xếp hạng)
