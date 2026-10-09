@@ -16,3 +16,11 @@
 - `linkViaStart` and `test/oauth-flow.ts` already had `{ postPrefix, extraQuery }` from 8a-1; no change needed.
 - Plan code used as is; no fixes were needed. `me.tsx` and the locale files are CRLF in the working copy; edits preserved their line endings.
 - Ghi nhan: `npm test -w apps/web -- <path>` does not accept paths from the repo root form; focused runs used `npx vitest run <path>` from `apps/web`.
+
+## Fix round R1
+- M1: `LINK_NOTICES` (const tuple) and `LinkNotice = (typeof LINK_NOTICES)[number]` now live only in `views/me/LinkedAccounts.tsx`; `routes/oauth.tsx` imports the type, `routes/me.tsx` uses `LINK_NOTICES.find(...)`. No behaviour change.
+- M2: the "session expired" and "hash for another session" tests now assert `loggedCodes()` equals `["session_mismatch"]` and prove the code was not spent (expired: session expiry restored, same code then gives `/me?link=ok`; other hash: the same state/verifier/nonce bound to the real session redeems the code).
+- M3: both "taken" locations asserted `toBe("/me?link=taken")`.
+- M4: the unknown-value test first asserts `<section id="identities"`.
+- Tests: `npx vitest run test/auth/oauth-link.test.ts test/me test/auth/oauth-routes.test.ts --maxWorkers=1 --no-file-parallelism` gives 7 files, 98 tests passing; `npm run typecheck -w apps/web` exit 0.
+- Environment: the worktree's root `node_modules` was missing when the round started (source intact); I recreated it with `npm install` (no deletions).

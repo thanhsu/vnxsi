@@ -16,6 +16,7 @@ import { isLocale, type Locale, localeFromPath, localizedPath } from "../i18n/lo
 import { safeNext } from "../http/next.ts";
 import { hitRateLimit } from "../http/rate-limit.ts";
 import { OAuthErrorPage, OAuthLinkPage, OAuthNotLinkedPage } from "../views/auth.tsx";
+import type { LinkNotice } from "../views/me/LinkedAccounts.tsx";
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
 
@@ -59,8 +60,6 @@ function failed(c: Context<AppEnv>, provider: OAuthProvider, code: OAuthFailure,
   logFailure(c, provider, code);
   return page(c, <OAuthErrorPage locale={locale} origin={new URL(c.req.url).origin} />, status);
 }
-
-type LinkNotice = "ok" | "taken" | "hasProvider" | "failed";
 
 /** Back to the owner's page with one fixed word; `/me` shows the message for it. The URL carries no code, state or id. */
 const backToMe = (c: Context<AppEnv>, locale: Locale, notice: LinkNotice) => c.redirect(`${localizedPath(locale, "/me")}?link=${notice}`, 303);

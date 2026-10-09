@@ -15,7 +15,7 @@ import { requestOrigin } from "../http/origin.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
 import { InquiryThread } from "../views/InquiryThread.tsx";
-import { LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
+import { LINK_NOTICES, LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
 import { RequestList } from "../views/me/RequestList.tsx";
 import { Layout } from "../views/Layout.tsx";
 import { page } from "../views/render.ts";
@@ -57,7 +57,7 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
     const locale = c.get("locale");
     const tr = translator(locale);
     const user = c.get("user")!;
-    const notice = (["ok", "taken", "hasProvider", "failed"] as const).find((v) => v === c.req.query("link"));
+    const notice = LINK_NOTICES.find((v) => v === c.req.query("link"));
     const [inquiries, requests, identities, linkable] = await Promise.all([listClientInquiries(c.env.DB, user.id), listClientRequests(c.env.DB, user.id), listIdentitiesForUser(c.env.DB, user.id), availableProviders(c)]);
     return page(
       c,

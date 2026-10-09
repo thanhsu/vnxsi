@@ -134,7 +134,8 @@ describe("callback with a link flow (ADR-012 §4)", () => {
     const { cookie } = await signIn(emailOf("lan"));
     const first = (await comeBack("github", cookie, a)).res;
     const second = (await comeBack("github", cookie, b)).res;
-    expect(first.headers.get("location")).toBe(second.headers.get("location"));
+    expect(first.headers.get("location")).toBe("/me?link=taken");
+    expect(second.headers.get("location")).toBe("/me?link=taken");
   });
 
   it("a user who already has another account of that provider gets 'hasProvider' and keeps the old one", async () => {
@@ -178,9 +179,15 @@ describe("callback with a link flow (ADR-012 §4)", () => {
     if (!link.flow) throw new Error("no link flow");
     await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE user_id = ?1").bind(user.id, "2020-01-01T00:00:00.000Z").run();
     const code = issueFakeCode("github", identityOf(), { verifier: link.flow.verifier, nonce: link.flow.nonce, redirectUri: redirectUri("github") });
+    spies.forEach((s) => s.mockClear());
     const res = await callbackReq("github", { code, state: link.flow.state }, `${cookie}; ${link.flowCookie}`);
     expect(res.status).toBe(400);
     expect(await identitiesOf(user.id)).toBe(0);
+    expect(loggedCodes()).toEqual(["session_mismatch"]);
+    // The code was never spent: with the session alive again, the same code still links.
+    await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE user_id = ?1").bind(user.id, "2999-01-01T00:00:00.000Z").run();
+    const again = await callbackReq("github", { code, state: link.flow.state }, `${cookie}; ${link.flowCookie}`);
+    expect(again.headers.get("location")).toBe("/me?link=ok");
   });
 
   it("a link flow whose hash is for another session is not accepted even with a valid state", async () => {
@@ -188,9 +195,15 @@ describe("callback with a link flow (ADR-012 §4)", () => {
     const { user, cookie } = await signIn(emailOf("lan"));
     const flow = newFlowCookie({ provider: "github", intent: "link", state: "s".repeat(43), verifier: "v".repeat(43), nonce: "n".repeat(43), next: null, locale: "en", sessionHash: await linkSessionHash("another-session") }, Date.now());
     const code = issueFakeCode("github", identityOf(), { verifier: flow.verifier, nonce: flow.nonce, redirectUri: redirectUri("github") });
+    spies.forEach((s) => s.mockClear());
     const res = await callbackReq("github", { code, state: flow.state }, `${cookie}; ${OAUTH_COOKIE}=${encodeOAuthCookie(flow)}`);
     expect(res.status).toBe(400);
     expect(await identitiesOf(user.id)).toBe(0);
+    expect(loggedCodes()).toEqual(["session_mismatch"]);
+    // The code was never spent: the same flow bound to the real session redeems it.
+    const right = newFlowCookie({ provider: "github", intent: "link", state: flow.state, verifier: flow.verifier, nonce: flow.nonce, next: null, locale: "en", sessionHash: await linkSessionHash(cookie.split("=")[1] ?? "") }, Date.now());
+    const again = await callbackReq("github", { code, state: right.state }, `${cookie}; ${OAUTH_COOKIE}=${encodeOAuthCookie(right)}`);
+    expect(again.headers.get("location")).toBe("/me?link=ok");
   });
 
   it("the provider's refusal and a bad code come back to /me with 'failed', one fixed log code each, cookie cleared", async () => {
@@ -247,6 +260,7 @@ describe("/me notices for ?link= (VNX-2605a-2)", () => {
     resetFlagCache();
     const { cookie } = await signIn(emailOf("lan"));
     const html = await meHtml("/me?link=%3Cb%3Eevil%3C/b%3E", cookie);
+    expect(html).toContain('<section id="identities"');
     expect(html).not.toContain("evil");
     expect(html).not.toContain('class="notice');
     expect(await meHtml("/me", cookie)).not.toContain('role="status"');

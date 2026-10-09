@@ -3,7 +3,9 @@ import { OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_NAME, type UserIdentity }
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 
-export type LinkNotice = "ok" | "taken" | "hasProvider" | "failed";
+/** The closed set of `/me?link=` results: the one source for the callback, the route and this view. */
+export const LINK_NOTICES = ["ok", "taken", "hasProvider", "failed"] as const;
+export type LinkNotice = (typeof LINK_NOTICES)[number];
 
 const NOTICE_KEY = {
   ok: "me.identities.notice.ok",
