@@ -5,7 +5,9 @@
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "dev": "npm run dev -w apps/web",
-    "deploy": "npm run deploy -w apps/web"
+    "deploy": "npm run deploy -w apps/web",
+    "smoke": "node scripts/smoke.mjs",
+    "test:scripts": "node --test \"scripts/test/**/*.test.mjs\""
   },
   "engines": { "node": ">=22.18" }
 }
