@@ -30,6 +30,7 @@
 - **(2026-10-07) Email báo liên kết/hủy liên kết** gồm: tên provider, `label`, thời điểm (UTC), và câu "Không phải bạn? Đăng nhập bằng link qua email, hủy liên kết ở `/me` và viết cho contact@vnx.si". Email chỉ gửi tới `users.email` của chính chủ.
 - **(2026-10-10) Task 9:** câu chữ nút hủy liên kết, hai thông báo, hai email (gồm dòng link `/me` trơn) duyệt nguyên văn 4 locale; câu "Không phải bạn?" của email hủy liên kết là "kiểm tra các tài khoản liên kết ở /me"; mục `/me` chỉ-thông-báo chỉ cho `unlinked`/`notLinked`; thêm task VNX-2605c (kết thúc session `oauth_<provider>` khi hủy liên kết), bắt buộc trước VNX-2608.
 - **(2026-10-10) Task 10-11:** (E1) cờ của một provider **tắt thì huy hiệu công khai của provider đó biến mất khỏi `/b/:handle` và công tắc của nó biến mất khỏi `/hub/profile`**; route truyền danh sách provider khả dụng (cờ bật VÀ đã cấu hình, quy tắc `availableProviders`) vào `listPublicBadges` và view hub; `show_on_profile` đã lưu KHÔNG bị đổi bởi cờ, bật lại cờ thì huy hiệu hiện lại. (E2) tài khoản EMU: giữ link như ADR-012 §5; xem lại bằng tài khoản thật ở VNX-2608. (E3) câu chữ hai task duyệt nguyên văn 4 locale. Link GitHub đi thẳng, không qua `/go/` (xem "Ghi nhận" của Task 11).
+- **(2026-10-10) Task 9c (VNX-2605c) và Task 12:** (E1 = b1) hủy liên kết P kết thúc MỌI session `oauth_<P>` của user, kể cả của người bấm khi session đó là `oauth_<P>` (route xóa cookie, 303 `/me?link=unlinked`, `/login?next=…` rồi thông báo "unlinked" có sẵn; không chuỗi mới); (E2) "đăng xuất các phiên khác" vào backlog sau VNX-2608, rủi ro còn lại ghi ở "Ghi nhận" của Task 9c; (E3) email hủy liên kết thêm `email.identityUnlinked.sessions`, duyệt nguyên văn 4 locale; (E4) bổ sung pháp lý tài khoản liên kết không phải "thay đổi quan trọng", không báo trước. Task 12 chờ rebase lên `main` (bản M7 của Privacy). Thứ tự: 9c, rebase, 12, 2604d, 2608.
 
 ## Quyết định thiết kế của Reviewer (Opus đã duyệt có chỉnh, 2026-10-07)
 
@@ -6927,3 +6928,743 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **Ghi nhận:** `login` GitHub đổi tên thì `label` chỉ được làm mới ở lần đăng nhập kế (ADR-012 §5, `touchIdentityLogin`); trước đó huy hiệu link tới login cũ (có thể 404 hoặc sang người khác). Chấp nhận theo ADR; nếu Owner thấy là rủi ro mạo danh, đó là quyết định mới (làm mới định kỳ cần gọi GitHub, cần ADR).
 
 #### Kết quả review Task 10–11 (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa M1–M5, L1–L6, S1–S3, H1; câu chữ và E1/E2 do Owner duyệt 2026-10-10
+
+---
+
+### Task 9c: VNX-2605c — Hủy liên kết kết thúc các session `oauth_<provider>` (bảng thứ tự để "—" cho dòng này nên không chiếm số 12; số 12 là VNX-2607)
+
+**Phụ thuộc:** Task 9 (APPROVE). **Review Focus:** 6 (audit cùng batch, không token), 4, 7. **Bắt buộc trước VNX-2608** (Owner 2026-10-10).
+
+**Mục tiêu.** Lý do của Owner: kẻ đã liên kết tài khoản provider của mình vào tài khoản nạn nhân (cần một session sống của nạn nhân) rồi đăng nhập bằng nó giữ được phiên `oauth_<provider>` tới 30 ngày sau khi nạn nhân hủy liên kết. Sau task này: `POST /me/identities/:provider/unlink` xóa các session của chính user đó có `method = oauth_<provider>`, **trong cùng `db.batch`** với việc xóa hàng `user_identities` và dòng audit. Không đổi schema. Thêm một câu vào email hủy liên kết (E3) và đóng race ở callback đăng nhập (quyết định 10). Các quyết định E1–E4 của Owner 2026-10-10 nằm trong mục "Đã chốt".
+
+**Quyết định kỹ thuật** (từ code thật; Reviewer kiểm):
+1. **Hàm ghi `sessions` nằm ở `auth/sessions.ts`** (người ghi duy nhất; `WRITERS.sessions` ở `test/architecture.test.ts:27` bắt mọi `DELETE FROM sessions` ngoài file này). Thêm `endProviderSessionsStatement(db, { userId, provider }) → D1PreparedStatement`, cùng kiểu với `deleteUserSessionsStatement` (route `admin-users.tsx` đã ghép nó vào batch của route).
+2. **Ghép vào batch: tham số bắt buộc `endSessions` của `unlinkIdentity`; `db/identities.ts` KHÔNG import `auth/`.** `ARCHITECTURE.md` §2: `db/` chỉ phụ thuộc domain, `auth/` phụ thuộc db; import `db → auth` đảo chiều và dễ tạo vòng. `unlinkIdentity` vẫn sở hữu `db.batch` (một chỗ duy nhất xóa `user_identities` và ghi audit), nhận một statement dựng sẵn và chạy nó giữa audit và DELETE. Tham số **bắt buộc** (kiểu `D1PreparedStatement`) nên người gọi sau này không quên kết thúc session. Không thêm `user_identities` vào SQL của `sessions.ts` (allowlist `IDENTITY_ALLOWED` chặn `FROM user_identities` ngoài 6 file; không nới).
+3. **Thứ tự batch:** `[audit (guard: hàng identity còn), endSessions, DELETE user_identities … RETURNING]`. D1 chạy batch như một transaction: statement nào lỗi thì cả batch hoàn tác (test nguyên tử ở Step 1 chứng minh bằng trigger thật). `endSessions` không có guard riêng (không đọc `user_identities`): hai lần bấm đồng thời thì lần sau xóa 0 hàng, vô hại; trường hợp `existing` null thì `unlinkIdentity` thoát sớm trước batch nên **không xóa gì** (`notLinked`).
+4. **Chỉ đúng `user_id` và `method`:** `DELETE FROM sessions WHERE user_id = ?1 AND method = ?2`; `?2 = sessionMethodFor(provider)` (`domain/identity.ts`). Session `magic_link`, session của provider khác, session của user khác không bao giờ khớp. Dùng `idx_sessions_user` (migration 0003). **Bất biến (Owner E1 = b1, 2026-10-10): không còn session `oauth_<P>` nào của user này sau một lần hủy liên kết P.**
+5. **Session của người bấm (Owner E1 = b1):** nếu session đang bấm có `method = oauth_<P>` thì nó cũng bị xóa bởi cùng câu DELETE; route chỉ cần xóa cookie: `if (removed && user.method === sessionMethodFor(provider)) clearSessionCookie(c)`, rồi 303 về `/me?link=unlinked` như thường. `requireUser` đưa người dùng tới `/login?next=…`, đăng nhập xong họ thấy thông báo "unlinked" có sẵn. Không có hằng số chính sách, không băm cookie, không chuỗi giao diện mới. Người bấm từ session `magic_link` hay provider khác thì giữ nguyên session.
+6. **(đã bỏ, thuộc phương án giữ session người bấm)**
+7. **Audit giữ `{ provider }`** (quyết định 7 của Reviewer). Không ghi số session đã kết thúc: `unlinkIdentity` phải đếm trước khi xóa rồi nhét số vào dữ liệu audit bằng subquery, thêm phụ thuộc giữa hai bảng cho một con số mà luật tất định ("mọi session `oauth_<provider>` của user này") đã nói đủ; không có lý do mạnh để đổi.
+8. **Không backfill.** Cờ provider đang tắt trên production nên chưa có session `oauth_*` thật; không cần SQL dọn một lần cho các lần hủy trước task này.
+9. **Email hủy liên kết thêm một câu (Owner E3, duyệt nguyên văn 2026-10-10):** khóa `email.identityUnlinked.sessions` đặt sau `email.identityUnlinked.body` trong email hủy liên kết. Gửi mail vẫn sau batch; mail lỗi không hoàn tác việc kết thúc session (có test).
+10. **Race ở callback đăng nhập (`routes/oauth.tsx:157-171`, review MEDIUM-1).** Hiện callback: tìm identity, `markLogin`, `writeAudit`, `touchIdentityLogin`, `createSession`. Nếu hủy liên kết chen vào sau `findIdentityByProviderSubject` thì `createSession` vẫn tạo session `oauth_<P>` sau khi batch hủy đã xóa, và session đó sống 30 ngày: đúng lỗ hổng task này đóng. Sửa: **tạo session trước, rồi xác nhận identity còn**: `touchIdentityLogin` đổi thành `UPDATE user_identities SET … WHERE id = ?1 AND user_id = ?4 RETURNING id` và trả `boolean`; nếu hàng đã mất thì `deleteSession(db, raw)`, trả trang "chưa liên kết" có sẵn (cùng byte với mọi trường hợp chưa liên kết) và **không đặt cookie session**. Quyết định: chuyển `writeAudit` `auth.login` xuống **sau** bước xác nhận này để một lần đăng nhập bị từ chối không để lại dòng `auth.login`; `markLogin` (cập nhật `last_login_at`) giữ trước vì nó là thao tác trên `users` và đã là hành vi hiện có. Ghi lại: lần chen vào giữa `touchIdentityLogin` và việc đặt cookie không còn nguy hiểm, vì session đã tạo sau lần xác nhận cuối chỉ bị xóa bởi lần hủy nếu hủy chạy sau (batch xóa mọi `oauth_<P>` của user).
+11. **Cỡ:** ≈ 70 dòng mã, ≈ 330 dòng test; dưới 600, không tách.
+
+**Đã chốt (Owner 2026-10-10; không còn câu hỏi mở):**
+- **E1 = (b1):** hủy liên kết P cũng kết thúc session của chính người bấm khi session đó có `method = oauth_<P>`; route xóa cookie và 303 về `/me?link=unlinked` đã bản địa hóa; `requireUser` đưa tới `/login?next=…`, đăng nhập xong người dùng thấy thông báo "unlinked" có sẵn. Không chuỗi mới.
+- **E2:** "đăng xuất các phiên khác" như hành động chung đưa vào backlog sau VNX-2608 (xem "Ghi nhận").
+- **E3:** email hủy liên kết thêm một câu, duyệt nguyên văn 4 locale (bảng dưới).
+- **E4:** phần bổ sung pháp lý về tài khoản liên kết KHÔNG phải "thay đổi quan trọng": không báo trước (Task 12).
+
+| Khóa (thêm ngay sau `email.identityUnlinked.body` của từng file locale; KHÔNG có chú thích "BẢN NHÁP") | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `email.identityUnlinked.sessions` | Every device that was signed in with it has been signed out. | Mọi thiết bị đang đăng nhập bằng tài khoản đó đã được đăng xuất. | 所有用该账号登录的设备都已退出登录。 | 所有用該帳號登入的裝置都已登出。 |
+
+Trong `email/templates/identity.ts` (`compose`): khi `kind === "unlinked"`, chèn `p(tr("email.identityUnlinked.sessions"))` ngay sau `p(body)` (HTML) và một dòng tương ứng sau `body` trong `text`; email liên kết không đổi. Test: `identity-templates.test.ts` (mỗi locale email hủy chứa câu, email liên kết không chứa) và `identity-unlink.test.ts` (email gửi thật chứa câu).
+
+**Files:**
+- Modify: `apps/web/src/auth/sessions.ts`, `apps/web/src/db/identities.ts` (`unlinkIdentity`, `touchIdentityLogin`), `apps/web/src/routes/me.tsx`, `apps/web/src/routes/oauth.tsx`, `apps/web/src/email/templates/identity.ts`, 4 file `apps/web/src/i18n/messages/*.ts`, `apps/web/test/db/identities.test.ts` (3 lời gọi `unlinkIdentity`, lời gọi `touchIdentityLogin`), `apps/web/test/email/identity-templates.test.ts`, `apps/web/test/me/identity-unlink.test.ts`, `apps/web/test/architecture.test.ts` (hai assertion).
+- Create: `apps/web/test/auth/end-provider-sessions.test.ts`, `apps/web/test/me/identity-unlink-sessions.test.ts`, `apps/web/test/auth/oauth-unlink-race.test.ts`.
+
+**Interfaces:**
+- Consumes: `unlinkIdentity`, `touchIdentityLogin`, `UserIdentity` (`db/identities.ts`); `sessionMethodFor`, `OAuthProvider`, `SessionMethod` (`domain/identity.ts`); `clearSessionCookie` (`auth/cookies.ts`); `deleteSession`, `createSession` (`auth/sessions.ts`); `signIn(email, { method })`, `ensureUser` (`test/fixtures.ts`); `linkedUser`, `enableProvider`, `startOAuth`, `issueCodeFor`, `callbackReq` (`test/oauth-flow.ts`); `formPost`, `getReq`, `testEnv` (`test/helpers.ts`).
+- Produces: `endProviderSessionsStatement(db, { userId, provider })` (`auth/sessions.ts`); `unlinkIdentity(db, { userId, provider, now, endSessions })` với `endSessions: D1PreparedStatement` bắt buộc; `touchIdentityLogin(db, { id, userId, label, now }) → Promise<boolean>` (`db/identities.ts`).
+
+- [ ] **Step 1: Test mức DB (đỏ).** Tạo `apps/web/test/auth/end-provider-sessions.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { endProviderSessionsStatement } from "../../src/auth/sessions.ts";
+import { unlinkIdentity } from "../../src/db/identities.ts";
+import type { OAuthProvider, SessionMethod } from "../../src/domain/identity.ts";
+import { signIn } from "../fixtures.ts";
+import { testEnv } from "../helpers.ts";
+import { linkedUser } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}-${Math.random().toString(36).slice(2, 8)}`; // D1 is shared: per-test addresses, no global counts
+const NOW = "2026-10-10T09:00:00.000Z";
+const methodsOf = async (userId: string) =>
+  (await testEnv.DB.prepare("SELECT method FROM sessions WHERE user_id = ?1 ORDER BY method, id_hash").bind(userId).all<{ method: string }>()).results.map((r) => r.method);
+const audits = async (userId: string) =>
+  (await testEnv.DB.prepare("SELECT data FROM audit_log WHERE entity = 'user' AND entity_id = ?1 AND action = 'auth.identity.unlink'").bind(userId).all<{ data: string }>()).results.map((r) => r.data);
+const unlink = (userId: string, provider: OAuthProvider) =>
+  unlinkIdentity(testEnv.DB, { userId, provider, now: NOW, endSessions: endProviderSessionsStatement(testEnv.DB, { userId, provider }) });
+const sessionFor = (email: string, method: SessionMethod) => signIn(email, { method });
+
+describe("unlinkIdentity ends the provider's sessions in its own batch (VNX-2605c)", () => {
+  it("ends the user's sessions of that provider and only those; the audit row stays { provider }", async () => {
+    const email = `lan-${tag()}@example.com`;
+    const { user } = await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    await linkedUser(email, "google", { subject: `s-${tag()}`, label: `g-${tag()}@gmail.example` });
+    for (const m of ["magic_link", "oauth_github", "oauth_github", "oauth_google", "oauth_linkedin"] as const) await sessionFor(email, m);
+    expect(await unlink(user.id, "github")).toMatchObject({ provider: "github" });
+    expect(await methodsOf(user.id)).toEqual(["magic_link", "oauth_google", "oauth_linkedin"]);
+    expect(await audits(user.id)).toEqual(['{"provider":"github"}']); // no session count, no hash
+  });
+
+  it("never touches another user's sessions, even of the same provider", async () => {
+    const a = await linkedUser(`a-${tag()}@example.com`, "github", { subject: `s-${tag()}`, label: `a-${tag()}` });
+    const b = await linkedUser(`b-${tag()}@example.com`, "github", { subject: `s-${tag()}`, label: `b-${tag()}` });
+    await sessionFor(a.user.email, "oauth_github");
+    await sessionFor(b.user.email, "oauth_github");
+    await unlink(a.user.id, "github");
+    expect(await methodsOf(a.user.id)).toEqual([]);
+    expect(await methodsOf(b.user.id)).toEqual(["oauth_github"]);
+    expect(await audits(b.user.id)).toEqual([]);
+  });
+
+  it("an unlink that does not happen (notLinked) deletes nothing and audits nothing", async () => {
+    const email = `lan-${tag()}@example.com`;
+    const { user } = await linkedUser(email, "google", { subject: `s-${tag()}`, label: `g-${tag()}@gmail.example` });
+    await sessionFor(email, "oauth_github"); // a session of a provider the user has no identity for
+    await sessionFor(email, "oauth_google");
+    expect(await unlink(user.id, "github")).toBeNull();
+    expect(await methodsOf(user.id)).toEqual(["oauth_github", "oauth_google"]);
+    expect(await audits(user.id)).toEqual([]);
+  });
+
+  it("a user who does not hold the identity cannot end the holder's sessions", async () => {
+    const holder = await linkedUser(`h-${tag()}@example.com`, "github", { subject: `s-${tag()}`, label: `h-${tag()}` });
+    const other = await linkedUser(`o-${tag()}@example.com`, "google", { subject: `s-${tag()}`, label: `o-${tag()}@gmail.example` });
+    await sessionFor(holder.user.email, "oauth_github");
+    expect(await unlink(other.user.id, "github")).toBeNull();
+    expect(await methodsOf(holder.user.id)).toEqual(["oauth_github"]);
+  });
+
+  it("is atomic: when the identity DELETE fails, the sessions, the row and the audit are all untouched", async () => {
+    const email = `lan-${tag()}@example.com`;
+    const label = `boom-${tag()}`;
+    const { user } = await linkedUser(email, "github", { subject: `s-${tag()}`, label });
+    await sessionFor(email, "oauth_github");
+    await sessionFor(email, "oauth_github");
+    // A trigger that aborts only the DELETE of this row: the batch is one transaction, so nothing before it may stick.
+    await testEnv.DB.prepare(`CREATE TRIGGER vnx_test_unlink_boom BEFORE DELETE ON user_identities WHEN OLD.label = '${label}' BEGIN SELECT RAISE(ABORT, 'boom'); END`).run();
+    try {
+      await expect(unlink(user.id, "github")).rejects.toThrow();
+      expect(await methodsOf(user.id)).toEqual(["oauth_github", "oauth_github"]);
+      expect((await testEnv.DB.prepare("SELECT count(*) AS n FROM user_identities WHERE user_id = ?1").bind(user.id).first<{ n: number }>())?.n).toBe(1);
+      expect(await audits(user.id)).toEqual([]);
+    } finally {
+      await testEnv.DB.prepare("DROP TRIGGER IF EXISTS vnx_test_unlink_boom").run();
+    }
+    expect(await unlink(user.id, "github")).not.toBeNull(); // without the trigger the same call goes through
+    expect(await methodsOf(user.id)).toEqual([]);
+  });
+});
+
+
+- [ ] **Step 2: Chạy, thấy đỏ.** `npm test -w apps/web -- test/auth/end-provider-sessions.test.ts` → FAIL (chưa có `endProviderSessionsStatement`; chữ ký `unlinkIdentity` chưa có `endSessions`).
+
+- [ ] **Step 3: Cài đặt lõi (xanh).**
+
+`apps/web/src/auth/sessions.ts`: thêm dòng import `sessionMethodFor` và `type OAuthProvider` từ `../domain/identity.ts` (file đã import `isSessionMethod, SessionMethod` từ đó); thêm cuối file:
+
+```ts
+/**
+ * Ends this user's sessions that were created by signing in with that provider (VNX-2605c). Built for the unlink batch: it runs in the same
+ * db.batch as the identity DELETE and its audit row, so all three commit or none do. Another user's sessions and this user's other methods never match.
+ * All of them, the caller's own included (Owner E1 = b1): no session made through that provider survives an unlink. It reads no other table; with the
+ * identity already gone (a double press) it can only end sessions of that provider created since, so it signs the user out and never grants access.
+ */
+export function endProviderSessionsStatement(db: D1Database, input: { userId: string; provider: OAuthProvider }): D1PreparedStatement {
+  return db.prepare("DELETE FROM sessions WHERE user_id = ?1 AND method = ?2").bind(input.userId, sessionMethodFor(input.provider));
+}
+```
+
+`apps/web/src/db/identities.ts`: thay docstring và hàm `unlinkIdentity`:
+
+```ts
+/**
+ * Removes the user's account of that provider and audits it, atomically, together with `endSessions`: the statement that ends the sessions
+ * made through that provider (`endProviderSessionsStatement`; the caller builds it because `auth/` owns `sessions` and `db/` does not import `auth/`).
+ * Required, so no caller can unlink without ending them. The audit statement runs first: it is guarded on the row existing for that user,
+ * which is no longer true after the DELETE. Null (no audit row, nothing deleted, `endSessions` never run) when the user has none.
+ */
+export async function unlinkIdentity(
+  db: D1Database,
+  input: { userId: string; provider: OAuthProvider; now: string; endSessions: D1PreparedStatement },
+): Promise<UserIdentity | null> {
+  const existing = await db.prepare("SELECT * FROM user_identities WHERE user_id = ?1 AND provider = ?2").bind(input.userId, input.provider).first<Row>();
+  if (!existing) return null;
+  const results = await db.batch<{ id: string }>([
+    auditStatement(
+      db,
+      { actorUserId: input.userId, action: IDENTITY_AUDIT.unlink, entity: "user", entityId: input.userId, data: { provider: input.provider }, now: input.now },
+      { identityId: existing.id, userId: input.userId },
+    ),
+    input.endSessions,
+    db.prepare("DELETE FROM user_identities WHERE id = ?1 AND user_id = ?2 RETURNING id").bind(existing.id, input.userId),
+  ]);
+  return results[2]?.results.length ? toIdentity(existing) : null;
+}
+```
+
+`apps/web/test/db/identities.test.ts`: import `endProviderSessionsStatement` từ `../../src/auth/sessions.ts`; thêm `const end = (userId: string, provider: "google" | "github" | "linkedin") => endProviderSessionsStatement(testEnv.DB, { userId, provider });` và thêm `endSessions: end(<userId>, <provider>)` vào ba lời gọi `unlinkIdentity` (và thêm `userId` vào lời gọi `touchIdentityLogin`, xem Step 5b) (dòng 72, 76: `end(user.id, "linkedin")`; dòng 85: `end(other.id, "github")`).
+
+Chạy lại Step 1 và `npm test -w apps/web -- test/db/identities.test.ts` → PASS.
+
+- [ ] **Step 4: Test route (đỏ).** Tạo `apps/web/test/me/identity-unlink-sessions.test.ts`:
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import type { SessionMethod } from "../../src/domain/identity.ts";
+import { clearOutbox, FakeMailer, outbox } from "../../src/email/fake.ts";
+import { signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+import { linkedUser } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}-${Math.random().toString(36).slice(2, 8)}`;
+const emailOf = (who: string) => `${who}-${tag()}@example.com`;
+const unlink = (provider: string, cookie: string, headers: Record<string, string> = {}) =>
+  createApp().request(formPost(`/me/identities/${provider}/unlink`, {}, { cookie, ...headers }), undefined, testEnv);
+const meRes = (cookie: string) => createApp().request(getReq("/me", cookie), undefined, testEnv);
+const meStatus = async (cookie: string) => (await meRes(cookie)).status;
+const sessionFor = (email: string, method: SessionMethod) => signIn(email, { method });
+const n = async (sql: string, ...binds: unknown[]) => (await testEnv.DB.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0;
+
+beforeEach(() => {
+  clearOutbox();
+  for (const m of ["error", "warn", "log", "info", "debug"] as const) vi.spyOn(console, m).mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("unlinking ends the provider's sessions (VNX-2605c)", () => {
+  it("from a magic-link session: every GitHub session of the user is signed out on its next request; the others carry on", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    await linkedUser(email, "google", { subject: `s-${tag()}`, label: `g-${tag()}@gmail.example` });
+    const caller = await sessionFor(email, "magic_link");
+    const github1 = await sessionFor(email, "oauth_github");
+    const github2 = await sessionFor(email, "oauth_github");
+    const other = await sessionFor(email, "magic_link"); // another device, e-mail link
+    const google = await sessionFor(email, "oauth_google");
+    expect(await meStatus(github1.cookie)).toBe(200); // alive before
+    const res = await unlink("github", caller.cookie);
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+    for (const ended of [github1, github2]) {
+      const after = await meRes(ended.cookie);
+      expect(after.status).toBe(303); // requireUser: no session any more
+      expect(after.headers.get("location")).toContain("/login");
+    }
+    for (const alive of [caller, other, google]) expect(await meStatus(alive.cookie)).toBe(200);
+  });
+
+  it("the caller's own session (Owner E1 = b1): a GitHub session that unlinks GitHub is signed out too, its row is gone, the cookie is cleared", async () => {
+    const email = emailOf("lan");
+    const { user } = await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    const mine = await sessionFor(email, "oauth_github");
+    const elsewhere = await sessionFor(email, "oauth_github");
+    const res = await unlink("github", mine.cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+    expect(res.headers.getSetCookie().some((l) => l.startsWith("__Host-vnx_session=") && /Max-Age=0/i.test(l))).toBe(true); // cookie cleared
+    expect(await n("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'oauth_github'", user.id)).toBe(0);
+    for (const ended of [mine, elsewhere]) {
+      const next = await meRes(ended.cookie); // the next request to /me
+      expect(next.status).toBe(303);
+      expect(next.headers.get("location")).toContain("/login");
+    }
+  });
+
+  it("a caller on an oauth_google session who unlinks GitHub stays signed in (and the GitHub sessions end)", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    await linkedUser(email, "google", { subject: `s-${tag()}`, label: `g-${tag()}@gmail.example` });
+    const google = await sessionFor(email, "oauth_google");
+    const github = await sessionFor(email, "oauth_github");
+    const res = await unlink("github", google.cookie);
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+    expect(res.headers.getSetCookie().some((l) => l.startsWith("__Host-vnx_session="))).toBe(false); // not cleared
+    expect(await meStatus(google.cookie)).toBe(200);
+    expect(await meStatus(github.cookie)).toBe(303);
+  });
+
+  it("another user's sessions (even their GitHub ones) are untouched", async () => {
+    const a = emailOf("a");
+    const b = emailOf("b");
+    await linkedUser(a, "github", { subject: `s-${tag()}`, label: `a-${tag()}` });
+    await linkedUser(b, "github", { subject: `s-${tag()}`, label: `b-${tag()}` });
+    const aSession = await sessionFor(a, "magic_link");
+    const bGithub = await sessionFor(b, "oauth_github");
+    await unlink("github", aSession.cookie);
+    expect(await meStatus(bGithub.cookie)).toBe(200);
+  });
+
+  it("an unlink that does not happen (notLinked) ends nothing", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "google", { subject: `s-${tag()}`, label: `g-${tag()}@gmail.example` });
+    const caller = await sessionFor(email, "magic_link");
+    const github = await sessionFor(email, "oauth_github"); // a session with no identity behind it
+    const res = await unlink("github", caller.cookie);
+    expect(res.headers.get("location")).toBe("/me?link=notLinked");
+    expect(await meStatus(github.cookie)).toBe(200);
+  });
+
+  it("a refused request (foreign Origin, signed out) ends nothing", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    const caller = await sessionFor(email, "magic_link");
+    const github = await sessionFor(email, "oauth_github");
+    expect((await unlink("github", caller.cookie, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await createApp().request(formPost("/me/identities/github/unlink", {}), undefined, testEnv)).status).toBe(303); // to /login
+    expect(await meStatus(github.cookie)).toBe(200);
+  });
+
+  it("a failing mailer does not bring the sessions back; the sent e-mail carries the sessions sentence", async () => {
+    const email = emailOf("lan");
+    const { user } = await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    const caller = await sessionFor(email, "magic_link");
+    await sessionFor(email, "oauth_github");
+    const send = vi.spyOn(FakeMailer.prototype, "send").mockRejectedValue(new Error("boom"));
+    await unlink("github", caller.cookie);
+    send.mockRestore();
+    expect(await n("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'oauth_github'", user.id)).toBe(0);
+    const again = emailOf("lan2");
+    await linkedUser(again, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    await unlink("github", (await sessionFor(again, "magic_link")).cookie);
+    const mails = outbox.filter((m) => m.to === again);
+    expect(mails).toHaveLength(1);
+    expect(mails[0]?.text).toContain("Every device that was signed in with it has been signed out.");
+  });
+});
+```
+Chạy `npm test -w apps/web -- test/me/identity-unlink-sessions.test.ts` → FAIL ở "from a magic-link session" (session GitHub còn sống; TypeScript cũng đỏ vì route chưa truyền `endSessions`).
+
+- [ ] **Step 5: Route (xanh).** `apps/web/src/routes/me.tsx`: import `clearSessionCookie` từ `../auth/cookies.ts` (dòng `readSessionCookie` hiện có vẫn dùng cho route link), `endProviderSessionsStatement` từ `../auth/sessions.ts`; mở rộng dòng import `isOAuthProvider` từ `../domain/identity.ts` thêm `sessionMethodFor`. Thay thân route unlink:
+
+```ts
+  onLocalized(app, "post", "/me/identities/:provider/unlink", requireUser, async (c) => {
+    const provider = c.req.param("provider");
+    if (!isOAuthProvider(provider)) return errorResponse(c, "notFound", 404);
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    // VNX-2605c: the same batch ends EVERY session of this user made through `provider`, the caller's own included (Owner E1 = b1).
+    const removed = await unlinkIdentity(c.env.DB, { userId: user.id, provider, now, endSessions: endProviderSessionsStatement(c.env.DB, { userId: user.id, provider }) });
+    if (removed) await notifyIdentityChange(c.env, { kind: "unlinked", to: user.email, locale: user.locale, provider, label: removed.label, at: now, requestId: c.get("requestId") });
+    // The caller's own session was deleted too when it came in through this provider: clear its cookie. The redirect is unchanged; `requireUser` then sends them to /login?next=…
+    if (removed && user.method === sessionMethodFor(provider)) clearSessionCookie(c);
+    return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${removed ? "unlinked" : "notLinked"}`, 303);
+  });
+```
+Sửa dòng chú thích phía trên route: thêm "and ends every session of this user made through that provider". Chạy lại Step 4 → PASS.
+
+**Email (E3):** thêm khóa `email.identityUnlinked.sessions` vào 4 file locale và vào `compose` của `email/templates/identity.ts` như mục "Đã chốt"; chạy `npm test -w apps/web -- test/email/identity-templates.test.ts test/me/identity-unlink.test.ts test/i18n`.
+
+- [ ] **Step 5b: Race ở callback đăng nhập (đỏ rồi xanh; quyết định 10).** Tạo `apps/web/test/auth/oauth-unlink-race.test.ts`. Dùng helper của `test/oauth-flow.ts` (`enableProvider`, `startOAuth`, `issueCodeFor`, `callbackReq`, `linkedUser`) và so trang "chưa liên kết" với trang của một callback bằng identity chưa liên kết đúng cách test byte-identity của Task 6 (`test/auth/oauth-routes.test.ts`; tái dùng helper so byte trừ request id của nó, bọc thành `sameAsNotLinkedPage(res)`). Hai trigger mô phỏng "hủy liên kết chen vào": (i) `AFTER UPDATE ON users` (chạy trong `markLogin`), (ii) `AFTER INSERT ON sessions` (chạy khi tạo session); cả hai xóa identity của user như một lần hủy đồng thời.
+
+```ts
+const cases = [
+  { name: "vnx_test_race_users", event: "AFTER UPDATE ON users", cond: (id: string) => `NEW.id = '${id}'` },
+  { name: "vnx_test_race_sessions", event: "AFTER INSERT ON sessions", cond: (id: string) => `NEW.user_id = '${id}'` },
+];
+for (const c of cases) {
+  it(`unlinked mid sign-in (${c.name}): the not-linked page, no session cookie, no oauth_github session, no auth.login audit`, async () => {
+    await enableProvider("github");
+    const email = `lan-${tag()}@example.com`;
+    const identity = { subject: `s-${tag()}`, label: `l-${tag()}` };
+    const { user } = await linkedUser(email, "github", identity);
+    const started = await startOAuth("github");
+    const code = issueCodeFor("github", started, identity);
+    await testEnv.DB.prepare(`CREATE TRIGGER ${c.name} ${c.event} WHEN ${c.cond(user.id)} BEGIN DELETE FROM user_identities WHERE user_id = '${user.id}'; END`).run();
+    try {
+      const res = await callbackReq("github", { code, state: started.flow.state }, started.cookie);
+      expect(res.status).toBe(200); // the same page as for an unlinked account (Task 6)
+      expect(await sameAsNotLinkedPage(res)).toBe(true);
+      expect(res.headers.getSetCookie().some((l) => l.startsWith("__Host-vnx_session="))).toBe(false);
+    } finally {
+      await testEnv.DB.prepare(`DROP TRIGGER IF EXISTS ${c.name}`).run(); // always dropped
+    }
+    expect(await n("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'oauth_github'", user.id)).toBe(0);
+    expect(await n("SELECT count(*) AS n FROM audit_log WHERE entity = 'user' AND entity_id = ?1 AND action = 'auth.login'", user.id)).toBe(0);
+  });
+}
+```
+(`n`, `tag` như các file test khác.) Chạy `npm test -w apps/web -- test/auth/oauth-unlink-race.test.ts` → FAIL (session `oauth_github` còn sống, cookie được đặt). Cài đặt:
+
+`apps/web/src/db/identities.ts`:
+
+```ts
+/** A sign-in with this identity: records the time and refreshes the label (the GitHub login can change; ADR-012 §5). False when the row is gone (unlinked meanwhile): the caller must then end the session it just made. */
+export async function touchIdentityLogin(db: D1Database, input: { id: string; userId: string; label: string; now: string }): Promise<boolean> {
+  const { results } = await db
+    .prepare("UPDATE user_identities SET label = ?2, last_used_at = ?3, updated_at = ?3 WHERE id = ?1 AND user_id = ?4 RETURNING id")
+    .bind(input.id, input.label, input.now, input.userId)
+    .all<{ id: string }>();
+  return results.length === 1;
+}
+```
+`apps/web/src/routes/oauth.tsx` (callback: thay các dòng từ `await markLogin` tới `writeSessionCookie`; thêm `deleteSession` vào import từ `../auth/sessions.ts`):
+
+```ts
+      await markLogin(c.env.DB, user.id, { now: iso, isAdmin: adminEmails(c.env).has(user.email) });
+      // Session first, then confirm the identity still exists: an unlink that slipped in after the lookup above has already deleted the
+      // `oauth_<provider>` sessions that existed (VNX-2605c), so a session made now must not outlive it.
+      const raw = await createSession(c.env.DB, user.id, now, method);
+      if (!(await touchIdentityLogin(c.env.DB, { id: identity.id, userId: user.id, label: result.identity.label, now: iso }))) {
+        await deleteSession(c.env.DB, raw);
+        return await page(c, <OAuthNotLinkedPage locale={flow.locale} origin={new URL(c.req.url).origin} />);
+      }
+      // The audit row comes after the check (decision 10): a refused sign-in leaves no `auth.login`.
+      await writeAudit(c.env.DB, { actorUserId: user.id, action: "auth.login", entity: "user", entityId: user.id, data: { method }, now: iso });
+      writeSessionCookie(c, raw);
+      return c.redirect(safeNext(flow.next) ?? localizedPath(flow.locale, "/"), 303);
+```
+Cập nhật `test/db/identities.test.ts`: lời gọi `touchIdentityLogin` thêm `userId`; thêm một test "returns false and changes nothing when the row is gone or belongs to another user". Chạy lại file race → PASS; `npm test -w apps/web -- test/auth/oauth-routes.test.ts test/auth/oauth-link.test.ts test/db/identities.test.ts` → PASS (byte-identity và log-shape của Task 6 giữ xanh; nếu một test Task 6 kiểm thứ tự `auth.login` trước `createSession`, sửa theo thứ tự mới và ghi vào báo cáo).
+
+- [ ] **Step 6: Test kiến trúc.** Thêm vào `apps/web/test/architecture.test.ts`, sau khối `linked identities stay in their module`:
+
+```ts
+describe("unlinking ends the provider's sessions (VNX-2605c)", () => {
+  it("db/ imports nothing from auth/ (ARCHITECTURE.md §2): the unlink batch receives its sessions statement", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (!file.startsWith("../src/db/")) continue;
+      expect(src, `${file} imports auth/`).not.toMatch(/from\s+["']\.\.\/auth\//);
+    }
+  });
+
+  it("the only caller of unlinkIdentity passes it endProviderSessionsStatement, and only auth/sessions.ts deletes sessions", () => {
+    const callers = Object.entries(sources).filter(([file, src]) => /\bunlinkIdentity\(/.test(src) && file !== "../src/db/identities.ts");
+    expect(callers.map(([file]) => file)).toEqual(["../src/routes/me.tsx"]);
+    expect(callers[0]?.[1]).toContain("endProviderSessionsStatement(");
+    for (const [file, src] of Object.entries(sources)) if (/DELETE FROM sessions/.test(src)) expect(file).toBe("../src/auth/sessions.ts");
+  });
+});
+```
+(`sources` chỉ gom `../src/**`, nên các file test không ảnh hưởng.)
+
+- [ ] **Step 7: Tiêu chí chấp nhận.** (`EP` = `apps/web/test/auth/end-provider-sessions.test.ts`, `US` = `apps/web/test/me/identity-unlink-sessions.test.ts`; `npm test -w apps/web -- <đường dẫn> -t "<tên>"`)
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | Session của provider P kết thúc; `magic_link` và provider khác còn; audit chỉ `{provider}` | `EP -t "ends the user's sessions of that provider"` |
+| 2 | Session của user khác không bị chạm, kể cả cùng provider | `EP -t "another user's sessions"` và `US -t "another user's sessions"` |
+| 3 | Session của người bấm: `oauth_<P>` bị đăng xuất, cookie xóa, hàng mất; `oauth_google` bấm hủy GitHub thì còn | `US -t "the caller's own session"` và `US -t "oauth_google session"` |
+| 4 | Session đã kết thúc bị đăng xuất ở request kế tiếp (303 `/login`) | `US -t "from a magic-link session"` |
+| 5 | `notLinked` và người không giữ identity: không xóa gì, không audit | `EP -t "does not happen"`, `EP -t "does not hold"`, `US -t "notLinked"` |
+| 6 | Batch nguyên tử (trigger làm DELETE identity lỗi: session, hàng, audit còn nguyên) | `EP -t "is atomic"` |
+| 7 | Request bị từ chối (Origin ngoài, chưa đăng nhập) không kết thúc gì | `US -t "refused request"` |
+| 8 | Mail lỗi không hoàn tác việc kết thúc session; email hủy có câu "Every device…" 4 locale | `US -t "failing mailer"`, `npm test -w apps/web -- test/email/identity-templates.test.ts test/i18n` |
+| 8b | Hủy chen vào giữa lúc đăng nhập: trang chưa liên kết, không cookie, không session, không audit `auth.login` | `npm test -w apps/web -- test/auth/oauth-unlink-race.test.ts` |
+| 9 | Ranh giới: `db/` không import `auth/`; chỉ `me.tsx` gọi `unlinkIdentity` kèm statement; chỉ `sessions.ts` xóa `sessions` | `npm test -w apps/web -- test/architecture.test.ts` |
+| 10 | Không hồi quy Task 1, 9 | `npm test -w apps/web -- test/db test/me test/auth` |
+| 11 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test -- --maxWorkers=2` |
+
+- [ ] **Step 8: Typecheck, toàn bộ test, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test -- --maxWorkers=2
+git add apps/web/src/auth/sessions.ts apps/web/src/db/identities.ts apps/web/src/routes/me.tsx apps/web/src/routes/oauth.tsx apps/web/src/email/templates/identity.ts \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/auth/end-provider-sessions.test.ts apps/web/test/me/identity-unlink-sessions.test.ts apps/web/test/auth/oauth-unlink-race.test.ts \
+  apps/web/test/db/identities.test.ts apps/web/test/email/identity-templates.test.ts apps/web/test/me/identity-unlink.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): unlinking a provider ends the sessions made through it, in the same batch (VNX-2605c)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+**Kích cỡ ước tính:** mã ≈ 70 dòng (sessions 6, identities 14, me.tsx 8, oauth.tsx 12, template 6), test ≈ 330 dòng (DB 100, route 110, race 60, email 20, kiến trúc 20, sửa cũ 20); locale riêng. Dưới 600 không tính locale: không tách.
+
+**Nghĩa vụ cho task sau:**
+- **VNX-2608:** thử bằng provider thật: đăng nhập GitHub ở hai trình duyệt, hủy liên kết ở trình duyệt thứ ba (magic link), xác nhận hai phiên GitHub bị đăng xuất ở lần tải kế tiếp. Task này đóng điều kiện bắt buộc 2605c trước VNX-2608.
+- **Task 12 (VNX-2607):** dòng Privacy "Sessions: up to 30 days, or until you sign out" vẫn đúng.
+- **Ghi nhận (E2, Owner 2026-10-10):** "đăng xuất các phiên khác" như hành động chung đi vào backlog sau VNX-2608. **Rủi ro còn lại:** một bản sao bị đánh cắp của session `magic_link` vẫn sống tới 30 ngày sau khi hủy liên kết (hủy chỉ kết thúc session `oauth_<P>`); khoảng hở này có từ trước EPIC 26, không do task này tạo ra.
+- **Thứ tự:** 9c, rồi rebase EPIC 26 lên `main`, rồi Task 12 (viết lại), rồi VNX-2604d, rồi VNX-2608.
+
+---
+
+### Task 12: VNX-2607 — Áp dụng câu chữ Privacy và Terms đã duyệt (bổ sung ADR-012) (CHỜ REBASE, viết lại sau khi rebase EPIC 26 lên `main`)
+
+> **TRẠNG THÁI: CHỜ REBASE, viết lại sau khi rebase EPIC 26 lên `main`.** Plan review 2026-10-10: REJECT cho tới khi rebase. Phần bên dưới là bản nháp cũ viết trên nhánh chưa có phần M7 của Privacy; KHÔNG implement nó. Thứ tự: 9c, rebase lên `main`, Task 12 (viết lại), VNX-2604d, VNX-2608. Owner 2026-10-10: E4 = phần bổ sung pháp lý về tài khoản liên kết KHÔNG phải "thay đổi quan trọng" (Terms §12), không báo trước (trả lời câu hỏi mở 7).
+>
+> **Nghĩa vụ cho bản viết lại:**
+> - **BLOCKER-1.** `main` có `docs/legal/privacy-m7.md` và bốn hằng `privacyEn`, `privacyVi`, `privacyEnM7`, `privacyViM7`; `/privacy` hiện bản M7 từ `PRIVACY_NOTICE_GO_LIVE` − 14 ngày (xem `main:.ai/context/CURRENT-STATUS.md:301-302`). Bản viết lại phải: áp bổ sung cho CẢ `privacy.md` VÀ `privacy-m7.md` và cả bốn hằng; đặt `__Host-vnx_oauth` ngay sau `__Host-vnx_invite` ở cả hai phiên bản; mỗi phiên bản có bảng neo riêng; chạy mọi kiểm tra của `linked-accounts.test.ts` cho cả hai phiên bản (trang M7 live với `{ ...testEnv, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" }`); cập nhật phần đầu `privacy-m7.md`.
+> - **MEDIUM-2 / E5 (việc Owner lúc deploy):** ngày hiển thị của bản M7 cố định là D. Deploy VNX-2607 trước D−14 nếu được và đặt `LEGAL_UPDATED_AT` bằng ngày deploy 2607; nếu không, một follow-up cho bản M7 hằng "last updated" riêng.
+> - **LOW-2:** không hard-code câu §8 trong test; suy ra từ mục "Bổ sung" hoặc bỏ.
+> - **LOW-4:** thêm khóa rate limit `oauth:ip:*` (IP thô) vào bảng đối chiếu code.
+> - **E6 (Ghi nhận cho lượt pháp lý kế tiếp, không đổi bây giờ):** đổi §2 Security thành "a record of security-relevant actions (admin actions, sign-ins, linking and unlinking accounts)".
+> - Các lệch 1, 2, 3, 5, 6 giữ nguyên chữ. Ghi chú vận hành: xóa theo yêu cầu phải xóa hàng `user_identities` trước (không có `ON DELETE CASCADE`).
+
+
+**Phụ thuộc:** Task 9, 11 (và Task 9c nếu đã xong, để câu về session đúng). **Cổng:** VNX-2607 phải merge **trước** khi bật bất kỳ cờ provider nào trên production (Owner 2026-10-07; cổng ra EPIC 26). Không có Review Focus riêng; kiểm bằng test câu chữ.
+
+**Mục tiêu.** Chép nguyên văn các khối "Bổ sung ADR-012" (Owner APPROVED 2026-10-07) vào đúng chỗ của `## EN` và `## VI` trong `docs/legal/privacy.md` và `docs/legal/terms.md`, rồi vào `apps/web/src/legal/content.ts`, để `/privacy` và `/terms` (4 locale) hiện chúng. **Không đổi chữ nào của câu đã duyệt.** Đối chiếu từng mệnh đề với code thật (bảng dưới); mọi lệch được liệt kê thành câu hỏi mở kèm đề xuất sửa chính xác, không tự sửa.
+
+**Quyết định kỹ thuật** (Reviewer kiểm):
+1. **Quy ước của file:** các bổ sung M5, M6, EPIC 21 đã được chép thẳng vào `## EN`/`## VI` và ghi vào dòng "Trạng thái" cùng dòng "Đối chiếu code …" ở đầu file, không để lại mục riêng. Với ADR-012, Owner viết sẵn mục "Bổ sung ADR-012" ở cuối file (sau `---`, nên `partOf` của `content.test.ts` không đọc nó). Quyết định: **giữ mục đó làm bản gốc đã duyệt, đổi tiêu đề và dòng trạng thái thành "ĐÃ ÁP DỤNG"** (không xóa: bản gốc Owner duyệt là chứng cứ), và thêm test so từng dòng của nó với `## EN`/`## VI` (Step 1) để hai bản không lệch nhau.
+2. **Test lấy câu chữ từ chính mục "Bổ sung"** (không chép câu vào test): nguồn sự thật duy nhất là văn bản Owner duyệt. Kèm bảng neo (câu đứng ngay sau câu nào) để kiểm vị trí "thêm sau gạch …" và hai chỗ "sửa/thay".
+3. **zh-Hans, zh-Hant:** `views/LegalPage.tsx:82-96` hiện `doc = page.en` kèm `<p class="notice">{tr("legal.englishOnly")}</p>` (đã dịch, ví dụ zh-Hans "本页面目前仅提供英文版本，以英文版本为准。") và `lang="en"` cho thân. Nên không cần sửa `content.ts` riêng cho zh; chỉ cần test bốn trang zh hiện bản EN mới kèm câu "English version applies" đã dịch.
+4. **`LEGAL_UPDATED_AT` không đổi trong task này.** Hằng số dùng chung cho Terms và Privacy (`legal/content.ts:10`, hiện `"2026-10-05"`), Owner chốt khi deploy (dòng "Ngày cập nhật hiển thị" của `terms.md`). Ghi vào "Việc của Owner lúc deploy" và câu hỏi mở 4; `content.test.ts:167` chỉ kiểm `>= "2026-10-05"` nên xanh dù đổi hay không.
+5. **Test ràng buộc câu chữ với code thật** (không chỉ so chữ): tên cookie `__Host-vnx_oauth` bằng `OAUTH_COOKIE`, "up to 10 minutes" bằng `OAUTH_FLOW_TTL_MS` (600 s) và `LINK_INTENT_TTL_MS` ≤ nó, "30 days" bằng `SESSION_TTL_MS`, và tập cột của `user_identities` ghim cứng để một cột mới buộc người sửa đọc lại Privacy §2.
+6. **Cỡ:** không có mã chạy được ngoài chuỗi trong `content.ts`; ≈ 40 dòng `content.ts`, ≈ 80 dòng markdown, ≈ 150 dòng test.
+
+**Đối chiếu từng mệnh đề với code thật (Task 1-11 đã build, nhánh tại `b27fc27`):**
+
+| Mệnh đề đã duyệt | Code thật | Kết quả |
+|---|---|---|
+| Cookie `__Host-vnx_oauth`, "up to 10 minutes" | `auth/oauth-cookie.ts:12` (tên); `domain/oauth.ts:13-14` (luồng 600 s, intent liên kết 120 s); `writeOAuthCookie` đặt `maxAge ≤ 600` | Khớp |
+| Lưu: dịch vụ nào, mã định danh, nhãn (email Google/LinkedIn, username GitHub), thời điểm liên kết, lần đăng nhập gần nhất | `migrations/0017_user_identities.sql`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `id`, `user_id`, `updated_at`, `show_on_profile`) | Khớp, hai lưu ý nhỏ: câu hỏi mở 1 và 2 |
+| "never receive or store the password … do not keep the access keys" | không cột token (test cột Task 1); `auth/oauth/oidc.ts`, `github.ts` dùng token trong một lần `exchange` rồi bỏ; callback chỉ log mã lỗi cố định | Khớp |
+| Sign-in: "session records … including whether … email link or linked account" | `sessions.method` (`magic_link` / `oauth_*`) | Khớp |
+| Builder hiện GitHub username hoặc "LinkedIn verified"; Google không bao giờ; builder không thấy tài khoản liên kết của client | `listPublicBadges` (Task 11): GitHub `login` + link, LinkedIn chỉ `{ provider }`, không Google; test riêng tư Task 11 | Khớp |
+| "Your linked accounts are shown only to you" | `/me` (`listIdentitiesForUser` theo user) và `/hub/profile` (chỉ hàng của builder đó) | Khớp |
+| Dịch vụ đăng nhập biết bạn đăng nhập VNX.SI | luồng OAuth chuyển hướng sang provider | Khớp |
+| "We email you whenever an account is linked to or unlinked from yours" (Privacy §8, Terms §4) | `notify/identity.ts`: hai email tới `users.email`; không gửi khi `already_linked`; gửi lỗi chỉ log, không thử lại | Khớp, một lưu ý: câu hỏi mở 3 |
+| "Linked accounts: until you unlink them or your account is deleted" | `unlinkIdentity` xóa hàng; chưa có luồng xóa tài khoản (`deleteGhostUsers` không chọn user có identity); cột `user_id` không có `ON DELETE CASCADE` | Khớp với chính sách; lưu ý vận hành: câu hỏi mở 6 |
+
+**Câu hỏi mở cho Owner (đều là lệch nhỏ hoặc quyết định chữ; Planner KHÔNG sửa câu đã duyệt):**
+1. **Nhãn "the email address for Google and LinkedIn".** Khi provider không trả email, `label` là chữ "Google"/"LinkedIn" (quyết định 12), không phải email. Chữ duyệt đúng với trường hợp thường. **Đề xuất: không sửa.** (Nếu muốn chính xác tuyệt đối: "(the email address for Google and LinkedIn when they give one, the username for GitHub)".)
+2. **Cột `show_on_profile` và `updated_at` không được liệt kê** trong câu "we store …". `show_on_profile` là lựa chọn "hiện huy hiệu" của builder, đã được nói ở Mục 3 và 4; `updated_at` là dấu thời gian kỹ thuật. **Đề xuất: không sửa.**
+3. **"We email you whenever …" và gửi thất bại.** Email gửi ngay sau khi lưu, không có hàng đợi gửi lại (Task 9 "Ghi nhận"). **Đề xuất: giữ câu.** Nếu Owner muốn tuyệt đối: đổi "We email you" thành "We try to email you" ở Privacy §8 và Terms §4, VI "Chúng tôi cố gắng gửi email cho bạn"; cần Owner duyệt.
+4. **`LEGAL_UPDATED_AT`.** Terms và Privacy dùng chung một ngày. **Đề xuất: đổi thành ngày deploy của VNX-2607 lên production, trong commit deploy hoặc Owner báo ngày.** Việc của Owner lúc deploy; test không chặn.
+5. **Thêm "or until you unlink the account you signed in with" vào dòng session ở Privacy §6?** Chỉ liên quan nếu Task 9c đã merge. Dòng hiện tại "Sessions: up to 30 days, or until you sign out" vẫn đúng. **Đề xuất: không thêm** (không bắt buộc, tránh sửa câu đã duyệt).
+6. **Xóa tài khoản và `user_identities`.** Câu "until … your account is deleted" đúng về chính sách nhưng chưa có luồng xóa; cột `user_id` không có `ON DELETE CASCADE`, nên xóa tay một dòng `users` đang có identity sẽ lỗi khóa ngoại cho tới khi xóa hàng `user_identities` trước. **Đề xuất: ghi vào quy trình xóa theo yêu cầu (Privacy §7) khi có**; không ảnh hưởng câu chữ.
+7. **Terms §12 hứa báo người dùng đã đăng nhập về thay đổi quan trọng.** Thay đổi ở Terms §4 có tính là quan trọng không? Chưa có cơ chế báo (ghi chú Owner trong `terms.md`). **Đề xuất: không tính là quan trọng** (bổ sung phương thức đăng nhập, không đổi nghĩa vụ); Owner quyết.
+
+**Files:**
+- Modify: `docs/legal/privacy.md`, `docs/legal/terms.md`, `apps/web/src/legal/content.ts`.
+- Create: `apps/web/test/legal/linked-accounts.test.ts`.
+- Không sửa: `apps/web/src/views/LegalPage.tsx`, `apps/web/src/routes/legal.tsx`, file locale (không chuỗi giao diện mới), `LEGAL_UPDATED_AT`.
+
+**Interfaces:**
+- Consumes: `LEGAL`, `LEGAL_UPDATED_AT` (`legal/content.ts`); `OAUTH_COOKIE` (`auth/oauth-cookie.ts`); `OAUTH_FLOW_TTL_MS`, `LINK_INTENT_TTL_MS` (`domain/oauth.ts`); `SESSION_TTL_MS` (`auth/sessions.ts`); `t` (`i18n/t.ts`); `createApp`, `testEnv`.
+- Produces: không export mới.
+
+- [ ] **Step 1: Test (đỏ).** Tạo `apps/web/test/legal/linked-accounts.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
+import { SESSION_TTL_MS } from "../../src/auth/sessions.ts";
+import { LINK_INTENT_TTL_MS, OAUTH_FLOW_TTL_MS } from "../../src/domain/oauth.ts";
+import { t } from "../../src/i18n/t.ts";
+import { testEnv } from "../helpers.ts";
+
+// The Owner-approved ADR-012 addendum (2026-10-07) at the foot of docs/legal/*.md is the single source of the wording: the live `## EN`/`## VI`
+// parts must contain every line of it, in the places it names (VNX-2607).
+const SOURCES = import.meta.glob("../../../../docs/legal/*.md", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const sourceOf = (name: string): string => {
+  const entry = Object.entries(SOURCES).find(([file]) => file.endsWith(`/docs/legal/${name}.md`));
+  if (!entry) throw new Error(`docs/legal/${name}.md not found`);
+  return entry[1].replace(/\r\n/g, "\n");
+};
+const partOf = (md: string, lang: "EN" | "VI"): string => {
+  const start = md.indexOf(`\n## ${lang}\n`);
+  if (start < 0) throw new Error(`missing ## ${lang}`);
+  const body = md.slice(start + `\n## ${lang}\n`.length);
+  const end = body.indexOf("\n---");
+  return end < 0 ? body : body.slice(0, end);
+};
+/** The wording lines of the addendum's `### EN` or `### VI` block (not the bold "Mục …" instruction lines). */
+const addendumLines = (md: string, lang: "EN" | "VI"): string[] => {
+  const section = md.slice(md.indexOf("\n## Bổ sung ADR-012"));
+  const from = section.indexOf(`\n### ${lang}\n`);
+  if (from < 0) throw new Error(`missing addendum ### ${lang}`);
+  const rest = section.slice(from + `\n### ${lang}\n`.length);
+  const to = rest.indexOf("\n### ");
+  return (to < 0 ? rest : rest.slice(0, to)).split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("**Mục "));
+};
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
+const textOf = (html: string) => decode(html.replace(/<\/?(?:strong|code|a|span)\b[^>]*>/g, "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+const plain = (s: string) => s.replace(/\*\*/g, "").replace(/`/g, "").replace(/\s+/g, " ").trim();
+const live = async (path: string) => textOf(mainOf(await (await createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv)).text()));
+
+// Where each added line goes: `after` is the line it must directly follow (a prefix of that line), `first` starts the added line, `added` is how many lines go there.
+const PRIVACY_PLACES = {
+  EN: [
+    { after: "- **Sign-in:**", first: "- **Linked accounts:**", added: 1 },
+    { after: "- To sign you in and keep you signed in.", first: "- To let you sign in with an account you have linked", added: 1 },
+    { after: "- Builder profiles and approved products are public.", first: "- Your linked accounts are shown only to you.", added: 2 },
+    { after: "- `__Host-vnx_invite`:", first: "- `__Host-vnx_oauth`:", added: 1 },
+    { after: "- Sign-in links:", first: "- Linked accounts: until you unlink them", added: 1 },
+  ],
+  VI: [
+    { after: "- **Đăng nhập:**", first: "- **Tài khoản liên kết:**", added: 1 },
+    { after: "- Đăng nhập và giữ bạn đăng nhập.", first: "- Cho bạn đăng nhập bằng tài khoản đã liên kết", added: 1 },
+    { after: "- Hồ sơ builder và sản phẩm đã duyệt là công khai.", first: "- Tài khoản liên kết của bạn chỉ hiện cho chính bạn.", added: 2 },
+    { after: "- `__Host-vnx_invite`:", first: "- `__Host-vnx_oauth`:", added: 1 },
+    { after: "- Link đăng nhập:", first: "- Tài khoản liên kết: tới khi bạn hủy liên kết", added: 1 },
+  ],
+} as const;
+
+describe("the ADR-012 addendum is applied to the live Privacy and Terms text (VNX-2607)", () => {
+  for (const lang of ["EN", "VI"] as const) {
+    it(`privacy ${lang}: every addendum line is in the ${lang} part, in the places it names`, () => {
+      const md = sourceOf("privacy");
+      const part = partOf(md, lang);
+      const lines = part.split("\n");
+      for (const line of addendumLines(md, lang)) expect(part, line.slice(0, 60)).toContain(line);
+      for (const place of PRIVACY_PLACES[lang]) {
+        const at = lines.findIndex((l) => l.startsWith(place.after));
+        expect(at, place.after).toBeGreaterThanOrEqual(0);
+        expect(lines[at + 1]?.startsWith(place.first), `${place.after} is followed by ${place.first}`).toBe(true);
+        expect(lines.slice(at + 1, at + 1 + place.added).every((l) => l.startsWith("- ")), place.first).toBe(true);
+      }
+      expect(lines.filter((l) => l.startsWith(lang === "EN" ? "- **Sign-in:**" : "- **Đăng nhập:**"))).toHaveLength(1); // replaced, not duplicated
+    });
+
+    it(`terms ${lang}: section 4 is the addendum paragraph, once`, () => {
+      const md = sourceOf("terms");
+      const part = partOf(md, lang);
+      const [paragraph] = addendumLines(md, lang);
+      expect(paragraph).toBeDefined();
+      expect(part).toContain(paragraph ?? "");
+      expect(part.split(paragraph ?? "")).toHaveLength(2);
+      expect(part).not.toContain(lang === "EN" ? "Keep your email account secure; anyone who can read it" : "Hãy giữ an toàn hộp thư của bạn; ai đọc được");
+    });
+  }
+
+  it("privacy section 8 says we e-mail on link and unlink, in the replaced paragraph, in both languages", () => {
+    expect(partOf(sourceOf("privacy"), "EN")).toContain("We email you whenever an account is linked to or unlinked from yours.");
+    expect(partOf(sourceOf("privacy"), "VI")).toContain("Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết với tài khoản của bạn.");
+  });
+
+  it("the live pages show them: EN and VI privacy carry the new cookie and the linked-accounts sentence", async () => {
+    const en = await live("/privacy");
+    expect(en).toContain("__Host-vnx_oauth");
+    expect(en).toContain("up to 10 minutes");
+    expect(en).toContain("Linked accounts: if you link a Google, GitHub or LinkedIn account to your VNX.SI account");
+    expect(en).toContain("Linked accounts: until you unlink them or your account is deleted.");
+    const vi = await live("/vi/privacy");
+    expect(vi).toContain("__Host-vnx_oauth");
+    expect(vi).toContain("tối đa 10 phút");
+    expect(vi).toContain("Tài khoản liên kết: nếu bạn liên kết tài khoản Google, GitHub hoặc LinkedIn với tài khoản VNX.SI");
+    expect(vi).toContain("Tài khoản liên kết: tới khi bạn hủy liên kết hoặc tài khoản của bạn bị xóa.");
+  });
+
+  it("every addendum line is on the live privacy page and the live terms page, word for word", async () => {
+    for (const [lang, prefix] of [["EN", ""], ["VI", "/vi"]] as const) {
+      const privacy = await live(`${prefix}/privacy`);
+      for (const line of addendumLines(sourceOf("privacy"), lang)) expect(privacy, `${lang} ${line.slice(0, 50)}`).toContain(plain(line.replace(/^- /, "")));
+      const terms = await live(`${prefix}/terms`);
+      for (const line of addendumLines(sourceOf("terms"), lang)) expect(terms, `${lang} terms`).toContain(plain(line));
+    }
+    expect(await live("/terms")).toContain("you can link a Google, GitHub or LinkedIn account and use it to sign in too");
+    expect(await live("/vi/terms")).toContain("bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập");
+  });
+
+  it("zh-Hans and zh-Hant show the same English text with their translated 'English version applies' line", async () => {
+    for (const [locale, prefix] of [["zh-Hans", "/zh-hans"], ["zh-Hant", "/zh-hant"]] as const) {
+      const privacy = await live(`${prefix}/privacy`);
+      expect(privacy, locale).toContain(t(locale, "legal.englishOnly"));
+      expect(privacy, locale).toContain("__Host-vnx_oauth");
+      expect(privacy, locale).toContain("Linked accounts: if you link a Google, GitHub or LinkedIn account");
+      const terms = await live(`${prefix}/terms`);
+      expect(terms, locale).toContain(t(locale, "legal.englishOnly"));
+      expect(terms, locale).toContain("link a Google, GitHub or LinkedIn account");
+    }
+  });
+
+  it("the live page does not show the draft header or the instruction lines", async () => {
+    for (const path of ["/privacy", "/vi/privacy", "/terms", "/vi/terms"]) {
+      const text = await live(path);
+      for (const word of ["Bổ sung ADR-012", "ĐÃ ÁP DỤNG", "bản nháp", "**"]) expect(text, `${path} ${word}`).not.toContain(word);
+    }
+  });
+});
+
+describe("the sentences match the code (VNX-2607 cross-check)", () => {
+  it("the cookie name and lifetimes named in Privacy sections 5 and 6", () => {
+    expect(OAUTH_COOKIE).toBe("__Host-vnx_oauth");
+    expect(OAUTH_FLOW_TTL_MS).toBe(10 * 60 * 1000); // "up to 10 minutes"
+    expect(LINK_INTENT_TTL_MS).toBeLessThanOrEqual(OAUTH_FLOW_TTL_MS);
+    expect(SESSION_TTL_MS).toBe(30 * 24 * 60 * 60 * 1000); // "up to 30 days"
+  });
+
+  it("user_identities stores exactly the fields Privacy section 2 lists, and no token", async () => {
+    const { results } = await testEnv.DB.prepare("SELECT name FROM pragma_table_info('user_identities') ORDER BY cid").all<{ name: string }>();
+    // service (provider), its ID (provider_subject), a label, when linked, when last used; plus show_on_profile (covered by section 3) and updated_at.
+    // A new column must be matched by a Privacy change first: edit this list only together with docs/legal/privacy.md.
+    expect(results.map((r) => r.name)).toEqual(["id", "user_id", "provider", "provider_subject", "label", "show_on_profile", "linked_at", "last_used_at", "updated_at"]);
+    for (const r of results) expect(r.name).not.toMatch(/token|secret|password|access|refresh|code|verifier/i);
+  });
+});
+```
+
+- [ ] **Step 2: Chạy, thấy đỏ.** `npm test -w apps/web -- test/legal/linked-accounts.test.ts` → FAIL (mọi dòng bổ sung chưa có trong `## EN`/`## VI`; `/privacy` chưa có `__Host-vnx_oauth`). Hai test "match the code" xanh sẵn (chúng ghim code, không phụ thuộc chữ).
+
+- [ ] **Step 3: Chép vào markdown (phần md của `linked-accounts` xanh; `content.test.ts` đỏ vì md đã đổi mà trang chưa: đúng, Step 4 sửa).** Trong `docs/legal/privacy.md`, phần `## EN` rồi `## VI`, áp **nguyên văn** từng khối của mục "Bổ sung ADR-012" (copy từ chính file, không gõ lại):
+
+| Chỗ | Việc | Nguồn trong mục "Bổ sung" |
+|---|---|---|
+| Mục 2, gạch "Sign-in" / "Đăng nhập" | **thay** gạch cũ bằng bản "sửa gạch … thành", rồi **thêm** gạch "Linked accounts" / "Tài khoản liên kết" ngay sau | hai khối "Mục 2" |
+| Mục 3, sau "To sign you in and keep you signed in." / "Đăng nhập và giữ bạn đăng nhập." | thêm 1 gạch | "Mục 3" |
+| Mục 4, sau "Builder profiles and approved products are public." / "Hồ sơ builder và sản phẩm đã duyệt là công khai." | thêm 2 gạch | "Mục 4" |
+| Mục 5, sau gạch `__Host-vnx_invite` (cuối danh sách) | thêm 1 gạch `__Host-vnx_oauth` | "Mục 5" |
+| Mục 6, sau gạch "Sign-in links …" / "Link đăng nhập …" | thêm 1 gạch | "Mục 6" |
+| Mục 8, đoạn "Sessions and sign-in links …" / "Phiên và link đăng nhập …" | **thay** cả đoạn | "Mục 8" |
+
+Trong `docs/legal/terms.md`: **thay** đoạn văn của "4. Your account" (`## EN`) và "4. Tài khoản của bạn" (`## VI`, `terms.md:87-88`) bằng đoạn của khối "Mục 4"; mục 3 giữ nguyên. Không có dòng `---` nào trong chữ chép vào (`partOf` cắt ở `\n---`).
+
+Cập nhật đầu hai file (quy ước của file):
+- `privacy.md`, dòng "Trạng thái": thêm ngay sau "**Bổ sung EPIC 21 … 2026-10-05.**": ` **Bổ sung ADR-012 (tài khoản liên kết): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607.**`; thêm bullet **"Đối chiếu code ADR-012 (`feat/epic26-linked-accounts` tại `<SHA>`):"** (SHA từ `git rev-parse --short HEAD` lúc commit) gồm: cookie `__Host-vnx_oauth` 600 s luồng / 120 s intent liên kết (`auth/oauth-cookie.ts`, `domain/oauth.ts`); bảng `user_identities`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `show_on_profile`, `updated_at`), không cột token (`migrations/0017_user_identities.sql`); `sessions.method` (`auth/sessions.ts`); hai email báo tới `users.email`, không gửi khi `already_linked`, lỗi gửi chỉ log (`notify/identity.ts`); huy hiệu: GitHub `@login` + link, LinkedIn chỉ nhãn "verified", Google không bao giờ, danh tính client không bao giờ tới builder (`db/identities.ts` `listPublicBadges`); lưu giữ: hàng bị xóa khi hủy liên kết, chưa có luồng xóa tài khoản.
+- `terms.md`, dòng "Trạng thái": thêm ` **Bổ sung ADR-012 (mục 4): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607.**`.
+- Mục cuối của cả hai file: đổi tiêu đề thành `## Bổ sung ADR-012 (tài khoản liên kết): ĐÃ ÁP DỤNG (VNX-2607), giữ làm bản gốc đã duyệt`; dòng "Trạng thái" của mục đó thành: ``câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Đã áp dụng** ở VNX-2607: các đoạn dưới đây đã nằm trong `## EN` và `## VI`; `test/legal/linked-accounts.test.ts` kiểm từng dòng còn khớp. Khi đổi câu chữ sau này, sửa cả hai chỗ (hoặc xóa mục này cùng test đó) và hỏi Owner.``; dòng "Cách áp dụng": đổi sang quá khứ ("VNX-2607 đã chép … vào `src/legal/content.ts`"). Không đổi dòng nào trong hai khối `### EN`/`### VI`.
+
+Chạy: `npm test -w apps/web -- test/legal/linked-accounts.test.ts -t "applied"` → test md ("every addendum line is in the … part", "section 4", "section 8") PASS; các test trang trực tiếp còn đỏ.
+
+- [ ] **Step 4: Chép vào `content.ts` (xanh).** `apps/web/src/legal/content.ts` (không đổi kiểu `LegalDoc`; mỗi dòng gạch là một chuỗi trong `ul`, dấu `` ` `` và `**` giữ như các dòng hiện có; copy từ markdown đã áp ở Step 3). Chỗ sửa:
+
+| Đối tượng (dòng hiện tại) | Sửa |
+|---|---|
+| `termsEn` mục "4. Your account", khối `p` (≈ 49-52) | thay chuỗi bằng đoạn EN của Terms "Mục 4" |
+| `termsVi` mục "4. Tài khoản của bạn" (≈ 161-164) | thay bằng đoạn VI |
+| `privacyEn` mục 2, gạch `**Sign-in:**` (260) | thay bằng bản "sửa gạch thành"; thêm ngay sau một mục `**Linked accounts:** …` |
+| `privacyEn` mục 3, sau `To sign you in and keep you signed in.` (280) | thêm `To let you sign in with an account you have linked and, …` |
+| `privacyEn` mục 4, sau `Builder profiles and approved products are public.` (298) | thêm hai mục `Your linked accounts are shown only to you. …` và `When you sign in with Google, GitHub or LinkedIn, …` |
+| `privacyEn` mục 5, sau `` `__Host-vnx_invite`… `` (315) | thêm `` `__Host-vnx_oauth`: keeps a sign-in … for up to 10 minutes. `` |
+| `privacyEn` mục 6, sau `Sign-in links: 15 minutes. …` (325) | thêm `Linked accounts: until you unlink them or your account is deleted.` |
+| `privacyEn` mục 8, khối `p` (346) | thay bằng đoạn đã duyệt ("… admin actions are logged. We email you whenever an account is linked to or unlinked from yours. No system is perfectly secure; …") |
+| `privacyVi`: sáu chỗ tương ứng (385, 405, 423, 440, 450, 471) | như trên, bản VI |
+
+Ví dụ một chỗ (mục 5 EN; các chỗ khác cùng cách, nguyên văn từ markdown):
+
+```ts
+            "`__Host-vnx_invite`: remembers a builder invite link for 1 hour.",
+            "`__Host-vnx_oauth`: keeps a sign-in with Google, GitHub or LinkedIn secure while you go to that service and back, for up to 10 minutes.",
+```
+Chú thích đầu `content.ts` (dòng 3-6): thêm "…and, for the linked-accounts text, 2026-10-07 (VNX-2607)" sau "approved by the Owner 2026-10-04". Không đổi `LEGAL_UPDATED_AT`. Chạy: `npm test -w apps/web -- test/legal` → PASS (`content.test.ts`, `pages.test.ts`, `linked-accounts.test.ts`).
+
+- [ ] **Step 5: Tiêu chí chấp nhận.** (`LA` = `apps/web/test/legal/linked-accounts.test.ts`; `npm test -w apps/web -- <đường dẫn> -t "<tên>"`)
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | Mọi dòng bổ sung Privacy có trong `## EN` và `## VI`, đúng chỗ, gạch Sign-in được thay chứ không nhân đôi | `LA -t "privacy EN"` và `LA -t "privacy VI"` |
+| 2 | Terms mục 4 là đoạn mới, đúng một lần, câu cũ biến mất | `LA -t "terms EN"` và `LA -t "terms VI"` |
+| 3 | `/privacy` EN và VI có cookie `__Host-vnx_oauth` và câu "Linked accounts" / "Tài khoản liên kết" | `LA -t "live pages show them"` |
+| 4 | Mọi dòng bổ sung hiện nguyên văn trên `/privacy` và `/terms` (EN, VI) | `LA -t "every addendum line is on the live"` |
+| 5 | zh-Hans, zh-Hant hiện bản EN kèm câu "English version applies" đã dịch | `LA -t "zh-Hans and zh-Hant"` |
+| 6 | Không lộ tiêu đề nháp, "ĐÃ ÁP DỤNG", dòng chỉ dẫn | `LA -t "does not show the draft header"` |
+| 7 | Câu chữ khớp code: tên và thời hạn cookie, 30 ngày, cột `user_identities` không token | `LA -t "match the code"` |
+| 8 | `content.test.ts` (so từng dòng md với trang) và `pages.test.ts` xanh | `npm test -w apps/web -- test/legal` |
+| 9 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test -- --maxWorkers=2` |
+
+- [ ] **Step 6: Typecheck, toàn bộ test, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test -- --maxWorkers=2
+git add docs/legal/privacy.md docs/legal/terms.md apps/web/src/legal/content.ts apps/web/test/legal/linked-accounts.test.ts
+git commit -m "docs(legal): apply the approved linked-accounts text to Privacy and Terms (VNX-2607)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Kích cỡ ước tính:** `content.ts` ≈ 40 dòng (chuỗi), markdown ≈ 80 dòng, test ≈ 150 dòng; không có locale. Dưới 600: không tách.
+
+**Việc của Owner lúc deploy (không phải của Implementer):**
+- **Merge VNX-2607 và deploy trước khi bật cờ provider nào** (VNX-2608); kiểm `https://vnx.si/privacy`, `/vi/privacy`, `/terms` đã có cookie `__Host-vnx_oauth` và mục "Linked accounts" trên production.
+- Chốt `LEGAL_UPDATED_AT` (câu hỏi mở 4); hằng số này đổi ngày hiển thị của cả Terms lẫn Privacy.
+- Trả lời các câu hỏi mở 1-7 ở trên (không câu nào chặn merge nếu Owner chọn "không sửa").
+
+**Nghĩa vụ cho task sau:**
+- **VNX-2608:** `GET /privacy` và `/terms` trên production có bổ sung ADR-012 (cổng ra EPIC 26) trước khi bật cờ đầu tiên.
+- **Ghi nhận:** nếu về sau thêm cột vào `user_identities` hoặc thêm provider, test "stores exactly the fields" và Privacy §2 phải đổi cùng lúc; chưa có quy trình xóa tài khoản tự động (câu hỏi mở 6).
+
+#### Kết quả review Task 12: chưa review (Planner đã viết, chờ Opus review plan)
+
+#### Kết quả review Task 9c và 12 (Opus, 2026-10-10): 9c APPROVE_WITH_CHANGES đã sửa HIGH-1, MEDIUM-1, LOW-1, LOW-3, S1; 12 REJECT, viết lại sau rebase; E1–E4 do Owner duyệt 2026-10-10
