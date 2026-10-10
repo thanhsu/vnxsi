@@ -55,3 +55,20 @@
 - **VNX-2706a:** form interest dùng `parseInterestForm` (sau M-1).
 - **VNX-2707b:** tạo `docs/legal/privacy-board.md`, `terms-board.md`; điền `REPLACED_PRIVACY`/`REPLACED_TERMS` trong `test/config/wrangler-guard.test.ts` bằng đúng các dòng bị thay (§12.2 gạch thứ hai mục 4, §12.3); **bỏ `it.skipIf`** và thêm khẳng định hai file board tồn tại, để hai kiểm không thể tiếp tục bị bỏ qua. Review 2707b kiểm số test skipped của bộ đầy đủ về 0.
 - **VNX-0801 / Ghi nhận (Reviewer):** câu `flags.desc.request_board` vi, zh-hans, zh-hant do AI viết, cần người bản xứ đọc lại.
+
+## Re-review (vòng sửa 1, `02384ed`)
+
+- **Ngày:** 2026-10-10. **Đã đọc:** diff `789ddce..02384ed` (`src/domain/request-board.ts`, `test/domain/request-board.test.ts`, `test/db/request-board-migration.test.ts`, phần sửa của báo cáo).
+- **Lệnh đã chạy lại:** `npm run typecheck -w apps/web`: exit 0; bộ 2702b (9 file như trên): **9 file, 129 test xanh, 2 skipped**. Không chạy lại toàn bộ: lượt sửa chỉ chạm một file domain thuần chưa có nơi gọi ngoài test; Implementer báo 193 file / 2391 xanh / 2 skipped.
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| M-1 | ✓ Đóng | Văn bản nhiều dòng dùng `BAD_IN_TEXT = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u` (sau khi bỏ `\n`, `\t`); BOM đầu chuỗi bị bỏ (`cleanText`); tiêu đề giữ `Cc`+`Cf`. Test: mô tả có `👩‍💻`, `👨‍👩‍👧`, `🏳️‍🌈`, soft hyphen, variation selector, ZWNJ, tiếng Việt NFC và NFD, tiếng Trung → hợp lệ; U+202A, U+202D, U+202E, U+2066, U+2069, U+0085, U+0000, U+001B → `invalid`; tiêu đề có ZWJ hoặc soft hyphen vẫn `invalid`. Thêm ca SQL: chuỗi ZWJ đếm mọi code point ở cả CHECK lẫn parser (35 → từ chối, 40 → nhận). |
+| M-1, ZWSP | ✓ Chấp nhận | U+200B (ZWSP) giờ được phép trong mô tả và ghi chú (test cũ từ chối ZWSP được đổi). Hợp lý: ZWSP không đảo thứ tự chữ (khác bidi override), có dùng thật (ngắt dòng tiếng Thái, Khmer; hay theo văn bản dán), mô tả request ở `/request` từ trước tới nay không kiểm ký tự nào, và mọi bản công khai đều qua Ops kiểm duyệt. Rủi ro còn lại chỉ là chữ vô hình chen giữa (ví dụ trong số điện thoại); ghi nhận: nếu sau này có bộ lọc tự động tìm liên hệ hay từ khóa, phải bỏ ZWSP, ZWJ, soft hyphen trước khi so. |
+| L-1 | ✓ Đóng | `publicExcerpt` gộp mọi khoảng trắng (`\s+`), cắt giữa các cụm grapheme (`Intl.Segmenter`) trong trần 200 code point; chỉ khi cụm đầu tiên đã dài hơn 200 code point mới quay về cắt theo code point. Test: không ZWJ treo, không tách cờ, không tách chữ NFD khỏi dấu, tab và NBSP thành một dấu cách. |
+
+Không có phát hiện mới.
+
+### Verdict cuối
+
+**APPROVE.** VNX-2702b xong ở `6a8a11c` + `02384ed` (review `789ddce`). Nghĩa vụ ở mục "Nghĩa vụ để lại cho task sau" phía trên vẫn giữ nguyên.
