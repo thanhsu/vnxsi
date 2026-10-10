@@ -120,6 +120,9 @@ export function buildSeed(now = new Date()) {
     add("audit_log", { id: id("A", 30 + n), actor_user_id: null, action: "request.submit", entity: "request", entity_id: id("R", n), data: JSON.stringify({ category: requestCategory(n), languages: ["en"] }), created_at: at(now, -(n + 18) * HOUR) });
   }
 
+  // EPIC 27: the request board flag is on in this database (the date half of the gate is REQUEST_BOARD_GO_LIVE in e2e/scripts/serve.mjs).
+  add("feature_flags", { key: "request_board", enabled: 1, updated_by: null, updated_at: stamp, write_id: null });
+
   // Session of the main builder (no mail needed) and the one-use login links.
   add("sessions", { id_hash: sha256(SESSION_RAW), user_id: MAIN.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
   for (const [name, raw] of Object.entries(TOKENS)) {

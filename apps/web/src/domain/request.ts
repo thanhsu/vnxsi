@@ -1,6 +1,7 @@
 import type { Availability, WorkLanguage } from "./builder.ts";
 import { WORK_LANGUAGES } from "./builder.ts";
 import { BUDGET_BANDS, parseClientEmail, parseClientName, parseDeadline, type BudgetBand } from "./inquiry.ts";
+import { isCountryCode } from "./countries.ts";
 import { CATEGORIES, type Category } from "./product.ts";
 import { normalizeNewlines } from "./product-input.ts";
 
@@ -164,8 +165,12 @@ export type RequestFormValues = {
   name: string;
   email: string;
   website: string;
+  /** ISO 3166-1 alpha-2, or "" when not chosen (EPIC 27 Q1). Never filled from the network. */
+  country: string;
+  /** The opt-in box (addendum 3.1): only the value "1" counts. The route ignores it while the board gate is off. */
+  publish: boolean;
 };
-export type RequestField = "title" | "description" | "category" | "budgetBand" | "deadline" | "languages" | "name" | "email";
+export type RequestField = "title" | "description" | "category" | "budgetBand" | "deadline" | "languages" | "name" | "email" | "country";
 export type RequestFieldError = "required" | "too_short" | "too_long" | "choice" | "date" | "email" | "invalid";
 export type RequestErrors = Partial<Record<RequestField, RequestFieldError>>;
 export interface RequestInput {
@@ -177,6 +182,7 @@ export interface RequestInput {
   languages: WorkLanguage[];
   name: string;
   email: string | null;
+  country: string | null;
 }
 
 /** `body` from `c.req.parseBody({ all: true })`: a repeated field arrives as an array. */
@@ -194,6 +200,8 @@ export function requestValuesFromBody(body: Record<string, unknown>): RequestFor
     name: one(body.name),
     email: one(body.email),
     website: one(body.website),
+    country: one(body.country),
+    publish: one(body.publish) === "1",
   };
 }
 
@@ -228,6 +236,10 @@ export function parseRequestForm(values: RequestFormValues, opts: { needEmail: b
   const languages = WORK_LANGUAGES.filter((l) => values.languages.includes(l));
   if (!known || languages.length === 0) errors.languages = "choice";
 
+  // Optional; the exact code only (no trimming, no case folding): "vn", " VN" and "USA" are not countries.
+  const country = values.country === "" ? null : isCountryCode(values.country) ? values.country : undefined;
+  if (country === undefined) errors.country = "choice";
+
   const named = parseClientName(values.name);
   if (!named.ok) errors.name = named.error;
 
@@ -237,8 +249,8 @@ export function parseRequestForm(values: RequestFormValues, opts: { needEmail: b
     if (!email) errors.email = "email";
   }
 
-  if (Object.keys(errors).length > 0 || !category || !budgetBand || !due.ok || !named.ok) return { ok: false, errors };
-  return { ok: true, input: { title, description, category, budgetBand, deadline: due.deadline, languages, name: named.name, email } };
+  if (Object.keys(errors).length > 0 || !category || !budgetBand || !due.ok || !named.ok || country === undefined) return { ok: false, errors };
+  return { ok: true, input: { title, description, category, budgetBand, deadline: due.deadline, languages, name: named.name, email, country } };
 }
 
 export type ProposalFormValues = { approach: string; priceMode: string; price: string; priceMax: string; priceNote: string; timelineDays: string };

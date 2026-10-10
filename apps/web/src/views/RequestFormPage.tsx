@@ -7,6 +7,7 @@ import { localizedPath, type Locale } from "../i18n/locales.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { translator, type Translate } from "../i18n/t.ts";
 import { BUDGET_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "./labels.ts";
+import { countryOptions } from "./country.ts";
 import { FormErrorSummary, type FormErrorItem } from "./FormErrorSummary.tsx";
 import { Layout } from "./Layout.tsx";
 
@@ -28,8 +29,13 @@ type Props = {
   errors: RequestErrors;
   /** null when signed out and Turnstile is not configured: the form is not offered (fail closed). */
   siteKey: string | null;
+  /** The request board gate (c.get("requestBoard")): the opt-in box is offered only while it is on. */
+  board: boolean;
   formError?: string;
 };
+
+/** The country has one error of its own wording; every other field uses the shared messages. */
+const fieldErrorKey = (field: keyof RequestErrors, code: RequestFieldError): MessageKey => (field === "country" ? "request.error.country" : ERROR_KEY[code]);
 
 /** Summary lines in page order (VNX-0807): the form-level error first, then each field error linked to its input. */
 export function requestErrorItems(p: Pick<Props, "errors" | "formError" | "signedIn">, tr: Translate): FormErrorItem[] {
@@ -40,13 +46,14 @@ export function requestErrorItems(p: Pick<Props, "errors" | "formError" | "signe
     ["category", "rq-category", "request.form.category"],
     ["budgetBand", "rq-budget", "inquiry.form.budget"],
     ["deadline", "rq-deadline", "inquiry.form.deadline"],
+    ["country", "rq-country", "request.form.country"],
     ["languages", "rq-languages", "request.form.languages"],
     ["name", "rq-name", "inquiry.form.name"],
     ["email", p.signedIn ? "" : "rq-email", "inquiry.form.email"],
   ];
   for (const [field, id, label] of fields) {
     const code = p.errors[field];
-    if (code) items.push({ href: id ? `#${id}` : "", message: `${tr(label)}: ${tr(ERROR_KEY[code])}` });
+    if (code) items.push({ href: id ? `#${id}` : "", message: `${tr(label)}: ${tr(fieldErrorKey(field, code))}` });
   }
   return items;
 }
@@ -60,7 +67,7 @@ export const RequestFormPage: FC<Props> = (p) => {
     const code = p.errors[field];
     return code ? (
       <p id={`rq-${field}-error`} class="error-msg">
-        {tr(ERROR_KEY[code])}
+        {tr(fieldErrorKey(field, code))}
       </p>
     ) : null;
   };
@@ -120,6 +127,19 @@ export const RequestFormPage: FC<Props> = (p) => {
               <input id="rq-deadline" name="deadline" type="date" value={p.values.deadline} {...aria("deadline")} />
               {err("deadline")}
             </div>
+            <div class="field">
+              <label for="rq-country">{tr("request.form.country")}</label>
+              <select id="rq-country" name="country" {...aria("country")}>
+                <option value="">{tr("request.form.countryAny")}</option>
+                {countryOptions(p.locale).map((c) => (
+                  <option value={c.code} selected={c.code === p.values.country}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <p class="hint">{tr("request.form.countryHint")}</p>
+              {err("country")}
+            </div>
             <fieldset class="field" {...aria("languages")}>
               <legend>{tr("request.form.languages")}</legend>
               {WORK_LANGUAGES.map((l, i) => (
@@ -142,6 +162,16 @@ export const RequestFormPage: FC<Props> = (p) => {
                 {err("email")}
               </div>
             )}
+            {p.board ? (
+              <div class="field">
+                <label class="choice">
+                  <input type="checkbox" id="rq-publish" name="publish" value="1" checked={p.values.publish} aria-describedby="rq-publish-hint" /> {tr("request.board.optIn.label")}
+                </label>
+                <p class="hint" id="rq-publish-hint">
+                  {tr("request.board.optIn.hint")}
+                </p>
+              </div>
+            ) : null}
             {/* Honeypot: hidden from people and assistive tech; bots fill it. */}
             <div class="hp" aria-hidden="true">
               <label for="rq-website">{tr("inquiry.form.website")}</label>

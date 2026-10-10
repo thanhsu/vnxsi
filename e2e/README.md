@@ -78,6 +78,7 @@ Biến `--var` (chỉ có hiệu lực trong tiến trình `wrangler dev` cục 
 | `TURNSTILE_DRIVER` | `fake` | site key `fake-site-key`, token hợp lệ `test-pass` |
 | `ADMIN_EMAILS` | `e2e-admin@example.test` | cố định |
 | `PRIVACY_NOTICE_GO_LIVE` | rỗng | ngày go-live của production không được đổi hành vi test (giống `vitest.config.ts`). Luật "không đặt bằng `--var`" trong `wrangler.jsonc` nói về deploy; ở đây chỉ là server local. |
+| `REQUEST_BOARD_GO_LIVE` | `2026-01-01` | EPIC 27: ngày cố định trong quá khứ để cổng bảng request mở trên server local (cờ `request_board` bật trong seed). Luật "không đặt bằng `--var`" của `wrangler.jsonc` nói về deploy; ở đây chỉ là server local. |
 | `ANALYTICS_SALT` | rỗng | không đếm view, không cookie visitor, kể cả khi `.dev.vars` của dev có salt |
 
 ## Phạm vi đang kiểm
@@ -87,12 +88,13 @@ Biến `--var` (chỉ có hiệu lực trong tiến trình `wrangler dev` cục 
 | `home.spec.ts` | Các khối homepage render đủ (Numbers, chart, Trending, Top, Live), count-up dừng đúng số in sẵn, dải Live chạy/dừng khi rê chuột, khi bấm nút và khi focus, bản sao `inert`, chart mọc khi cuộn tới, tooltip và `Escape`, `prefers-reduced-motion`, tắt JavaScript, header bảo mật. Mô phỏng checklist tay Task 8b của M7. |
 | `inquiry.spec.ts` | Form `/b/e2e-builder/hire` khi chưa đăng nhập: label đủ, widget Turnstile, gửi rỗng (400, lỗi theo field có `aria-describedby` và không `role="alert"`, khối tóm tắt, giữ dữ liệu), thiếu token Turnstile (mục tóm tắt không liên kết, tiền tố `Error:` ở `<title>`), gửi thành công, hồi quy `Referrer-Policy: no-referrer` (POST mang `Origin` thật). |
 | `form-errors.spec.ts` | Mẫu lỗi chung (VNX-0807) trên form Inquiry (EN + VI, kèm quét axe trang 400), request (EN), contact (EN + VI) và waitlist của landing (EN + VI, `/` và `/vi/`): `<title>` bắt đầu bằng `Error:`/`Lỗi:`, `#form-errors` có heading đúng locale và nhận focus khi tải (thuộc tính `autofocus`, không JS), số liên kết bằng số lỗi theo field và mỗi liên kết trỏ tới một control có thật, không còn `role="alert"`, bấm liên kết đầu đưa focus vào đúng field, giá trị đã nhập còn nguyên. Waitlist còn kiểm URL trang 400 không có fragment (fragment trỏ tới phần tử có thật làm trình duyệt bỏ `autofocus`, review VNX-0807 F1). |
+| `request-board-forms.spec.ts` | EPIC 27, phần `/request` (VNX-2703a): `<select name="country">` có option rỗng đầu tiên, ô `publish` không chọn kèm câu mô tả; gửi form thiếu trường khi đã chọn `publish` và `country=VN` → 400 (EN và VI) với mẫu lỗi chung, ô `publish` còn chọn, `country` còn `VN`, URL không fragment. |
 | `login.spec.ts` | `/login` (email sai và đúng), `/auth/verify` (GET không tiêu token, chỉ nút mới đăng nhập, cookie `__Host-vnx_session` có `HttpOnly`/`Secure`/`SameSite=Lax`, token dùng một lần), `next` cục bộ và `next` ra ngoài, link hết hạn, đăng xuất, `/hub` khi chưa đăng nhập. Lỗi email sai vẫn là mẫu cũ (`role="alert"`) cho tới VNX-0807 T6 (sau khi EPIC 26 merge). |
 | `editor.spec.ts` | Danh sách product, tạo draft và điền từng bước tới khi chỉ còn thiếu ảnh, lỗi kiểm tra đầu vào (slug sai, slug trùng, URL demo không https; khối tóm tắt và tiền tố `Error:`), chưa đăng nhập, builder khác không mở được product. |
 | `a11y.spec.ts` | axe với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa` trên 12 trang công khai `en`, 3 trang builder đã đăng nhập, 4 trang `vi`, `/` và form Inquiry ở 360 px, `/` có chuyển động sau khi count-up và mọi animation hữu hạn xong, và `/`, `/vi/` khi `landing.js` + `home.js` bị chặn (biến thể `nojs`, mục dưới). |
 | `meta.spec.ts` | Chứng minh công cụ không "xanh rỗng": axe bắt `image-alt` và `color-contrast`, bộ nghe CSP bắt script inline bị chặn và `console.error`, cơ chế `KNOWN_A11Y` vừa che được vi phạm vừa làm đỏ mục thừa, `settle()` dừng với `E2E infrastructure` khi một asset cùng origin nạp lỗi và cho qua khi test đã khai báo request đó. |
 
-Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, request board, trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
+Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, request board (trừ form `/request` ở trên; phần còn lại thêm theo từng task EPIC 27), trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
 Từ VNX-0807, chỉ có Vitest (chưa có E2E): mẫu lỗi chung trên các form hub (apply, portfolio, products, pricing, media, invitations), thread inquiry (`/hub/inquiries/:id`, `/me/inquiries/:id`); deck homepage ở chế độ thẻ product khi không JS (seed E2E chưa có đủ 3 product công khai, nên lượt `nojs` chỉ phủ chế độ thẻ danh mục).
 
 ### Biến thể `nojs` và chờ animation
@@ -122,7 +124,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
   | `POST /b/:handle/hire` (chưa đăng nhập) | 10 / giờ / IP, 5 / giờ / email | 2 lần đếm theo IP, 1 theo email |
   | `POST /login` | 20 / giờ / IP, 5 / giờ / email | 1 |
   | `POST /auth/verify` | không có | 4 |
-  | `POST /request`, `POST /contact`, `POST /waitlist` | có (theo IP) | 0: `form-errors.spec.ts` chỉ gửi form sai, bị từ chối trước bước đếm |
+  | `POST /request`, `POST /contact`, `POST /waitlist` | có (theo IP) | 0: `form-errors.spec.ts` và `request-board-forms.spec.ts` chỉ gửi form sai, bị từ chối trước bước đếm |
 
   Thêm spec có POST thì cập nhật bảng này. Với `E2E_RETRIES` lớn, một test lỗi nhiều lần có thể chạm hạn mức (429).
 - Đổi seed: chạy `npm run test:scripts`. `scripts/test/e2e-seed.test.mjs` áp mọi migration lên SQLite trong bộ nhớ, kiểm khóa ngoại và các ngưỡng `MIN` của homepage. Test đọc bảng `MIN` thẳng từ `apps/web/src/domain/public-stats.ts` (regex trên văn bản), nên ngưỡng ở app tăng thì test này đỏ trước cả `global-setup`.

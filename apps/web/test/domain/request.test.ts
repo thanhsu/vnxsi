@@ -93,6 +93,8 @@ const form = (overrides: Partial<RequestFormValues> = {}): RequestFormValues => 
   name: "Minh Tran",
   email: "",
   website: "",
+  country: "",
+  publish: false,
   ...overrides,
 });
 
@@ -101,8 +103,22 @@ describe("parseRequestForm (spec §5.7 step 1)", () => {
     const result = parseRequestForm(form(), { needEmail: false, today: TODAY });
     expect(result).toEqual({
       ok: true,
-      input: { title: "Booking app for three salons", description: "We need online booking with reminders for three salons in Hanoi.", category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en", "vi"], name: "Minh Tran", email: null },
+      input: { title: "Booking app for three salons", description: "We need online booking with reminders for three salons in Hanoi.", category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en", "vi"], name: "Minh Tran", email: null, country: null },
     });
+  });
+
+  it("takes an optional country: a listed code, or empty for null; anything else is a choice error", () => {
+    const country = (c: string) => parseRequestForm(form({ country: c }), { needEmail: false, today: TODAY });
+    expect(country("VN")).toMatchObject({ ok: true, input: { country: "VN" } });
+    expect(country("")).toMatchObject({ ok: true, input: { country: null } });
+    for (const bad of ["XX", "vn", "USA", " VN", "VN ", " "]) expect(country(bad), JSON.stringify(bad)).toEqual({ ok: false, errors: { country: "choice" } });
+  });
+
+  it("reads country and the opt-in box from a body; only the value 1 publishes", () => {
+    expect(requestValuesFromBody({ country: "VN", publish: "1" })).toMatchObject({ country: "VN", publish: true });
+    for (const v of ["0", "on", "true", "", "11"]) expect(requestValuesFromBody({ publish: v }).publish, v).toBe(false);
+    expect(requestValuesFromBody({})).toMatchObject({ country: "", publish: false });
+    expect(requestValuesFromBody({ publish: ["1", "0"] }).publish).toBe(true);
   });
 
   it("reads repeated language fields and CRLF descriptions from a form body", () => {
