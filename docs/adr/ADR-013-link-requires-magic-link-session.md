@@ -41,5 +41,5 @@ Task VNX-2605d phải thêm test cho:
 
 - `POST …/link` từ session `oauth_*` bị từ chối, không ghi cookie intent; từ session `magic_link` vẫn 303 như trước;
 - callback nhánh `link` với flow bắt đầu từ session `magic_link` nhưng session nay là `oauth_*` hoặc đã bị xóa: không ghi liên kết;
-- session bị xóa giữa lúc đổi code và lúc ghi liên kết (trigger, như VNX-2605c): không ghi liên kết, không audit, không email;
+- session bị xóa giữa lúc đổi code và lúc ghi liên kết: không ghi liên kết, không audit, không email. (Ghi chú 2026-10-10: test dùng spy chỉ trong test bọc `FakeOAuthProvider.exchange` thay cho trigger như VNX-2605c, vì giữa lúc đổi code và lệnh INSERT không có câu lệnh D1 nào chạy để trigger bám vào; kèm một test gọi thẳng `linkIdentity` để chứng minh điều kiện nằm trong câu SQL.)
 - hủy liên kết từ session `oauth_*` vẫn được phép.
