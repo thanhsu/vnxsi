@@ -152,6 +152,7 @@ _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang too
 | Gộp `main` vào M7 | ✅ | f811e60, 0e44251 | Ops O1, VNX-2105/2508a, ADR-012 docs; `isStaff` thêm thành viên Ops + test Viewer không bị đếm |
 | Sửa sau review toàn nhánh M7 | ✅ | 37f86bc | ghi chú deploy `wrangler.jsonc`, test bảo vệ cấu hình, làm chắc test; 1913/1913 |
 | Merge M7 vào `main` | ✅ | 38bf414 | merge `--no-ff` của `56ffb91`, Owner duyệt 2026-10-07; đã push. **Đã deploy 2026-10-07** (version `8e1e141d`); Owner kiểm trình duyệt 8b xong 2026-10-08 |
+| VNX-0805 Runbook deploy + script smoke | ✅ | bdede61…9e38683 | `docs/runbooks/deploy.md` (12 mục, tiếng Việt), `scripts/smoke.mjs` (`npm run smoke`, 64 kiểm tra, chỉ GET/HEAD, ≤ 10 request/10 s vào đường có rate limit), `npm run test:scripts` (20 test, chạy trong CI); review `.ai/reviews/VNX-0805-review.md` APPROVE WITH CHANGES → sửa → APPROVE; merge vào `main`, đã push |
 
 ## Việc của Owner khi deploy M7
 
@@ -312,6 +313,7 @@ Owner, trước khi ElevenLabs chạy thật:
 
 - **Deploy sau khi merge M4:** áp `0006_catalog` cùng lúc với code M4 (ghi trong `wrangler.jsonc`). Trước lần `db:migrate:remote` đầu tiên: thử `0006_catalog` trên một D1 remote nháp (trigram, trigger, `json_each` trong trigger, `wrangler d1 export`).
 - ✅ **M7:** `/for-builders` đã vào sitemap kèm alternate, link header trong `<nav>`; `/go/` không có tiền tố locale.
+- **Sau VNX-0805:** VNX-2508 siết check `/vi/ops` trong `scripts/smoke-checks.mjs`; VNX-0804 thêm check `www` → apex; mọi task đổi Terms/Privacy (và task dọn sau 2026-11-21) cập nhật ngày "Last updated" mong đợi trong runbook; lần sao lưu FTS5 thật đầu tiên thử lệnh mục 10 trên D1 nháp trước. Mỗi lần deploy: làm theo `docs/runbooks/deploy.md`, chạy `npm run smoke`.
 - **M8 (runbook):** backup D1 khi có bảng ảo FTS5 (bỏ `products_fts` và trigger → export → tạo lại và backfill, hoặc dùng Time Travel).
 
 - **Owner (VNX-0307):** bật R2 trên Cloudflare Dashboard (tài khoản `15385598…`); báo Claude để chạy `wrangler r2 bucket create vnxsi-media`. Cần trước lần deploy có M3.
@@ -331,6 +333,10 @@ Owner, trước khi ElevenLabs chạy thật:
 
 ## Ghi nhận (minor, chưa làm)
 
+- **VNX-0805:**
+  - (F4) Dòng "Production lần 3" ghi `/vi/ops` là 404 kín có `no-store` + `X-Robots-Tag`; thực tế `/vi/ops` có `no-store` và meta noindex nhưng **không** có `X-Robots-Tag` (từ `d447cf4`, không phải thoái lui; VNX-2502 F3, để VNX-2508).
+  - (F9) VNX-0805 không có `.ai/tasks/VNX-0805-handoff.md`: plan đã duyệt dùng làm handoff.
+  - (F10) Plan §12 đề nghị nhắc cập nhật bảng smoke trong `.ai/templates/REVIEW-TEMPLATE.md`; chưa sửa template.
 - **EPIC 27 (plan):**
   - Client có thể rút rồi bật lại công khai không giới hạn (mỗi lần vào hàng chờ Ops); chưa đặt trần vì đó là quy tắc nghiệp vụ mới. Nếu bị lạm dụng thì Owner quyết một con số.
   - Viewer (Ops) đã thấy bản gốc request và email client qua `marketplace.view` (`findAdminRequest`); phụ lục chỉ không mở thêm. Muốn thu hẹp thì cần sửa ADR-010 riêng.
