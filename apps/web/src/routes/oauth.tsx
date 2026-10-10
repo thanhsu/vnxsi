@@ -4,7 +4,7 @@ import { readSessionCookie, writeSessionCookie } from "../auth/cookies.ts";
 import { getOAuthProvider, isProviderConfigured } from "../auth/oauth/index.ts";
 import type { ExchangeFailure, ProviderClient } from "../auth/oauth/provider.ts";
 import { clearOAuthCookie, linkSessionHash, readOAuthCookie, writeOAuthCookie } from "../auth/oauth-cookie.ts";
-import { createSession } from "../auth/sessions.ts";
+import { createSession, deleteSession } from "../auth/sessions.ts";
 import { writeAudit } from "../db/audit.ts";
 import { isFlagEnabled } from "../db/flags.ts";
 import { findIdentityByProviderSubject, linkIdentity, touchIdentityLogin } from "../db/identities.ts";
@@ -166,9 +166,16 @@ export function registerOAuthRoutes(app: Hono<AppEnv>) {
       const iso = now.toISOString();
       const method = sessionMethodFor(provider);
       await markLogin(c.env.DB, user.id, { now: iso, isAdmin: adminEmails(c.env).has(user.email) });
+      // Session first, then confirm the identity still exists: an unlink that slipped in after the lookup above has already deleted the
+      // `oauth_<provider>` sessions that existed (VNX-2605c), so a session made now must not outlive it.
+      const raw = await createSession(c.env.DB, user.id, now, method);
+      if (!(await touchIdentityLogin(c.env.DB, { id: identity.id, userId: user.id, label: result.identity.label, now: iso }))) {
+        await deleteSession(c.env.DB, raw);
+        return await page(c, <OAuthNotLinkedPage locale={flow.locale} origin={new URL(c.req.url).origin} />);
+      }
+      // The audit row comes after the check (decision 10): a refused sign-in leaves no `auth.login`.
       await writeAudit(c.env.DB, { actorUserId: user.id, action: "auth.login", entity: "user", entityId: user.id, data: { method }, now: iso });
-      await touchIdentityLogin(c.env.DB, { id: identity.id, label: result.identity.label, now: iso });
-      writeSessionCookie(c, await createSession(c.env.DB, user.id, now, method));
+      writeSessionCookie(c, raw);
       return c.redirect(safeNext(flow.next) ?? localizedPath(flow.locale, "/"), 303);
     } catch {
       // No `err` is bound on purpose: nothing about it can reach a log (F5).

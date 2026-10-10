@@ -10,6 +10,12 @@ const SUBJECTS: Record<Locale, [string, string]> = {
   "zh-Hans": ["GitHub 已关联到你的 VNX.SI 账户", "GitHub 已从你的 VNX.SI 账户取消关联"],
   "zh-Hant": ["GitHub 已連結到你的 VNX.SI 帳戶", "GitHub 已從你的 VNX.SI 帳戶取消連結"],
 };
+const SESSIONS: Record<Locale, string> = {
+  en: "Every device that was signed in with it has been signed out.",
+  vi: "Mọi thiết bị đang đăng nhập bằng tài khoản đó đã được đăng xuất.",
+  "zh-Hans": "所有用该账号登录的设备都已退出登录。",
+  "zh-Hant": "所有用該帳號登入的裝置都已登出。",
+};
 const UNLINK_WORD: Record<Locale, string> = { en: "unlink", vi: "hủy liên kết", "zh-Hans": "取消关联", "zh-Hant": "取消連結" };
 
 describe("formatUtc", () => {
@@ -34,6 +40,10 @@ describe("identity e-mails (VNX-2605b)", () => {
         expect(mail.html).toContain(`lang="${locale}"`);
         expect(mail.html).toContain("contact@vnx.si");
       }
+      expect(b.text).toContain(SESSIONS[locale]);
+      expect(b.html).toContain(SESSIONS[locale]);
+      expect(a.text).not.toContain(SESSIONS[locale]);
+      expect(a.html).not.toContain(SESSIONS[locale]);
       expect(a.text.toLowerCase()).toContain(UNLINK_WORD[locale]); // the linked mail tells the owner how to undo it
     });
   }

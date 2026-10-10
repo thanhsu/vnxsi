@@ -571,6 +571,7 @@ export const en = {
   "email.identityLinked.notYou": "Not you? Sign in with an email link, unlink it at /me and write to contact@vnx.si.",
   "email.identityUnlinked.subject": "{provider} was unlinked from your VNX.SI account",
   "email.identityUnlinked.body": "The {provider} account was unlinked from your VNX.SI account on {time}. It can no longer be used to sign in.",
+  "email.identityUnlinked.sessions": "Every device that was signed in with it has been signed out.",
   "email.identityUnlinked.notYou": "Not you? Sign in with an email link, check your linked accounts at /me and write to contact@vnx.si.",
   "email.identity.account": "Account: {label}",
   "email.identity.manage": "Your linked accounts:",

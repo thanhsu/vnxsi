@@ -573,6 +573,7 @@ export const vi: Messages = {
   "email.identityLinked.notYou": "Không phải bạn? Hãy đăng nhập bằng link qua email, hủy liên kết ở /me và viết cho contact@vnx.si.",
   "email.identityUnlinked.subject": "Đã hủy liên kết {provider} khỏi tài khoản VNX.SI của bạn",
   "email.identityUnlinked.body": "Tài khoản {provider} đã được hủy liên kết khỏi tài khoản VNX.SI của bạn lúc {time}. Tài khoản đó không còn dùng để đăng nhập được nữa.",
+  "email.identityUnlinked.sessions": "Mọi thiết bị đang đăng nhập bằng tài khoản đó đã được đăng xuất.",
   "email.identityUnlinked.notYou": "Không phải bạn? Hãy đăng nhập bằng link qua email, kiểm tra các tài khoản liên kết ở /me và viết cho contact@vnx.si.",
   "email.identity.account": "Tài khoản: {label}",
   "email.identity.manage": "Tài khoản liên kết của bạn:",

@@ -32,8 +32,8 @@ function compose(kind: keyof typeof KEYS, locale: Locale, input: IdentityEmailIn
   const manage = tr("email.identity.manage");
   return {
     subject: tr(k.subject, { provider }),
-    text: [body, ...(account ? [account] : []), "", notYou, "", manage, input.manageUrl].join("\n"),
-    html: wrap(locale, [p(body), ...(account ? [p(account)] : []), p(notYou), p(manage), link(input.manageUrl)]),
+    text: [body, ...(kind === "unlinked" ? [tr("email.identityUnlinked.sessions")] : []), ...(account ? [account] : []), "", notYou, "", manage, input.manageUrl].join("\n"),
+    html: wrap(locale, [p(body), ...(kind === "unlinked" ? [p(tr("email.identityUnlinked.sessions"))] : []), ...(account ? [p(account)] : []), p(notYou), p(manage), link(input.manageUrl)]),
   };
 }
 

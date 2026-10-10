@@ -211,6 +211,22 @@ describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => 
 const SHOW_FLAG_FILES = new Set(["../src/domain/identity.ts", "../src/db/identities.ts", "../src/views/hub/ProfilePage.tsx"]);
 const IDENTITY_WORDS = /user_identities|show_on_profile|showOnProfile|listPublicBadges|PublicBadge|githubProfileUrl|domain\/identity|db\/identities/;
 
+describe("unlinking ends the provider's sessions (VNX-2605c)", () => {
+  it("db/ imports nothing from auth/ (ARCHITECTURE.md §2): the unlink batch receives its sessions statement", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (!file.startsWith("../src/db/")) continue;
+      expect(src, `${file} imports auth/`).not.toMatch(/from\s+["']\.\.\/auth\//);
+    }
+  });
+
+  it("the only caller of unlinkIdentity passes it endProviderSessionsStatement, and only auth/sessions.ts deletes sessions", () => {
+    const callers = Object.entries(sources).filter(([file, src]) => /\bunlinkIdentity\(/.test(src) && file !== "../src/db/identities.ts");
+    expect(callers.map(([file]) => file)).toEqual(["../src/routes/me.tsx"]);
+    expect(callers[0]?.[1]).toContain("endProviderSessionsStatement(");
+    for (const [file, src] of Object.entries(sources)) if (/DELETE FROM sessions/.test(src)) expect(file).toBe("../src/auth/sessions.ts");
+  });
+});
+
 describe("the identity badge stays out of ranking and builder-facing code (ADR-004, ADR-012 §5)", () => {
   it("the identities allowlist is exactly the files that read or write the table", () => {
     expect([...IDENTITY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/identities.ts", "../src/routes/builder-profile.tsx", "../src/routes/hub.tsx", "../src/routes/me.tsx", "../src/routes/oauth.tsx"]);

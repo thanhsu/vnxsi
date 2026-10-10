@@ -87,26 +87,36 @@ export async function linkIdentity(
 }
 
 /**
- * Removes the user's account of that provider and audits it, atomically. The audit statement runs first: it is guarded on the row
- * existing for that user, which is no longer true after the DELETE. Null (and no audit row) when the user has none.
+ * Removes the user's account of that provider and audits it, atomically, together with `endSessions`: the statement that ends the sessions
+ * made through that provider (`endProviderSessionsStatement`; the caller builds it because `auth/` owns `sessions` and `db/` does not import `auth/`).
+ * Required, so no caller can unlink without ending them. The audit statement runs first: it is guarded on the row existing for that user,
+ * which is no longer true after the DELETE. Null (no audit row, nothing deleted, `endSessions` never run) when the user has none.
  */
-export async function unlinkIdentity(db: D1Database, input: { userId: string; provider: OAuthProvider; now: string }): Promise<UserIdentity | null> {
+export async function unlinkIdentity(
+  db: D1Database,
+  input: { userId: string; provider: OAuthProvider; now: string; endSessions: D1PreparedStatement },
+): Promise<UserIdentity | null> {
   const existing = await db.prepare("SELECT * FROM user_identities WHERE user_id = ?1 AND provider = ?2").bind(input.userId, input.provider).first<Row>();
   if (!existing) return null;
-  const [, removed] = await db.batch<{ id: string }>([
+  const results = await db.batch<{ id: string }>([
     auditStatement(
       db,
       { actorUserId: input.userId, action: IDENTITY_AUDIT.unlink, entity: "user", entityId: input.userId, data: { provider: input.provider }, now: input.now },
       { identityId: existing.id, userId: input.userId },
     ),
+    input.endSessions,
     db.prepare("DELETE FROM user_identities WHERE id = ?1 AND user_id = ?2 RETURNING id").bind(existing.id, input.userId),
   ]);
-  return removed?.results.length ? toIdentity(existing) : null;
+  return results[2]?.results.length ? toIdentity(existing) : null;
 }
 
-/** A sign-in with this identity: records the time and refreshes the label (the GitHub login can change; ADR-012 §5). */
-export async function touchIdentityLogin(db: D1Database, input: { id: string; label: string; now: string }): Promise<void> {
-  await db.prepare("UPDATE user_identities SET label = ?2, last_used_at = ?3, updated_at = ?3 WHERE id = ?1").bind(input.id, input.label, input.now).run();
+/** A sign-in with this identity: records the time and refreshes the label (the GitHub login can change; ADR-012 §5). False when the row is gone (unlinked meanwhile): the caller must then end the session it just made. */
+export async function touchIdentityLogin(db: D1Database, input: { id: string; userId: string; label: string; now: string }): Promise<boolean> {
+  const { results } = await db
+    .prepare("UPDATE user_identities SET label = ?2, last_used_at = ?3, updated_at = ?3 WHERE id = ?1 AND user_id = ?4 RETURNING id")
+    .bind(input.id, input.label, input.now, input.userId)
+    .all<{ id: string }>();
+  return results.length === 1;
 }
 
 export type BadgeResult = "changed" | "unchanged" | "not_linked";

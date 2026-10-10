@@ -1,12 +1,13 @@
 import type { Context, Hono } from "hono";
-import { readSessionCookie } from "../auth/cookies.ts";
+import { clearSessionCookie, readSessionCookie } from "../auth/cookies.ts";
 import { requireUser } from "../auth/middleware.ts";
 import { linkSessionHash, writeOAuthCookie } from "../auth/oauth-cookie.ts";
+import { endProviderSessionsStatement } from "../auth/sessions.ts";
 import { listIdentitiesForUser, unlinkIdentity } from "../db/identities.ts";
 import { listClientInquiries, listMessages } from "../db/inquiries.ts";
 import { listClientRequests } from "../db/requests.ts";
 import type { InquirySummary } from "../domain/inquiry.ts";
-import { isOAuthProvider } from "../domain/identity.ts";
+import { isOAuthProvider, sessionMethodFor } from "../domain/identity.ts";
 import { newLinkIntent } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
@@ -93,14 +94,17 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
   });
 
   // ADR-012 §4: unlink is always allowed, flag on or off, configured or not (the e-mail link always remains). A POST that answers
-  // 303 to the same site only. `unlinkIdentity` filters by this user, audits `{ provider }` in its batch, and returns null (no audit) when nothing was linked.
+  // 303 to the same site only. `unlinkIdentity` filters by this user, audits `{ provider }` in its batch, and returns null (no audit) when nothing was linked, and ends every session of this user made through that provider.
   onLocalized(app, "post", "/me/identities/:provider/unlink", requireUser, async (c) => {
     const provider = c.req.param("provider");
     if (!isOAuthProvider(provider)) return errorResponse(c, "notFound", 404);
     const user = c.get("user")!;
     const now = new Date().toISOString();
-    const removed = await unlinkIdentity(c.env.DB, { userId: user.id, provider, now });
+    // VNX-2605c: the same batch ends EVERY session of this user made through `provider`, the caller's own included (Owner E1 = b1).
+    const removed = await unlinkIdentity(c.env.DB, { userId: user.id, provider, now, endSessions: endProviderSessionsStatement(c.env.DB, { userId: user.id, provider }) });
     if (removed) await notifyIdentityChange(c.env, { kind: "unlinked", to: user.email, locale: user.locale, provider, label: removed.label, at: now, requestId: c.get("requestId") });
+    // The caller's own session was deleted too when it came in through this provider: clear its cookie. The redirect is unchanged; `requireUser` then sends them to /login?next=…
+    if (removed && user.method === sessionMethodFor(provider)) clearSessionCookie(c);
     return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${removed ? "unlinked" : "notLinked"}`, 303);
   });
 

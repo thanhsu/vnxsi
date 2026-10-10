@@ -51,6 +51,7 @@ describe("POST /me/identities/:provider/unlink (VNX-2605b)", () => {
     expect(mails[0]?.subject).toBe("GitHub was unlinked from your VNX.SI account");
     expect(mails[0]?.text).toContain("GitHub");
     expect(mails[0]?.text).toContain(label);
+    expect(mails[0]?.text).toContain("Every device that was signed in with it has been signed out.");
     const audit = await testEnv.DB.prepare("SELECT created_at FROM audit_log WHERE entity = 'user' AND entity_id = ?1 AND action = 'auth.identity.unlink'").bind(user.id).first<{ created_at: string }>();
     expect(mails[0]?.text).toContain(formatUtc(audit?.created_at ?? "")); // the audited instant, in UTC
     expect(mails[0]?.text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);

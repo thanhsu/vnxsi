@@ -573,6 +573,7 @@ export const zhHant: Messages = {
   "email.identityLinked.notYou": "不是你本人操作？請用電子郵件登入，在 /me 取消連結，並寄信至 contact@vnx.si。",
   "email.identityUnlinked.subject": "{provider} 已從你的 VNX.SI 帳戶取消連結",
   "email.identityUnlinked.body": "{provider} 帳號已於 {time} 從你的 VNX.SI 帳戶取消連結，無法再用它登入。",
+  "email.identityUnlinked.sessions": "所有用該帳號登入的裝置都已登出。",
   "email.identityUnlinked.notYou": "不是你本人操作？請用電子郵件登入，在 /me 查看連結帳號，並寄信至 contact@vnx.si。",
   "email.identity.account": "帳號：{label}",
   "email.identity.manage": "你的連結帳號：",

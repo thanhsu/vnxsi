@@ -573,6 +573,7 @@ export const zhHans: Messages = {
   "email.identityLinked.notYou": "不是你本人操作？请用邮箱登录，在 /me 取消关联，并发邮件至 contact@vnx.si。",
   "email.identityUnlinked.subject": "{provider} 已从你的 VNX.SI 账户取消关联",
   "email.identityUnlinked.body": "{provider} 账号已于 {time} 从你的 VNX.SI 账户取消关联，不能再用它登录。",
+  "email.identityUnlinked.sessions": "所有用该账号登录的设备都已退出登录。",
   "email.identityUnlinked.notYou": "不是你本人操作？请用邮箱登录，在 /me 查看关联账号，并发邮件至 contact@vnx.si。",
   "email.identity.account": "账号：{label}",
   "email.identity.manage": "你的关联账号：",

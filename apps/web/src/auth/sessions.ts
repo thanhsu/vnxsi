@@ -1,4 +1,4 @@
-import { isSessionMethod, type SessionMethod } from "../domain/identity.ts";
+import { isSessionMethod, type OAuthProvider, sessionMethodFor, type SessionMethod } from "../domain/identity.ts";
 import { randomToken, sha256Hex } from "./crypto.ts";
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -47,4 +47,14 @@ export async function deleteExpiredSessions(db: D1Database, now: Date): Promise<
 /** Only deletes while the user is suspended, so a batch whose status change lost the race leaves sessions alone. */
 export function deleteUserSessionsStatement(db: D1Database, userId: string): D1PreparedStatement {
   return db.prepare("DELETE FROM sessions WHERE user_id = ?1 AND EXISTS (SELECT 1 FROM users WHERE id = ?1 AND status = 'suspended')").bind(userId);
+}
+
+/**
+ * Ends this user's sessions that were created by signing in with that provider (VNX-2605c). Built for the unlink batch: it runs in the same
+ * db.batch as the identity DELETE and its audit row, so all three commit or none do. Another user's sessions and this user's other methods never match.
+ * All of them, the caller's own included (Owner E1 = b1): no session made through that provider survives an unlink. It reads no other table; with the
+ * identity already gone (a double press) it can only end sessions of that provider created since, so it signs the user out and never grants access.
+ */
+export function endProviderSessionsStatement(db: D1Database, input: { userId: string; provider: OAuthProvider }): D1PreparedStatement {
+  return db.prepare("DELETE FROM sessions WHERE user_id = ?1 AND method = ?2").bind(input.userId, sessionMethodFor(input.provider));
 }

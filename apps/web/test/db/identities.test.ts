@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { endProviderSessionsStatement } from "../../src/auth/sessions.ts";
 import { findIdentityByProviderSubject, linkIdentity, listIdentitiesForUser, setShowOnProfile, touchIdentityLogin, unlinkIdentity } from "../../src/db/identities.ts";
 import { ensureUser } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
@@ -7,6 +8,7 @@ import { GITHUB_LOGIN_RE, githubProfileUrl } from "../../src/domain/identity.ts"
 
 const NOW = "2026-10-07T09:00:00.000Z";
 const LATER = "2026-10-08T09:00:00.000Z";
+const end = (userId: string, provider: "google" | "github" | "linkedin") => endProviderSessionsStatement(testEnv.DB, { userId, provider });
 
 let seq = 0;
 const newUser = () => ensureUser(`ident-${++seq}@vnx.si`);
@@ -69,11 +71,11 @@ describe("user_identities (ADR-012 §2, §4)", () => {
   it("unlinks an account the user holds, audits it, and lets the account be linked again", async () => {
     const user = await newUser();
     await linkIdentity(testEnv.DB, { userId: user.id, provider: "linkedin", subject: "li-1", label: "lan@example.com", now: NOW });
-    const removed = await unlinkIdentity(testEnv.DB, { userId: user.id, provider: "linkedin", now: LATER });
+    const removed = await unlinkIdentity(testEnv.DB, { userId: user.id, provider: "linkedin", now: LATER, endSessions: end(user.id, "linkedin") });
     expect(removed).toMatchObject({ provider: "linkedin", subject: "li-1" });
     expect(await listIdentitiesForUser(testEnv.DB, user.id)).toEqual([]);
     expect(await audits(user.id, "auth.identity.unlink")).toEqual(['{"provider":"linkedin"}']);
-    expect(await unlinkIdentity(testEnv.DB, { userId: user.id, provider: "linkedin", now: LATER })).toBeNull();
+    expect(await unlinkIdentity(testEnv.DB, { userId: user.id, provider: "linkedin", now: LATER, endSessions: end(user.id, "linkedin") })).toBeNull();
     expect(await audits(user.id, "auth.identity.unlink")).toHaveLength(1);
     expect((await linkIdentity(testEnv.DB, { userId: user.id, provider: "linkedin", subject: "li-1", label: "lan@example.com", now: LATER })).ok).toBe(true);
   });
@@ -82,7 +84,7 @@ describe("user_identities (ADR-012 §2, §4)", () => {
     const owner = await newUser();
     const other = await newUser();
     await linkIdentity(testEnv.DB, { userId: owner.id, provider: "github", subject: "77", label: "octocat", now: NOW });
-    expect(await unlinkIdentity(testEnv.DB, { userId: other.id, provider: "github", now: LATER })).toBeNull();
+    expect(await unlinkIdentity(testEnv.DB, { userId: other.id, provider: "github", now: LATER, endSessions: end(other.id, "github") })).toBeNull();
     expect(await listIdentitiesForUser(testEnv.DB, owner.id)).toHaveLength(1);
     expect(await audits(other.id, "auth.identity.unlink")).toEqual([]);
   });
@@ -91,9 +93,21 @@ describe("user_identities (ADR-012 §2, §4)", () => {
     const user = await newUser();
     const linked = await linkIdentity(testEnv.DB, { userId: user.id, provider: "github", subject: "9", label: "old-login", now: NOW });
     if (!linked.ok) throw new Error("link failed");
-    await touchIdentityLogin(testEnv.DB, { id: linked.identity.id, label: "new-login", now: LATER });
+    expect(await touchIdentityLogin(testEnv.DB, { id: linked.identity.id, userId: user.id, label: "new-login", now: LATER })).toBe(true);
     const [identity] = await listIdentitiesForUser(testEnv.DB, user.id);
     expect(identity).toMatchObject({ label: "new-login", lastUsedAt: LATER, updatedAt: LATER, linkedAt: NOW, subject: "9" });
+  });
+
+  it("touchIdentityLogin returns false and changes nothing when the row is gone or belongs to another user", async () => {
+    const user = await newUser();
+    const other = await newUser();
+    const linked = await linkIdentity(testEnv.DB, { userId: user.id, provider: "github", subject: "10", label: "old-login", now: NOW });
+    if (!linked.ok) throw new Error("link failed");
+    expect(await touchIdentityLogin(testEnv.DB, { id: linked.identity.id, userId: other.id, label: "x", now: LATER })).toBe(false);
+    expect((await listIdentitiesForUser(testEnv.DB, user.id))[0]).toMatchObject({ label: "old-login", lastUsedAt: null, updatedAt: NOW });
+    await unlinkIdentity(testEnv.DB, { userId: user.id, provider: "github", now: LATER, endSessions: end(user.id, "github") });
+    expect(await touchIdentityLogin(testEnv.DB, { id: linked.identity.id, userId: user.id, label: "x", now: LATER })).toBe(false);
+    expect(await listIdentitiesForUser(testEnv.DB, user.id)).toEqual([]);
   });
 
   it("enforces the rules in SQL as well: provider list, 0/1 flag, one account per provider, one user per account", async () => {
