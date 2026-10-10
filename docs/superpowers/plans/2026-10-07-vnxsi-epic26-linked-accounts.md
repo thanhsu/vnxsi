@@ -31,6 +31,7 @@
 - **(2026-10-10) Task 9:** câu chữ nút hủy liên kết, hai thông báo, hai email (gồm dòng link `/me` trơn) duyệt nguyên văn 4 locale; câu "Không phải bạn?" của email hủy liên kết là "kiểm tra các tài khoản liên kết ở /me"; mục `/me` chỉ-thông-báo chỉ cho `unlinked`/`notLinked`; thêm task VNX-2605c (kết thúc session `oauth_<provider>` khi hủy liên kết), bắt buộc trước VNX-2608.
 - **(2026-10-10) Task 10-11:** (E1) cờ của một provider **tắt thì huy hiệu công khai của provider đó biến mất khỏi `/b/:handle` và công tắc của nó biến mất khỏi `/hub/profile`**; route truyền danh sách provider khả dụng (cờ bật VÀ đã cấu hình, quy tắc `availableProviders`) vào `listPublicBadges` và view hub; `show_on_profile` đã lưu KHÔNG bị đổi bởi cờ, bật lại cờ thì huy hiệu hiện lại. (E2) tài khoản EMU: giữ link như ADR-012 §5; xem lại bằng tài khoản thật ở VNX-2608. (E3) câu chữ hai task duyệt nguyên văn 4 locale. Link GitHub đi thẳng, không qua `/go/` (xem "Ghi nhận" của Task 11).
 - **(2026-10-10) Task 9c (VNX-2605c) và Task 12:** (E1 = b1) hủy liên kết P kết thúc MỌI session `oauth_<P>` của user, kể cả của người bấm khi session đó là `oauth_<P>` (route xóa cookie, 303 `/me?link=unlinked`, `/login?next=…` rồi thông báo "unlinked" có sẵn; không chuỗi mới); (E2) "đăng xuất các phiên khác" vào backlog sau VNX-2608, rủi ro còn lại ghi ở "Ghi nhận" của Task 9c; (E3) email hủy liên kết thêm `email.identityUnlinked.sessions`, duyệt nguyên văn 4 locale; (E4) bổ sung pháp lý tài khoản liên kết không phải "thay đổi quan trọng", không báo trước. Task 12 chờ rebase lên `main` (bản M7 của Privacy). Thứ tự: 9c, rebase, 12, 2604d, 2608.
+- **(2026-10-10) Task 9d (VNX-2605d, ADR-013):** bắt đầu liên kết (`POST …/link`), `start` nhánh link và callback nhánh `link` chỉ với session `magic_link`; session `oauth_*` vẫn đăng nhập, xem `/me` và hủy liên kết; callback kiểm lại session còn sống và vẫn là `magic_link` NGAY TRONG câu INSERT ghi liên kết; `/me` giải thích thay cho nút "Liên kết" (câu chữ chờ Owner duyệt). Bắt buộc trước VNX-2608; thứ tự mới: 9c, 9d, rebase, 12, 2604d, 2608.
 
 ## Quyết định thiết kế của Reviewer (Opus đã duyệt có chỉnh, 2026-10-07)
 
@@ -121,11 +122,12 @@ Không chặn Task 1. Đây là các quy tắc nghiệp vụ hoặc nội dung m
 | 8 | VNX-2605a | `/me` mục "Đăng nhập & tài khoản liên kết" (liệt kê), `POST …/link` (Origin, intent vào cookie, 303), nhánh `link` ở callback, xung đột identity; kiểm tay chuỗi redirect | 6 | 4, 5, 12 |
 | 9 | VNX-2605b | `POST …/unlink`; email báo liên kết và hủy liên kết 4 locale (`email/templates/identity.ts`) | 8 | 6 |
 | — | VNX-2605c | Kết thúc các session `oauth_<provider>` khi hủy liên kết provider đó (trừ session đang thực hiện), và/hoặc "đăng xuất các phiên khác"; **điều kiện bắt buộc trước VNX-2608**; plan chi tiết sau | 9 | 6 |
+| — | VNX-2605d | Chỉ liên kết provider mới từ session `magic_link` (ADR-013): `POST …/link`, `start` và callback nhánh `link` từ chối session `oauth_*`; callback kiểm lại session ngay trong câu INSERT ghi liên kết; `/me` giải thích thay cho nút "Liên kết"; **điều kiện bắt buộc trước VNX-2608** | 9c | 5, 4, 7 |
 | 10 | VNX-2606a | `setShowOnProfile` và công tắc ở `/hub/profile` (theo câu hỏi mở 5) | 1 | 8 |
 | 11 | VNX-2606b | Huy hiệu trên `/b/:handle` (GitHub link, LinkedIn nhãn, Google không); test không lộ client và không vào xếp hạng | 10, 8 | 8 |
 | 12 | VNX-2607 | Chép bổ sung ADR-012 vào `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code thật (tên cột, cookie, thời hạn); merge trước khi bật cờ | 9, 11 | — |
 | — | VNX-2604d | Logo chính thức trong nút `/login` (file do Owner giao ở VNX-2601), CSS `.oauth-logo`, test file tồn tại. Phải xong **trước** VNX-2608 (Owner 2026-10-08, ADR-012 "Hệ quả": nút theo guideline thương hiệu của từng provider) | 2601, 7 | 10, 12 |
-| — | VNX-2608 | **HUMAN, HIGH-RISK.** Owner bật 3 cờ trên production, thử đăng nhập và liên kết bằng tài khoản thật | 2601, 12, 2604d, 2605c | — |
+| — | VNX-2608 | **HUMAN, HIGH-RISK.** Owner bật 3 cờ trên production, thử đăng nhập và liên kết bằng tài khoản thật | 2601, 12, 2604d, 2605c, 2605d | — |
 
 Mỗi task kết thúc bằng `npm run typecheck -w apps/web` và `npm test` xanh rồi mới commit.
 
@@ -7668,3 +7670,480 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 #### Kết quả review Task 12: chưa review (Planner đã viết, chờ Opus review plan)
 
 #### Kết quả review Task 9c và 12 (Opus, 2026-10-10): 9c APPROVE_WITH_CHANGES đã sửa HIGH-1, MEDIUM-1, LOW-1, LOW-3, S1; 12 REJECT, viết lại sau rebase; E1–E4 do Owner duyệt 2026-10-10
+
+---
+
+### Task 9d: VNX-2605d — Chỉ liên kết provider mới từ session `magic_link` (ADR-013)
+
+**Phụ thuộc:** Task 9c (đã implement, `94cf5d8`, APPROVE). **Review Focus:** 5 (liên kết cần đúng session), 4, 7. **Bắt buộc trước VNX-2608** (Owner 2026-10-10, ADR-013).
+
+**Mục tiêu.** Đóng hai đường mà review VNX-2605c tìm ra: (1) nhảy sang provider thứ hai (từ session `oauth_P` liên kết P2 rồi đăng nhập bằng P2); (2) `finishLink` kiểm session trước khi đổi code nhưng không kiểm lại trước khi ghi liên kết. Sau task này: bắt đầu liên kết (`POST …/link`), `start` nhánh link và callback nhánh link chỉ chạy với session `method = magic_link`; callback kiểm lại, **trong chính câu INSERT ghi liên kết**, rằng đúng session đó còn sống và vẫn là `magic_link`. Session `oauth_*` vẫn đăng nhập, xem `/me`, hủy liên kết như trước. Không đổi schema.
+
+**Quyết định kỹ thuật** (từ code thật tại `6dc9ea0`; Reviewer kiểm):
+1. **Tên hàm: thêm `isLinkCapableSession(method)` ở `domain/identity.ts`, KHÔNG dùng lại `isStaffSession`.** Cả hai hôm nay đều `method === "magic_link"`, nhưng `isStaffSession` có docstring "chỉ gọi từ `requireOps` và `requireAdmin`" (quyết định 9, test `staff-session.test.ts`); một quy tắc liên kết dùng tên "staff" sẽ làm người đọc tin rằng liên kết là quyền nhân viên, và sửa một quy tắc sẽ vô tình đổi quy tắc kia. Hằng `LINK_SESSION_METHOD: SessionMethod = "magic_link"` là nguồn chung cho predicate và cho câu SQL guard (db/ chỉ nhận giá trị bind, không hard-code chữ).
+2. **`POST …/link` từ session không đủ điều kiện: 303 về `/me?link=needsEmailLink`** (notice mới, một nguồn `LINK_NOTICES`). Không ghi cookie intent, không redirect tới `start`. Kiểm đặt SAU `enabledProvider` (provider lạ hoặc cờ tắt vẫn 404, như hôm nay) và TRƯỚC `writeOAuthCookie`. Chọn notice mới thay vì dùng lại `failed` vì người dùng cần biết phải làm gì (đăng nhập bằng link qua email); đây là một chuỗi giao diện (chờ Owner duyệt).
+3. **`start`: session không đủ điều kiện thì coi như không có session cho việc liên kết, tức rơi về hành vi `signin`** (không lỗi mới, không trang mới). Cụ thể `sessionHash` chỉ được tính khi `isLinkCapableSession(user.method)`; mọi nhánh sau đó (intent cookie, flow cookie `link` của chính session) đều thấy `sessionHash === null` nên `linking = false` và `start` 302 sang provider với flow `signin` (không mang session). Lý do: đúng nguyên tắc có sẵn "mọi thứ khác là đăng nhập thường" của `resolveStartIntent`; cho một người cầm cookie intent cũ (hoặc kẻ gian có cookie) kết cục vô hại: lần cùng lắm là đăng nhập bằng identity đã liên kết, hoặc trang "chưa liên kết". Test 8a-1 (trang trung gian 200 cho session `magic_link`) không đổi vì chúng đi bằng `signIn(email)` mặc định `magic_link`.
+4. **Callback `finishLink`, hai lớp:**
+   - **Trước `exchange`:** thêm điều kiện `isLinkCapableSession(user.method)` vào cổng `session_mismatch` hiện có (trang lỗi chung, mã log `session_mismatch`; không đổi hình dạng log). Code của provider không bị tiêu.
+   - **Sau `exchange`, trong `linkIdentity`:** tham số tùy chọn mới `requireSession?: { idHash: string }` (thời điểm lấy từ `input.now`, không thêm trường `now`; S-2). Câu INSERT chuyển từ `VALUES (…)` sang `SELECT … WHERE (?7 IS NULL OR EXISTS (SELECT 1 FROM sessions WHERE id_hash = ?7 AND user_id = ?2 AND method = ?8 AND expires_at > ?6))`, vẫn `ON CONFLICT DO NOTHING RETURNING id`. Vì audit trong batch có guard "hàng identity tồn tại", session đã mất thì **không có hàng, không audit**; email chỉ gửi khi `linked.ok` nên **không email**. `db/identities.ts` chỉ ĐỌC `sessions` (bảng chỉ ghi ở `auth/sessions.ts`; `WRITERS` chỉ cấm ghi; không import `auth/`); `id_hash` do route tính bằng `sha256Hex(raw)` (cùng cách `getSessionUser`; KHÔNG phải `linkSessionHash`, hàm đó là hash cho cookie intent). Khi INSERT không ra hàng và `requireSession` có mặt, `linkIdentity` đọc lại session: không còn thì trả `{ ok: false, reason: "session_ended" }` (giá trị mới của `LinkRefusal`), trước khi xét `already_linked`/`taken`/`user_has_provider`.
+   - **Kết quả khi session mất sau `exchange`:** `failed(c, provider, "session_mismatch", flow.locale)`: trang lỗi chung 400, **không** `/me?link=failed` (người dùng không còn session nên `/me` sẽ bật về `/login` và mất thông báo). Cookie OAuth đã bị xóa ở đầu callback.
+   - **Cửa sổ còn lại:** không có giữa kiểm session và ghi (cùng một câu lệnh, D1 tuần tự hóa ghi). Phần còn lại là thứ tự tự nhiên: session có thể bị kết thúc NGAY SAU khi INSERT xong; khi đó liên kết đã hợp lệ vào lúc ghi, và email báo liên kết (ADR-012 §4) cùng nút hủy liên kết của chủ tài khoản là đường xử lý; hủy liên kết một provider P2 chỉ kết thúc session `oauth_P2` (kẻ gian không có, vì liên kết bắt đầu từ `magic_link`).
+5. **`/me`:** `LinkedAccounts` nhận prop `canLink: boolean` (route truyền `isLinkCapableSession(user.method)`). Khi `canLink` sai: không form "Liên kết {provider}"; nếu còn provider khả dụng chưa liên kết thì hiện một ghi chú `<p class="muted">` (khóa `me.identities.emailToLink`). Nút hủy liên kết giữ nguyên. Khi `?link=needsEmailLink` đang hiện, bỏ ghi chú (không lặp hai câu). Các dòng provider vẫn hiện (cột hành động trống) để người dùng thấy cái gì chưa liên kết.
+6. **Hủy liên kết không đổi** (ADR-013 "Không đổi"): không kiểm `method`; test khẳng định.
+7. **Mô phỏng race bằng spy, KHÔNG bằng trigger (đổi có chủ ý so với chữ "trigger" của ADR-013 "Được bảo đảm bởi"):** giữa `exchange` và INSERT không có câu lệnh D1 nào chạy, nên một trigger `BEFORE INSERT` chỉ kiểm một thứ tự xen kẽ mà D1 không tạo ra được. Test bọc `FakeOAuthProvider.prototype.exchange` (gọi hàm gốc rồi `DELETE FROM sessions` của chính session đó) để mô phỏng "session bị kết thúc trong lúc đổi code" một cách xác định; test thứ hai gọi thẳng `linkIdentity` với `requireSession` trỏ tới session đã xóa, chứng minh guard nằm trong SQL, không nằm ở route. Spy phục hồi bằng `afterEach`. Báo cáo của Implementer phải ghi sự thay đổi này.
+8. **Review 9c M1** (làm ở đây): mỗi test race trong `test/auth/oauth-unlink-race.test.ts` assert hàng identity đã mất sau callback (chứng minh trigger đã chạy).
+9. **Cỡ:** ≈ 60 dòng mã, ≈ 330 dòng test; dưới 600, không tách.
+
+**Chuỗi giao diện mới (Owner duyệt nguyên văn 2026-10-10, phương án A; thêm vào 4 file locale ngay sau `me.identities.notice.notLinked`, KHÔNG có chú thích "BẢN NHÁP" trong file locale):**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `me.identities.emailToLink` | To link another account, sign out, then sign in with an email link. You can still unlink accounts here. | Muốn liên kết thêm tài khoản, hãy đăng xuất rồi đăng nhập bằng link qua email. Bạn vẫn hủy liên kết được ở đây. | 要关联其他账号，请先退出登录，再用邮箱登录。你仍可在此取消关联。 | 要連結其他帳號，請先登出，再用電子郵件登入。你仍可在此取消連結。 |
+| `me.identities.notice.needsEmailLink` | To link a new account, you need to be signed in with an email link. Sign out, sign in with an email link, then try again. | Muốn liên kết tài khoản mới, bạn cần đăng nhập bằng link qua email. Hãy đăng xuất, đăng nhập bằng link qua email rồi thử lại. | 关联新账号需要用邮箱登录。请退出登录，再用邮箱登录后重试。 | 連結新帳號需要用電子郵件登入。請登出，再用電子郵件登入後再試一次。 |
+
+`LINK_NOTICES` thêm `"needsEmailLink"` (một nguồn duy nhất; `NOTICE_KEY` thêm khóa; `STATUS` thêm nó: thông tin, không phải cảnh báo).
+
+**Đã chốt (Owner 2026-10-10):** câu chữ hai chuỗi trên (phương án A). Hệ quả ADR-013 đã chấp nhận: người chỉ đăng nhập bằng provider vẫn cần hộp thư để liên kết thêm. Không còn câu hỏi mở; không thêm nút "Đăng xuất" mới trong task này.
+
+**Files:**
+- Modify: `apps/web/src/domain/identity.ts`, `apps/web/src/db/identities.ts` (`linkIdentity`), `apps/web/src/routes/me.tsx` (link POST, truyền `canLink`), `apps/web/src/routes/oauth.tsx` (`start`, `finishLink`), `apps/web/src/views/me/LinkedAccounts.tsx`, 4 file `apps/web/src/i18n/messages/*.ts` (sau khi duyệt), `apps/web/test/auth/oauth-unlink-race.test.ts` (M1), `apps/web/test/architecture.test.ts` (một assertion).
+- Create: `apps/web/test/auth/oauth-link-session.test.ts`.
+- Test (sửa, CHẮC CHẮN đỏ nếu không sửa; Implementer sửa trong Step 4):
+  - `apps/web/test/auth/oauth-link.test.ts:87-94` ("works from an OAuth session too…") thành test chỉ cho `magic_link`: liên kết giữ `method` của session, số session vẫn 1; bỏ nửa `oauth_*` (nửa đó nay phải bị từ chối, đã có test mới).
+  - `apps/web/test/me/identities.test.ts:44-58`: giữ các assertion form Link chỉ cho `magic_link`; với `oauth_google`: hàng hiện "Not linked", không có `/github/link`, và có ghi chú `me.identities.emailToLink`.
+  - `apps/web/test/auth/oauth-link-start.test.ts`: chạy lại, dự kiến không đổi (dùng `signIn` mặc định `magic_link`).
+
+**Interfaces:**
+- Consumes: `linkIdentity`, `LinkResult`, `LinkRefusal` (`db/identities.ts`, `domain/identity.ts`); `flowMatchesSession`, `resolveStartIntent`, `newLinkIntent`, `encodeOAuthCookie` (`domain/oauth.ts`); `linkSessionHash`, `OAUTH_COOKIE` (`auth/oauth-cookie.ts`); `sha256Hex` (`auth/crypto.ts`); `readSessionCookie`; `FakeOAuthProvider`, `issueFakeCode` (`auth/oauth/fake.ts`); `signIn(email, { method })`, `linkedUser`, `enableProvider`, `linkViaStart`, `callbackReq` (`test/oauth-flow.ts`); `clearOutbox`, `outbox`.
+- Produces: `LINK_SESSION_METHOD`, `isLinkCapableSession(method)` (`domain/identity.ts`); `LinkRefusal` thêm `"session_ended"`; `linkIdentity(db, { …, requireSession? })`; `LINK_NOTICES` thêm `"needsEmailLink"`; prop `canLink` của `LinkedAccounts`.
+
+- [ ] **Step 1: Test (đỏ).** Tạo `apps/web/test/auth/oauth-link-session.test.ts`:
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { sha256Hex } from "../../src/auth/crypto.ts";
+import { linkSessionHash, OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
+import { FakeOAuthProvider, issueFakeCode, resetFakeOAuth } from "../../src/auth/oauth/fake.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import { linkIdentity } from "../../src/db/identities.ts";
+import { isLinkCapableSession, isStaffSession, SESSION_METHODS, type OAuthProvider, type SessionMethod } from "../../src/domain/identity.ts";
+import { encodeOAuthCookie, newLinkIntent, oauthRedirectUri, parseOAuthCookie } from "../../src/domain/oauth.ts";
+import { clearOutbox, outbox } from "../../src/email/fake.ts";
+import { signIn } from "../fixtures.ts";
+import { formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
+import { callbackReq, enableProvider, linkedUser, linkViaStart } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}-${Math.random().toString(36).slice(2, 8)}`;
+const emailOf = (who: string) => `${who}-${tag()}@example.com`; // D1 is shared: per-test addresses, no global counts
+const n = async (sql: string, ...binds: unknown[]) => (await testEnv.DB.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0;
+const identities = (userId: string) => n("SELECT count(*) AS n FROM user_identities WHERE user_id = ?1", userId);
+const linkAudits = (userId: string) => n("SELECT count(*) AS n FROM audit_log WHERE actor_user_id = ?1 AND action = 'auth.identity.link'", userId);
+const rawOf = (cookie: string) => cookie.split("=")[1] ?? "";
+const codeFor = (provider: OAuthProvider, flow: { verifier: string; nonce: string }, identity: { subject: string; label: string }) =>
+  issueFakeCode(provider, identity, { verifier: flow.verifier, nonce: flow.nonce, redirectUri: oauthRedirectUri(testEnv.APP_ORIGIN, provider) });
+const postLink = (provider: string, cookie: string) => createApp().request(formPost(`/me/identities/${provider}/link`, {}, { cookie }), undefined, testEnv);
+
+beforeEach(async () => {
+  resetFakeOAuth();
+  clearOutbox();
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+  for (const m of ["error", "warn", "log", "info", "debug"] as const) vi.spyOn(console, m).mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("isLinkCapableSession (ADR-013)", () => {
+  it("only magic_link; its own predicate, not the staff one", () => {
+    for (const m of SESSION_METHODS) expect(isLinkCapableSession(m), m).toBe(m === "magic_link");
+    // Delete this line the day the two rules diverge (it only records that they are equal today; they are separate predicates on purpose).
+    for (const m of SESSION_METHODS) expect(isLinkCapableSession(m)).toBe(isStaffSession(m));
+  });
+});
+
+describe("POST /me/identities/:provider/link needs a magic-link session (VNX-2605d)", () => {
+  it("from an oauth_* session: 303 to /me?link=needsEmailLink, no intent cookie, no redirect to start", async () => {
+    await enableProvider("github");
+    await enableProvider("google");
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    for (const method of ["oauth_github", "oauth_google", "oauth_linkedin"] as const) {
+      const { cookie } = await signIn(email, { method });
+      const res = await postLink("google", cookie);
+      expect(res.status, method).toBe(303);
+      expect(res.headers.get("location"), method).toBe("/me?link=needsEmailLink");
+      expect(setCookieValue(res, OAUTH_COOKIE), method).toBeNull(); // no intent cookie
+      expect(res.headers.get("location")).not.toContain("/auth/oauth/");
+    }
+  });
+
+  it("the redirect keeps the request locale: /vi/me/identities/google/link from an oauth_* session goes to /vi/me?link=needsEmailLink", async () => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"), { method: "oauth_github" });
+    const res = await createApp().request(formPost("/vi/me/identities/google/link", {}, { cookie }), undefined, testEnv);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/vi/me?link=needsEmailLink");
+  });
+
+  it("from a magic_link session: unchanged, 303 to the same-site start with the intent cookie", async () => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"), { method: "magic_link" });
+    const res = await postLink("google", cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/auth/oauth/google/start?lang=en");
+    expect(setCookieValue(res, OAUTH_COOKIE)).not.toBeNull();
+  });
+
+  it("an unknown provider is still 404 and a flag-off provider 404, whatever the session", async () => {
+    const { cookie } = await signIn(emailOf("lan"), { method: "oauth_github" });
+    expect((await postLink("facebook", cookie)).status).toBe(404);
+    expect((await postLink("google", cookie)).status).toBe(404); // flag off
+  });
+});
+
+describe("start with a link intent needs a magic-link session (VNX-2605d)", () => {
+  it("an intent cookie bound to an oauth_* session gives a plain sign-in: 302, a signin flow, no link page", async () => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"), { method: "oauth_github" });
+    const intent = encodeOAuthCookie(newLinkIntent({ provider: "google", sessionHash: await linkSessionHash(rawOf(cookie)) }, Date.now()));
+    const res = await createApp().request(getReq("/auth/oauth/google/start", `${cookie}; ${OAUTH_COOKIE}=${intent}`), undefined, testEnv);
+    expect(res.status).toBe(302);
+    expect(new URL(res.headers.get("location") ?? "").hostname).toBe("accounts.google.com");
+    const flow = parseOAuthCookie(setCookieValue(res, OAUTH_COOKIE) ?? "", { provider: "google", now: Date.now() });
+    expect(flow?.phase === "flow" && flow.intent).toBe("signin");
+  });
+
+  it("the same bound to a magic_link session still gives the 200 link page (positive control)", async () => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"), { method: "magic_link" });
+    const link = await linkViaStart("google", cookie);
+    expect(link.start.status).toBe(200);
+    expect(link.flow?.intent).toBe("link");
+  });
+
+  it("a live link flow of a session that has since become oauth_* is not shown again as a link page", async () => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"), { method: "magic_link" });
+    const link = await linkViaStart("google", cookie);
+    expect(link.start.status).toBe(200); // positive preconditions: the link flow really is live
+    expect(link.flow?.intent).toBe("link");
+    await testEnv.DB.prepare("UPDATE sessions SET method = 'oauth_github' WHERE id_hash = ?1").bind(await sha256Hex(rawOf(cookie))).run();
+    const again = await createApp().request(getReq("/auth/oauth/google/start", `${cookie}; ${link.flowCookie}`), undefined, testEnv);
+    expect(again.status).toBe(302);
+    expect(new URL(again.headers.get("location") ?? "").hostname).toBe("accounts.google.com");
+    const next = parseOAuthCookie(setCookieValue(again, OAUTH_COOKIE) ?? "", { provider: "google", now: Date.now() });
+    expect(next?.phase === "flow" && next.intent).toBe("signin");
+  });
+});
+
+describe("the callback's link branch (VNX-2605d)", () => {
+  async function started(email: string, provider: OAuthProvider = "github") {
+    await enableProvider(provider);
+    const { user, cookie } = await signIn(email, { method: "magic_link" });
+    const link = await linkViaStart(provider, cookie);
+    if (!link.flow) throw new Error("no link flow"); // positive precondition: the flow really started on the magic_link session
+    const identity = { subject: `s-${tag()}`, label: `l-${tag()}` };
+    return { user, cookie, link, identity, flow: link.flow, code: codeFor(provider, link.flow, identity) };
+  }
+  const callback = (provider: OAuthProvider, s: Awaited<ReturnType<typeof started>>, session: string) =>
+    callbackReq(provider, { code: s.code, state: s.flow.state }, `${session}; ${s.link.flowCookie}`);
+  const nothingHappened = async (userId: string, email: string) => {
+    expect(await identities(userId)).toBe(0);
+    expect(await linkAudits(userId)).toBe(0);
+    expect(outbox.filter((m) => m.to === email)).toHaveLength(0);
+  };
+
+  it("positive control: the same flow on the unchanged magic_link session links, audits and e-mails once", async () => {
+    const email = emailOf("lan");
+    const s = await started(email);
+    const res = await callback("github", s, s.cookie);
+    expect(res.headers.get("location")).toBe("/me?link=ok");
+    expect(await identities(s.user.id)).toBe(1);
+    expect(await linkAudits(s.user.id)).toBe(1);
+    expect(outbox.filter((m) => m.to === email)).toHaveLength(1);
+  });
+
+  it("the session became oauth_* after the flow started: no link, no audit, no e-mail; the code is not spent (error page)", async () => {
+    const email = emailOf("lan");
+    const s = await started(email);
+    await testEnv.DB.prepare("UPDATE sessions SET method = 'oauth_google' WHERE id_hash = ?1").bind(await sha256Hex(rawOf(s.cookie))).run();
+    const exchange = vi.spyOn(FakeOAuthProvider.prototype, "exchange"); // pass-through: counts calls
+    const res = await callback("github", s, s.cookie);
+    expect(res.status).toBe(400);
+    expect(exchange).not.toHaveBeenCalled(); // the check BEFORE the exchange: the code is not spent (fails without it)
+    await nothingHappened(s.user.id, email);
+  });
+
+  it("the session was deleted after the flow started: no link (and no session to come back to)", async () => {
+    const email = emailOf("lan");
+    const s = await started(email);
+    await testEnv.DB.prepare("DELETE FROM sessions WHERE id_hash = ?1").bind(await sha256Hex(rawOf(s.cookie))).run();
+    const exchange = vi.spyOn(FakeOAuthProvider.prototype, "exchange");
+    const res = await callback("github", s, s.cookie);
+    expect(res.status).toBe(400);
+    expect(exchange).not.toHaveBeenCalled();
+    await nothingHappened(s.user.id, email);
+  });
+
+  it("another session of the same user (oauth_*) presenting the flow cookie: no link", async () => {
+    const email = emailOf("lan");
+    const s = await started(email);
+    const other = await signIn(email, { method: "oauth_github" });
+    const exchange = vi.spyOn(FakeOAuthProvider.prototype, "exchange");
+    const res = await callback("github", s, other.cookie);
+    expect(res.status).toBe(400);
+    expect(exchange).not.toHaveBeenCalled();
+    await nothingHappened(s.user.id, email);
+  });
+
+  it("RACE: the session is ended while the code is exchanged: no link, no audit, no e-mail, the error page", async () => {
+    const email = emailOf("lan");
+    const s = await started(email);
+    const hash = await sha256Hex(rawOf(s.cookie));
+    const real = FakeOAuthProvider.prototype.exchange;
+    const exchange = vi.spyOn(FakeOAuthProvider.prototype, "exchange").mockImplementation(async function (this: FakeOAuthProvider, input) {
+      const result = await real.call(this, input); // the exchange succeeds…
+      await testEnv.DB.prepare("DELETE FROM sessions WHERE id_hash = ?1").bind(hash).run(); // …and the session ends right after it (restored by afterEach)
+      return result;
+    });
+    const res = await callback("github", s, s.cookie);
+    expect(res.status).toBe(400);
+    expect(res.headers.get("location")).toBeNull();
+    expect(exchange).toHaveBeenCalledTimes(1); // the exchange DID run (the pre-exchange check passed), so only the in-SQL guard stopped the link
+    expect(await n("SELECT count(*) AS n FROM sessions WHERE id_hash = ?1", hash)).toBe(0); // positive precondition: the session row really is gone
+    await nothingHappened(s.user.id, email);
+  });
+
+  it("RACE at the SQL level: linkIdentity with a session that no longer exists writes nothing, not even an audit row", async () => {
+    const { user, cookie } = await signIn(emailOf("lan"), { method: "magic_link" });
+    const idHash = await sha256Hex(rawOf(cookie));
+    const now = new Date().toISOString();
+    const args = { userId: user.id, provider: "github" as const, subject: `s-${tag()}`, label: `l-${tag()}`, now };
+    await testEnv.DB.prepare("DELETE FROM sessions WHERE id_hash = ?1").bind(idHash).run();
+    expect(await linkIdentity(testEnv.DB, { ...args, requireSession: { idHash } })).toEqual({ ok: false, reason: "session_ended" });
+    expect(await identities(user.id)).toBe(0);
+    expect(await linkAudits(user.id)).toBe(0);
+    // an oauth_* row with that hash is refused the same way, a live magic_link one passes
+    const alive = await signIn(emailOf("lan"), { method: "oauth_github" });
+    const oauthHash = await sha256Hex(rawOf(alive.cookie));
+    expect(await linkIdentity(testEnv.DB, { ...args, userId: alive.user.id, requireSession: { idHash: oauthHash } })).toEqual({ ok: false, reason: "session_ended" });
+    const good = await signIn(emailOf("lan"), { method: "magic_link" });
+    expect((await linkIdentity(testEnv.DB, { ...args, userId: good.user.id, requireSession: { idHash: await sha256Hex(rawOf(good.cookie)) } })).ok).toBe(true);
+    // another user's session id does not count for this user
+    const victim = await signIn(emailOf("victim"), { method: "magic_link" });
+    const stranger = await signIn(emailOf("stranger"), { method: "magic_link" });
+    expect(await linkIdentity(testEnv.DB, { ...args, subject: `s-${tag()}`, userId: victim.user.id, requireSession: { idHash: await sha256Hex(rawOf(stranger.cookie)) } })).toEqual({ ok: false, reason: "session_ended" });
+  });
+});
+
+describe("unlinking stays allowed from any session (VNX-2605d, ADR-013)", () => {
+  it("an oauth_* session can unlink", async () => {
+    const email = emailOf("lan");
+    const { user } = await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(email, { method: "oauth_linkedin" });
+    const res = await createApp().request(formPost("/me/identities/github/unlink", {}, { cookie }), undefined, testEnv);
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+    expect(await identities(user.id)).toBe(0);
+  });
+});
+
+describe("/me for a session that cannot link (VNX-2605d)", () => {
+  const section = async (path: string, cookie: string) => {
+    const html = await (await createApp().request(getReq(path, cookie), undefined, testEnv)).text();
+    return html.match(/<section id="identities">.*?<\/section>/s)?.[0] ?? "";
+  };
+  const NOTE: Array<[string, string]> = [
+    ["/me", "To link another account, sign out, then sign in with an email link."],
+    ["/vi/me", "Muốn liên kết thêm tài khoản, hãy đăng xuất rồi đăng nhập bằng link qua email."],
+    ["/zh-hans/me", "要关联其他账号，请先退出登录，再用邮箱登录。"],
+    ["/zh-hant/me", "要連結其他帳號，請先登出，再用電子郵件登入。"],
+  ];
+
+  it("an oauth_* session sees the note, no Link form, and still the Unlink form; a magic_link session sees the Link form and no note", async () => {
+    await enableProvider("google");
+    await enableProvider("github");
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `s-${tag()}`, label: `l-${tag()}` });
+    const oauth = await signIn(email, { method: "oauth_github" });
+    const magic = await signIn(email, { method: "magic_link" });
+    for (const [path, text] of NOTE) {
+      const html = (await section(path, oauth.cookie)).replace(/&#39;/g, "'");
+      expect(html, path).toContain(text);
+      expect(html, path).not.toContain("/google/link");
+      expect(html, path).toContain("/github/unlink");
+    }
+    const withLink = await section("/me", magic.cookie);
+    expect(withLink).toContain("/me/identities/google/link");
+    expect(withLink).not.toContain("To link another account, sign out");
+  });
+
+  it("?link=needsEmailLink shows its message once and not the note as well", async () => {
+    await enableProvider("google");
+    const { cookie } = await signIn(emailOf("lan"), { method: "oauth_google" });
+    const html = await section("/me?link=needsEmailLink", cookie);
+    expect(html).toContain("To link a new account, you need to be signed in with an email link.");
+    expect(html).not.toContain("To link another account, sign out");
+    expect(html).toContain('role="status"');
+  });
+});
+```
+Ghi chú implementer: tên helper `setCookieValue`, `getReq`, `formPost` ở `test/helpers.ts` và `linkViaStart`, `callbackReq` ở `test/oauth-flow.ts` đã có; trả `string | null` của `setCookieValue` cần khớp chữ ký thật (đổi `toBeNull()` cho khớp nếu nó trả `undefined`). `encodeOAuthCookie` export từ `domain/oauth.ts`.
+
+- [ ] **Step 2: Chạy, thấy đỏ.** `npm test -w apps/web -- test/auth/oauth-link-session.test.ts` → FAIL (không có `isLinkCapableSession`, `requireSession`, notice `needsEmailLink`; POST từ `oauth_*` đang 303 tới `start`; RACE ghi liên kết).
+
+- [ ] **Step 3: Domain và DB (xanh một phần).**
+
+`apps/web/src/domain/identity.ts`, sau `isStaffSession`:
+
+```ts
+/**
+ * Only a magic-link session may start or finish linking a NEW provider account (ADR-013): adding a way to sign in must prove the mailbox.
+ * Its own name and constant on purpose: today it equals `isStaffSession`, but that one is the /ops and /admin rule (decision 9) and the two may diverge.
+ * Unlinking is allowed for every session and does not call this.
+ */
+export const LINK_SESSION_METHOD: SessionMethod = "magic_link";
+export function isLinkCapableSession(method: SessionMethod): boolean {
+  return method === LINK_SESSION_METHOD;
+}
+```
+Cũng thêm `"session_ended"` vào `LinkRefusal` (docstring: "the session that asked to link is gone or is not a magic-link session").
+
+`apps/web/src/db/identities.ts`: import `LINK_SESSION_METHOD`; thay `linkIdentity`:
+
+```ts
+export async function linkIdentity(
+  db: D1Database,
+  input: { userId: string; provider: OAuthProvider; subject: string; label: string; now: string; /** The session that asked (ADR-013): the row is written only while it is alive and a magic-link session of this user. */ requireSession?: { idHash: string } },
+): Promise<LinkResult> {
+  const id = ulid(Date.parse(input.now));
+  const [insert] = await db.batch<{ id: string }>([
+    db
+      .prepare(
+        `INSERT INTO user_identities (id, user_id, provider, provider_subject, label, show_on_profile, linked_at, last_used_at, updated_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, 0, ?6, NULL, ?6
+         WHERE (?7 IS NULL OR EXISTS (SELECT 1 FROM sessions WHERE id_hash = ?7 AND user_id = ?2 AND method = ?8 AND expires_at > ?6))
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+      )
+      .bind(id, input.userId, input.provider, input.subject, input.label, input.now, input.requireSession?.idHash ?? null, LINK_SESSION_METHOD),
+    auditStatement(/* unchanged: guarded on the identity row existing */),
+  ]);
+  if (insert?.results.length) { /* unchanged */ }
+  if (input.requireSession) {
+    // Nothing was inserted: if the session is the reason, say so before any conflict answer.
+    const alive = await db
+      .prepare("SELECT 1 AS ok FROM sessions WHERE id_hash = ?1 AND user_id = ?2 AND method = ?3 AND expires_at > ?4")
+      .bind(input.requireSession.idHash, input.userId, LINK_SESSION_METHOD, input.now)
+      .first<{ ok: number }>();
+    if (!alive) return { ok: false, reason: "session_ended" };
+  }
+  /* holder lookup unchanged */
+}
+```
+(Giữ nguyên phần còn lại của hàm; `ON CONFLICT` sau `SELECT … WHERE` hợp lệ trong SQLite. Cập nhật docstring: "`requireSession`…")
+
+Chạy: `npm test -w apps/web -- test/auth/oauth-link-session.test.ts -t "RACE at the SQL level"` và `-t "isLinkCapableSession"` → PASS; `npm test -w apps/web -- test/db/identities.test.ts` → PASS (không truyền `requireSession` thì hành vi cũ).
+
+- [ ] **Step 4: Routes và view (xanh).**
+
+`apps/web/src/routes/me.tsx` (import `isLinkCapableSession` từ `../domain/identity.ts`):
+
+```ts
+  onLocalized(app, "get", "/me", requireUser, async (c) => {
+    // … as before …
+        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} notice={notice} canLink={isLinkCapableSession(user.method)} />
+```
+```ts
+  onLocalized(app, "post", "/me/identities/:provider/link", requireUser, async (c) => {
+    const found = await enabledProvider(c);
+    const raw = readSessionCookie(c);
+    if (!found || !raw) return errorResponse(c, "notFound", 404);
+    // ADR-013: only a magic-link session starts a link. Nothing is written and nothing redirects to `start`; the owner is told what to do.
+    const refused: LinkNotice = "needsEmailLink"; // typed against the one LINK_NOTICES source
+    if (!isLinkCapableSession(c.get("user")!.method)) return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${refused}`, 303);
+    const now = Date.now();
+    writeOAuthCookie(c, newLinkIntent({ provider: found.provider, sessionHash: await linkSessionHash(raw) }, now), now);
+    return c.redirect(`/auth/oauth/${found.provider}/start?lang=${c.get("locale")}`, 303);
+  });
+```
+`apps/web/src/routes/oauth.tsx`: import `isLinkCapableSession` và `sha256Hex` (`../auth/crypto.ts`). `start`:
+
+```ts
+    const user = c.get("user");
+    const sessionHash = user && raw && isLinkCapableSession(user.method) ? await linkSessionHash(raw) : null; // ADR-013: any other session is, for linking, no session: a plain sign-in follows
+```
+`finishLink`:
+
+```ts
+  // ADR-013, before the code is spent: a live magic-link session, and the one that asked.
+  if (!user || !raw || !isLinkCapableSession(user.method) || !flowMatchesSession(flow, await linkSessionHash(raw))) return failed(c, provider, "session_mismatch", flow.locale);
+  …
+  // After the exchange, the same check INSIDE the write (a session ended meanwhile writes nothing): `requireSession`.
+  const nowIso = new Date(nowMs).toISOString();
+  const linked = await linkIdentity(c.env.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: nowIso, requireSession: { idHash: await sha256Hex(raw) } });
+  if (!linked.ok && linked.reason === "session_ended") return failed(c, provider, "session_mismatch", flow.locale); // not /me?link=failed: with no session /me would bounce to /login and lose the message
+```
+(đặt dòng `session_ended` ngay sau `linkIdentity`, trước `if (linked.ok) await notifyIdentityChange`; `linked.reason === "user_has_provider" ? …` giữ nguyên.) Cập nhật docstring `finishLink`: "checked BEFORE the code is spent and again inside the write".
+
+`apps/web/src/views/me/LinkedAccounts.tsx`: `LINK_NOTICES` thêm `"needsEmailLink"`; `NOTICE_KEY.needsEmailLink = "me.identities.notice.needsEmailLink"`; `STATUS` thêm `"needsEmailLink"`; prop `canLink: boolean`; trong ô hành động đổi `linkable.includes(provider)` thành `canLink && linkable.includes(provider)`; sau `<p class="muted">{intro}</p>` thêm:
+
+```tsx
+      {!canLink && notice !== "needsEmailLink" && rows.some((p) => linkable.includes(p) && !identities.some((i) => i.provider === p)) ? <p class="muted">{tr("me.identities.emailToLink")}</p> : null}
+```
+Thêm hai khóa vào 4 file locale (bảng trên, sau Owner duyệt; trước đó test chuỗi sẽ đỏ, nên Implementer chờ duyệt rồi mới chạy Step 5). Chạy `npm test -w apps/web -- test/auth/oauth-link-session.test.ts` → PASS.
+
+- [ ] **Step 5: M1 của review 9c.** Trong `apps/web/test/auth/oauth-unlink-race.test.ts`, test `unlinked mid sign-in (…)`: sau khối `finally` thêm `expect(await n("SELECT count(*) AS n FROM user_identities WHERE user_id = ?1", user.id)).toBe(0); // the trigger ran: the identity is gone` (chứng minh trigger đã bắn; trước dòng assert `oauth_github` session). Chạy `npm test -w apps/web -- test/auth/oauth-unlink-race.test.ts` → PASS.
+
+- [ ] **Step 6: Test kiến trúc.** Thêm vào `apps/web/test/architecture.test.ts`:
+
+```ts
+describe("linking needs a magic-link session (VNX-2605d, ADR-013)", () => {
+  it("the only caller of linkIdentity passes requireSession, and linking code never uses the staff predicate", () => {
+    const callers = Object.entries(sources).filter(([file, src]) => /\blinkIdentity\(/.test(src) && file !== "../src/db/identities.ts");
+    expect(callers.map(([file]) => file)).toEqual(["../src/routes/oauth.tsx"]);
+    expect(callers[0]?.[1]).toMatch(/requireSession: \{ idHash: await sha256Hex\(raw\)/);
+    for (const file of ["../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/views/me/LinkedAccounts.tsx"]) expect(sources[file], file).not.toContain("isStaffSession");
+  });
+});
+```
+
+- [ ] **Step 7: Tiêu chí chấp nhận.** (`LS` = `apps/web/test/auth/oauth-link-session.test.ts`; `npm test -w apps/web -- <đường dẫn> -t "<tên>"`)
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | `POST …/link` từ `oauth_*`: 303 `/me?link=needsEmailLink`, không cookie intent; từ `magic_link`: như cũ; provider lạ/cờ tắt vẫn 404 | `LS -t "needs a magic-link session"` |
+| 2 | `start` với intent/flow của session `oauth_*`: 302 signin, không trang link; đối chứng `magic_link` vẫn 200 | `LS -t "start with a link intent"` |
+| 3 | Callback: flow bắt đầu ở `magic_link` nhưng session nay `oauth_*`, đã xóa, hoặc là session khác: không liên kết, không audit, không email, trang lỗi | `LS -t "callback's link branch"` |
+| 4 | Race: session mất giữa `exchange` và ghi: không liên kết, không audit, không email | `LS -t "RACE"` |
+| 5 | Guard nằm trong SQL (`session_ended`; session `oauth_*` hay của người khác cũng bị từ chối; `magic_link` hợp lệ qua) | `LS -t "RACE at the SQL level"` |
+| 6 | Hủy liên kết vẫn được từ session `oauth_*` | `LS -t "unlinking stays allowed"` |
+| 7 | `/me`: session `oauth_*` thấy ghi chú, không form Link, còn form Unlink, 4 locale; `magic_link` thấy form Link | `LS -t "/me for a session"` |
+| 8 | M1: trigger đã chạy ở mọi test race của 9c | `npm test -w apps/web -- test/auth/oauth-unlink-race.test.ts` |
+| 9 | Ranh giới: chỉ `oauth.tsx` gọi `linkIdentity` và truyền `requireSession`; không dùng `isStaffSession` cho liên kết | `npm test -w apps/web -- test/architecture.test.ts` |
+| 10 | 4 locale đủ khóa | `npm test -w apps/web -- test/i18n/parity.test.ts` |
+| 11 | Không hồi quy 8a, 8b, 9, 9c | `npm test -w apps/web -- test/me test/auth test/db` |
+| 12 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test -- --maxWorkers=2` |
+
+- [ ] **Step 8: Typecheck, toàn bộ test, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test -- --maxWorkers=2
+git add apps/web/src/domain/identity.ts apps/web/src/db/identities.ts apps/web/src/routes/me.tsx apps/web/src/routes/oauth.tsx apps/web/src/views/me/LinkedAccounts.tsx \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/auth/oauth-link-session.test.ts apps/web/test/auth/oauth-unlink-race.test.ts apps/web/test/auth/oauth-link.test.ts apps/web/test/me/identities.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): linking a new provider needs a magic-link session, re-checked inside the write (VNX-2605d)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+(`git add` đã gồm hai test cũ phải sửa; thêm file nào khác Step 4 buộc phải sửa.)
+
+**Kích cỡ ước tính:** mã ≈ 60 dòng (domain 10, identities 22, me.tsx 6, oauth.tsx 8, view 10, locale riêng), test ≈ 330 dòng (mới 290, M1 2, kiến trúc 10, sửa cũ ≈ 20). Dưới 600 không tính locale: không tách.
+
+**Nghĩa vụ cho task sau:**
+- **VNX-2608:** thử bằng provider thật: đăng nhập bằng GitHub, vào `/me`, xác nhận không có nút Link mà có ghi chú; đăng nhập bằng link qua email rồi liên kết thêm Google thành công.
+- **Task 12 (VNX-2607, viết lại sau rebase):** Terms §4 / Privacy không nói rằng liên kết đòi session magic link; câu đã duyệt vẫn đúng ("Once signed in, you can link…"); không cần đổi chữ, ghi vào bảng đối chiếu code.
+- **Ghi nhận:** thông báo `needsEmailLink` dẫn người dùng tới "đăng xuất"; chưa có nút đăng xuất ngay trên `/me`. Nếu Owner muốn, task riêng.
+
+#### Kết quả review Task 9d (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, MEDIUM-2, LOW-1..3, S-1..3; câu chữ Owner duyệt 2026-10-10
