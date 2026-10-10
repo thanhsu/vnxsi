@@ -1,6 +1,6 @@
 # VNX-0802 — Playwright + axe: homepage, form Inquiry, editor, login · Plan
 
-- **Trạng thái:** Draft (chờ Owner duyệt; theo ủy quyền M6+, Opus có thể duyệt thay Owner)
+- **Trạng thái:** **APPROVED** (Opus duyệt thay Owner theo ủy quyền M6+, Owner cho làm VNX-0802 ngày 2026-10-10). Câu hỏi mở theo mặc định của plan: OQ-1 không sửa app trong task này, lỗi axe có sẵn vào `a11y-known.ts` + báo cáo, Reviewer triage và đưa Owner danh sách; OQ-2 dự phòng seed `public_stats` trực tiếp; OQ-3 dự phòng `--local-protocol https` + `ignoreHTTPSErrors`; OQ-4 chỉ Chromium; OQ-5 CI chạy ở mọi PR và push, runbook thêm dòng chạy `npm run e2e` trước deploy.
 - **Roadmap:** `docs/roadmap/WAVE1-ROADMAP.md` → M8, VNX-0802 (AGENT)
 - **Spec / NFR:** `docs/blueprint/02-NFR.md` mục Khả năng tiếp cận: WCAG 2.2 AA cho mọi trang công khai và form; vùng chạm >= 44 px; tương phản >= 4,5:1; focus nhìn thấy; `prefers-reduced-motion`; "kiểm tự động bằng axe trong Playwright (VNX-0802)". Spec Wave 1 §8.11 (ngưỡng homepage), §9 (homepage với reduced-motion không animation).
 - **ADR:** ADR-001 (một Worker, Hono + assets), ADR-004 (không vị trí trả tiền: seed không tạo dữ liệu tiền), ADR-012 (số liệu, bảng `public_stats`). Không cần ADR mới.
