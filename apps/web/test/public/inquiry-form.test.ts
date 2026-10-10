@@ -6,7 +6,7 @@ import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
 import { FAKE_TURNSTILE_PASS } from "../../src/http/turnstile.ts";
 import { makeBuilder, makeLiveProduct, signIn } from "../fixtures.ts";
-import { followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const get = (path: string, cookie?: string) => app().request(getReq(path, cookie), undefined, testEnv);
@@ -72,7 +72,10 @@ describe("inquiry form, signed in (spec §5.6 step 2)", () => {
     const { cookie } = await signIn("if-self@vnx.si");
     const res = await post(`/p/${product.slug}/inquiry/buy`, { type: "buy", message: MESSAGE, budgetBand: "unsure", name: "Me", website: "" }, { cookie });
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain("You can&#39;t send an inquiry to yourself.");
+    const html = await res.text();
+    expect(html).toContain("You can&#39;t send an inquiry to yourself.");
+    // VNX-0807: a form-level error is a summary line with no link, and no second alert.
+    expect(expectErrorSummary(html, [], { formLevel: 1 })).toContain("You can&#39;t send an inquiry to yourself.");
   });
 
   it("re-renders with per-field errors and the typed values", async () => {
@@ -82,6 +85,19 @@ describe("inquiry form, signed in (spec §5.6 step 2)", () => {
     expect(res.status).toBe(400);
     const html = await res.text();
     for (const text of ["Please write at least 20 characters.", "Choose one of the options.", "Pick a date from today up to 5 years ahead.", "This field is required.", "short &lt;b&gt;"]) expect(html, text).toContain(text);
+    // VNX-0807: title prefix, one focused summary linking each field in page order, per-field errors kept for assistive tech.
+    const body = expectErrorSummary(html, ["iq-message", "iq-budget", "iq-deadline", "iq-name"]);
+    expect(body).toContain("Please write at least 20 characters.");
+    for (const field of ["message", "budgetBand", "deadline", "name"]) expect(html).toContain(`aria-describedby="iq-${field}-error"`);
+    expect(html).toContain('id="iq-message-error" class="error-msg"');
+    // Vietnamese: prefix and heading follow the locale.
+    const vi = await (await post(`/vi/p/${product.slug}/inquiry/buy`, { type: "buy", message: "short", budgetBand: "lots", deadline: "", name: "x", website: "" }, { cookie })).text();
+    expectErrorSummary(vi, ["iq-message", "iq-budget"], { titlePrefix: "Lỗi:" });
+    expect(vi).toContain("Có lỗi cần sửa");
+    // A clean form has none of it.
+    const clean = await (await get(`/p/${product.slug}/inquiry/buy`, cookie)).text();
+    expect(clean).not.toContain("form-errors");
+    expect(clean).not.toMatch(/<title>Error:/);
   });
 });
 
