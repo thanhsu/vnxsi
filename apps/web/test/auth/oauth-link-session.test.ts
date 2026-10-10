@@ -212,6 +212,22 @@ describe("the callback's link branch (VNX-2605d)", () => {
     const victim = await signIn(emailOf("victim"), { method: "magic_link" });
     const stranger = await signIn(emailOf("stranger"), { method: "magic_link" });
     expect(await linkIdentity(testEnv.DB, { ...args, subject: `s-${tag()}`, userId: victim.user.id, requireSession: { idHash: await sha256Hex(rawOf(stranger.cookie)) } })).toEqual({ ok: false, reason: "session_ended" });
+    // LOW-1: a magic_link session of the RIGHT user, identical to the passing case except that it has expired
+    const stale = await signIn(emailOf("stale"), { method: "magic_link" });
+    const staleHash = await sha256Hex(rawOf(stale.cookie));
+    await testEnv.DB.prepare("UPDATE sessions SET expires_at = ?2 WHERE id_hash = ?1").bind(staleHash, new Date(Date.parse(now) - 1000).toISOString()).run();
+    expect(await linkIdentity(testEnv.DB, { ...args, subject: `s-${tag()}`, userId: stale.user.id, requireSession: { idHash: staleHash } })).toEqual({ ok: false, reason: "session_ended" });
+    expect(await identities(stale.user.id)).toBe(0);
+    expect(await linkAudits(stale.user.id)).toBe(0);
+    // SUGGESTION-1: a dead session wins over a conflict: the subject is already linked to this very user, still `session_ended`, not `already_linked`
+    const held = await signIn(emailOf("held"), { method: "magic_link" });
+    const heldHash = await sha256Hex(rawOf(held.cookie));
+    const heldArgs = { ...args, subject: `s-${tag()}`, userId: held.user.id };
+    expect((await linkIdentity(testEnv.DB, { ...heldArgs, requireSession: { idHash: heldHash } })).ok).toBe(true);
+    await testEnv.DB.prepare("DELETE FROM sessions WHERE id_hash = ?1").bind(heldHash).run();
+    expect(await linkIdentity(testEnv.DB, { ...heldArgs, requireSession: { idHash: heldHash } })).toEqual({ ok: false, reason: "session_ended" });
+    expect(await identities(held.user.id)).toBe(1);
+    expect(await linkAudits(held.user.id)).toBe(1);
   });
 });
 

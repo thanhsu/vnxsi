@@ -27,3 +27,11 @@ ADR-013 "Duoc bao dam boi" says the race is tested with a trigger "as in VNX-260
 
 ## Ghi nhan (out of scope)
 - `needsEmailLink` tells the user to sign out but `/me` has no sign-out button (already recorded in the plan).
+
+## Fix round R1
+
+Test-only, no source change. In the SQL-level test of `apps/web/test/auth/oauth-link-session.test.ts`:
+- LOW-1: a fresh `magic_link` session of the right user with `expires_at` set 1 s before `now` gives `session_ended`, no identity row, no audit row (differs from the passing case only in `expires_at`).
+- SUGGESTION-1: a dead session plus a subject already linked to this user gives `session_ended`, not `already_linked`; the existing identity and its one audit row are untouched.
+
+Run: `npx vitest run test/auth/oauth-link-session.test.ts --maxWorkers=1 --no-file-parallelism`: 17 passed (17). `npm run typecheck -w apps/web`: no errors.
