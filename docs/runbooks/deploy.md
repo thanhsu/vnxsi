@@ -29,7 +29,7 @@ Quy ước: mọi lệnh chạy từ **gốc repo** trừ khi có dòng `cd apps
 
 ## 2. Trước deploy
 
-**Ai được chạy:** Owner. Claude chỉ chạy migrate / deploy / `secret put` khi Owner đã yêu cầu **chính lần deploy đó** trong hội thoại, từ checkout sạch của `origin/main` (quy tắc trong `.claude/settings.local.json`). Auto mode chặn Claude đọc dữ liệu dòng của production: câu `SELECT` trên dữ liệu thật và `d1 export` do Owner chạy.
+**Ai được chạy:** Owner. Claude chỉ chạy migrate / deploy / `secret put` khi Owner đã yêu cầu **chính lần deploy đó** trong hội thoại, từ checkout sạch của `origin/main` (`CLAUDE.md`, mục "Luật cứng": không merge, không push, không deploy nếu Owner chưa nói rõ). Auto mode chặn Claude đọc dữ liệu dòng của production: câu `SELECT` trên dữ liệu thật và `d1 export` do Owner chạy.
 
 1. Owner nói rõ "deploy". Ghi lại câu cho phép (dùng ở mục 8).
 2. Tạo worktree sạch từ `origin/main`. Main checkout `D:\DOCS\SUPHAM\GIT\vnxsi` thuộc phiên khác: không deploy từ đó.
@@ -61,7 +61,8 @@ Quy ước: mọi lệnh chạy từ **gốc repo** trừ khi có dòng `cd apps
    cd <gốc repo chính>
    git worktree remove ../vnxsi-deploy
    ```
-   **Không bao giờ `rm -rf node_modules`** trong worktree: `node_modules/@vnxsi/web` là link trỏ vào `apps/web`, `rm -rf` của Git Bash đi theo link và xóa mã nguồn (đã xảy ra 2026-10-07). Nếu `git worktree remove` từ chối, đừng dùng `--force` khi chưa xem `git status`; xóa thư mục thì dùng `cmd /c rmdir /s /q <thư mục>` (không đi theo junction).
+   `git worktree remove` gỡ cả worktree là an toàn: link workspace `node_modules/@vnxsi/web` trỏ vào `apps/web` **của chính worktree đó**, vốn cũng bị xóa cùng. Nguy hiểm là **`rm -rf node_modules`** riêng lẻ trong một worktree còn dùng: `rm -rf` của Git Bash đi theo link và xóa mã nguồn `apps/web` (đã xảy ra 2026-10-07). Không bao giờ làm vậy.
+   Nếu `git worktree remove` từ chối, đừng dùng `--force` khi chưa xem `git status`. Cần xóa thư mục thì chạy trong **PowerShell hoặc cmd**: `cmd /c rmdir /s /q <thư mục>` (không đi theo junction). Trong Git Bash, MSYS đổi `/c`, `/s`, `/q` thành đường dẫn; phải viết `cmd //c rmdir //s //q <thư mục>`.
 
 ## 3. Thứ tự deploy
 
@@ -147,10 +148,10 @@ npm run smoke -- --base http://localhost:8787   # local (sau npm run dev)
 - `--slug` mặc định tắt. Dùng `HEAD` cho `/p/<slug>` và `/go/p/<slug>/demo`: handler trả lời HEAD mà không ghi lượt xem hay click, nên không làm nhiễu thống kê. Kiểm 302, `Location` https, `Referrer-Policy: origin`, `X-Robots-Tag: noindex`.
 - **Mã thoát:** `0` không FAIL; `1` có FAIL; `2` tham số sai (không gửi request nào).
 - **Đầu ra:** bảng `STATUS | check | detail`, rồi dòng `N pass, M pass-after-retry, K fail` và `Privacy: Last updated <ngày>`. Base khác `vnx.si` thì HSTS và origin của dòng `Sitemap:` không được kiểm (script ghi rõ ở dòng đầu).
-- **Kiểm gì (64 request, khoảng 14 giây):** 9 trang công khai × 4 locale (200, HTML); `/admin`, `/hub`, `/me` × 4 locale (303, `Location` = `<locale>/login?next=...`); `/ops`, `/ops/x` (404, `no-store`, `X-Robots-Tag: noindex`); `/vi/ops` (chỉ kiểm 404); `/p/<không có>` × 4 locale (404, noindex qua header hoặc `<meta name="robots">`); `/go/p/<không có>/demo`, `/go/<không có>` (404, noindex, `no-store`); `robots.txt`; `sitemap.xml` (không lộ `/ops`, `/go`, `/hub`, `/admin`, `/me`); header bảo mật trên `/` và trang 404 (CSP không `unsafe-inline`/`unsafe-eval`, `nosniff`, `X-Frame-Options: DENY`, HSTS 1 năm, `Referrer-Policy: strict-origin-when-cross-origin`); `/auth/verify` không token (400, `Referrer-Policy: same-origin`, `no-store`); `/privacy` (in "Last updated"); `/api/health` (`{"ok":true}`).
+- **Kiểm gì (64 request, khoảng 14 giây):** 9 trang công khai × 4 locale (200, HTML); `/admin`, `/hub`, `/me` × 4 locale (303, `Location` = `<locale>/login?next=...`); `/ops`, `/ops/x` (404, `no-store`, `X-Robots-Tag: noindex`); `/vi/ops` (404; xem dòng "Đã biết" ngay dưới); `/p/<không có>` × 4 locale (404, noindex qua header hoặc `<meta name="robots">`); `/go/p/<không có>/demo`, `/go/<không có>` (404, noindex, `no-store`); `robots.txt`; `sitemap.xml` (không lộ `/ops`, `/go`, `/hub`, `/admin`, `/me`); header bảo mật trên `/` và trang 404 (CSP không `unsafe-inline`/`unsafe-eval`, `nosniff`, `X-Frame-Options: DENY`, HSTS 1 năm, `Referrer-Policy: strict-origin-when-cross-origin`); `/auth/verify` không token (400, `Referrer-Policy: same-origin`, `no-store`); `/privacy` (in "Last updated"); `/api/health` (`{"ok":true}`).
 - **Ngân sách request (vì rule rate limit):** 6 request vào đường bị rule phủ (8 khi có `--slug`); chạy tuần tự; ≥ 600 ms giữa hai request bị phủ; không quá 10 request bị phủ trong cửa sổ 10 giây, kể cả retry. Gặp 429: in cảnh báo, chờ 11 giây, thử lại một lần. Chạy smoke vài lần liên tiếp vẫn dưới ngưỡng 20 / 10 giây; đừng chạy song song nhiều bản.
 - **Thử lại:** check FAIL được thử lại đúng một lần sau 3 giây → `PASS (retry)` hoặc `FAIL`. Ngay sau deploy từng có một route có tiền tố locale trả 404 thoáng qua (lan truyền); retry che được. Vẫn FAIL: chờ khoảng một phút, chạy lại `npm run smoke` một lần, rồi mới tính rollback (mục 9). `PASS (retry)` nhiều là dấu hiệu lan truyền chậm: ghi vào sổ.
-- **Đã biết, không phải lỗi:** `/vi/ops` là trang 404 thường (không `no-store`, không `X-Robots-Tag`; trang lỗi vẫn có `<meta name="robots" content="noindex">`); `/p/<không có>` noindex bằng meta, không header; `/go/...` 404 mang `Referrer-Policy` mặc định (`origin` chỉ có ở 302); `robots.txt` production có khối Managed của Cloudflare đứng trước dòng của app.
+- **Đã biết, không phải lỗi:** `/vi/ops` trả 404 có `Cache-Control: no-store` và noindex bằng `<meta name="robots">`, nhưng **không** có `X-Robots-Tag` (khoảng hở là VNX-2502 F3, dời sang VNX-2508; khi VNX-2508 xong, smoke sẽ kiểm `/vi/ops` như `/ops`); `/p/<không có>` noindex bằng meta, không header; `/go/...` 404 mang `Referrer-Policy` mặc định (`origin` chỉ có ở 302); `robots.txt` production có khối Managed của Cloudflare đứng trước dòng của app.
 
 **Kiểm tay còn lại (smoke không làm):**
 
@@ -183,7 +184,8 @@ npx wrangler versions list             # 10 version gần nhất
 npx wrangler rollback <version-id> --message "<lý do>"
 ```
 
-- Rollback chỉ đổi mã và cấu hình đi theo version (`vars`, kể cả `PRIVACY_NOTICE_GO_LIVE`). **Không** đổi dữ liệu D1/R2, không hoàn migration. Version tạo trước một lần `wrangler secret put` có thể mang bộ secret cũ: sau rollback chạy `npx wrangler secret list` và smoke.
+- Rollback chỉ đổi mã và cấu hình đi theo version (`vars`, kể cả `PRIVACY_NOTICE_GO_LIVE`). **Không** đổi dữ liệu D1/R2, không hoàn migration.
+- **Secret:** `wrangler rollback` liệt kê các secret đã đổi kể từ version đích và hỏi xác nhận. Xác nhận nghĩa là version đó chạy với **giá trị secret cũ**: khóa đã xoay quay về khóa cũ (có thể đã thu hồi), `ANALYTICS_SALT` đặt sau version đó thì mất. `npx wrangler secret list` chỉ in tên nên không phát hiện được điều này. Sau rollback: `npx wrangler secret put <TÊN>` lại **từng secret wrangler đã liệt kê** (mỗi lần tạo version mới; ghi version cuối vào sổ), rồi `npm run smoke`.
 - **Chỉ rollback về version chứa `eb45c10`.** Đối chiếu version ↔ commit bằng sổ (mục 8) hoặc message đã gắn khi deploy. Hiện tại (2026-10-10) mọi version trước `55e19e11` (`8e1e141d`, `411e3c9f`, …) **không** chứa `eb45c10` → không rollback được; sửa bằng roll-forward.
 - **Roll-forward:** sửa trên nhánh, merge vào `main` (Owner duyệt), deploy lại từ worktree sạch theo mục 2–3.
 
@@ -215,7 +217,7 @@ npx wrangler rollback <version-id> --message "<lý do>"
 
 **(a) Ưu tiên Time Travel** (mục 9): không cần export, không đụng schema. Ghi bookmark trước mỗi migrate là đủ cho phần lớn tình huống.
 
-**(b) Export tay** (khi cần bản sao ngoài Cloudflare). Owner chạy, vì file chứa dữ liệu cá nhân. Thử toàn bộ quy trình trên một D1 nháp trước. Trong lúc làm, tìm kiếm catalog trả rỗng; sửa product trong lúc này không mất vì bước 3 backfill lại từ `products`.
+**(b) Export tay** (khi cần bản sao ngoài Cloudflare). Owner chạy, vì file chứa dữ liệu cá nhân. **Chưa ai chạy quy trình này:** trước lần đầu trên production, chạy **đúng các lệnh dưới đây** trên một D1 nháp (có `products` và `products_fts` dựng từ migration) và ghi kết quả vào runbook. Trong lúc làm, tìm kiếm catalog trả rỗng; sửa product trong lúc này không mất vì bước 3 backfill lại từ `products`. `d1 export` có thể chặn các truy vấn khác tới DB trong lúc chạy: làm vào giờ thấp điểm.
 
 1. Bỏ trigger đồng bộ và bảng ảo (tên lấy từ `0006_catalog.sql`):
    ```sh
@@ -226,14 +228,19 @@ npx wrangler rollback <version-id> --message "<lý do>"
    ```sh
    npx wrangler d1 export vnxsi --remote --output <đường dẫn ngoài repo>/vnxsi-<YYYYMMDD>.sql
    ```
-3. Tạo lại bảng ảo, trigger và backfill bằng **chính file migration**, nguyên văn, không viết lại:
+3. Tạo lại bảng ảo, trigger và backfill bằng **nội dung nguyên văn của file migration**, gửi qua `--command` (cùng đường query mà `migrations apply` đã dùng để tạo `products_fts` lần đầu):
    ```sh
-   npx wrangler d1 execute vnxsi --remote --file migrations/0006_catalog.sql
+   # Git Bash
+   npx wrangler d1 execute vnxsi --remote --command "$(cat migrations/0006_catalog.sql)"
    ```
-   `d1 execute --file` không ghi vào bảng theo dõi migration, nên `migrations list` không đổi.
+   ```powershell
+   # PowerShell
+   npx wrangler d1 execute vnxsi --remote --command (Get-Content -Raw migrations/0006_catalog.sql)
+   ```
+   **Không dùng `--file`** cho bước này: với `--remote`, `d1 execute --file` đi qua import API của D1 (DB tạm ngừng phục vụ truy vấn trong lúc chạy) và chưa được thử với `CREATE VIRTUAL TABLE … fts5` cùng trigger. `d1 execute` (cả hai cách) không ghi vào bảng theo dõi migration, nên `migrations list` không đổi.
 4. Kiểm: tìm kiếm ở `/products` trả kết quả; `npm run smoke`.
 
-- Khôi phục từ file export vào DB mới: import file, rồi chạy lại `migrations/0006_catalog.sql` như bước 3 (file export không có `products_fts`).
+- Khôi phục từ file export vào DB mới: import file, rồi chạy lại nội dung `migrations/0006_catalog.sql` như bước 3 (file export không có `products_fts`).
 - File export chứa dữ liệu cá nhân: không vào repo, không gửi cho model AI, xóa khi hết hạn dùng.
 
 ## 11. Lỗi hay gặp
@@ -258,4 +265,5 @@ npx wrangler rollback <version-id> --message "<lý do>"
 - Thêm secret: thêm tên vào bảng mục 5 (không giá trị).
 - Đổi rule rate limit: đổi `WINDOW_MAX` / khoảng nghỉ trong `scripts/smoke-checks.mjs` cho ở dưới một nửa ngưỡng, và mục 6.
 - Nâng `wrangler`: chạy lại `npx wrangler <lệnh> --help` cho các lệnh ở mục 3, 5, 9, 10.
+- Đổi văn bản Terms hoặc Privacy: ngày "Last updated" dùng chung cho cả hai (`apps/web/src/legal/content.ts`), nên đổi một văn bản là đổi ngày mong đợi. Task đó cập nhật ngày ở mục 4 và mục 11. Task dọn Privacy hai phiên bản (sau 2026-11-21) cũng vậy.
 - Mỗi deploy: cập nhật bảng mục 1.
