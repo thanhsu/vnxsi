@@ -35,3 +35,13 @@ Results:
 - SUGGESTION-1: `test/public/builder-badges.test.ts` Top builders order test asserts each `optIn` returns "changed".
 - SUGGESTION-3: `test/ops/guard.test.ts` new case: root Owner with an oauth_* session on `/ops/monetization/merchants` gets the same sealed 404 as an anonymous visitor.
 - Tests: builder-badges, ops/guard, auth/staff plus typecheck (see commit message run).
+
+## Merge 2 (7d68df8, VNX-0807)
+- `git fetch` showed origin/main at `5eae764`, one docs-only commit past 7d68df8 (`5eae764` touches only `.ai/context/CURRENT-STATUS.md`). That is what was merged (commit d4fe582); its subject names 7d68df8 as briefed, but the content includes 5eae764.
+- Conflicts: none (git auto-merged locale files, app.css, Layout/HubLayout (`invalid` and `signedIn` both present), architecture tests, docs).
+- Migrations: no new migration on main; `git diff --stat origin/main...HEAD -- apps/web/migrations` shows only 0017_user_identities.sql (22 insertions).
+- `npm run typecheck -w apps/web`: no errors; `npm run e2e:typecheck`: clean.
+- `npm test -- --maxWorkers=2`: Test Files 187 passed (187), Tests 2262 passed (2262).
+- `npm run test:scripts`: 52 pass, 0 fail.
+- `npm run e2e`: 59 passed (1.6m).
+- EPIC 26 views were not changed; error summary not adopted there (VNX-0807 T6).
