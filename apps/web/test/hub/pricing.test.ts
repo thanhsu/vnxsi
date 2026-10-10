@@ -3,7 +3,7 @@ import { createApp } from "../../src/app.ts";
 import { listTiers } from "../../src/db/pricing.ts";
 import { findProductById, setProductStatus } from "../../src/db/products.ts";
 import { makeBuilder, makeDraft, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const post = (id: string, cookie: string, body: Record<string, string>) =>
   createApp().request(formPost(`/hub/products/${id}/edit/pricing`, body, { cookie }), undefined, testEnv);
@@ -43,6 +43,8 @@ describe("pricing step (spec §5.3, §6.1)", () => {
     const html = await res.text();
     expect(html).toContain("Enter a price from 0 to 100000 USD");
     expect(html).toContain('value="abc"');
+    expect(expectErrorSummary(html, ["tier-0-price"])).toContain("Tier 1 · ");
+    expect(html).toContain('aria-describedby="tier-0-price-error"');
     expect((await listTiers(testEnv.DB, product.id)).map((t) => t.name)).toEqual(["Keep"]);
   });
 

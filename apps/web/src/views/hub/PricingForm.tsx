@@ -3,7 +3,8 @@ import type { TierErrors, TierFieldError, TierRowValues, TierValues } from "../.
 import { BILLINGS } from "../../domain/product.ts";
 import type { Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
-import { translator } from "../../i18n/t.ts";
+import { translator, type Translate } from "../../i18n/t.ts";
+import { FormErrorSummary, type FormErrorItem } from "../FormErrorSummary.tsx";
 import { BILLING_KEY } from "../labels.ts";
 
 const ERROR_KEY: Record<TierFieldError, MessageKey> = {
@@ -13,6 +14,25 @@ const ERROR_KEY: Record<TierFieldError, MessageKey> = {
   price: "pricing.error.price",
   contact: "pricing.error.contact",
 };
+
+const FIELDS: [keyof TierRowValues, MessageKey][] = [
+  ["name", "pricing.name"],
+  ["billing", "pricing.billing"],
+  ["price", "pricing.price"],
+  ["description", "pricing.description"],
+];
+
+/** Summary lines in page order (VNX-0807): "Tier n · Label: error", linked to the control. */
+export function pricingErrorItems(errors: TierErrors, tr: Translate): FormErrorItem[] {
+  const items: FormErrorItem[] = [];
+  for (const i of Object.keys(errors).map(Number).sort((a, b) => a - b)) {
+    for (const [name, label] of FIELDS) {
+      const code = errors[i]?.[name];
+      if (code) items.push({ href: `#tier-${i}-${name}`, message: `${tr("pricing.tier", { n: i + 1 })} · ${tr(label)}: ${tr(ERROR_KEY[code])}` });
+    }
+  }
+  return items;
+}
 
 type Props = { locale: Locale; action: string; values: TierValues; errors: TierErrors };
 
@@ -36,11 +56,7 @@ export const PricingForm: FC<Props> = (p) => {
   return (
     <form method="post" action={p.action}>
       <p class="hint">{tr("pricing.intro")}</p>
-      {Object.keys(p.errors).length > 0 ? (
-        <p class="error-msg" role="alert">
-          {tr("builder.form.errorSummary")}
-        </p>
-      ) : null}
+      <FormErrorSummary tr={tr} items={pricingErrorItems(p.errors, tr)} lead={tr("builder.form.errorSummary")} />
       {p.values.map((row, i) => (
         <fieldset class="field">
           <legend>{tr("pricing.tier", { n: i + 1 })}</legend>

@@ -16,14 +16,14 @@ const LOCK_KEY: Record<EditLock, MessageKey> = {
   builder_suspended: "editor.locked.builder_suspended",
 };
 
-type Props = { locale: Locale; origin: string; product: Product; step: ProductStep; lock: EditLock | null; gaps: ReadinessGap[]; saved: boolean };
+type Props = { locale: Locale; origin: string; product: Product; step: ProductStep; lock: EditLock | null; gaps: ReadinessGap[]; saved: boolean; invalid?: boolean };
 
 /** Shared frame of every editor step: title, status, step navigation, lock and review notes. */
 export const EditorLayout: FC<PropsWithChildren<Props>> = (p) => {
   const tr = translator(p.locale);
   const base = `/hub/products/${p.product.id}/edit`;
   return (
-    <HubLayout locale={p.locale} origin={p.origin} title={`${tr(STEP_KEY[p.step])} · ${p.product.name}`} rest={`${base}/${p.step}`} active="products">
+    <HubLayout locale={p.locale} origin={p.origin} title={`${tr(STEP_KEY[p.step])} · ${p.product.name}`} rest={`${base}/${p.step}`} active="products" invalid={p.invalid}>
       <h1>
         {p.product.name} <span class={`badge badge-${p.product.status}`}>{tr(PRODUCT_STATUS_KEY[p.product.status])}</span>
       </h1>
