@@ -1,12 +1,13 @@
 # Privacy Policy — bản nháp
 
-- **Trạng thái:** APPROVED bởi Owner 2026-10-04 (câu chữ và số liệu). **Bổ sung M5 (Inquiry, Turnstile): APPROVED bởi Owner 2026-10-04 (VNX-0508).** **Bổ sung M6 (request): APPROVED bởi Owner 2026-10-04.** **Bổ sung EPIC 21 (outbound, partner): APPROVED bởi Owner 2026-10-05.** Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04 (câu chữ và số liệu). **Bổ sung M5 (Inquiry, Turnstile): APPROVED bởi Owner 2026-10-04 (VNX-0508).** **Bổ sung M6 (request): APPROVED bởi Owner 2026-10-04.** **Bổ sung EPIC 21 (outbound, partner): APPROVED bởi Owner 2026-10-05.** **Bổ sung ADR-012 (tài khoản liên kết): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607 (cả `privacy.md` và `privacy-m7.md`).** Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
 - **Task:** VNX-0705a. Implementer chuyển nguyên văn mục EN và VI vào `src/legal/content.ts`; `zh-Hans`, `zh-Hant` hiện bản EN kèm câu "bản tiếng Anh có hiệu lực" đã dịch.
 - **Nguyên tắc:** chỉ ghi điều code thật sự làm **tại thời điểm go-live**. Mỗi khi M5 (Inquiry), M6 (request), M7 (lượt xem, `/go/`), EPIC 21 (partner) thêm dữ liệu, phải cập nhật trang này trong cùng task đó.
 - **Đối chiếu code (`main` tại `5363766`):** session `__Host-vnx_session` 30 ngày (`auth/sessions.ts`); link đăng nhập 15 phút (`auth/tokens.ts`); `__Host-vnx_invite` 1 giờ (`auth/invite-cookie.ts`); rate limit lưu IP thô trong khóa `login:ip:*`, `waitlist:ip:*` và hash email `login:email:*` (`routes/auth.tsx`, `routes/landing.tsx`); waitlist lưu email, `personas`, `consent_at`, `lang`, `country`, `referrer` (host), `utm_*` (`db/waitlist.ts`).
 - **Đối chiếu code M5 (`main` tại `89723e4`):** Inquiry lưu `client_name`, loại, nội dung, ngân sách, hạn chót, product/builder (`db/inquiries.ts`); builder chỉ thấy tên và tin nhắn, không thấy email (`InquirySummary`); email thông báo có nội dung tin nhắn (`notify/inquiry.ts`); chưa đăng nhập thì tạo tài khoản ngầm, Inquiry chờ và tài khoản chưa xác nhận bị xóa sau 48 giờ (`jobs/daily.ts`); Turnstile chỉ ở form khi chưa đăng nhập (`http/turnstile.ts`, Cloudflare nhận IP); bộ đếm `inquiry:ip:*` (IP thô) và `inquiry:email:*` (hash email) (`routes/inquiry-form.tsx`). Không có cookie mới.
 - **Đối chiếu code M6 (`feat/m6-request` tại `2865d7e`):** request lưu `client_name`, `title`, `description`, `category`, `budget_band`, `deadline`, `languages`, gắn với tài khoản client qua `client_user_id` (`db/requests.ts` `createRequest`, migration `0008_requests`); đề xuất lưu `approach`, `price_cents`, `price_max_cents`, `price_note`, `timeline_days`, từ chối lưu `decline_reason` mà client không thấy (`proposeStatement`, `declineInviteStatement`, bảng `request_invites`); builder chỉ thấy tên đã che qua `builderFacingName` (`views/RequestFacts.tsx`, `views/hub/InvitationsPage.tsx`, email mời và nhắc ở `notify/request.ts`, Inquiry sinh ra ở `notify/inquiry.ts`), không thấy email; chưa đăng nhập thì tạo tài khoản ngầm, request chưa từng xác nhận (kể cả đã bị gỡ) và tài khoản chưa xác nhận bị xóa sau 48 giờ (`jobs/daily.ts` bước `pending_requests`, `ghost_users`: `deleteExpiredPendingRequests`, `deleteGhostUsers`); Turnstile chỉ ở form khi chưa đăng nhập (`routes/request-form.tsx`, `http/turnstile.ts`); bộ đếm `request:ip:*` (IP thô) và `request:email:*` (hash email) (`routes/request-form.tsx`). Không có cookie mới.
 - **Đối chiếu code EPIC 21 (`feat/epic21-partner-slice` tại `9760016`):** mỗi `GET /go/:merchantSlug`, `/go/o/:offerId` ghi một dòng `outbound_clicks` (`routes/go.ts` `respond` → `saveClick` → `recordClick` ở `db/clicks.ts`, migration `0012_outbound_clicks`), cả khi redirect có tracking lẫn khi `fallback` về `website_url` của merchant; HEAD, 404 (`not_found`) và 405 không ghi. Các cột: `id`, `offer_id`, `product_id` (null ở lát mỏng), `link_kind`, `src` (enum, `parseSrc`), `locale`, `country`, `referrer_host`, `is_bot`, `created_at`; không có cột IP, email hay user. `visitor_hash` luôn NULL (`go.ts`, tới M7). `domain/outbound.ts`: `referrerHost` chỉ giữ tên miền, trả null cho IP literal, `localhost` (`isPublicHostname`); `localeFromReferer` lấy locale từ `Referer` cùng host, không có thì `en`; `countryOf` chỉ nhận mã 2 chữ từ `cf.country`; `isBotRequest` chỉ đánh dấu `is_bot`, không chặn. Xóa dòng cũ hơn 395 ngày (`OUTBOUND_CLICK_RETENTION_DAYS`, `purgeOldClicks`, `jobs/daily.ts` bước `outbound_clicks`). Redirect 302 có `Referrer-Policy: origin`. Không có cookie mới. Câu chữ EN và VI ở `src/legal/content.ts`.
+- **Đối chiếu code ADR-012 (`feat/epic26-linked-accounts` tại `69992f9`):** cookie `__Host-vnx_oauth` luồng 600 s, intent liên kết 120 s (`auth/oauth-cookie.ts`, `domain/oauth.ts`); bảng `user_identities`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `show_on_profile`, `updated_at`), không cột token (`migrations/0017_user_identities.sql`); `sessions.method` (`auth/sessions.ts`); hai email báo tới `users.email`, không gửi khi `already_linked`, lỗi gửi chỉ log (`notify/identity.ts`); huy hiệu GitHub `@login` + link, LinkedIn chỉ nhãn "verified", Google không bao giờ, danh tính client không bao giờ tới builder (`db/identities.ts` `listPublicBadges`); bộ đếm đăng nhập OAuth lưu IP thô ở khóa `oauth:ip:*`, 20 lần/giờ (`routes/oauth.tsx`); hủy liên kết xóa hàng và kết thúc session `oauth_<provider>` (`db/identities.ts` `unlinkIdentity`, `auth/sessions.ts`); chưa có luồng xóa tài khoản.
 - **Điều kiện để câu về thời hạn giữ IP đúng:** cron dọn `rate_limits` (VNX-0505, M5) chạy trước go-live.
 - **Owner chốt (2026-10-04):** trả lời yêu cầu trong 30 ngày; giữ waitlist tới khi chợ mở cho client cộng 12 tháng, hoặc tới khi người dùng yêu cầu xóa.
 
@@ -23,7 +24,8 @@ This policy explains how VNX.SI ("we") handles personal data on vnx.si. Contact 
 
 **2. What we collect**
 - **Account:** your email address, the display name you choose, your language, whether you are an admin, and when you last signed in.
-- **Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash).
+- **Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash), including whether you signed in by email link or with a linked account.
+- **Linked accounts:** if you link a Google, GitHub or LinkedIn account to your VNX.SI account, we store which service it is, the ID that service gives your account, and a label so you can recognise it (the email address for Google and LinkedIn, the username for GitHub), plus when you linked it and when you last signed in with it. When you sign in with one of these services, it sends us your basic profile; we keep only what is listed here. We never receive or store the password of that account, and we do not keep the access keys the service gives us.
 - **Builder profile and products:** what you enter in your profile and listings (name, headline, bio, country, skills, rates, links, product descriptions, prices, images). This content is **public** once approved.
 - **Inquiries:** when you contact a builder, the name you type, your messages, the type of request, your budget range, an optional deadline, and the product or builder it is about. If you are not signed in, we also take your email address and create an account for it; nothing reaches the builder until you confirm that email.
 - **Requests:** when you post a request, the name you type, the title, the description, the category, your budget range, an optional deadline and the languages you want to work in. If you are not signed in, we also take your email address and create an account for it; nothing is reviewed until you confirm that email.
@@ -38,6 +40,7 @@ We do not collect payment details. We do not use third-party analytics, advertis
 
 **3. Why we use it**
 - To sign you in and keep you signed in.
+- To let you sign in with an account you have linked and, if you are a builder and choose to, to show on your public profile that you own a GitHub or LinkedIn account.
 - To show builder profiles and products publicly, and to review them before they go public.
 - To email you about your account, your listings, or, if you joined the waitlist, when the marketplace opens.
 - To pass inquiries and replies between clients and builders, and to email the other side when there is a new message (the email includes the message).
@@ -50,6 +53,8 @@ We rely on your consent (waitlist, contact form), on what is needed to provide t
 
 **4. Who can see it**
 - Builder profiles and approved products are public.
+- Your linked accounts are shown only to you. A builder can choose to show their GitHub username, or the fact that their LinkedIn account is verified, on their public profile. Google accounts are never shown, and builders never see a client's linked accounts.
+- When you sign in with Google, GitHub or LinkedIn, that service knows you signed in to VNX.SI and handles that under its own privacy policy.
 - Builders do not see clients' email addresses. A builder sees the name you typed, your messages, your budget range and deadline; a builder invited to your request also sees the request.
 - When you follow a link to a partner you leave VNX.SI. The partner can see that you came from VNX.SI, and the click code if the link carries one. It handles your data under its own privacy policy, and it may set its own cookies or tracking when you arrive on its site.
 - Messages sent through the contact form are read only by the VNX.SI team; a copy is delivered to our mailbox through Resend.
@@ -60,9 +65,11 @@ We rely on your consent (waitlist, contact form), on what is needed to provide t
 We use only cookies that the site needs to work:
 - `__Host-vnx_session`: keeps you signed in, for up to 30 days.
 - `__Host-vnx_invite`: remembers a builder invite link for 1 hour.
+- `__Host-vnx_oauth`: keeps a sign-in with Google, GitHub or LinkedIn secure while you go to that service and back, for up to 10 minutes.
 
 **6. How long we keep it**
 - Sign-in links: 15 minutes. Sessions: up to 30 days, or until you sign out.
+- Linked accounts: until you unlink them or your account is deleted.
 - Rate-limit counters (including IP addresses): deleted regularly once they expire.
 - Outbound click records: deleted after 13 months.
 - Inquiries and their messages: while your account exists, under the same rule as your account below. Inquiries you never confirmed, and accounts created for them that were never confirmed: deleted after 48 hours.
@@ -75,7 +82,7 @@ We use only cookies that the site needs to work:
 You can ask to see, correct, export or delete your personal data, to withdraw your consent, or to object to how we use it. Email contact@vnx.si from the address you used with us. We reply within 30 days. You can also complain to the data protection authority where you live.
 
 **8. Security**
-Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. No system is perfectly secure; tell us at contact@vnx.si if you find a problem.
+Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. We email you whenever an account is linked to or unlinked from yours. No system is perfectly secure; tell us at contact@vnx.si if you find a problem.
 
 **9. Children**
 VNX.SI is not for children. You must be at least 16 to join the waitlist and 18 to be a builder.
@@ -99,7 +106,8 @@ Chính sách này giải thích cách VNX.SI ("chúng tôi") xử lý dữ liệ
 
 **2. Chúng tôi thu thập gì**
 - **Tài khoản:** email, tên hiển thị bạn chọn, ngôn ngữ, bạn có phải admin không, và lần đăng nhập gần nhất.
-- **Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash).
+- **Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash), gồm cả việc bạn đăng nhập bằng link qua email hay bằng tài khoản liên kết.
+- **Tài khoản liên kết:** nếu bạn liên kết tài khoản Google, GitHub hoặc LinkedIn với tài khoản VNX.SI, chúng tôi lưu đó là dịch vụ nào, mã định danh dịch vụ đó cấp cho tài khoản của bạn, và một nhãn để bạn nhận ra (email với Google và LinkedIn, tên người dùng với GitHub), cùng thời điểm liên kết và lần gần nhất bạn đăng nhập bằng nó. Khi bạn đăng nhập bằng một trong các dịch vụ này, dịch vụ gửi cho chúng tôi thông tin hồ sơ cơ bản; chúng tôi chỉ giữ những gì ghi ở đây. Chúng tôi không bao giờ nhận hay lưu mật khẩu của tài khoản đó, và không giữ khóa truy cập mà dịch vụ cấp cho chúng tôi.
 - **Hồ sơ builder và sản phẩm:** những gì bạn nhập vào hồ sơ và listing (tên, tiêu đề, giới thiệu, quốc gia, kỹ năng, mức giá, link, mô tả sản phẩm, giá, hình ảnh). Nội dung này **công khai** sau khi được duyệt.
 - **Yêu cầu (Inquiry):** khi bạn liên hệ một builder, tên bạn gõ, các tin nhắn, loại yêu cầu, khoảng ngân sách, hạn chót (nếu có), và sản phẩm hoặc builder được hỏi. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; builder chưa nhận được gì cho tới khi bạn xác nhận email.
 - **Nhu cầu (request):** khi bạn đăng nhu cầu, tên bạn gõ, tiêu đề, mô tả, danh mục, khoảng ngân sách, hạn chót (nếu có) và các ngôn ngữ bạn muốn làm việc. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; nhu cầu chưa được xem xét cho tới khi bạn xác nhận email.
@@ -114,6 +122,7 @@ Chúng tôi không thu thông tin thanh toán. Chúng tôi không dùng analytic
 
 **3. Chúng tôi dùng để làm gì**
 - Đăng nhập và giữ bạn đăng nhập.
+- Cho bạn đăng nhập bằng tài khoản đã liên kết và, nếu bạn là builder và tự chọn, hiện trên hồ sơ công khai rằng bạn sở hữu tài khoản GitHub hoặc LinkedIn.
 - Hiển thị công khai hồ sơ builder và sản phẩm, và duyệt chúng trước khi công khai.
 - Gửi email về tài khoản, listing của bạn, hoặc, nếu bạn vào danh sách chờ, báo khi chợ mở.
 - Chuyển yêu cầu và trả lời giữa client và builder, và gửi email báo bên kia khi có tin nhắn mới (email có kèm nội dung tin nhắn).
@@ -126,6 +135,8 @@ Căn cứ của chúng tôi là sự đồng ý của bạn (danh sách chờ, f
 
 **4. Ai thấy được dữ liệu**
 - Hồ sơ builder và sản phẩm đã duyệt là công khai.
+- Tài khoản liên kết của bạn chỉ hiện cho chính bạn. Builder có thể chọn hiện tên người dùng GitHub, hoặc việc tài khoản LinkedIn đã được xác minh, trên hồ sơ công khai. Tài khoản Google không bao giờ được hiện, và builder không bao giờ thấy tài khoản liên kết của client.
+- Khi bạn đăng nhập bằng Google, GitHub hoặc LinkedIn, dịch vụ đó biết bạn đã đăng nhập vào VNX.SI và xử lý việc này theo chính sách quyền riêng tư của họ.
 - Builder không thấy email của client. Builder thấy tên bạn gõ, các tin nhắn, khoảng ngân sách và hạn chót; builder được mời vào nhu cầu của bạn thấy thêm nhu cầu đó.
 - Khi bạn bấm link tới một partner, bạn rời VNX.SI. Partner thấy được bạn đến từ VNX.SI, và mã bấm nếu link có mang. Họ xử lý dữ liệu của bạn theo chính sách quyền riêng tư của họ, và có thể đặt cookie hoặc theo dõi riêng khi bạn vào trang của họ.
 - Tin nhắn gửi qua form liên hệ chỉ đội ngũ VNX.SI đọc; một bản được chuyển tới hộp thư của chúng tôi qua Resend.
@@ -136,9 +147,11 @@ Căn cứ của chúng tôi là sự đồng ý của bạn (danh sách chờ, f
 Chúng tôi chỉ dùng cookie cần thiết để trang hoạt động:
 - `__Host-vnx_session`: giữ bạn đăng nhập, tối đa 30 ngày.
 - `__Host-vnx_invite`: ghi nhớ link mời builder trong 1 giờ.
+- `__Host-vnx_oauth`: giữ an toàn cho lượt đăng nhập bằng Google, GitHub hoặc LinkedIn trong lúc bạn sang dịch vụ đó và quay lại, tối đa 10 phút.
 
 **6. Chúng tôi giữ bao lâu**
 - Link đăng nhập: 15 phút. Phiên đăng nhập: tối đa 30 ngày, hoặc tới khi bạn đăng xuất.
+- Tài khoản liên kết: tới khi bạn hủy liên kết hoặc tài khoản của bạn bị xóa.
 - Bộ đếm giới hạn (gồm địa chỉ IP): được xóa định kỳ khi hết hạn.
 - Bản ghi lượt bấm link ra ngoài: xóa sau 13 tháng.
 - Yêu cầu và tin nhắn: trong thời gian tài khoản tồn tại, theo cùng quy tắc với tài khoản bên dưới. Yêu cầu bạn chưa xác nhận, và tài khoản tạo cho chúng mà chưa từng xác nhận: xóa sau 48 giờ.
@@ -151,7 +164,7 @@ Chúng tôi chỉ dùng cookie cần thiết để trang hoạt động:
 Bạn có thể yêu cầu xem, sửa, xuất hoặc xóa dữ liệu cá nhân, rút lại sự đồng ý, hoặc phản đối cách chúng tôi dùng dữ liệu. Gửi email tới contact@vnx.si từ địa chỉ bạn đã dùng với chúng tôi. Chúng tôi trả lời trong 30 ngày. Bạn cũng có thể khiếu nại với cơ quan bảo vệ dữ liệu nơi bạn sống.
 
 **8. Bảo mật**
-Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề.
+Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết với tài khoản của bạn. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề.
 
 **9. Trẻ em**
 VNX.SI không dành cho trẻ em. Bạn phải từ 16 tuổi để vào danh sách chờ và từ 18 tuổi để làm builder.
@@ -172,10 +185,10 @@ Nếu bản dịch khác bản tiếng Anh, bản tiếng Anh được áp dụn
 
 ---
 
-## Bổ sung ADR-012 (tài khoản liên kết): bản nháp, chưa áp dụng
+## Bổ sung ADR-012 (tài khoản liên kết): ĐÃ ÁP DỤNG (VNX-2607), giữ làm bản gốc đã duyệt
 
-- **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Chưa áp dụng:** chưa phải chính sách đang hiệu lực cho tới VNX-2607.
-- **Cách áp dụng:** task VNX-2607 chép các đoạn dưới đây vào đúng chỗ trong phần `## EN` và `## VI` ở trên và vào `src/legal/content.ts`, rồi đối chiếu lại với code thật (tên cột, tên cookie, thời hạn). VNX-2607 phải merge trước khi bật flag provider nào trên production. Không chép sớm hơn: trang này chỉ ghi điều code thật sự làm. **Lưu ý M7:** từ `PRIVACY_NOTICE_GO_LIVE` − 14 ngày, `/privacy` hiện `docs/legal/privacy-m7.md` (hằng số `privacyEnM7`, `privacyViM7`); VNX-2607 phải chép vào cả hai tệp và cả bốn hằng số, hoặc gộp hai phiên bản trước.
+- **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Đã áp dụng** ở VNX-2607: các đoạn dưới đây đã nằm trong `## EN` và `## VI` (Privacy: của CẢ `privacy.md` và `privacy-m7.md`); `test/legal/linked-accounts.test.ts` đọc khối này làm nguồn và kiểm từng dòng còn khớp. Khi đổi câu chữ sau này, sửa khối này, các tệp và `src/legal/content.ts` cùng lúc và hỏi Owner.
+- **Cách áp dụng:** VNX-2607 đã chép các đoạn dưới đây vào đúng chỗ trong phần `## EN` và `## VI` ở trên và vào `src/legal/content.ts`, rồi đối chiếu lại với code thật (tên cột, tên cookie, thời hạn). VNX-2607 phải merge trước khi bật flag provider nào trên production. Đã áp dụng cho cả hai phiên bản; ở `privacy-m7.md` gạch `__Host-vnx_oauth` đứng trước `__Host-vnx_vid`.
 - **Căn cứ:** ADR-012 mục 1 (dữ liệu nhận và scope), 2 (bảng `user_identities`, `sessions.method`), 4 (email báo liên kết), 5 (huy hiệu).
 
 ### EN

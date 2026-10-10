@@ -1,6 +1,6 @@
 # Terms of Service — bản nháp
 
-- **Trạng thái:** APPROVED bởi Owner 2026-10-04 (câu chữ và số liệu). Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó.
+- **Trạng thái:** APPROVED bởi Owner 2026-10-04 (câu chữ và số liệu). Đây là bản soạn để bắt đầu, **không phải tư vấn pháp lý**; nên nhờ người có chuyên môn đọc lại trước khi dựa vào nó. **Bổ sung ADR-012 (mục 4): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607; câu 2 của Mục 4 sửa theo Owner 2026-10-10 (ADR-013).**
 - **Task:** VNX-0705a. Implementer chuyển nguyên văn mục EN và VI vào `src/legal/content.ts`; `zh-Hans`, `zh-Hant` hiện bản EN kèm câu "bản tiếng Anh có hiệu lực" đã dịch.
 - **Căn cứ quyết định Owner (2026-10-04):** bên vận hành ghi "VNX.SI" + `contact@vnx.si`; luật Việt Nam; 16+ để để lại email, 18+ để làm builder hoặc giao dịch.
 - **Ngày cập nhật hiển thị:** ngày go-live (Implementer để hằng `LEGAL_UPDATED_AT`, Owner chốt khi deploy).
@@ -25,7 +25,7 @@ VNX.SI is a marketplace where builders list products built with AI, and people l
 - You must give a correct email address and keep access to it, because we sign you in by email link.
 
 **4. Your account**
-You sign in with a one-time link sent to your email. Keep your email account secure; anyone who can read it can sign in as you. Tell us at contact@vnx.si if you think someone else has used your account.
+You sign in with a one-time link sent to your email. Once signed in with the email link, you can link a Google, GitHub or LinkedIn account and use it to sign in too. Keep your email account and any linked accounts secure; anyone who can use them can sign in as you. We email you whenever an account is linked or unlinked. Tell us at contact@vnx.si if you think someone else has used your account.
 
 **5. Builders and listings**
 If you list a product or create a builder profile:
@@ -85,7 +85,7 @@ VNX.SI là chợ nơi builder đăng sản phẩm được xây bằng AI, và n
 - Bạn phải dùng email đúng và giữ quyền truy cập email đó, vì chúng tôi đăng nhập bằng link gửi qua email.
 
 **4. Tài khoản của bạn**
-Bạn đăng nhập bằng link dùng một lần gửi tới email. Hãy giữ an toàn hộp thư của bạn; ai đọc được hộp thư đó đều có thể đăng nhập như bạn. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn.
+Bạn đăng nhập bằng link dùng một lần gửi tới email. Sau khi đăng nhập bằng link qua email, bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập. Hãy giữ an toàn hộp thư và các tài khoản đã liên kết; ai dùng được chúng đều có thể đăng nhập như bạn. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn.
 
 **5. Builder và listing**
 Nếu bạn đăng sản phẩm hoặc tạo hồ sơ builder:
@@ -135,17 +135,17 @@ Chúng tôi có thể cập nhật điều khoản này. Chúng tôi sẽ đổi
 
 ---
 
-## Bổ sung ADR-012 (tài khoản liên kết): bản nháp, chưa áp dụng
+## Bổ sung ADR-012 (tài khoản liên kết): ĐÃ ÁP DỤNG (VNX-2607), giữ làm bản gốc đã duyệt
 
-- **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Chưa áp dụng:** chưa phải điều khoản đang hiệu lực cho tới VNX-2607.
-- **Cách áp dụng:** task VNX-2607 thay mục 4 trong phần `## EN` và `## VI` ở trên và trong `src/legal/content.ts`, cùng lúc với Privacy. Mục 3 giữ nguyên (email vẫn bắt buộc, vì tài khoản chỉ tạo được bằng email).
+- **Trạng thái:** câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012); câu 2 của Mục 4 sửa theo Owner 2026-10-10 (ADR-013: liên kết chỉ từ session `magic_link`). **Đã áp dụng** ở VNX-2607: đoạn dưới đây đã nằm trong `## EN` và `## VI`; `test/legal/linked-accounts.test.ts` đọc khối này làm nguồn. Khi đổi câu chữ sau này, sửa khối này, tệp và `src/legal/content.ts` cùng lúc và hỏi Owner.
+- **Cách áp dụng:** VNX-2607 đã thay mục 4 trong phần `## EN` và `## VI` ở trên và trong `src/legal/content.ts`, cùng lúc với Privacy. Mục 3 giữ nguyên (email vẫn bắt buộc, vì tài khoản chỉ tạo được bằng email).
 
 ### EN
 
 **Mục 4, thay đoạn văn bằng:**
-You sign in with a one-time link sent to your email. Once signed in, you can link a Google, GitHub or LinkedIn account and use it to sign in too. Keep your email account and any linked accounts secure; anyone who can use them can sign in as you. We email you whenever an account is linked or unlinked. Tell us at contact@vnx.si if you think someone else has used your account.
+You sign in with a one-time link sent to your email. Once signed in with the email link, you can link a Google, GitHub or LinkedIn account and use it to sign in too. Keep your email account and any linked accounts secure; anyone who can use them can sign in as you. We email you whenever an account is linked or unlinked. Tell us at contact@vnx.si if you think someone else has used your account.
 
 ### VI
 
 **Mục 4, thay đoạn văn bằng:**
-Bạn đăng nhập bằng link dùng một lần gửi tới email. Sau khi đăng nhập, bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập. Hãy giữ an toàn hộp thư và các tài khoản đã liên kết; ai dùng được chúng đều có thể đăng nhập như bạn. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn.
+Bạn đăng nhập bằng link dùng một lần gửi tới email. Sau khi đăng nhập bằng link qua email, bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập. Hãy giữ an toàn hộp thư và các tài khoản đã liên kết; ai dùng được chúng đều có thể đăng nhập như bạn. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn.
