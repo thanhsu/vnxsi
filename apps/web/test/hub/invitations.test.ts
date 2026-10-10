@@ -5,7 +5,7 @@ import { declineInviteStatement, listRequestInvites, proposeStatement, returnedI
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import type { Bindings } from "../../src/env.ts";
 import { inviteBuilders, makeBuilder, makeInquiry, makeRequest, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const get = (path: string, cookie?: string) => app().request(getReq(path, cookie), undefined, testEnv);
@@ -144,6 +144,12 @@ describe("Hub invitations (spec §5.3, §5.7 step 3)", () => {
     expect(html).toContain("The upper bound must be higher than the lower bound.");
     expect(html).toContain("Enter a number of days from 1 to 365.");
     expect(html).toContain("Next.js with a booking calendar and SMS reminders.</textarea>");
+    // VNX-0807: one summary for the page, in field order, linked to each control.
+    const body = expectErrorSummary(html, ["pp-priceMax", "pp-timelineDays"]);
+    expect(body).toContain("Enter a number of days from 1 to 365.");
+    const noApproach = await (await post(`/hub/invitations/${invite.id}/propose`, cookie, { ...proposal, approach: "" })).text();
+    expectErrorSummary(noApproach, ["pp-approach"]);
+    expect(noApproach).toContain('aria-describedby="pp-approach-error"');
     for (const bad of [{ approach: "  " }, { approach: "x".repeat(2001) }, { priceMode: "free" }, { price: "1000001" }, { priceNote: "n".repeat(201) }, { timelineDays: "366" }]) {
       expect((await post(`/hub/invitations/${invite.id}/propose`, cookie, { ...proposal, priceMode: "fixed", priceMax: "", ...bad })).status, JSON.stringify(bad)).toBe(400);
     }
@@ -152,7 +158,9 @@ describe("Hub invitations (spec §5.3, §5.7 step 3)", () => {
 
   it("declines with an optional reason: no e-mail to the client, the admin sees the reason", async () => {
     const { request, invite, cookie } = await invitedPair("hi-dec");
-    expect((await post(`/hub/invitations/${invite.id}/decline`, cookie, { reason: "x".repeat(1001) })).status).toBe(400);
+    const tooLong = await post(`/hub/invitations/${invite.id}/decline`, cookie, { reason: "x".repeat(1001) });
+    expect(tooLong.status).toBe(400);
+    expectErrorSummary(await tooLong.text(), ["pp-reason"]); // VNX-0807
     await expectUntouched(request.id, invite.id);
     expect((await post(`/hub/invitations/${invite.id}/decline`, cookie, { reason: "Fully booked until March." })).status).toBe(303);
     expect(await inviteOf(request.id)).toMatchObject({ status: "declined", declineReason: "Fully booked until March." });
