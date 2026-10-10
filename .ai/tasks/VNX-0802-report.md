@@ -87,3 +87,12 @@ During development roughly 20 to 40 percent of tests failed on the first attempt
 - Decide whether `E2E_RETRIES` stays (it is inert unless set) and whether CRLF warnings on commit (autocrlf) matter for `web-ci.yml`.
 - Re-run `npm test -w apps/web -- --maxWorkers=2` once to see whether the single first-run failure recurs.
 - `e2e/README.md` can cite: `npm run e2e:install` once (about 118 MB Chromium + 80 MB headless shell, to `%LOCALAPPDATA%\ms-playwright`), `npm run e2e`, `npm run e2e -- tests/login.spec.ts`, `E2E_PORT` / `E2E_INSPECTOR_PORT`, `npx playwright show-report`, orphan note (`taskkill /IM workerd.exe /F` only if no other session uses it), and the `Bound` sockets check above.
+
+## Vòng sửa 1 (review 58e2948: F1, F2, F5, F6, F7)
+
+- **F1:** `home.spec.ts` ghi lịch sử chữ của mọi `[data-count]` bằng `addInitScript` + `MutationObserver` (`recordCounts`). Count-up: poll tới khi lịch sử có ít nhất một giá trị khác số cuối và giá trị cuối đúng bằng số server in (`formatEn`). Reduced-motion: lịch sử của từng số đúng bằng `[final]` (không qua 0 hay số giữa), sau khi cuộn tới ô (lúc IntersectionObserver sẽ chạy nếu JS không tôn trọng `reduce`).
+- **F2:** `fixtures.mjs` gieo mỗi token dùng một lần cho 3 lần thử (`OK_1`, `OK_1_R1`, `OK_1_R2`, ...) và có `tokenFor(key, retry)`; `login.spec.ts` chọn token theo `test.info().retry`. `editor.spec.ts` đặt tên và slug theo lần thử (`E2E Created Product 1` / `e2e-created-product-1`). Không đặt `retries: 0`. Chưa chạy một retry thật (không có lỗi để kích); logic chỉ kiểm bằng đọc và bằng test seed (token đều khác nhau).
+- **F5:** `serve.mjs` chỉ kiểm `process.argv`. Test node vẫn đếm đúng 2 lần `--remote`.
+- **F6:** `e2e-seed.test.mjs` đọc bảng `MIN` từ `apps/web/src/domain/public-stats.ts` bằng regex trên văn bản, kèm một test khẳng định mọi ngưỡng đọc được là số nguyên dương. `apps/` không đổi.
+- **F7:** chú thích trong khối "JavaScript off" của `home.spec.ts`.
+- **Kiểm:** `npm run e2e:typecheck` sạch; `npm run test:scripts` 52/52; `npm run e2e` 4 lần chạy liên tiếp sau khi sửa: 49 passed, 1 failed, 49 passed, 49 passed. Lần failed là `a11y` "en / with motion" do `net::ERR_NO_BUFFER_SPACE` khi nạp `landing.js` (trang bố cục lệch, axe báo `target-size`): sự cố mạng cục bộ của máy như đã ghi ở trên, không phải lỗi của bản sửa; hai lần cuối liên tiếp xanh, không retry. Không dùng `git checkout`/`restore`/`reset`.

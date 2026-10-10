@@ -1,7 +1,8 @@
 // Sign-in by e-mail link. The mailer is a fake inside the worker, so the link is not read from mail: the seed holds one-use tokens
 // (e2e/seed/fixtures.mjs) and each test spends its own. The POST goes through a real browser, with a real Origin header.
+// A one-use token is spent by its test, so each attempt (test.info().retry) uses its own token from the seed: a retry can really pass.
 // POST /login budget: 2 here (the limits are 5 an hour per e-mail and 20 per IP).
-import { TOKENS } from "../seed/fixtures.mjs";
+import { TOKENS, tokenFor } from "../seed/fixtures.mjs";
 import { expect, test } from "../support/test";
 
 const SESSION = "__Host-vnx_session";
@@ -34,7 +35,7 @@ test("the sign-in form refuses a bad e-mail and accepts a good one", async ({ pa
 });
 
 test("a link opens a confirmation page, only its button signs in, and it works once", async ({ page }) => {
-  const res = await page.goto(`/auth/verify?t=${TOKENS.OK_1}`);
+  const res = await page.goto(`/auth/verify?t=${tokenFor("OK_1", test.info().retry)}`);
   expect(res!.status()).toBe(200);
   expect(res!.headers()["cache-control"]).toContain("no-store");
   expect(res!.headers()["referrer-policy"]).toBe("same-origin");
@@ -57,19 +58,19 @@ test("a link opens a confirmation page, only its button signs in, and it works o
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
   // The same link again: dead.
-  const replay = await page.goto(`/auth/verify?t=${TOKENS.OK_1}`);
+  const replay = await page.goto(`/auth/verify?t=${tokenFor("OK_1", test.info().retry)}`);
   expect(replay!.status()).toBe(400);
   await expect(page.getByRole("heading", { name: "This sign-in link no longer works" })).toBeVisible();
 });
 
 test("next sends the user to a local path", async ({ page }) => {
-  await signInWith(page, TOKENS.OK_NEXT, "&next=/hub/products");
+  await signInWith(page, tokenFor("OK_NEXT", test.info().retry), "&next=/hub/products");
   await expect(page).toHaveURL(/\/hub\/products$/);
   await expect(page.getByRole("heading", { name: "Your products" })).toBeVisible();
 });
 
 test("next never leaves the site", async ({ page, baseURL }) => {
-  await signInWith(page, TOKENS.OK_NEXT_EVIL, `&next=${encodeURIComponent("https://evil.example/")}`);
+  await signInWith(page, tokenFor("OK_NEXT_EVIL", test.info().retry), `&next=${encodeURIComponent("https://evil.example/")}`);
   await expect(page).toHaveURL(`${baseURL}/`);
   expect(new URL(page.url()).hostname).not.toBe("evil.example");
 });
@@ -82,7 +83,7 @@ test("an expired link is refused and sets no cookie", async ({ page }) => {
 });
 
 test("signing out clears the session and closes the hub", async ({ page }) => {
-  await signInWith(page, TOKENS.OK_2);
+  await signInWith(page, tokenFor("OK_2", test.info().retry));
   await page.goto("/hub");
   await expect(page).toHaveURL(/\/hub$/);
   await Promise.all([page.waitForURL(/\/$/), page.locator("form.signout button:visible").click()]);

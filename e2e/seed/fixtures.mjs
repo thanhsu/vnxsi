@@ -18,14 +18,21 @@ export const OTHER_PRODUCT = { id: id("P", 1002), slug: "e2e-other-product", nam
 /** Raw session cookie value of the main builder. Only its sha256 is stored. */
 export const SESSION_RAW = token("session");
 
-/** One-use login links, one per test that spends it. Only the sha256 is stored. */
+/** Retries a test may need: a spent token cannot be reused, so every one-use token exists once per attempt (see tokenFor). */
+export const ATTEMPTS = 3;
+const ONE_USE = { OK_1: "login-ok-1", OK_2: "login-ok-2", OK_NEXT: "login-next-ok", OK_NEXT_EVIL: "login-next-evil" };
+
+/** One-use login links (one per attempt: OK_1, OK_1_R1, OK_1_R2 ...) plus two that are never spent. Only the sha256 is stored. */
 export const TOKENS = {
-  OK_1: token("login-ok-1"),
-  OK_2: token("login-ok-2"),
-  OK_NEXT: token("login-next-ok"),
-  OK_NEXT_EVIL: token("login-next-evil"),
+  ...Object.fromEntries(Object.entries(ONE_USE).flatMap(([key, label]) => Array.from({ length: ATTEMPTS }, (_, r) => [r === 0 ? key : `${key}_R${r}`, token(r === 0 ? label : `${label}-r${r}`)]))),
   OK_A11Y: token("login-a11y"),
   EXPIRED: token("login-expired"),
+};
+
+/** The token of a one-use link for this attempt of a test (test.info().retry). */
+export const tokenFor = (key, retry) => {
+  if (retry >= ATTEMPTS) throw new Error(`seed has tokens for ${ATTEMPTS} attempts only`);
+  return TOKENS[retry === 0 ? key : `${key}_R${retry}`];
 };
 
 /** The four countries of the market builders: the homepage "countries" number needs 3. */

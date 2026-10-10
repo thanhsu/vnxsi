@@ -13,12 +13,16 @@ test("the product list shows the seeded drafts and products", async ({ builderPa
 });
 
 test("create a draft, fill every step, and see only the image gap left", async ({ builderPage: page }) => {
+  // The name carries the attempt number: a retry must not meet the slug the first attempt already took (the app would add a random suffix).
+  const retry = test.info().retry;
+  const name = retry === 0 ? "E2E Created Product" : `E2E Created Product ${retry}`;
+  const slug = retry === 0 ? "e2e-created-product" : `e2e-created-product-${retry}`;
   await page.goto("/hub/products");
-  await page.getByLabel("Product name").fill("E2E Created Product");
+  await page.getByLabel("Product name").fill(name);
   await page.getByRole("button", { name: "Create a draft" }).click();
   await expect(page).toHaveURL(EDIT);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("E2E Created Product");
-  await expect(page.getByLabel("Page address")).toHaveValue("e2e-created-product");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
+  await expect(page.getByLabel("Page address")).toHaveValue(slug);
   const gaps = page.locator(".product-actions li");
   await expect(gaps.filter({ hasText: "Add a tagline" })).toHaveCount(1);
   const editUrl = page.url();

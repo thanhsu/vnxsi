@@ -14,7 +14,7 @@ const webDir = path.join(repoRoot, "apps", "web");
 const stateDir = path.join(repoRoot, "e2e", ".state");
 
 // This program only ever talks to the local simulator. Refuse anything that could reach Cloudflare.
-if ([...process.argv.slice(2), ...Object.keys(process.env)].some((a) => a.includes("--remote"))) {
+if (process.argv.slice(2).some((a) => a.includes("--remote"))) {
   console.error("e2e serve: refusing to run with --remote");
   process.exit(1);
 }

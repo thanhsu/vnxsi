@@ -11,7 +11,16 @@ import { id, SESSION_RAW, TOKENS } from "../../e2e/seed/fixtures.mjs";
 // The thresholds are the MIN table of apps/web/src/domain/public-stats.ts (spec 8.11); the counting mirrors apps/web/src/db/public-stats.ts.
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const MIGRATIONS = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "web", "migrations");
-const MIN = { products: 10, builders: 10, requests30d: 10, countries: 3, trendingScore: 20, trendingItems: 6, categoryTotal: 10, categoryRequests: 3, growthWeeks: 4, tabBuilders: 3, liveEvents: 5 };
+// Read from the app source (parsing the text: the file is TypeScript), so a changed threshold turns this test red instead of only global-setup.
+const KEYS = { products: "products", builders: "builders", requests30d: "requests30d", countries: "countries", trendingScore: "trendingScore", trendingItems: "trendingItems", categoryTotal: "categoryTotal", categoryRequests: "categoryRequests", growthWeeks: "growthWeeks", tabBuilders: "tabBuilders", liveEvents: "liveEvents" };
+function readMin() {
+  const source = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "web", "src", "domain", "public-stats.ts"), "utf8");
+  const block = /export const MIN = \{([\s\S]*?)\} as const;/.exec(source)?.[1];
+  assert.ok(block, "found the MIN table in public-stats.ts");
+  const all = Object.fromEntries([...block.matchAll(/(\w+):\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
+  return Object.fromEntries(Object.entries(KEYS).map(([ours, theirs]) => [ours, all[theirs]]));
+}
+const MIN = readMin();
 
 /** A fresh in-memory database with every migration and the seed applied (foreign keys on, as D1 has them). */
 function seededDb(now = NOW) {
@@ -135,4 +144,8 @@ test("the expired token is expired and the others are valid for hours", () => {
   const rows = db.prepare("SELECT expires_at FROM login_tokens ORDER BY expires_at").all();
   assert.equal(rows.filter((r) => r.expires_at < NOW.toISOString()).length, 1);
   assert.equal(rows.filter((r) => r.expires_at > NOW.toISOString()).length, Object.keys(TOKENS).length - 1);
+});
+
+test("every threshold was read from the app source", () => {
+  for (const [key, value] of Object.entries(MIN)) assert.ok(Number.isInteger(value) && value > 0, `${key} = ${value}`);
 });

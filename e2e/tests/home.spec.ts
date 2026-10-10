@@ -1,7 +1,29 @@
 // Mirrors the Owner's manual checklist of M7 Task 8b (chart growth, count-up, Live strip, tooltip, reduced motion, no JS).
 // The homepage snapshot is real: global-setup runs the hourly cron over the seeded tables.
+import type { Page } from "@playwright/test";
 import { computed, formatEn, moveMouseAway, scrollToCenter } from "../support/page";
 import { expect, test } from "../support/test";
+
+/**
+ * The server prints the final number inside every [data-count], so checking only the final text would pass without any animation.
+ * This records every text each [data-count] shows (a MutationObserver from before the first script), so a test can see the values in between.
+ * Call before goto. history[i] is the list of texts of the i-th [data-count], in order, without repeats.
+ */
+async function recordCounts(page: Page): Promise<() => Promise<string[][]>> {
+  await page.addInitScript(() => {
+    const history: string[][] = [];
+    (window as unknown as { __countHistory: string[][] }).__countHistory = history;
+    const snap = () =>
+      document.querySelectorAll("[data-count]").forEach((el, i) => {
+        const list = (history[i] ??= []);
+        const text = el.textContent ?? "";
+        if (list[list.length - 1] !== text) list.push(text);
+      });
+    new MutationObserver(snap).observe(document, { subtree: true, childList: true, characterData: true });
+    document.addEventListener("DOMContentLoaded", snap);
+  });
+  return () => page.evaluate(() => (window as unknown as { __countHistory: string[][] }).__countHistory);
+}
 
 const BLOCKS = ["home-numbers", "home-live", "home-trending", "home-pulse", "home-builders", "home-products"];
 
@@ -21,7 +43,8 @@ test("every data block renders with a heading and no placeholder text", async ({
   expect(text.join("\n")).not.toMatch(/\b(undefined|NaN|null)\b/);
 });
 
-test("count-up ends on the printed value", async ({ page }) => {
+test("count-up runs through values and ends on the printed value", async ({ page }) => {
+  const history = await recordCounts(page);
   await page.goto("/");
   const counts = page.locator("[data-count]");
   const n = await counts.count();
@@ -29,9 +52,14 @@ test("count-up ends on the printed value", async ({ page }) => {
   for (let i = 0; i < n; i++) {
     const el = counts.nth(i);
     await scrollToCenter(el);
-    const target = await el.getAttribute("data-count");
-    // The animation lasts 1200 ms; poll the final text instead of sleeping.
-    await expect(el, `count ${target}`).toHaveText(formatEn(target!), { timeout: 3_000 });
+    const final = formatEn((await el.getAttribute("data-count"))!);
+    // The animation lasts 1200 ms; poll the recorded texts instead of sleeping: it must have shown a value other than the final one, and end on the final one.
+    await expect
+      .poll(async () => {
+        const seen = (await history())[i] ?? [];
+        return { moved: seen.some((t) => t !== final), last: seen[seen.length - 1] };
+      }, { message: `count ${final}`, timeout: 4_000 })
+      .toEqual({ moved: true, last: final });
   }
 });
 
@@ -110,14 +138,24 @@ test("chart tooltip shows the group text and Escape hides it", async ({ page }) 
 
 test.describe("reduced motion", () => {
   test("numbers are final at once, no strip, no motion on charts", async ({ page }) => {
+    const history = await recordCounts(page);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     const counts = page.locator("[data-count]");
     const n = await counts.count();
     expect(n).toBeGreaterThanOrEqual(2);
     for (let i = 0; i < n; i++) {
-      const target = await counts.nth(i).getAttribute("data-count");
-      await expect(counts.nth(i)).toHaveText(formatEn(target!), { timeout: 500 });
+      const el = counts.nth(i);
+      await scrollToCenter(el); // the observer that would start the count-up fires here
+      const final = formatEn((await el.getAttribute("data-count"))!);
+      await expect(el).toHaveText(final, { timeout: 500 });
+    }
+    // Never through 0 or any other value: every text each number ever showed is the final one.
+    const seen = await history();
+    expect(seen.length).toBe(n);
+    for (const [i, list] of seen.entries()) {
+      const final = formatEn((await counts.nth(i).getAttribute("data-count"))!);
+      expect(list, `number ${i}`).toEqual([final]);
     }
     await expect(page.locator(".home-marquee-track"), "home.js leaves the list alone").toHaveCount(0);
     await expect(page.locator("[data-motion-toggle]")).toBeHidden();
@@ -127,6 +165,8 @@ test.describe("reduced motion", () => {
 });
 
 test.describe("JavaScript off", () => {
+  // With scripts off the init script of watchCsp does not run, so no securitypolicyviolation event is heard here (console errors still are).
+  // There is no script left to violate the policy; the CSP header itself is asserted in the last test.
   test.use({ javaScriptEnabled: false });
 
   test("every block still has its content", async ({ page }) => {
