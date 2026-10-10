@@ -183,7 +183,7 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
 // ADR-012 §5, ADR-004: linked identities are read and written only by their module. Ranking, public and builder-facing code
 // never touch the table. Each task adds the files it creates (2604b: routes/oauth.tsx; 2605a: routes/me.tsx; 2606a: routes/hub.tsx (the builder's own switch); 2606b: routes/builder-profile.tsx, ...).
 // db/audit.ts is on the list only because the identity audit guard reads `id` and `user_id` of the row; it reads nothing else.
-const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts", "../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/routes/hub.tsx"]);
+const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts", "../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/routes/hub.tsx", "../src/routes/builder-profile.tsx"]);
 
 describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => {
   it("the allowlist holds only files that exist, and no ranking file is on it", () => {
@@ -203,6 +203,56 @@ describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => 
       if (IDENTITY_ALLOWED.has(file)) continue;
       expect(src, `${file} imports db/identities`).not.toMatch(/from\s+["'][^"']*\/db\/identities\.ts["']/);
       expect(src, `${file} touches user_identities`).not.toMatch(/\b(?:FROM|JOIN|INTO|UPDATE)\s+user_identities\b/);
+    }
+  });
+});
+
+// VNX-2606b (ADR-004, ADR-012 §5): the identity badge is never an input to ranking, and a client's linked accounts never reach builder-facing or public code.
+const SHOW_FLAG_FILES = new Set(["../src/domain/identity.ts", "../src/db/identities.ts", "../src/views/hub/ProfilePage.tsx"]);
+const IDENTITY_WORDS = /user_identities|show_on_profile|showOnProfile|listPublicBadges|PublicBadge|githubProfileUrl|domain\/identity|db\/identities/;
+
+describe("the identity badge stays out of ranking and builder-facing code (ADR-004, ADR-012 §5)", () => {
+  it("the identities allowlist is exactly the files that read or write the table", () => {
+    expect([...IDENTITY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/identities.ts", "../src/routes/builder-profile.tsx", "../src/routes/hub.tsx", "../src/routes/me.tsx", "../src/routes/oauth.tsx"]);
+  });
+
+  it("no ranking, catalogue, directory or suggestion file mentions identities, the badge flag or the badge query", () => {
+    for (const file of RANKING_FILES) expect(sources[file], `${file} touches identities`).not.toMatch(IDENTITY_WORDS);
+  });
+
+  it("only the identity module and the builder's own switch view mention show_on_profile", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (SHOW_FLAG_FILES.has(file)) continue;
+      expect(src, `${file} reads the badge flag`).not.toMatch(/show_on_profile|showOnProfile/);
+    }
+  });
+
+  it("builder-facing client code (inbox, thread, invitations, notices) does not touch identities", () => {
+    for (const file of [...BUILDER_FACING_FILES, "../src/routes/hub-invitations.tsx", "../src/views/ProposalView.tsx"]) {
+      expect(sources[file], file).toBeDefined();
+      expect(sources[file], `${file} touches identities`).not.toMatch(IDENTITY_WORDS);
+    }
+  });
+
+  it("the public profile route reads identities only through listPublicBadges, and the hub only its own builder's rows", () => {
+    const profile = sources["../src/routes/builder-profile.tsx"] ?? "";
+    const calls = (src: string, name: string) => (src.match(new RegExp(`${name}\\(`, "g")) ?? []).length;
+    const exact = (src: string, re: RegExp) => (src.match(re) ?? []).length;
+    expect(calls(profile, "listPublicBadges")).toBeGreaterThan(0);
+    expect(calls(profile, "listPublicBadges")).toBe(exact(profile, /listPublicBadges\(c\.env\.DB, builder\.userId, providers\)/g)); // every call is for the builder shown
+    for (const name of ["listIdentitiesForUser", "findIdentityByProviderSubject", "linkIdentity", "unlinkIdentity", "setShowOnProfile"]) expect(profile, name).not.toContain(name);
+    const hub = sources["../src/routes/hub.tsx"] ?? "";
+    expect(calls(hub, "listIdentitiesForUser")).toBeGreaterThan(0);
+    expect(calls(hub, "listIdentitiesForUser")).toBe(exact(hub, /listIdentitiesForUser\(c\.env\.DB, builder\.userId\)/g)); // every call is for the signed-in builder
+    expect(calls(hub, "setShowOnProfile")).toBeGreaterThan(0);
+    expect(calls(hub, "setShowOnProfile")).toBe(exact(hub, /setShowOnProfile\(c\.env\.DB, \{ userId: c\.get\("builder"\)\.userId,/g));
+    for (const name of ["findIdentityByProviderSubject", "linkIdentity", "unlinkIdentity", "listPublicBadges"]) expect(hub, name).not.toContain(name);
+  });
+
+  it("views import no db module (the badge reaches the page as a plain prop)", () => {
+    for (const file of ["../src/views/BuilderProfilePage.tsx", "../src/views/hub/ProfilePage.tsx", "../src/views/BuilderCard.tsx"]) {
+      expect(sources[file], file).toBeDefined();
+      expect(sources[file], `${file} imports db`).not.toMatch(/from\s+["'][^"']*\/db\//);
     }
   });
 });

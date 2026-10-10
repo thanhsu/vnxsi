@@ -1,4 +1,4 @@
-import { type BadgeProvider, IDENTITY_AUDIT, type LinkRefusal, type OAuthProvider, type UserIdentity } from "../domain/identity.ts";
+import { type BadgeProvider, githubProfileUrl, IDENTITY_AUDIT, type LinkRefusal, type OAuthProvider, type PublicBadge, type UserIdentity } from "../domain/identity.ts";
 import { ulid } from "../lib/ulid.ts";
 import { auditStatement } from "./audit.ts";
 
@@ -130,4 +130,36 @@ export async function setShowOnProfile(db: D1Database, input: { userId: string; 
     ),
   ]);
   return update?.results.length ? "changed" : "unchanged";
+}
+
+/**
+ * What `/b/:handle` may show (ADR-012 §5): the builder's GitHub and LinkedIn accounts that the builder opted into, only while the builder is
+ * approved on an active account. Google never. The conditions live here, not in the route, so the query stands on its own: a builder who leaves
+ * `approved` keeps the rows and the flag, and the badge simply stops being returned. `providers` are the ones whose flag is on and that are configured (Owner E1): another provider's row is not returned. LinkedIn's label (often an e-mail) is never selected;
+ * a GitHub label that is not a plain login yields no badge (no half-drawn link). Not read by ranking, catalogue or directory code (ADR-004).
+ */
+export async function listPublicBadges(db: D1Database, builderUserId: string, providers: readonly BadgeProvider[]): Promise<PublicBadge[]> {
+  if (providers.length === 0) return [];
+  const marks = providers.map((_, i) => `?${i + 2}`).join(", "); // placeholders only: the values are bound, never interpolated
+  const { results } = await db
+    .prepare(
+      `SELECT i.provider AS provider, CASE WHEN i.provider = 'github' THEN i.label END AS login
+       FROM user_identities i
+       JOIN builders b ON b.user_id = i.user_id
+       JOIN users u ON u.id = i.user_id
+       WHERE i.user_id = ?1 AND i.show_on_profile = 1 AND i.provider IN (${marks})
+         AND b.status = 'approved' AND u.status = 'active'
+       ORDER BY i.provider`,
+    )
+    .bind(builderUserId, ...providers)
+    .all<{ provider: "github" | "linkedin"; login: string | null }>();
+  const badges: PublicBadge[] = [];
+  for (const r of results) {
+    if (r.provider === "linkedin") badges.push({ provider: "linkedin" });
+    else {
+      const url = r.login === null ? null : githubProfileUrl(r.login);
+      if (r.login !== null && url !== null) badges.push({ provider: "github", login: r.login, url });
+    }
+  }
+  return badges;
 }

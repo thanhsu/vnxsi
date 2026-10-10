@@ -241,6 +241,8 @@ fieldset.field { border: 1px solid var(--border); border-radius: var(--r-md); pa
 .rate { margin-left: 8px; }
 .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
 .chips li { padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 14px; }
+.verified-list { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 8px 0; }
+.verified { padding: 2px 10px; border: 1px solid var(--success); border-radius: 999px; font-size: 14px; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
 .facts dd { margin: 0; }
 @media (max-width: 560px) { .facts { grid-template-columns: 1fr; } }

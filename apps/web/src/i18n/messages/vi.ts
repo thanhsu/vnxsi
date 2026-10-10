@@ -156,6 +156,8 @@ export const vi: Messages = {
   "bprofile.languages": "Ngôn ngữ làm việc",
   "bprofile.rate": "{amount}/giờ",
   "bprofile.website": "Website",
+  "bprofile.verifiedVia": "đã xác minh qua {provider}",
+  "bprofile.verified.heading": "Tài khoản đã xác minh",
   "bprofile.portfolio": "Portfolio",
   "admin.title": "Quản trị",
   "admin.nav.label": "Các mục quản trị",

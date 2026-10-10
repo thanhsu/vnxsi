@@ -1,8 +1,10 @@
 import type { Hono } from "hono";
 import { findPublicBuilderByHandle } from "../db/builders.ts";
+import { listPublicBadges } from "../db/identities.ts";
 import { listPortfolio } from "../db/portfolio.ts";
 import { listPublicProductsByBuilder } from "../db/products.ts";
 import { HANDLE_RE } from "../domain/builder-input.ts";
+import { isBadgeProvider } from "../domain/identity.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { onLocalized } from "../http/localized.ts";
@@ -10,6 +12,7 @@ import { siteOrigin } from "../http/origin.ts";
 import { BuilderProfilePage } from "../views/BuilderProfilePage.tsx";
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
+import { availableProviders } from "./oauth.tsx";
 
 export function registerBuilderProfileRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/b/:handle", async (c) => {
@@ -19,7 +22,12 @@ export function registerBuilderProfileRoutes(app: Hono<AppEnv>) {
     if (raw !== handle) return c.redirect(localizedPath(c.get("locale"), `/b/${handle}`), 301);
     const builder = await findPublicBuilderByHandle(c.env.DB, handle);
     if (!builder) return errorResponse(c, "notFound", 404);
-    const [portfolio, products] = await Promise.all([listPortfolio(c.env.DB, builder.userId), listPublicProductsByBuilder(c.env.DB, builder.userId)]);
-    return page(c, <BuilderProfilePage locale={c.get("locale")} origin={siteOrigin(c)} builder={builder} portfolio={portfolio} products={products} signedIn={c.get("user") !== null} />);
+    const providers = (await availableProviders(c)).filter(isBadgeProvider); // Owner E1: flag off (or unconfigured) hides that provider's badge
+    const [portfolio, products, badges] = await Promise.all([
+      listPortfolio(c.env.DB, builder.userId),
+      listPublicProductsByBuilder(c.env.DB, builder.userId),
+      listPublicBadges(c.env.DB, builder.userId, providers),
+    ]);
+    return page(c, <BuilderProfilePage locale={c.get("locale")} origin={siteOrigin(c)} builder={builder} portfolio={portfolio} products={products} badges={badges} signedIn={c.get("user") !== null} />);
   });
 }

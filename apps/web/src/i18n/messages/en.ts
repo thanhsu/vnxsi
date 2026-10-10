@@ -154,6 +154,8 @@ export const en = {
   "bprofile.languages": "Works in",
   "bprofile.rate": "{amount}/hour",
   "bprofile.website": "Website",
+  "bprofile.verifiedVia": "verified via {provider}",
+  "bprofile.verified.heading": "Verified accounts",
   "bprofile.portfolio": "Portfolio",
   "admin.title": "Admin",
   "admin.nav.label": "Admin sections",

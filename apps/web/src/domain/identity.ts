@@ -50,6 +50,17 @@ export const PROVIDER_NAME: Record<OAuthProvider, string> = { google: "Google", 
 /** Audit actions of a link and an unlink. The row carries the provider only: no label, no subject, no token. */
 export const IDENTITY_AUDIT = { link: "auth.identity.link", unlink: "auth.identity.unlink", show: "auth.identity.badge_show", hide: "auth.identity.badge_hide" } as const;
 
+/** A GitHub login: letters, digits, hyphens and (Enterprise Managed Users, `name_SHORTCODE`) underscores, at most 39 characters. Stricter than the label CHECK, so it can never put `/`, `?` or `#` in a profile link. The one source: the GitHub adapter and the public badge both use it. */
+export const GITHUB_LOGIN_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,38}$/;
+
+/** The public profile link of a GitHub login, or null when the login is not a plain login (then no link and no badge is drawn). */
+export function githubProfileUrl(login: string): string | null {
+  return GITHUB_LOGIN_RE.test(login) ? `https://github.com/${login}` : null;
+}
+
+/** What the public profile may show of a linked account (ADR-012 §5). LinkedIn carries no label: it is often an e-mail. */
+export type PublicBadge = { provider: "github"; login: string; url: string } | { provider: "linkedin" };
+
 export interface UserIdentity {
   id: string;
   userId: string;

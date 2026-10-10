@@ -1,3 +1,4 @@
+import { GITHUB_LOGIN_RE } from "../../domain/identity.ts";
 import type { ExchangeFailure, ExchangeInput, ExchangeResult, ProviderClient } from "./provider.ts";
 
 /** Constants, never built from input (decision 3 (b)). */
@@ -5,8 +6,6 @@ export const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 export const GITHUB_USER_URL = "https://api.github.com/user";
 
 const TIMEOUT_MS = 8000;
-/** A GitHub login: letters, digits, hyphens and (Enterprise Managed Users, `name_SHORTCODE`) underscores, at most 39 characters. Stricter than the label CHECK, so it can never put `/`, `?` or `#` in a profile link. */
-const LOGIN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,38}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -80,7 +79,7 @@ export class GithubClient implements ProviderClient {
     if (!isRecord(profile)) return fail("profile_response");
     const { id, login } = profile;
     if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return fail("profile_response");
-    if (typeof login !== "string" || !LOGIN.test(login)) return fail("profile_response");
+    if (typeof login !== "string" || !GITHUB_LOGIN_RE.test(login)) return fail("profile_response");
     return { ok: true, identity: { subject: String(id), label: login } };
   }
 }

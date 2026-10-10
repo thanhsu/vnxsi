@@ -156,6 +156,8 @@ export const zhHans: Messages = {
   "bprofile.languages": "工作语言",
   "bprofile.rate": "{amount}/小时",
   "bprofile.website": "网站",
+  "bprofile.verifiedVia": "已通过 {provider} 验证",
+  "bprofile.verified.heading": "已验证账号",
   "bprofile.portfolio": "作品集",
   "admin.title": "管理后台",
   "admin.nav.label": "管理导航",

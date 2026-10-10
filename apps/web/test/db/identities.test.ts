@@ -3,6 +3,7 @@ import { findIdentityByProviderSubject, linkIdentity, listIdentitiesForUser, set
 import { ensureUser } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 import { linkedUser } from "../oauth-flow.ts";
+import { GITHUB_LOGIN_RE, githubProfileUrl } from "../../src/domain/identity.ts";
 
 const NOW = "2026-10-07T09:00:00.000Z";
 const LATER = "2026-10-08T09:00:00.000Z";
@@ -150,5 +151,19 @@ describe("setShowOnProfile (VNX-2606a)", () => {
     const row = await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE id = ?1").bind(a.identity.id).first<{ v: number }>();
     expect(row?.v).toBe(0);
     expect(await audits(b.id, "auth.identity.badge_show")).toEqual([]);
+  });
+});
+
+describe("githubProfileUrl (VNX-2606b)", () => {
+  it("builds https://github.com/<login> for a valid login, EMU underscore included", () => {
+    expect(githubProfileUrl("octocat")).toBe("https://github.com/octocat");
+    expect(githubProfileUrl("mona-cat_octo")).toBe("https://github.com/mona-cat_octo");
+    expect(githubProfileUrl("a".repeat(39))).toBe(`https://github.com/${"a".repeat(39)}`);
+  });
+  it("is null for anything that could change the URL", () => {
+    for (const bad of ["", "-octo", "_octo", "octo/cat", "octo%2Fcat", "octo.cat", "octo cat", "octo?x=1", "octo#x", "<script>", "a".repeat(40), "octo\n"]) {
+      expect(githubProfileUrl(bad), bad).toBeNull();
+    }
+    expect(GITHUB_LOGIN_RE.test("octo\n")).toBe(false); // no multiline match slipping a newline through
   });
 });

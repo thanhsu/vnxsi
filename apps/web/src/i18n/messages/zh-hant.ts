@@ -156,6 +156,8 @@ export const zhHant: Messages = {
   "bprofile.languages": "工作語言",
   "bprofile.rate": "{amount}/小時",
   "bprofile.website": "網站",
+  "bprofile.verifiedVia": "已透過 {provider} 驗證",
+  "bprofile.verified.heading": "已驗證帳號",
   "bprofile.portfolio": "作品集",
   "admin.title": "管理後台",
   "admin.nav.label": "管理導覽",
