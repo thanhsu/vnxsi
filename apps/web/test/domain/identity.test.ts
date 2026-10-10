@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FLAG_KEYS } from "../../src/domain/flags.ts";
-import { IDENTITY_AUDIT, isOAuthProvider, isSessionMethod, OAUTH_PROVIDERS, PROVIDER_FLAG, PROVIDER_NAME, SESSION_METHODS, sessionMethodFor } from "../../src/domain/identity.ts";
+import { BADGE_PROVIDERS, IDENTITY_AUDIT, isBadgeProvider, isOAuthProvider, isSessionMethod, OAUTH_PROVIDERS, PROVIDER_FLAG, PROVIDER_NAME, SESSION_METHODS, sessionMethodFor } from "../../src/domain/identity.ts";
 
 describe("OAuth providers (ADR-012 §1)", () => {
   it("are google, github and linkedin, in that order", () => {
@@ -37,7 +37,7 @@ describe("session methods (ADR-012 §2)", () => {
 
 describe("identity audit actions (ADR-012 §4)", () => {
   it("are fixed", () => {
-    expect(IDENTITY_AUDIT).toEqual({ link: "auth.identity.link", unlink: "auth.identity.unlink" });
+    expect(IDENTITY_AUDIT).toEqual({ link: "auth.identity.link", unlink: "auth.identity.unlink", show: "auth.identity.badge_show", hide: "auth.identity.badge_hide" });
   });
 });
 
@@ -45,5 +45,14 @@ describe("provider display names (ADR-012 decision 12, F2)", () => {
   it("are fixed and never translated", () => {
     expect(PROVIDER_NAME).toEqual({ google: "Google", github: "GitHub", linkedin: "LinkedIn" });
     expect(Object.keys(PROVIDER_NAME)).toEqual([...OAUTH_PROVIDERS]);
+  });
+});
+
+describe("badge providers (VNX-2606a)", () => {
+  it("are exactly github and linkedin: google never", () => {
+    expect([...BADGE_PROVIDERS]).toEqual(["github", "linkedin"]);
+    expect(isBadgeProvider("github")).toBe(true);
+    expect(isBadgeProvider("linkedin")).toBe(true);
+    for (const v of ["google", "GitHub", "", null, 3]) expect(isBadgeProvider(v)).toBe(false);
   });
 });

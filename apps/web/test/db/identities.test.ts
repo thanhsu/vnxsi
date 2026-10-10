@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { findIdentityByProviderSubject, linkIdentity, listIdentitiesForUser, touchIdentityLogin, unlinkIdentity } from "../../src/db/identities.ts";
+import { findIdentityByProviderSubject, linkIdentity, listIdentitiesForUser, setShowOnProfile, touchIdentityLogin, unlinkIdentity } from "../../src/db/identities.ts";
 import { ensureUser } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
+import { linkedUser } from "../oauth-flow.ts";
 
 const NOW = "2026-10-07T09:00:00.000Z";
 const LATER = "2026-10-08T09:00:00.000Z";
@@ -124,5 +125,30 @@ describe("user_identities (ADR-012 §2, §4)", () => {
     await expect(linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-long", label: "x".repeat(255), now: NOW })).rejects.toThrow();
     expect((await linkIdentity(testEnv.DB, { userId: user.id, provider: "google", subject: "g-max", label: "x".repeat(254), now: NOW })).ok).toBe(true);
     expect(await listIdentitiesForUser(testEnv.DB, user.id)).toHaveLength(1);
+  });
+});
+
+describe("setShowOnProfile (VNX-2606a)", () => {
+  it("turns the flag on and off, audits {provider} only, and writes nothing when the value is unchanged", async () => {
+    const { user } = await linkedUser(`ident-bt-${++seq}@vnx.si`, "github", { subject: `s-${++seq}`, label: "mona-cat_octo" });
+    const flag = async () => (await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE user_id = ?1 AND provider = 'github'").bind(user.id).first<{ v: number }>())?.v;
+    expect(await flag()).toBe(0); // positive precondition: linking never opts in
+    expect(await setShowOnProfile(testEnv.DB, { userId: user.id, provider: "github", show: true, now: new Date().toISOString() })).toBe("changed");
+    expect(await flag()).toBe(1);
+    expect(await audits(user.id, "auth.identity.badge_show")).toEqual(['{"provider":"github"}']);
+    expect(await setShowOnProfile(testEnv.DB, { userId: user.id, provider: "github", show: true, now: new Date().toISOString() })).toBe("unchanged");
+    expect(await audits(user.id, "auth.identity.badge_show")).toHaveLength(1); // no second row
+    expect(await setShowOnProfile(testEnv.DB, { userId: user.id, provider: "github", show: false, now: new Date().toISOString() })).toBe("changed");
+    expect(await flag()).toBe(0);
+    expect(await audits(user.id, "auth.identity.badge_hide")).toEqual(['{"provider":"github"}']);
+  });
+
+  it("not_linked when the user has no such identity, and it never touches another user's row", async () => {
+    const a = await linkedUser(`ident-bt-${++seq}@vnx.si`, "linkedin", { subject: `s-${++seq}`, label: "a@example.com" });
+    const b = await newUser();
+    expect(await setShowOnProfile(testEnv.DB, { userId: b.id, provider: "linkedin", show: true, now: new Date().toISOString() })).toBe("not_linked");
+    const row = await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE id = ?1").bind(a.identity.id).first<{ v: number }>();
+    expect(row?.v).toBe(0);
+    expect(await audits(b.id, "auth.identity.badge_show")).toEqual([]);
   });
 });

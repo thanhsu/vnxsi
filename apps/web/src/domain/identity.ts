@@ -9,6 +9,13 @@ export function isOAuthProvider(value: unknown): value is OAuthProvider {
   return typeof value === "string" && (OAUTH_PROVIDERS as readonly string[]).includes(value);
 }
 
+/** The providers whose account a builder may show on the public profile (ADR-012 §5). Google never has a switch. */
+export const BADGE_PROVIDERS = ["github", "linkedin"] as const;
+export type BadgeProvider = (typeof BADGE_PROVIDERS)[number];
+export function isBadgeProvider(value: unknown): value is BadgeProvider {
+  return typeof value === "string" && (BADGE_PROVIDERS as readonly string[]).includes(value);
+}
+
 /** `sessions.method`: how the session was created. /ops and /admin accept only "magic_link" (ADR-012 §6). */
 export const SESSION_METHODS = ["magic_link", "oauth_google", "oauth_github", "oauth_linkedin"] as const;
 export type SessionMethod = (typeof SESSION_METHODS)[number];
@@ -41,7 +48,7 @@ export const PROVIDER_FLAG: Record<OAuthProvider, FlagKey> = {
 export const PROVIDER_NAME: Record<OAuthProvider, string> = { google: "Google", github: "GitHub", linkedin: "LinkedIn" };
 
 /** Audit actions of a link and an unlink. The row carries the provider only: no label, no subject, no token. */
-export const IDENTITY_AUDIT = { link: "auth.identity.link", unlink: "auth.identity.unlink" } as const;
+export const IDENTITY_AUDIT = { link: "auth.identity.link", unlink: "auth.identity.unlink", show: "auth.identity.badge_show", hide: "auth.identity.badge_hide" } as const;
 
 export interface UserIdentity {
   id: string;

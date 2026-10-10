@@ -181,9 +181,9 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
 });
 
 // ADR-012 §5, ADR-004: linked identities are read and written only by their module. Ranking, public and builder-facing code
-// never touch the table. Each task adds the files it creates (2604b: routes/oauth.tsx; 2605a: routes/me.tsx; 2606b: routes/builder-profile.tsx, ...).
+// never touch the table. Each task adds the files it creates (2604b: routes/oauth.tsx; 2605a: routes/me.tsx; 2606a: routes/hub.tsx (the builder's own switch); 2606b: routes/builder-profile.tsx, ...).
 // db/audit.ts is on the list only because the identity audit guard reads `id` and `user_id` of the row; it reads nothing else.
-const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts", "../src/routes/oauth.tsx", "../src/routes/me.tsx"]);
+const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts", "../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/routes/hub.tsx"]);
 
 describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => {
   it("the allowlist holds only files that exist, and no ranking file is on it", () => {

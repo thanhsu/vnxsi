@@ -1,4 +1,4 @@
-import { IDENTITY_AUDIT, type LinkRefusal, type OAuthProvider, type UserIdentity } from "../domain/identity.ts";
+import { type BadgeProvider, IDENTITY_AUDIT, type LinkRefusal, type OAuthProvider, type UserIdentity } from "../domain/identity.ts";
 import { ulid } from "../lib/ulid.ts";
 import { auditStatement } from "./audit.ts";
 
@@ -107,4 +107,27 @@ export async function unlinkIdentity(db: D1Database, input: { userId: string; pr
 /** A sign-in with this identity: records the time and refreshes the label (the GitHub login can change; ADR-012 §5). */
 export async function touchIdentityLogin(db: D1Database, input: { id: string; label: string; now: string }): Promise<void> {
   await db.prepare("UPDATE user_identities SET label = ?2, last_used_at = ?3, updated_at = ?3 WHERE id = ?1").bind(input.id, input.label, input.now).run();
+}
+
+export type BadgeResult = "changed" | "unchanged" | "not_linked";
+
+/**
+ * The builder's opt-in for the public badge (ADR-012 §5): turns `show_on_profile` on or off for that user's own account of that provider and audits
+ * it ({ provider } only) in the same batch. The write is filtered by `user_id`, so another user's row is never reached. Nothing is written
+ * (and nothing audited) when the value already is what was asked. The flag has no public effect by itself: the badge query also needs an approved builder (Task 11).
+ */
+export async function setShowOnProfile(db: D1Database, input: { userId: string; provider: BadgeProvider; show: boolean; now: string }): Promise<BadgeResult> {
+  const existing = await db.prepare("SELECT * FROM user_identities WHERE user_id = ?1 AND provider = ?2").bind(input.userId, input.provider).first<Row>();
+  if (!existing) return "not_linked";
+  const next = input.show ? 1 : 0;
+  if (existing.show_on_profile === next) return "unchanged";
+  const [update] = await db.batch<{ id: string }>([
+    db.prepare("UPDATE user_identities SET show_on_profile = ?3, updated_at = ?4 WHERE id = ?1 AND user_id = ?2 AND show_on_profile != ?3 RETURNING id").bind(existing.id, input.userId, next, input.now),
+    auditStatement(
+      db,
+      { actorUserId: input.userId, action: input.show ? IDENTITY_AUDIT.show : IDENTITY_AUDIT.hide, entity: "user", entityId: input.userId, data: { provider: input.provider }, now: input.now },
+      { identityId: existing.id, userId: input.userId },
+    ),
+  ]);
+  return update?.results.length ? "changed" : "unchanged";
 }
