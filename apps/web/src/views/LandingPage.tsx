@@ -269,7 +269,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
           ) : (
             <>
               <FormErrorSummary tr={tr} items={summary} />
-              <form method="post" action={`${localizedPath(locale, "/waitlist")}#notify`} class="waitlist-form">
+              <form method="post" action={localizedPath(locale, "/waitlist")} class="waitlist-form">
                 <div class="waitlist-row">
                   <div class="field">
                     <label for="waitlist-email">{tr("landing.form.email")}</label>

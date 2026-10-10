@@ -72,3 +72,11 @@ Test theo AC (tên tệp):
 3. Vitest cho login + profile dùng `expectErrorSummary`.
 4. Reviewer: thêm VNX-0807 vào roadmap/backlog, cập nhật `e2e/README.md` (số test 49 -> 57, `support/network.ts`, biến thể `nojs`), ghi `CURRENT-STATUS.md`; ghi vào "Ghi nhận": form `/admin/*`, `/ops/*` ngoài phạm vi; bản dịch `zh-*` của `form.error.*` (AI dịch) vào danh sách chờ người bản xứ.
 5. `autofocus` trên `tabindex=-1` chỉ kiểm ở Chromium (rủi ro WebKit cũ đã nêu trong plan).
+
+## Vòng sửa 1 (F1, F4, F5, F8)
+
+- **F1:** `views/LandingPage.tsx`: action của form waitlist bỏ `#notify` (`localizedPath(locale, "/waitlist")`). Luồng thành công không đổi vì `routes/landing.tsx` đã tự redirect tới `/?joined=1#notify`. Test `test/landing/page.test.ts` (2 chỗ) cập nhật theo action không fragment. E2E mới trong `form-errors.spec.ts` (EN + VI): email sai -> 400, URL không có hash, title `Error:` / `Lỗi:`, `#form-errors` có focus, liên kết focus `#waitlist-email`, giá trị giữ nguyên.
+- **F4:** `routes/contact.tsx`: 503 khi thiếu siteKey không truyền `formError` (giống route request), chỉ còn thông báo `contact.form.unavailable` của form; test `test/contact/submit.test.ts` đòi đúng một lần xuất hiện.
+- **F5:** xóa `hasFormErrors` và dòng test dùng nó.
+- **F8:** `e2e/support/a11y.ts`: một định nghĩa "unfinished" cài vào trang (`window.__unfinished`), dùng cho cả chờ và thông báo lỗi.
+- Kết quả: typecheck 0 lỗi; Vitest 165 file / 1919 test xanh; `npm run e2e` hai lần: 59 passed mỗi lần; `e2e:typecheck` sạch; `test:scripts` 52/52.

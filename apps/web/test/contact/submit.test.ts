@@ -169,6 +169,8 @@ describe("POST /contact protections (plan VNX-0710 AC7)", () => {
     const env = { ...testEnv, TURNSTILE_DRIVER: undefined, TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET: undefined } as Bindings;
     const res = await post("/contact", form("no-turnstile@example.vn"), { env });
     expect(res.status).toBe(503);
+    // The unavailable notice shows once (the form-level summary line is left out, as on the request form).
+    expect((await res.text()).split(t("en", "contact.form.unavailable").replace("'", "&#39;")).length - 1).toBe(1);
     expect(await rowsFor("no-turnstile@example.vn")).toHaveLength(0);
   });
 

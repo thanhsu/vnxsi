@@ -25,20 +25,17 @@ export async function settle(page: Page, opts: { motion?: boolean } = {}): Promi
  * time-based animation has finished. Infinite ones (the Live strip) and scroll-driven ones (chart growth, tied to the scroll position, not to time) are left alone.
  */
 async function finiteAnimationsDone(page: Page): Promise<void> {
-  const pending = () =>
-    document
-      .getAnimations()
-      .filter((a) => a.timeline === document.timeline && a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== "finished" && a.playState !== "idle")
-      .map((a) => (a instanceof CSSAnimation ? a.animationName : a instanceof CSSTransition ? a.transitionProperty : "animation"));
+  // One definition of "unfinished", installed in the page and used by both the wait and the error message.
+  await page.evaluate(() => {
+    (window as unknown as { __unfinished: () => Animation[] }).__unfinished = () =>
+      document.getAnimations().filter((a) => a.timeline === document.timeline && a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== "finished" && a.playState !== "idle");
+  });
   try {
-    await page.waitForFunction(() => {
-      const left = document
-        .getAnimations()
-        .filter((a) => a.timeline === document.timeline && a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== "finished" && a.playState !== "idle");
-      return left.length === 0;
-    }, undefined, { timeout: 5_000 });
+    await page.waitForFunction(() => (window as unknown as { __unfinished: () => Animation[] }).__unfinished().length === 0, undefined, { timeout: 5_000 });
   } catch {
-    const left = await page.evaluate(pending);
+    const left = await page.evaluate(() =>
+      (window as unknown as { __unfinished: () => Animation[] }).__unfinished().map((a) => (a instanceof CSSAnimation ? a.animationName : a instanceof CSSTransition ? a.transitionProperty : "animation")),
+    );
     throw new Error(`E2E infrastructure: finite animations still running after 5 s: ${left.join(", ")}`);
   }
 }

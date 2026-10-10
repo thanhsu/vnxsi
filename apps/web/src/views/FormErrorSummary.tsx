@@ -4,8 +4,6 @@ import type { Translate } from "../i18n/t.ts";
 /** One line of the summary. `href` is "#<id of the input>", or "" for an error that belongs to no field (captcha, rate limit, mail failure). */
 export type FormErrorItem = { href: string; message: string };
 
-export const hasFormErrors = (items: readonly unknown[]): boolean => items.length > 0;
-
 /**
  * Error summary at the top of a server-rendered form that came back with errors (VNX-0807, WCAG 3.3.1, 3.3.3).
  * `autofocus` + tabindex="-1" moves focus to it on load without JavaScript, so a screen reader hears the heading and the whole list

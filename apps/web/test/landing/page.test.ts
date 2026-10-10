@@ -273,7 +273,7 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
 
   it("links to /request next to the waitlist form without replacing it (Owner 2026-10-04)", async () => {
     const main = mainOf(await (await get("/vi")).text());
-    expect(main).toMatch(/<section id="notify"[\s\S]*href="\/vi\/request"[\s\S]*<form method="post" action="\/vi\/waitlist#notify"/);
+    expect(main).toMatch(/<section id="notify"[\s\S]*href="\/vi\/request"[\s\S]*<form method="post" action="\/vi\/waitlist"/);
   });
 
   it("AC6: numbers the ways, the trust items and the steps with CSS counters", async () => {
@@ -295,7 +295,7 @@ describe("landing page GET / (VNX-0708, redesigned in VNX-0709)", () => {
     const main = mainOf(html);
     expect(main).toContain('href="#notify"');
     expect(main).toContain('id="notify"');
-    expect(main).toContain('<form method="post" action="/vi/waitlist#notify"');
+    expect(main).toContain('<form method="post" action="/vi/waitlist"'); // no fragment: a fragment would stop autofocus on the 4xx re-render (VNX-0807 F1)
     expect(main).toMatch(/<label for="waitlist-email">/);
     expect(main).toMatch(/<input id="waitlist-email" name="email" type="email"/);
     expect(main).toMatch(/<input id="waitlist-consent" name="consent" type="checkbox"/);

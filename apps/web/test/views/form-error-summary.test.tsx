@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { t, translator } from "../../src/i18n/t.ts";
-import { FormErrorSummary, hasFormErrors } from "../../src/views/FormErrorSummary.tsx";
+import { FormErrorSummary } from "../../src/views/FormErrorSummary.tsx";
 import { Layout } from "../../src/views/Layout.tsx";
 import { expectErrorSummary } from "../helpers.ts";
 
@@ -62,7 +62,6 @@ describe("FormErrorSummary", () => {
   });
 
   it("renders nothing without items", async () => {
-    expect(hasFormErrors([])).toBe(false);
     expect(String(await (<FormErrorSummary tr={translator("en")} items={[]} />))).toBe("");
   });
 });

@@ -85,3 +85,23 @@ for (const l of [EN, VI]) {
     await expect(page.locator("#ct-name")).toHaveValue("Ada Tester");
   });
 }
+
+for (const l of [EN, VI]) {
+  test(`${l.path || "/en"} landing waitlist: bad email`, async ({ page }) => {
+    const path = `${l.path}/waitlist`;
+    await page.goto(`${l.path}/`);
+    await skipBrowserValidation(page, "form.waitlist-form");
+    await page.locator("#waitlist-email").fill("not-an-email");
+    await page.locator("#waitlist-consent").check();
+    // The landing page has other buttons: press this form's own.
+    const [res] = await Promise.all([
+      page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === path),
+      page.locator("form.waitlist-form button[type=submit]").click(),
+    ]);
+    expect(res.status()).toBe(400);
+    // The form action carries no fragment, so the browser runs autofocus on the re-rendered page (a URL fragment would skip it).
+    expect(new URL(page.url()).hash).toBe("");
+    await expectErrorPattern(page, l, "#waitlist-email");
+    await expect(page.locator("#waitlist-email")).toHaveValue("not-an-email");
+  });
+}
