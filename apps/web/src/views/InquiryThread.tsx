@@ -1,7 +1,8 @@
 import type { FC } from "hono/jsx";
 import { builderFacingName, canPostMessage, DECLINE_REASON_MAX, REPLY_MAX, type InquiryMessage, type InquirySummary } from "../domain/inquiry.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
-import { translator } from "../i18n/t.ts";
+import { translator, type Translate } from "../i18n/t.ts";
+import { FormErrorSummary, type FormErrorItem } from "./FormErrorSummary.tsx";
 import { BUDGET_KEY, INQUIRY_STATUS_KEY, INQUIRY_TYPE_KEY } from "./labels.ts";
 import { PlainText } from "./PlainText.tsx";
 
@@ -19,6 +20,20 @@ type Props = {
 
 const when = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
 
+/**
+ * Summary lines of the thread's two forms (VNX-0807). A link points at its textarea only while that form is on the page
+ * (the reason form is the builder's, on an open inquiry; both forms need an active thread). Exported so the page that frames the thread can set `invalid`.
+ */
+export function threadErrorItems(p: Pick<Props, "summary" | "viewer" | "replyError" | "reasonError">, tr: Translate): FormErrorItem[] {
+  const status = p.summary.inquiry.status;
+  const replyShown = canPostMessage(status);
+  const reasonShown = replyShown && p.viewer === "builder" && status === "open";
+  return [
+    ...(p.replyError ? [{ href: replyShown ? "#th-body" : "", message: `${tr("thread.reply")}: ${p.replyError}` }] : []),
+    ...(p.reasonError ? [{ href: reasonShown ? "#th-reason" : "", message: `${tr("thread.declineReason")}: ${p.reasonError}` }] : []),
+  ];
+}
+
 export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, base, replyError, reasonError, values }) => {
   const tr = translator(locale);
   const inquiry = summary.inquiry;
@@ -30,6 +45,7 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
   const active = canPostMessage(inquiry.status);
   return (
     <article class="thread">
+      <FormErrorSummary tr={tr} items={threadErrorItems({ summary, viewer, replyError, reasonError }, tr)} />
       <dl class="facts">
         <dt>{tr("thread.type")}</dt>
         <dd>{tr(INQUIRY_TYPE_KEY[inquiry.type])}</dd>
@@ -79,7 +95,7 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
               </textarea>
               <p class="hint">{tr("thread.replyHint")}</p>
               {replyError ? (
-                <p id="th-body-error" class="error-msg" role="alert">
+                <p id="th-body-error" class="error-msg">
                   {replyError}
                 </p>
               ) : null}
@@ -93,11 +109,11 @@ export const InquiryThread: FC<Props> = ({ locale, summary, messages, viewer, ba
               <form method="post" action={`${base}/decline`} class="card wide">
                 <div class="field">
                   <label for="th-reason">{tr("thread.declineReason")}</label>
-                  <textarea id="th-reason" name="reason" maxlength={DECLINE_REASON_MAX} aria-invalid={reasonError ? "true" : undefined}>
+                  <textarea id="th-reason" name="reason" maxlength={DECLINE_REASON_MAX} aria-invalid={reasonError ? "true" : undefined} aria-describedby={reasonError ? "th-reason-error" : undefined}>
                     {values?.reason ?? ""}
                   </textarea>
                   {reasonError ? (
-                    <p class="error-msg" role="alert">
+                    <p id="th-reason-error" class="error-msg">
                       {reasonError}
                     </p>
                   ) : null}

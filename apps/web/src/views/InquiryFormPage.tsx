@@ -1,9 +1,10 @@
 import type { FC } from "hono/jsx";
 import { BUDGET_BANDS, type InquiryErrors, type InquiryFieldError, type InquiryFormValues, type InquiryType } from "../domain/inquiry.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
-import { translator } from "../i18n/t.ts";
+import { translator, type Translate } from "../i18n/t.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { BUDGET_KEY, INQUIRY_TYPE_KEY } from "./labels.ts";
+import { FormErrorSummary, type FormErrorItem } from "./FormErrorSummary.tsx";
 import { Layout } from "./Layout.tsx";
 
 export type InquiryTarget = { builderName: string; productName: string | null; action: string; rest: string };
@@ -31,14 +32,33 @@ type Props = {
   formError?: string;
 };
 
+/** Summary lines in page order (VNX-0807): the form-level error first, then each field error linked to its input. The `type` error has no input. */
+export function inquiryErrorItems(p: Pick<Props, "errors" | "formError" | "signedIn">, tr: Translate): FormErrorItem[] {
+  const items: FormErrorItem[] = p.formError ? [{ href: "", message: p.formError }] : [];
+  const fields: [keyof InquiryErrors, string, MessageKey][] = [
+    ["message", "iq-message", "inquiry.form.message"],
+    ["budgetBand", "iq-budget", "inquiry.form.budget"],
+    ["deadline", "iq-deadline", "inquiry.form.deadline"],
+    ["name", "iq-name", "inquiry.form.name"],
+    ["email", p.signedIn ? "" : "iq-email", "inquiry.form.email"],
+  ];
+  for (const [field, id, label] of fields) {
+    const code = p.errors[field];
+    if (code) items.push({ href: id ? `#${id}` : "", message: `${tr(label)}: ${tr(ERROR_KEY[code])}` });
+  }
+  if (p.errors.type) items.push({ href: "", message: tr(ERROR_KEY[p.errors.type]) });
+  return items;
+}
+
 export const InquiryFormPage: FC<Props> = (p) => {
   const tr = translator(p.locale);
+  const summary = inquiryErrorItems(p, tr);
   const typeLabel = tr(INQUIRY_TYPE_KEY[p.type]);
   const title = tr("inquiry.form.title", { type: typeLabel, target: p.target.productName ?? p.target.builderName });
   const err = (field: keyof InquiryErrors) => {
     const code = p.errors[field];
     return code ? (
-      <p id={`iq-${field}-error`} class="error-msg" role="alert">
+      <p id={`iq-${field}-error`} class="error-msg">
         {tr(ERROR_KEY[code])}
       </p>
     ) : null;
@@ -46,15 +66,11 @@ export const InquiryFormPage: FC<Props> = (p) => {
   const aria = (field: keyof InquiryErrors) => (p.errors[field] ? { "aria-invalid": "true", "aria-describedby": `iq-${field}-error` } : {});
   const blocked = !p.signedIn && p.siteKey === null;
   return (
-    <Layout locale={p.locale} title={`${title} · VNX.SI`} origin={p.origin} rest={p.target.rest} noindex signedIn={p.signedIn}>
+    <Layout locale={p.locale} title={`${title} · VNX.SI`} origin={p.origin} rest={p.target.rest} noindex signedIn={p.signedIn} invalid={summary.length > 0}>
       <section class="card wide">
         <h1>{title}</h1>
         <p>{tr("inquiry.form.intro", { builder: p.target.builderName })}</p>
-        {p.formError ? (
-          <p class="error-msg" role="alert">
-            {p.formError}
-          </p>
-        ) : null}
+        <FormErrorSummary tr={tr} items={summary} />
         {blocked ? (
           <p class="notice">
             {tr("inquiry.form.unavailable")} <a href={localizedPath(p.locale, `/login?next=${encodeURIComponent(localizedPath(p.locale, p.target.rest))}`)}>{tr("nav.signIn")}</a>

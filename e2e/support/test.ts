@@ -1,6 +1,7 @@
 import { expect, test as base, type Page } from "@playwright/test";
 import { SESSION_RAW } from "../seed/fixtures.mjs";
 import { watchCsp, type CspWatch } from "./csp";
+import { watchSameOriginFailures } from "./network";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
@@ -10,6 +11,11 @@ export const test = base.extend<{ csp: CspWatch; builderPage: Page }>({
   context: async ({ context }, use) => {
     await context.route((url) => !LOCAL_HOSTS.has(url.hostname), (route) => route.abort());
     await use(context);
+  },
+  // Same-origin request failures are recorded, so a scan never runs on a half-loaded page (R2(a) of VNX-0807).
+  page: async ({ page, baseURL }, use) => {
+    watchSameOriginFailures(page, baseURL!);
+    await use(page);
   },
   // Every test ends with: no CSP violation, no console.error, no uncaught page error.
   csp: [

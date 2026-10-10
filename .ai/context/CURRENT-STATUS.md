@@ -154,6 +154,7 @@ _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang too
 | Merge M7 vào `main` | ✅ | 38bf414 | merge `--no-ff` của `56ffb91`, Owner duyệt 2026-10-07; đã push. **Đã deploy 2026-10-07** (version `8e1e141d`); Owner kiểm trình duyệt 8b xong 2026-10-08 |
 | VNX-0805 Runbook deploy + script smoke | ✅ | bdede61…9e38683 | `docs/runbooks/deploy.md` (12 mục, tiếng Việt), `scripts/smoke.mjs` (`npm run smoke`, 64 kiểm tra, chỉ GET/HEAD, ≤ 10 request/10 s vào đường có rate limit), `npm run test:scripts` (20 test, chạy trong CI); review `.ai/reviews/VNX-0805-review.md` APPROVE WITH CHANGES → sửa → APPROVE; merge vào `main`, đã push |
 | VNX-0802 Playwright + axe (E2E) | ✅ | 88b4739…41ba788 | `e2e/` ở gốc repo: 49 test Chromium (homepage tự động hóa checklist 8b, form Inquiry, editor, login thật qua `/auth/verify`, 22 lượt axe WCAG 2.2 AA, bắt vi phạm CSP + lỗi console mọi trang); `wrangler dev` local cổng 8799, D1 seed cố định, không cửa sau, không bao giờ nhắm vnx.si; `npm run e2e` (~1 phút); job `e2e` trong CI; `@playwright/test` 1.64.0, `@axe-core/playwright` 4.13.0 ghim cứng; review `.ai/reviews/VNX-0802-review.md` APPROVE WITH CHANGES → sửa `4bc99de` → APPROVE; merge vào `main`, đã push |
+| VNX-0807 a11y (T1–T5): homepage không JS + mẫu báo lỗi form | ✅ (T6 còn mở) | 7057499…029a20e | R1: thẻ hero phía sau render `inert`/`aria-hidden` từ server (hết lỗi WCAG 2.2 AA `target-size` khi không JS); `FormErrorSummary` + `invalid` ở `Layout`/`HubLayout` (tiền tố `Error:`/`Lỗi:`/`错误：`/`錯誤：` ở `<title>`, khối "There is a problem" có link tới từng trường, `autofocus` không cần JS) cho 12 form; câu chữ Owner duyệt 2026-10-10; E2E 59 test (thêm quét axe không JS, dừng sớm khi tài nguyên tải lỗi); review `.ai/reviews/VNX-0807-review.md` APPROVE WITH CHANGES → sửa `dd73e0d` → APPROVE; merge vào `main`, đã push. **T6** (login, hồ sơ hub, tiền tố tiêu đề `/me/inquiries/:id`, E2E login) làm sau khi EPIC 26 merge, checklist trong review |
 
 ## Việc của Owner khi deploy M7
 
@@ -335,6 +336,12 @@ Owner, trước khi ElevenLabs chạy thật:
 
 ## Ghi nhận (minor, chưa làm)
 
+- **VNX-0807:**
+  - Quy tắc: form dùng mẫu báo lỗi không được để fragment trong `action` (trình duyệt bỏ `autofocus`); waitlist đã bỏ `#notify` (thành công vẫn về `/?joined=1#notify`).
+  - Form `/admin/*`, `/ops/*` giữ mẫu lỗi cũ (ngoài phạm vi). Mẫu lỗi ở form hub, thread, invitations chỉ có test Vitest. `autofocus` trên `tabindex=-1` chỉ thử trên Chromium.
+  - (F9) Thêm quét không JS cho chồng thẻ product khi seed E2E có ≥ 3 product công khai.
+  - (F6, chờ Owner) Task HUMAN "mời ~100 builder" đổi mã VNX-0807 → VNX-0808 vì trùng.
+  - (F7, VNX-0801) Chuỗi `form.error.*` zh do AI dịch; tiền tố zh `错误：` + dấu cách ASCII, nhờ người bản xứ đọc lại.
 - **VNX-0802:**
   - (F3) Implementer chạy `git checkout -- package.json` một lần (chỉ thay đổi chưa commit của chính nó, có khai báo). Từ nay handoff ghi rõ: hoàn tác bằng cách sửa file, không checkout/restore/reset.
   - (F4) Không có `.ai/tasks/VNX-0802-handoff.md` (lặp VNX-0805 F9): plan đã duyệt + lệnh giao việc dùng làm handoff.

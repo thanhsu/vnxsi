@@ -1,6 +1,7 @@
 import type { Child, FC } from "hono/jsx";
 import type { Utm, WaitlistErrors } from "../domain/waitlist-input.ts";
 import { ContactForm, emptyFeedbackValues } from "./contact/ContactForm.tsx";
+import { FormErrorSummary, type FormErrorItem } from "./FormErrorSummary.tsx";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
@@ -84,6 +85,12 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
   const builderHref = builderCtaHref(locale, signedIn);
   const emailError = form?.errors?.email ? tr("landing.form.error.email") : null;
   const consentError = form?.errors?.consent ? tr("landing.form.error.consent") : null;
+  // VNX-0807: the waitlist form is the only form on this page that comes back with errors (the "Ask us" form posts to /contact).
+  const summary: FormErrorItem[] = [
+    ...(form?.rateLimited ? [{ href: "", message: tr("landing.form.error.rateLimited") }] : []),
+    ...(emailError ? [{ href: "#waitlist-email", message: `${tr("landing.form.email")}: ${emailError}` }] : []),
+    ...(consentError ? [{ href: "#waitlist-consent", message: consentError }] : []),
+  ];
   const hidden: [string, string | null][] = [
     ["utm_source", utm.utmSource],
     ["utm_medium", utm.utmMedium],
@@ -111,6 +118,7 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
       origin={origin}
       rest="/"
       signedIn={signedIn}
+      invalid={!joined && summary.length > 0}
       jsonLd={organizationJsonLd(origin)}
       fullWidth
       scripts={["/assets/landing.js", "/assets/home.js"]}
@@ -259,62 +267,60 @@ export const LandingPage: FC<Props> = ({ locale, origin, signedIn, joined, utm, 
               {tr("landing.form.joined")}
             </p>
           ) : (
-            <form method="post" action={`${localizedPath(locale, "/waitlist")}#notify`} class="waitlist-form">
-              <div class="waitlist-row">
+            <>
+              <FormErrorSummary tr={tr} items={summary} />
+              <form method="post" action={localizedPath(locale, "/waitlist")} class="waitlist-form">
+                <div class="waitlist-row">
+                  <div class="field">
+                    <label for="waitlist-email">{tr("landing.form.email")}</label>
+                    <input
+                      id="waitlist-email"
+                      name="email"
+                      type="email"
+                      autocomplete="email"
+                      required
+                      maxlength={254}
+                      value={form?.email ?? ""}
+                      placeholder={tr("landing.form.email")}
+                      aria-invalid={emailError ? "true" : undefined}
+                      aria-describedby={emailError ? "waitlist-email-error" : undefined}
+                    />
+                    {emailError ? (
+                      <p id="waitlist-email-error" class="error-msg">
+                        {emailError}
+                      </p>
+                    ) : null}
+                  </div>
+                  <button class="btn btn-primary btn-lg" type="submit">
+                    {tr("landing.form.submit")}
+                  </button>
+                </div>
                 <div class="field">
-                  <label for="waitlist-email">{tr("landing.form.email")}</label>
-                  <input
-                    id="waitlist-email"
-                    name="email"
-                    type="email"
-                    autocomplete="email"
-                    required
-                    maxlength={254}
-                    value={form?.email ?? ""}
-                    placeholder={tr("landing.form.email")}
-                    aria-invalid={emailError ? "true" : undefined}
-                    aria-describedby={emailError ? "waitlist-email-error" : undefined}
-                  />
-                  {emailError ? (
-                    <p id="waitlist-email-error" class="error-msg" role="alert">
-                      {emailError}
+                  <div class="choice">
+                    <input
+                      id="waitlist-consent"
+                      name="consent"
+                      type="checkbox"
+                      required
+                      checked={form?.consent === true}
+                      aria-invalid={consentError ? "true" : undefined}
+                      aria-describedby={consentError ? "waitlist-consent-error" : undefined}
+                    />
+                    <label for="waitlist-consent">{tr("landing.form.consent")}</label>
+                  </div>
+                  {consentError ? (
+                    <p id="waitlist-consent-error" class="error-msg">
+                      {consentError}
                     </p>
                   ) : null}
                 </div>
-                <button class="btn btn-primary btn-lg" type="submit">
-                  {tr("landing.form.submit")}
-                </button>
-              </div>
-              <div class="field">
-                <div class="choice">
-                  <input
-                    id="waitlist-consent"
-                    name="consent"
-                    type="checkbox"
-                    required
-                    checked={form?.consent === true}
-                    aria-invalid={consentError ? "true" : undefined}
-                    aria-describedby={consentError ? "waitlist-consent-error" : undefined}
-                  />
-                  <label for="waitlist-consent">{tr("landing.form.consent")}</label>
+                {/* Honeypot: off-screen, hidden from assistive tech and out of the tab order. */}
+                <div class="hp" aria-hidden="true">
+                  <input name="website" type="text" tabindex={-1} autocomplete="off" />
                 </div>
-                {consentError ? (
-                  <p id="waitlist-consent-error" class="error-msg" role="alert">
-                    {consentError}
-                  </p>
-                ) : null}
-              </div>
-              {/* Honeypot: off-screen, hidden from assistive tech and out of the tab order. */}
-              <div class="hp" aria-hidden="true">
-                <input name="website" type="text" tabindex={-1} autocomplete="off" />
-              </div>
-              {hidden.map(([name, value]) => (value ? <input type="hidden" name={name} value={value} /> : null))}
-              {form?.rateLimited ? (
-                <p class="error-msg" role="alert">
-                  {tr("landing.form.error.rateLimited")}
-                </p>
-              ) : null}
-            </form>
+                {hidden.map(([name, value]) => (value ? <input type="hidden" name={name} value={value} /> : null))}
+              </form>
+            </>
           )}
           <p class="cta-row lp-final-links">
             <a class="btn btn-ghost" href={localizedPath(locale, "/builders")}>

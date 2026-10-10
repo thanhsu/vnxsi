@@ -5,7 +5,7 @@ import type { Bindings } from "../../src/env.ts";
 import { FAKE_TURNSTILE_PASS } from "../../src/http/turnstile.ts";
 import { t } from "../../src/i18n/t.ts";
 import { signIn } from "../fixtures.ts";
-import { formPost, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const randomIp = () => `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
@@ -105,9 +105,13 @@ describe("POST /contact field errors (plan VNX-0710 AC6)", () => {
       const fields = form(email, { ...override, from: "landing" });
       const res = await post("/vi/contact", fields);
       expect(res.status).toBe(400);
-      const main = mainOf(await res.text());
+      const html = await res.text();
+      const main = mainOf(html);
       expect(main).toContain('action="/vi/contact"');
-      expect(main).toContain(`<p id="ct-${field}-error" class="error-msg" role="alert">${t("vi", key)}</p>`);
+      expect(main).toContain(`<p id="ct-${field}-error" class="error-msg">${t("vi", key)}</p>`);
+      // VNX-0807: the shared pattern. The role group links to its first radio.
+      expectErrorSummary(html, [field === "role" ? "ct-role-builder" : `ct-${field}`], { titlePrefix: "Lỗi:" });
+      expect(html).toContain("Có lỗi cần sửa");
       expect(main).toContain('aria-describedby="ct-' + field + '-error"');
       expect(main.match(/class="error-msg"/g)).toHaveLength(1);
       // The typed values come back.
@@ -153,7 +157,10 @@ describe("POST /contact protections (plan VNX-0710 AC7)", () => {
   it("refuses a failed Turnstile check with 400 and the captcha message", async () => {
     const res = await post("/vi/contact", form("captcha@example.vn", { "cf-turnstile-response": "wrong" }));
     expect(res.status).toBe(400);
-    expect(textOf(mainOf(await res.text()))).toContain(t("vi", "contact.error.captcha"));
+    const html = await res.text();
+    expect(textOf(mainOf(html))).toContain(t("vi", "contact.error.captcha"));
+    // VNX-0807: a form-level error is an unlinked summary line, and the page has no role="alert".
+    expect(expectErrorSummary(html, [], { formLevel: 1, titlePrefix: "Lỗi:" })).toContain(t("vi", "contact.error.captcha"));
     expect(await rowsFor("captcha@example.vn")).toHaveLength(0);
     expect(outbox).toHaveLength(0);
   });
@@ -162,6 +169,8 @@ describe("POST /contact protections (plan VNX-0710 AC7)", () => {
     const env = { ...testEnv, TURNSTILE_DRIVER: undefined, TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET: undefined } as Bindings;
     const res = await post("/contact", form("no-turnstile@example.vn"), { env });
     expect(res.status).toBe(503);
+    // The unavailable notice shows once (the form-level summary line is left out, as on the request form).
+    expect((await res.text()).split(t("en", "contact.form.unavailable").replace("'", "&#39;")).length - 1).toBe(1);
     expect(await rowsFor("no-turnstile@example.vn")).toHaveLength(0);
   });
 

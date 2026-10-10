@@ -1,9 +1,10 @@
 // The tools must be able to fail: an axe scan that finds nothing and a CSP listener that hears nothing look the same as a clean app.
 // This spec uses the plain Playwright test API (no auto CSP assertion) because it causes violations on purpose.
 import { expect, test } from "@playwright/test";
-import { axeViolations, scanA11y } from "../support/a11y";
+import { axeViolations, scanA11y, settle } from "../support/a11y";
 import { KNOWN_A11Y, type KnownA11y } from "../support/a11y-known";
 import { watchCsp } from "../support/csp";
+import { allowSameOriginFailure, watchSameOriginFailures } from "../support/network";
 
 test("axe reports a missing image alt (the scan is not empty)", async ({ page }) => {
   await page.setContent('<!doctype html><html lang="en"><head><title>x</title></head><body><main><h1>Test</h1><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></main></body></html>');
@@ -58,4 +59,18 @@ test("scanA11y: a deferral covers its violation, and a deferral that matches not
   } finally {
     known.length = mark;
   }
+});
+
+test("settle stops with E2E infrastructure when a same-origin asset fails, unless the test named the abort", async ({ page, baseURL }) => {
+  watchSameOriginFailures(page, baseURL!);
+  await page.route(/\/assets\/landing\.js$/, (route) => route.abort());
+  await page.goto("/");
+  await expect(settle(page)).rejects.toThrow(/E2E infrastructure: .*\/assets\/landing\.js failed \(net::ERR_FAILED\)/);
+  // The same abort, named: the page settles.
+  const page2 = await page.context().newPage();
+  watchSameOriginFailures(page2, baseURL!);
+  await page2.route(/\/assets\/landing\.js$/, (route) => route.abort());
+  allowSameOriginFailure(page2, /\/assets\/landing\.js$/);
+  await page2.goto("/");
+  await settle(page2);
 });

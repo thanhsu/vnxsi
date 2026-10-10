@@ -3,6 +3,7 @@ import type { FieldErrorCode } from "../../domain/product-input.ts";
 import type { Product } from "../../domain/product.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
+import { FormErrorSummary } from "../FormErrorSummary.tsx";
 import { PRODUCT_STATUS_KEY } from "../labels.ts";
 import { HubLayout } from "./HubLayout.tsx";
 import { PRODUCT_ERROR_KEY } from "./ProductStepForm.tsx";
@@ -11,8 +12,9 @@ type Props = { locale: Locale; origin: string; products: Product[]; name: string
 
 export const ProductsPage: FC<Props> = (p) => {
   const tr = translator(p.locale);
+  const items = p.error && p.canCreate ? [{ href: "#new-name", message: `${tr("products.newName")}: ${tr(PRODUCT_ERROR_KEY[p.error], { max: 80, items: 0 })}` }] : [];
   return (
-    <HubLayout locale={p.locale} origin={p.origin} title={tr("products.title")} rest="/hub/products" active="products">
+    <HubLayout locale={p.locale} origin={p.origin} title={tr("products.title")} rest="/hub/products" active="products" invalid={items.length > 0}>
       <h1>{tr("products.title")}</h1>
       {p.products.length === 0 ? (
         <p class="muted">{tr("products.empty")}</p>
@@ -40,6 +42,7 @@ export const ProductsPage: FC<Props> = (p) => {
         <section class="card wide">
           <h2>{tr("products.create")}</h2>
           <form method="post" action={localizedPath(p.locale, "/hub/products")}>
+            <FormErrorSummary tr={tr} items={items} />
             <div class="field">
               <label for="new-name">{tr("products.newName")}</label>
               <input

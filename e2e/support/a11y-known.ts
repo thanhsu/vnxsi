@@ -9,8 +9,8 @@ export type KnownA11y = {
   /** Path as scanned, e.g. "/" or "/b/e2e-builder/hire". */
   page: string;
   locale: "en" | "vi";
-  /** Scan variant: omitted = the default scan; "mobile" = 360 px wide; "motion" = default scan with motion allowed. */
-  variant?: "mobile" | "motion";
+  /** Scan variant: omitted = the default scan; "mobile" = 360 px wide; "motion" = default scan with motion allowed; "nojs" = the page scripts are blocked. */
+  variant?: "mobile" | "motion" | "nojs";
   ruleId: string;
   selector?: string;
   reason: string;

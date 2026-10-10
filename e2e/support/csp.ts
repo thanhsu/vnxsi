@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { isAllowedFailure } from "./network";
 
 export type CspWatch = {
   /** `securitypolicyviolation` events: "<directive> <blocked uri> <source file>:<line> <sample>". */
@@ -42,6 +43,8 @@ export async function watchCsp(page: Page): Promise<CspWatch> {
     if (msg.type() !== "error") return;
     const url = msg.location().url;
     if (isTurnstileNoise(url)) return;
+    // A request the test aborts on purpose (named in allowSameOriginFailure) logs "Failed to load resource": expected.
+    if (isAllowedFailure(page, url) && msg.text().startsWith("Failed to load resource")) return;
     raw.push({ text: msg.text(), url, resourceLog: msg.text().startsWith("Failed to load resource: the server responded with a status of") });
   });
   page.on("pageerror", (err) => {

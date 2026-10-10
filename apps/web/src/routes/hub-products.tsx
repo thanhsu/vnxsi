@@ -92,7 +92,7 @@ async function pricingPage(c: Context<AppEnv>, product: Product, values: TierVal
   const { lock, gaps } = await editorState(c, product);
   return page(
     c,
-    <EditorLayout locale={c.get("locale")} origin={requestOrigin(c)} product={product} step="pricing" lock={lock} gaps={gaps} saved={c.req.query("saved") === "1"}>
+    <EditorLayout locale={c.get("locale")} origin={requestOrigin(c)} product={product} step="pricing" lock={lock} gaps={gaps} saved={c.req.query("saved") === "1"} invalid={!lock && Object.keys(errors).length > 0}>
       {lock ? null : <PricingForm locale={c.get("locale")} action={editorPath(c, product.id, "pricing")} values={values} errors={errors} />}
     </EditorLayout>,
     status,

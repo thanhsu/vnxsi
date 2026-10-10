@@ -3,7 +3,7 @@ import { createApp } from "../../src/app.ts";
 import { addPortfolioItem, findPortfolioItem, listPortfolio } from "../../src/db/portfolio.ts";
 import { MAX_PORTFOLIO_ITEMS } from "../../src/domain/portfolio.ts";
 import { makeBuilder, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const titles = async (builderId: string) => (await listPortfolio(testEnv.DB, builderId)).map((x) => x.title);
@@ -41,6 +41,9 @@ describe("Hub portfolio (spec §5.3)", () => {
     const html = await res.text();
     expect(html).toContain("Enter a title (up to 80 characters).");
     expect(html).toContain('value="http://insecure.example"');
+    // VNX-0807
+    expectErrorSummary(html, ["pf-title", "pf-url"]);
+    expect(html).toContain('aria-describedby="pf-title-error"');
   });
 
   it("refuses a 13th item (409) and hides the add form", async () => {

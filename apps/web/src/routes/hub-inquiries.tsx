@@ -13,7 +13,7 @@ import { notifyInquiryMessage } from "../notify/inquiry.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { HubLayout } from "../views/hub/HubLayout.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
-import { InquiryThread } from "../views/InquiryThread.tsx";
+import { InquiryThread, threadErrorItems } from "../views/InquiryThread.tsx";
 import { page } from "../views/render.ts";
 
 export type Side = "builder" | "client";
@@ -80,7 +80,7 @@ async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: Th
   const rest = `/hub/inquiries/${summary.inquiry.id}`;
   return page(
     c,
-    <HubLayout locale={locale} origin={requestOrigin(c)} title={tr("inbox.from", { name: builderFacingName(summary.inquiry.clientName) })} rest={rest} active="inquiries">
+    <HubLayout locale={locale} origin={requestOrigin(c)} title={tr("inbox.from", { name: builderFacingName(summary.inquiry.clientName) })} rest={rest} active="inquiries" invalid={threadErrorItems({ summary, viewer: "builder", ...extra }, tr).length > 0}>
       <h1>{tr("inbox.from", { name: builderFacingName(summary.inquiry.clientName) })}</h1>
       <InquiryThread locale={locale} summary={summary} messages={messages} viewer="builder" base={localizedPath(locale, rest)} {...extra} />
     </HubLayout>,

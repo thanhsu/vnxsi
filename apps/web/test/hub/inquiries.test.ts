@@ -4,7 +4,7 @@ import { findInquiryById, listMessages } from "../../src/db/inquiries.ts";
 import { setBuilderStatus } from "../../src/db/builders.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { makeInquiry, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const get = (path: string, cookie: string) => app().request(getReq(path, cookie), undefined, testEnv);
@@ -65,10 +65,19 @@ describe("Hub inbox (spec §5.3)", () => {
     const { cookie } = await signIn("hi-rerr-b@vnx.si");
     const empty = await post(`/hub/inquiries/${inquiry.id}/reply`, { body: "  " }, cookie);
     expect(empty.status).toBe(400);
-    expect(await empty.text()).toContain("Write a message first.");
+    const emptyHtml = await empty.text();
+    expect(emptyHtml).toContain("Write a message first.");
+    // VNX-0807: shared pattern (the thread is rendered inside HubLayout, which prefixes the title).
+    expect(expectErrorSummary(emptyHtml, ["th-body"])).toContain("Reply: Write a message first.");
+    expect(emptyHtml).toContain('aria-describedby="th-body-error"');
     const long = await post(`/hub/inquiries/${inquiry.id}/reply`, { body: "x".repeat(4001) }, cookie);
     expect(long.status).toBe(400);
     expect(outbox).toHaveLength(0);
+    const longReason = await post(`/hub/inquiries/${inquiry.id}/decline`, { reason: "x".repeat(1001) }, cookie);
+    expect(longReason.status).toBe(400);
+    const reasonHtml = await longReason.text();
+    expectErrorSummary(reasonHtml, ["th-reason"]);
+    expect(reasonHtml).toContain('aria-describedby="th-reason-error"');
   });
 
   it("declines with an optional reason the client sees, and only while open", async () => {

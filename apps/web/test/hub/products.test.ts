@@ -4,7 +4,7 @@ import { findProductById, setProductStatus } from "../../src/db/products.ts";
 import { grantBadge, listActiveBadges } from "../../src/db/verifications.ts";
 import { demoStepStatements } from "../../src/routes/hub-products.tsx";
 import { ensureUser, makeBuilder, makeDraft, makeReadyProduct, publishProduct, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const productStep = (o: Record<string, string> = {}) => ({
@@ -43,7 +43,9 @@ describe("Hub products list (spec §5.3)", () => {
     const { cookie } = await signIn("hp-bad@vnx.si");
     const res = await app().request(formPost("/hub/products", { name: " " }, { cookie }), undefined, testEnv);
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain("This field is required.");
+    const html = await res.text();
+    expect(html).toContain("This field is required.");
+    expectErrorSummary(html, ["new-name"]); // VNX-0807
     await makeBuilder("hp-susp@vnx.si", "hp-susp", "suspended");
     const susp = await signIn("hp-susp@vnx.si");
     expect((await app().request(formPost("/hub/products", { name: "X" }, { cookie: susp.cookie }), undefined, testEnv)).status).toBe(409);
@@ -69,6 +71,7 @@ describe("product editor text steps", () => {
     const { cookie } = await signIn("ed-taken-b@vnx.si");
     const bad = await app().request(formPost(`/hub/products/${product.id}/edit/product`, productStep({ slug: "Bad Slug" }), { cookie }), undefined, testEnv);
     expect(bad.status).toBe(400);
+    expect(expectErrorSummary(await bad.text(), ["pf-slug"])).toContain("Page address: ");
     const taken = await app().request(formPost(`/hub/products/${product.id}/edit/product`, productStep({ slug: "taken-name" }), { cookie }), undefined, testEnv);
     expect(taken.status).toBe(409);
     expect(await taken.text()).toContain("This address is already taken.");
@@ -81,7 +84,9 @@ describe("product editor text steps", () => {
     expect((await post("problem", { problem: "Lost bookings" })).status).toBe(303);
     expect((await post("audience", { targetUsers: "Spa owners" })).status).toBe(303);
     expect((await post("features", { features: "Calendar\nReminders", techStack: "Hono, D1" })).status).toBe(303);
-    expect((await post("demo", { demoUrl: "http://insecure.example", websiteUrl: "" })).status).toBe(400);
+    const insecure = await post("demo", { demoUrl: "http://insecure.example", websiteUrl: "" });
+    expect(insecure.status).toBe(400);
+    expectErrorSummary(await insecure.text(), ["pf-demoUrl"]); // VNX-0807: the editor title carries the prefix too
     expect((await post("demo", { demoUrl: "https://127.0.0.1/", websiteUrl: "" })).status).toBe(400);
     expect((await post("demo", { demoUrl: "", websiteUrl: "https://u@evil.com/" })).status).toBe(400);
     expect((await post("demo", { demoUrl: "https://demo.example", websiteUrl: "" })).status).toBe(303);

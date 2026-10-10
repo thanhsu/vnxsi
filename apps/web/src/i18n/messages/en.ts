@@ -72,6 +72,8 @@ export const en = {
   "builder.field.hourlyRate": "Hourly rate in USD (optional)",
   "builder.form.choose": "Choose…",
   "builder.form.errorSummary": "Please fix the highlighted fields.",
+  "form.error.titlePrefix": "Error:",
+  "form.error.summaryTitle": "There is a problem",
   "builder.error.handle": "Use 3–30 lowercase letters, numbers or hyphens, starting and ending with a letter or number.",
   "builder.error.handleReserved": "This handle is reserved. Choose another one.",
   "builder.error.handleTaken": "This handle is already taken.",

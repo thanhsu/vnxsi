@@ -89,7 +89,7 @@ export function registerContactRoutes(app: Hono<AppEnv>) {
     const ip = c.req.header("cf-connecting-ip") ?? "unknown";
     if (!user) {
       const captcha = await verifyTurnstile(c.env, body[TURNSTILE_FIELD], ip === "unknown" ? null : ip);
-      if (captcha === "unavailable") return contactPage(c, { values: again, formError: tr("contact.form.unavailable") }, 503);
+      if (captcha === "unavailable") return contactPage(c, { values: again, formError: turnstileSiteKey(c.env) === null ? undefined : tr("contact.form.unavailable") }, 503);
       if (captcha === "fail") return contactPage(c, { values: again, formError: tr("contact.error.captcha") }, 400);
     }
 

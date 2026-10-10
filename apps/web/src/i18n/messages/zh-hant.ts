@@ -74,6 +74,8 @@ export const zhHant: Messages = {
   "builder.field.hourlyRate": "時薪（美元，選填）",
   "builder.form.choose": "請選擇…",
   "builder.form.errorSummary": "請修正標示的欄位。",
+  "form.error.titlePrefix": "錯誤：",
+  "form.error.summaryTitle": "有問題需要修正",
   "builder.error.handle": "請使用 3–30 個小寫字母、數字或連字號，並以字母或數字開頭和結尾。",
   "builder.error.handleReserved": "此使用者名稱已被保留，請換一個。",
   "builder.error.handleTaken": "此使用者名稱已被使用。",
