@@ -2,6 +2,7 @@
 
 Bộ test trình duyệt cho bốn luồng người dùng thấy đầu tiên (homepage, form Inquiry, editor product, đăng nhập) và cổng WCAG 2.2 AA bằng axe.
 Plan: `.ai/plans/VNX-0802-plan.md`. Báo cáo của Implementer: `.ai/tasks/VNX-0802-report.md`.
+VNX-0807 (`.ai/plans/VNX-0807-plan.md`) thêm: chặn quét trên trang nạp thiếu tài nguyên (`support/network.ts`), lượt quét homepage không JS (biến thể `nojs`), chờ animation hữu hạn trước lượt quét có chuyển động, và `form-errors.spec.ts` (mẫu lỗi chung của form render phía server).
 
 **Chỉ chạy trên máy local.** Bộ test tự dựng một `wrangler dev` riêng với D1 riêng trong `e2e/.state/`, gửi form POST thật và gieo dữ liệu mẫu.
 Nó không bao giờ nhắm `vnx.si` hay `*.workers.dev`. Kiểm production là việc của `npm run smoke` (VNX-0805, `docs/runbooks/deploy.md`).
@@ -21,7 +22,7 @@ Trình duyệt nằm ở `%LOCALAPPDATA%\ms-playwright` (Linux: `~/.cache/ms-pla
 
 | Việc | Lệnh |
 |---|---|
-| Toàn bộ (khoảng 1 phút, 49 test) | `npm run e2e` |
+| Toàn bộ (khoảng 1,5 phút, 57 test) | `npm run e2e` |
 | Một spec | `npm run e2e -- tests/login.spec.ts` |
 | Một test theo tên | `npm run e2e -- -g "count-up"` |
 | Có cửa sổ trình duyệt | `npm run e2e:headed` |
@@ -84,13 +85,20 @@ Biến `--var` (chỉ có hiệu lực trong tiến trình `wrangler dev` cục 
 | Spec | Nội dung |
 |---|---|
 | `home.spec.ts` | Các khối homepage render đủ (Numbers, chart, Trending, Top, Live), count-up dừng đúng số in sẵn, dải Live chạy/dừng khi rê chuột, khi bấm nút và khi focus, bản sao `inert`, chart mọc khi cuộn tới, tooltip và `Escape`, `prefers-reduced-motion`, tắt JavaScript, header bảo mật. Mô phỏng checklist tay Task 8b của M7. |
-| `inquiry.spec.ts` | Form `/b/e2e-builder/hire` khi chưa đăng nhập: label đủ, widget Turnstile, gửi rỗng (400, lỗi theo field, giữ dữ liệu), thiếu token Turnstile, gửi thành công, hồi quy `Referrer-Policy: no-referrer` (POST mang `Origin` thật). |
-| `login.spec.ts` | `/login` (email sai và đúng), `/auth/verify` (GET không tiêu token, chỉ nút mới đăng nhập, cookie `__Host-vnx_session` có `HttpOnly`/`Secure`/`SameSite=Lax`, token dùng một lần), `next` cục bộ và `next` ra ngoài, link hết hạn, đăng xuất, `/hub` khi chưa đăng nhập. |
-| `editor.spec.ts` | Danh sách product, tạo draft và điền từng bước tới khi chỉ còn thiếu ảnh, lỗi kiểm tra đầu vào (slug sai, slug trùng, URL demo không https), chưa đăng nhập, builder khác không mở được product. |
-| `a11y.spec.ts` | axe với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa` trên 12 trang công khai `en`, 3 trang builder đã đăng nhập, 4 trang `vi`, `/` và form Inquiry ở 360 px, và `/` có chuyển động sau khi count-up xong. |
-| `meta.spec.ts` | Chứng minh công cụ không "xanh rỗng": axe bắt `image-alt` và `color-contrast`, bộ nghe CSP bắt script inline bị chặn và `console.error`, cơ chế `KNOWN_A11Y` vừa che được vi phạm vừa làm đỏ mục thừa. |
+| `inquiry.spec.ts` | Form `/b/e2e-builder/hire` khi chưa đăng nhập: label đủ, widget Turnstile, gửi rỗng (400, lỗi theo field có `aria-describedby` và không `role="alert"`, khối tóm tắt, giữ dữ liệu), thiếu token Turnstile (mục tóm tắt không liên kết, tiền tố `Error:` ở `<title>`), gửi thành công, hồi quy `Referrer-Policy: no-referrer` (POST mang `Origin` thật). |
+| `form-errors.spec.ts` | Mẫu lỗi chung (VNX-0807) trên form Inquiry (EN + VI, kèm quét axe trang 400), request (EN) và contact (EN + VI): `<title>` bắt đầu bằng `Error:`/`Lỗi:`, `#form-errors` có heading đúng locale và nhận focus khi tải (thuộc tính `autofocus`, không JS), số liên kết bằng số lỗi theo field và mỗi liên kết trỏ tới một control có thật, không còn `role="alert"`, bấm liên kết đầu đưa focus vào đúng field, giá trị đã nhập còn nguyên. |
+| `login.spec.ts` | `/login` (email sai và đúng), `/auth/verify` (GET không tiêu token, chỉ nút mới đăng nhập, cookie `__Host-vnx_session` có `HttpOnly`/`Secure`/`SameSite=Lax`, token dùng một lần), `next` cục bộ và `next` ra ngoài, link hết hạn, đăng xuất, `/hub` khi chưa đăng nhập. Lỗi email sai vẫn là mẫu cũ (`role="alert"`) cho tới VNX-0807 T6 (sau khi EPIC 26 merge). |
+| `editor.spec.ts` | Danh sách product, tạo draft và điền từng bước tới khi chỉ còn thiếu ảnh, lỗi kiểm tra đầu vào (slug sai, slug trùng, URL demo không https; khối tóm tắt và tiền tố `Error:`), chưa đăng nhập, builder khác không mở được product. |
+| `a11y.spec.ts` | axe với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa` trên 12 trang công khai `en`, 3 trang builder đã đăng nhập, 4 trang `vi`, `/` và form Inquiry ở 360 px, `/` có chuyển động sau khi count-up và mọi animation hữu hạn xong, và `/`, `/vi/` khi `landing.js` + `home.js` bị chặn (biến thể `nojs`, mục dưới). |
+| `meta.spec.ts` | Chứng minh công cụ không "xanh rỗng": axe bắt `image-alt` và `color-contrast`, bộ nghe CSP bắt script inline bị chặn và `console.error`, cơ chế `KNOWN_A11Y` vừa che được vi phạm vừa làm đỏ mục thừa, `settle()` dừng với `E2E infrastructure` khi một asset cùng origin nạp lỗi và cho qua khi test đã khai báo request đó. |
 
 Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, request board, trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
+Từ VNX-0807, chỉ có Vitest (chưa có E2E): mẫu lỗi chung trên form waitlist của landing, các form hub (apply, portfolio, products, pricing, media, invitations), thread inquiry (`/hub/inquiries/:id`, `/me/inquiries/:id`); deck homepage ở chế độ thẻ product khi không JS (seed E2E chưa có đủ 3 product công khai, nên lượt `nojs` chỉ phủ chế độ thẻ danh mục).
+
+### Biến thể `nojs` và chờ animation
+
+- `nojs`: test chặn `/assets/landing.js` và `/assets/home.js` bằng `page.route(..., route => route.abort())` rồi quét. Không dùng `javaScriptEnabled: false` vì axe phải chạy script trong trang. Markup là đúng cái người dùng không JS nhận (thẻ sau của deck hero có `inert` + `aria-hidden="true"` từ server, VNX-0807 R1). Khóa quét: `{ page: "/", locale, variant: "nojs" }`; mục `KNOWN_A11Y` cũng nhận `variant: "nojs"`.
+- Lượt "with motion" (`variant: "motion"`): `settle(page, { motion: true })` chờ mọi animation hữu hạn theo thời gian kết thúc (`document.getAnimations()`, bỏ animation vô hạn như dải Live và animation gắn cuộn), tối đa 5 giây, quá hạn thì `E2E infrastructure: finite animations still running after 5 s: <tên>`.
 
 ## Đăng nhập mà không có cửa sau
 
@@ -104,6 +112,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
 ## Viết thêm spec
 
 - Import `test` và `expect` từ `../support/test`, **không** từ `@playwright/test` (chỉ `meta.spec.ts` được làm khác, vì nó cố tình gây lỗi). Fixture tự động ở đó chặn mọi request ra ngoài `localhost`/`127.0.0.1` và làm đỏ test khi có vi phạm CSP, `console.error` hay lỗi trang chưa bắt. Bộ nghe chỉ gắn vào fixture `page` (và `builderPage`, cùng một trang): trang mở bằng `context.newPage()` không được nghe.
+- **Request cùng origin nạp lỗi** (`support/network.ts`, VNX-0807 R2(a)): fixture `page` gọi `watchSameOriginFailures` trước mọi `goto` và ghi lại mọi sự kiện `requestfailed` tới origin của app. `settle()` (chạy trước mỗi lượt axe) ném `E2E infrastructure: <url> failed (<errorText>)` nếu có, vì quét một trang thiếu CSS/font/script là đo một trang người dùng không nhận. Ngoại lệ: `net::ERR_ABORTED` (trình duyệt tự hủy request của nó, ví dụ khi điều hướng đi) và các path test đã khai báo bằng `allowSameOriginFailure(page, /regex/)` khi tự `route.abort()` (khai báo này cũng bỏ qua dòng console "Failed to load resource" của đúng URL đó trong bộ nghe CSP). Chỉ lỗi mức mạng là `requestfailed`; asset trả HTTP 4xx/5xx vẫn bị bộ nghe CSP bắt qua dòng `console.error` "Failed to load resource: the server responded with a status of ..." khi test kết thúc. Trang mở bằng `context.newPage()` phải tự gọi `watchSameOriginFailures(page, baseURL)` (xem `meta.spec.ts`).
 - Không ngủ theo thời gian cố định (hàm wait-for-timeout của `page`). Dùng assertion web-first (`toHaveText`, `toBeVisible`) hoặc `expect.poll`. `npm run test:scripts` có test quét các file `.ts`/`.mjs`/`.json` trong `e2e/` để chặn hàm đó, URL production và chuỗi giống secret; lệnh grep của AC12 trong plan quét cả thư mục, nên README này cố ý không viết nguyên tên hàm.
 - Mỗi test tự đủ, không phụ thuộc thứ tự và chạy lại được: tạo product riêng (tên và slug theo `test.info().retry`, vì app gắn hậu tố ngẫu nhiên khi slug đã có), dùng token riêng qua `tokenFor` (thêm token mới vào `ONE_USE` trong `seed/fixtures.mjs`).
 - **Ngân sách POST** (hạn mức theo IP dùng chung khóa `unknown` vì `wrangler dev` không có `cf-connecting-ip`). Chỉ form hợp lệ mới bị đếm:
@@ -113,6 +122,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
   | `POST /b/:handle/hire` (chưa đăng nhập) | 10 / giờ / IP, 5 / giờ / email | 2 lần đếm theo IP, 1 theo email |
   | `POST /login` | 20 / giờ / IP, 5 / giờ / email | 1 |
   | `POST /auth/verify` | không có | 4 |
+  | `POST /request`, `POST /contact` | có (theo IP) | 0: `form-errors.spec.ts` chỉ gửi form sai, bị từ chối trước bước đếm |
 
   Thêm spec có POST thì cập nhật bảng này. Với `E2E_RETRIES` lớn, một test lỗi nhiều lần có thể chạm hạn mức (429).
 - Đổi seed: chạy `npm run test:scripts`. `scripts/test/e2e-seed.test.mjs` áp mọi migration lên SQLite trong bộ nhớ, kiểm khóa ngoại và các ngưỡng `MIN` của homepage. Test đọc bảng `MIN` thẳng từ `apps/web/src/domain/public-stats.ts` (regex trên văn bản), nên ngưỡng ở app tăng thì test này đỏ trước cả `global-setup`.
@@ -124,7 +134,8 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
 - Lỗi axe in `id (impact): help` và danh sách selector của từng node.
 - `E2E setup: homepage snapshot not ready ...`: seed thấp hơn một ngưỡng `MIN` (thường do ai đó đổi ngưỡng ở app). Chạy `npm run test:scripts` để biết khối nào.
 - `E2E infrastructure: /assets/app.css did not load`: trang không có CSS (lỗi mạng của máy, xem dưới), không phải lỗi a11y.
-- Một script của trang (`landing.js`, `home.js`) nạp lỗi (`net::ERR_NO_BUFFER_SPACE` ...) thì axe quét trang ở trạng thái "không JavaScript" và có thể báo vi phạm **thật** của trạng thái đó (ví dụ `target-size` trên thẻ sau của deck homepage khi `landing.js` không chạy, review VNX-0802). Xem dòng `console.error: Failed to load resource` trong cùng test trước khi kết luận: lỗi nạp là của máy, còn vi phạm thì là phát hiện riêng.
+- `E2E infrastructure: http://localhost:8799/... failed (net::ERR_...)`: một tài nguyên cùng origin (script, CSS, font, ảnh) nạp lỗi ở mức mạng trước lượt quét (`support/network.ts`). Thường là lỗi mạng của máy (mục "Sự cố"), không phải lỗi a11y; trước VNX-0807 trường hợp này cho ra vi phạm giả, ví dụ `target-size` trên thẻ sau của deck khi `landing.js` không nạp (review VNX-0802). Trạng thái không JS thật của homepage được kiểm riêng bằng biến thể `nojs`.
+- `E2E infrastructure: finite animations still running after 5 s`: lượt "with motion" còn animation hữu hạn chạy quá 5 giây; xem tên animation trong thông báo.
 
 ## Sự cố
 
