@@ -2,16 +2,18 @@ import type { Context, Hono } from "hono";
 import { readSessionCookie } from "../auth/cookies.ts";
 import { requireUser } from "../auth/middleware.ts";
 import { linkSessionHash, writeOAuthCookie } from "../auth/oauth-cookie.ts";
-import { listIdentitiesForUser } from "../db/identities.ts";
+import { listIdentitiesForUser, unlinkIdentity } from "../db/identities.ts";
 import { listClientInquiries, listMessages } from "../db/inquiries.ts";
 import { listClientRequests } from "../db/requests.ts";
 import type { InquirySummary } from "../domain/inquiry.ts";
+import { isOAuthProvider } from "../domain/identity.ts";
 import { newLinkIntent } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
+import { notifyIdentityChange } from "../notify/identity.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
 import { InquiryThread } from "../views/InquiryThread.tsx";
@@ -88,6 +90,18 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
     const now = Date.now();
     writeOAuthCookie(c, newLinkIntent({ provider: found.provider, sessionHash: await linkSessionHash(raw) }, now), now);
     return c.redirect(`/auth/oauth/${found.provider}/start?lang=${c.get("locale")}`, 303);
+  });
+
+  // ADR-012 §4: unlink is always allowed, flag on or off, configured or not (the e-mail link always remains). A POST that answers
+  // 303 to the same site only. `unlinkIdentity` filters by this user, audits `{ provider }` in its batch, and returns null (no audit) when nothing was linked.
+  onLocalized(app, "post", "/me/identities/:provider/unlink", requireUser, async (c) => {
+    const provider = c.req.param("provider");
+    if (!isOAuthProvider(provider)) return errorResponse(c, "notFound", 404);
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    const removed = await unlinkIdentity(c.env.DB, { userId: user.id, provider, now });
+    if (removed) await notifyIdentityChange(c.env, { kind: "unlinked", to: user.email, locale: user.locale, provider, label: removed.label, at: now, requestId: c.get("requestId") });
+    return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${removed ? "unlinked" : "notLinked"}`, 303);
   });
 
   onLocalized(app, "get", "/me/inquiries/:id", requireUser, async (c) => {

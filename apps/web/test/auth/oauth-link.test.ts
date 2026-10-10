@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { linkSessionHash, OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
+import { clearOutbox, FakeMailer, outbox } from "../../src/email/fake.ts";
+import { formatUtc } from "../../src/email/templates/identity.ts";
 import { issueFakeCode, resetFakeOAuth } from "../../src/auth/oauth/fake.ts";
 import { resetFlagCache } from "../../src/db/flags.ts";
 import type { OAuthProvider } from "../../src/domain/identity.ts";
@@ -22,6 +24,7 @@ const redirectUri = (provider: OAuthProvider) => oauthRedirectUri(testEnv.APP_OR
 const spies: Array<ReturnType<typeof vi.spyOn>> = [];
 beforeEach(async () => {
   resetFakeOAuth();
+  clearOutbox();
   await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
   resetFlagCache();
   for (const method of ["error", "warn", "log", "info", "debug"] as const) spies.push(vi.spyOn(console, method).mockImplementation(() => {}));
@@ -247,6 +250,8 @@ describe("/me notices for ?link= (VNX-2605a-2)", () => {
     ["/vi/me", "taken", "Tài khoản đó đã được liên kết với một tài khoản VNX.SI khác nên không thể liên kết ở đây."],
     ["/zh-hans/me", "hasProvider", "你的 VNX.SI 账户已关联该平台的另一个账号。"],
     ["/zh-hant/me", "failed", "無法連結該帳號，請再試一次。"],
+    ["/me", "unlinked", "Account unlinked. You can still sign in with an email link."],
+    ["/vi/me", "notLinked", "Tài khoản đó chưa được liên kết nên không có gì thay đổi."],
   ])("%s?link=%s shows its message in the identities section", async (path, value, text) => {
     await enableProvider("github");
     resetFlagCache();
@@ -264,5 +269,85 @@ describe("/me notices for ?link= (VNX-2605a-2)", () => {
     expect(html).not.toContain("evil");
     expect(html).not.toContain('class="notice');
     expect(await meHtml("/me", cookie)).not.toContain('role="status"');
+  });
+});
+
+describe("the 'account linked' e-mail (VNX-2605b)", () => {
+  const mailTo = (address: string) => outbox.filter((m) => m.to === address);
+
+  it("a new link sends exactly one e-mail, to users.email, with provider, label and the audited UTC time", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { user, cookie } = await signIn(email);
+    const identity = { subject: `sub-${tag()}`, label: `l-${tag()}@gmail.example` }; // e-mail-shaped label
+    const { res } = await comeBack("github", cookie, identity);
+    expectBack(res, "/me?link=ok");
+    const mails = mailTo(email);
+    expect(mails).toHaveLength(1);
+    expect(mails[0]?.to).toBe(email);
+    expect(outbox).toHaveLength(1); // nothing to the label or anyone else
+    expect(mails[0]?.subject).toBe("GitHub was linked to your VNX.SI account");
+    expect(mails[0]?.text).toContain(identity.label);
+    const row = await testEnv.DB.prepare("SELECT linked_at FROM user_identities WHERE user_id = ?1").bind(user.id).first<{ linked_at: string }>();
+    expect(mails[0]?.text).toContain(formatUtc(row?.linked_at ?? ""));
+    expect(mails[0]?.text).toContain("contact@vnx.si");
+  });
+
+  it("is in users.locale", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email, { locale: "zh-Hant" });
+    await comeBack("github", cookie, identityOf(), "/vi");
+    expect(mailTo(email)[0]?.subject).toBe("GitHub 已連結到你的 VNX.SI 帳戶");
+  });
+
+  it("the same account again sends nothing (already_linked changes nothing)", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email);
+    const identity = identityOf();
+    await comeBack("github", cookie, identity);
+    await comeBack("github", cookie, identity);
+    expect(mailTo(email)).toHaveLength(1);
+  });
+
+  it("a conflict ('taken', 'hasProvider') sends nothing to anyone", async () => {
+    await enableProvider("github");
+    const shared = identityOf();
+    await linkedUser(emailOf("holder"), "github", shared);
+    const { cookie } = await signIn(emailOf("lan"));
+    expectBack((await comeBack("github", cookie, shared)).res, "/me?link=taken");
+    const mine = emailOf("mine");
+    await linkedUser(mine, "github", identityOf());
+    const { cookie: mineCookie } = await signIn(mine);
+    expectBack((await comeBack("github", mineCookie, identityOf())).res, "/me?link=hasProvider");
+    expect(outbox).toHaveLength(0);
+  });
+
+  it("a failing mailer keeps the link and the audit; one fixed log code, nothing else", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { user, cookie } = await signIn(email);
+    const identity = identityOf();
+    const send = vi.spyOn(FakeMailer.prototype, "send").mockRejectedValue(new Error(`boom ${email} ${identity.label} token=SECRET`));
+    const { res } = await comeBack("github", cookie, identity);
+    send.mockRestore(); // only this spy: `vi.restoreAllMocks()` would also drop the console spies the log assertions need
+    expectBack(res, "/me?link=ok");
+    expect(await identitiesOf(user.id)).toBe(1);
+    expect(await linkAudits(user.id)).toBe(1);
+    expect(loggedCodes()).toEqual(["notify_failed"]);
+    for (const line of logged()) for (const secret of [email, identity.label, "boom", "SECRET"]) expect(line).not.toContain(secret);
+  });
+
+  it("carries no state, verifier, nonce, code or session id, and no action link", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email);
+    const { link, code } = await comeBack("github", cookie, identityOf());
+    const mail = mailTo(email)[0];
+    const body = `${mail?.text}\n${mail?.html}`;
+    for (const secret of [link.flow?.state, link.flow?.verifier, link.flow?.nonce, code, cookie.split("=")[1]]) expect(body).not.toContain(secret ?? "x");
+    expect(body).not.toMatch(/[?&]t=|token=|code=|state=|\/auth\//i);
+    expect([...new Set(body.match(/https?:\/\/[^\s"<]+/g) ?? [])]).toEqual([`${testEnv.APP_ORIGIN}/me`]);
   });
 });

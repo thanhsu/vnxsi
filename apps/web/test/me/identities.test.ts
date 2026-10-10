@@ -77,7 +77,8 @@ describe("/me: Sign-in & linked accounts (VNX-2605a-1; visibility decided by the
     expect(rows[0]).toContain("Google");
     expect(rows[0]).toContain("Linked");
     expect(rows[0]).toContain(label);
-    expect(sectionOf(html)).not.toContain("<form");
+    expect(sectionOf(html)).toContain('action="/me/identities/google/unlink"');
+    expect(sectionOf(html)).not.toContain('/link"');
     expect(rows[0]).not.toContain("GitHub"); // the intro names all three providers, so look at the row only
     const { cookie: other } = await signIn(emailOf("minh"));
     expect((await meHtml(other)).html).not.toContain(label);
@@ -95,16 +96,15 @@ describe("/me: Sign-in & linked accounts (VNX-2605a-1; visibility decided by the
     expect(rows[0]).toContain("Link GitHub");
     expect(rows[1]).toContain("LinkedIn");
     expect(rows[1]).toContain("Linked");
-    expect(rows[1]).not.toContain("<form");
+    expect(rows[1]).toContain("/me/identities/linkedin/unlink");
   });
 
-  it("a label equal to the provider name is not repeated, and unlink is Task 9's: nothing mentions it", async () => {
+  it("a label equal to the provider name is not repeated", async () => {
     const email = emailOf("lan");
     await linkedUser(email, "linkedin", { subject: `sub-${tag()}`, label: "LinkedIn" });
     const { cookie } = await signIn(email);
     const html = (await meHtml(cookie)).html;
-    expect((rowsOf(html)[0] ?? "").match(/LinkedIn/g)).toHaveLength(1);
-    expect(sectionOf(html)).not.toContain("unlink");
+    expect(rowsOf(html)[0]).not.toContain('class="muted"');
   });
 
   it("is localized in all four locales, and /me is not no-referrer", async () => {

@@ -8,6 +8,7 @@ import { createSession } from "../auth/sessions.ts";
 import { writeAudit } from "../db/audit.ts";
 import { isFlagEnabled } from "../db/flags.ts";
 import { findIdentityByProviderSubject, linkIdentity, touchIdentityLogin } from "../db/identities.ts";
+import { notifyIdentityChange } from "../notify/identity.ts";
 import { findUserById, markLogin } from "../db/users.ts";
 import { isOAuthProvider, OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG, sessionMethodFor } from "../domain/identity.ts";
 import { buildAuthorizeUrl, checkCallbackState, codeChallengeS256, generateNonce, generateState, generateVerifier, flowMatchesSession, newFlowCookie, oauthRedirectUri, resolveStartIntent, type FlowCookie } from "../domain/oauth.ts";
@@ -91,7 +92,8 @@ async function finishLink(c: Context<AppEnv>, input: { provider: OAuthProvider; 
   }
 
   const linked = await linkIdentity(c.env.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: new Date(nowMs).toISOString() });
-  // VNX-2605b: the "account linked" e-mail goes here, only when linked.ok (not for already_linked).
+  // Only a real new link is told to the owner (not `already_linked`: nothing changed, and a replayed callback must not mail). The send never undoes the link.
+  if (linked.ok) await notifyIdentityChange(c.env, { kind: "linked", to: user.email, locale: user.locale, provider, label: linked.identity.label, at: linked.identity.linkedAt, requestId: c.get("requestId") });
   if (linked.ok || linked.reason === "already_linked") return backToMe(c, flow.locale, "ok");
   logFailure(c, provider, "link_conflict");
   return backToMe(c, flow.locale, linked.reason === "user_has_provider" ? "hasProvider" : "taken");
