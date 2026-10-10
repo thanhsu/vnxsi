@@ -46,21 +46,40 @@ const WRITERS: Record<string, string> = {
   partner_programs: "../src/db/programs.ts",
   offers: "../src/db/offers.ts",
   outbound_clicks: "../src/db/clicks.ts",
+  product_daily_stats: "../src/db/stats.ts",
+  product_view_dedupe: "../src/db/stats.ts",
+  public_stats: "../src/db/public-stats.ts",
   ops_members: "../src/db/ops-members.ts",
   ops_member_invites: "../src/db/ops-members.ts",
   user_identities: "../src/db/identities.ts",
 };
 
+/** Table names behind a write: INSERT, INSERT OR IGNORE/REPLACE, REPLACE INTO, UPDATE, DELETE (VNX-0701b). */
+const WRITE_SQL = /\b(?:INSERT\s+(?:OR\s+[A-Z]+\s+)?INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/g;
+
 describe("table ownership (VNX-0201)", () => {
   it("writes each table only from its owning module", () => {
     for (const [file, src] of Object.entries(sources)) {
       // SQL keywords are upper case and table names lower case by convention, so prose does not match.
-      for (const match of src.matchAll(/\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g)) {
+      for (const match of src.matchAll(WRITE_SQL)) {
         const table = match[1] ?? "";
         expect(WRITERS[table], `${file} writes unknown table ${table}`).toBeDefined();
         expect(file, `${table} is written outside its module`).toBe(WRITERS[table]);
       }
     }
+  });
+
+  it("sees INSERT OR IGNORE/REPLACE and REPLACE INTO, so product_view_dedupe cannot be written from another file unnoticed", () => {
+    for (const sql of ["INSERT OR IGNORE INTO product_view_dedupe (day) VALUES (1)", "INSERT OR REPLACE INTO product_view_dedupe (day) VALUES (1)", "REPLACE INTO product_view_dedupe (day) VALUES (1)"]) {
+      expect([...sql.matchAll(WRITE_SQL)][0]?.[1], sql).toBe("product_view_dedupe");
+    }
+    expect(WRITERS.product_view_dedupe).toBe("../src/db/stats.ts");
+  });
+
+  it("positive control: an upsert (INSERT ... ON CONFLICT ... DO UPDATE SET) yields exactly its target table, also across line breaks", () => {
+    const sql = "INSERT INTO x (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b = excluded.b";
+    expect([...sql.matchAll(WRITE_SQL)].map((m) => m[1])).toEqual(["x"]);
+    expect([...sql.replace("INSERT INTO", "INSERT\n  INTO").matchAll(WRITE_SQL)].map((m) => m[1])).toEqual(["x"]);
   });
 });
 
@@ -105,6 +124,17 @@ const RANKING_FILES = [
   "../src/views/DirectoryPage.tsx",
   "../src/routes/admin-requests.tsx",
   "../src/views/admin/RequestDetailPage.tsx",
+  // VNX-0702a (public statistics): Trending, Top builders/products, Live.
+  "../src/domain/public-stats.ts",
+  "../src/db/public-stats.ts",
+  // VNX-0702b: hourly public-stat snapshot.
+  "../src/jobs/hourly.ts",
+  // VNX-0703a: homepage data blocks (Trending, Founding products).
+  "../src/routes/home.tsx",
+  "../src/views/home/Trending.tsx",
+  // VNX-0703b: Top builders and Top products.
+  "../src/views/home/TopBuilders.tsx",
+  "../src/views/home/TopProducts.tsx",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
@@ -114,6 +144,30 @@ const MONEY_ALLOWED = new Set<string>(["../src/db/merchants.ts", "../src/db/prog
 // VNX-2508a: routes/ops-monetization.tsx is the Ops front of the same monetization module; it reuses the admin-merchants actions, so it is allowlisted for the same reason as admin-merchants.tsx.
 // Only app.ts (route registration) and allowlisted files may import routes/admin-merchants.tsx.
 const ADMIN_MERCHANTS_IMPORTERS = new Set<string>([...MONEY_ALLOWED, "../src/app.ts"]);
+
+/** Resolves a relative import specifier against the importing file's key (both in the `../src/...` form of import.meta.glob). */
+function resolveSpec(file: string, spec: string): string {
+  if (!spec.startsWith(".")) return spec;
+  const parts = file.split("/").slice(0, -1);
+  for (const seg of spec.split("/")) {
+    if (seg === "." || seg === "") continue;
+    if (seg === ".." && parts.length > 0 && parts[parts.length - 1] !== "..") parts.pop();
+    else parts.push(seg);
+  }
+  return parts.join("/");
+}
+/**
+ * True when `src` (the file `file`) imports the monetization db module `name` (ADR-007 rule 2): `import … from`, side-effect `import "x"`,
+ * `export … from` and dynamic `import("x")`, with the path resolved relative to `file` so a sibling `./offers.ts` from a db file is caught.
+ * Indirect imports (through db/products.ts, say) are not followed; see "Ghi nhận".
+ */
+function importsMoneyDb(file: string, src: string, name: string): boolean {
+  const target = `../src/db/${name}.ts`;
+  for (const m of src.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g)) if (resolveSpec(file, m[1] ?? "") === target) return true;
+  return false;
+}
+/** True when `src` runs SQL on money table `table`. Case-insensitive: lower-case SQL must not slip past (review F6). */
+const touchesMoneyTable = (src: string, table: string) => new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${table}\\b`, "i").test(src);
 
 describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("lists only files that exist", () => {
@@ -132,7 +186,7 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("ranking files import no monetization db module", () => {
     for (const file of RANKING_FILES) {
       for (const name of MONEY_DB) {
-        expect(sources[file], `${file} imports db/${name}`).not.toMatch(new RegExp(`from\\s+["'][^"']*/db/${name}\\.ts["']`));
+        expect(importsMoneyDb(file, sources[file]!, name), `${file} imports db/${name}`).toBe(false);
       }
     }
   });
@@ -162,7 +216,7 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("ranking files have no SQL on a money table", () => {
     for (const file of RANKING_FILES) {
       for (const table of MONEY_TABLES) {
-        expect(sources[file], `${file} reads ${table}`).not.toMatch(new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${table}\\b`));
+        expect(touchesMoneyTable(sources[file]!, table), `${file} reads ${table}`).toBe(false);
       }
     }
   });
@@ -170,8 +224,50 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   it("only allowlisted files import a money db module or touch a money table", () => {
     for (const [file, src] of Object.entries(sources)) {
       if (MONEY_ALLOWED.has(file)) continue;
-      for (const name of MONEY_DB) expect(src, `${file} imports db/${name}`).not.toMatch(new RegExp(`from\\s+["'][^"']*/db/${name}\\.ts["']`));
-      for (const table of MONEY_TABLES) expect(src, `${file} touches ${table}`).not.toMatch(new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${table}\\b`));
+      for (const name of MONEY_DB) expect(importsMoneyDb(file, src, name), `${file} imports db/${name}`).toBe(false);
+      for (const table of MONEY_TABLES) expect(touchesMoneyTable(src, table), `${file} touches ${table}`).toBe(false);
+    }
+  });
+
+  it("the detectors catch what they are meant to catch (positive control, review F6)", () => {
+    expect(importsMoneyDb("../src/domain/x.ts", `import { listOffers } from "../db/offers.ts";`, "offers")).toBe(true);
+    expect(importsMoneyDb("../src/db/x.ts", `import { y } from "./offers.ts";`, "offers")).toBe(true); // sibling import inside src/db
+    expect(importsMoneyDb("../src/db/x.ts", `import "./offers.ts";`, "offers")).toBe(true); // side-effect import
+    expect(importsMoneyDb("../src/db/x.ts", `export * from './clicks.ts'`, "clicks")).toBe(true);
+    expect(importsMoneyDb("../src/db/x.ts", `export { y } from "./clicks.ts";`, "clicks")).toBe(true);
+    expect(importsMoneyDb("../src/routes/x.ts", `const m = await import("../db/merchants.ts");`, "merchants")).toBe(true);
+    expect(importsMoneyDb("../src/db/x.ts", `import { y } from "./stats.ts";`, "offers")).toBe(false);
+    expect(importsMoneyDb("../src/db/x.ts", `import { y } from "../domain/offers.ts";`, "offers")).toBe(false);
+    for (const sql of ["SELECT * FROM offers", "select * from offers", "select 1 join OUTBOUND_CLICKS c", "insert into Merchants (id) values (1)", "update partner_programs set x = 1"]) {
+      expect(MONEY_TABLES.some((t) => touchesMoneyTable(sql, t)), sql).toBe(true);
+    }
+    expect(MONEY_TABLES.some((t) => touchesMoneyTable("SELECT * FROM product_daily_stats JOIN products", t))).toBe(false);
+  });
+
+  it("a ranking file that imports db/offers.ts would fail the ranking check (simulated)", () => {
+    const fake = { ...sources, "../src/domain/public-stats.ts": `${sources["../src/domain/public-stats.ts"] ?? ""}\nimport { x } from "../db/offers.ts";` };
+    expect(MONEY_DB.some((name) => importsMoneyDb("../src/domain/public-stats.ts", fake["../src/domain/public-stats.ts"]!, name))).toBe(true);
+    expect(MONEY_DB.some((name) => importsMoneyDb("../src/domain/public-stats.ts", sources["../src/domain/public-stats.ts"] ?? "", name))).toBe(false);
+  });
+
+  it("the public statistics files are ranking files and mention no money (ADR-004, review L3)", () => {
+    for (const file of ["../src/domain/public-stats.ts", "../src/db/public-stats.ts"]) {
+      expect(RANKING_FILES, file).toContain(file);
+      expect(sources[file] ?? "", file).not.toMatch(/sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|price|outbound_clicks/i);
+    }
+  });
+
+  it("the homepage ranking files are listed and mention no money (VNX-0703)", () => {
+    for (const file of ["../src/routes/home.tsx", "../src/views/home/Trending.tsx", "../src/views/home/TopBuilders.tsx", "../src/views/home/TopProducts.tsx"]) {
+      expect(RANKING_FILES, file).toContain(file);
+      expect(sources[file] ?? "", file).not.toMatch(/sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|outbound_clicks/i);
+    }
+  });
+
+  it("the public statistics files read only allowed tables (no money table, no outbound_clicks)", () => {
+    for (const file of ["../src/domain/public-stats.ts", "../src/db/public-stats.ts"]) {
+      for (const table of MONEY_TABLES) expect(touchesMoneyTable(sources[file] ?? "", table), `${file} reads ${table}`).toBe(false);
+      expect(MONEY_ALLOWED.has(file), file).toBe(false);
     }
   });
 
@@ -320,5 +416,17 @@ describe("linking needs a magic-link session (VNX-2605d, ADR-013)", () => {
     expect(callers.map(([file]) => file)).toEqual(["../src/routes/oauth.tsx"]);
     expect(callers[0]?.[1]).toMatch(/requireSession: \{ idHash: await sha256Hex\(raw\)/);
     for (const file of ["../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/views/me/LinkedAccounts.tsx"]) expect(sources[file], file).not.toContain("isStaffSession");
+  });
+});
+describe("single render choke point (VNX-0701c)", () => {
+  it("positive control: render.ts itself calls c.html(", () => {
+    expect(sources["../src/views/render.ts"]).toMatch(/\bc\.html\(/);
+  });
+
+  it("only views/render.ts calls .html( (a direct call would silently drop the privacy notice)", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (file === "../src/views/render.ts") continue;
+      expect(src, file).not.toMatch(/\.html\(/);
+    }
   });
 });

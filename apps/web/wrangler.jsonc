@@ -25,7 +25,13 @@
     "APP_ORIGIN": "https://vnx.si",
     // Turnstile site key (public) of the vnx.si widget (Owner, 2026-10-04; VNX-0710). Empty = signed-out inquiries and
     // contact messages are refused (fail closed). The secret goes in: wrangler secret put TURNSTILE_SECRET
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFNhEcGnR8e56X8X",
+    // Privacy go-live D (YYYY-MM-DD, UTC). From D minus 14 days /privacy shows the M7 text and the notice appears; view counting AND /go/p/ click hashing start at D 00:00 UTC.
+    // (a) D must be at least 14 days after the deploy that first carries it: a nearer or past date shortens or skips the advance notice, and counting starts immediately.
+    // (b) Empty or malformed = no view counting, no /go/p/ click hashing, no notice, and the old Privacy text.
+    // (c) Commit D here on main in a chore: commit. Never set it via --var or the dashboard, and never clear it. Every later deploy, from any session or branch, must come from a tree
+    //     that contains the date commit; otherwise Privacy reverts to the old text while hashes already exist.
+    "PRIVACY_NOTICE_GO_LIVE": "2026-10-21"
   },
   "workers_dev": true,
   "routes": [
@@ -33,15 +39,15 @@
     { "pattern": "www.vnx.si", "custom_domain": true }
   ],
   "observability": { "enabled": true },
-  // Daily job at 01:00 UTC (spec §8.4): src/jobs/daily.ts (reminders, admin alert, notification retries, clean-up).
-  // Registered on the next `npm run deploy`. M7 adds "5 * * * *".
-  "triggers": { "crons": ["0 1 * * *"] }
-  // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS.
+  // Daily clean-up runs at 01:00 UTC (src/jobs/daily.ts); the hourly public_stats snapshot runs at minute 05 (src/jobs/hourly.ts).
+  // Both triggers are registered on the next `npm run deploy`. (e) vnxsi-web needs 2 cron triggers: check for a free slot on the shared Cloudflare account before deploying.
+  "triggers": { "crons": ["0 1 * * *", "5 * * * *"] }
+  // Secrets (wrangler secret put …): TURNSTILE_SECRET, RESEND_API_KEY, ADMIN_EMAILS, ANALYTICS_SALT.
   // Optional var: MAIL_FROM (default "VNX.SI <noreply@vnx.si>").
   //
   // Deploy order for the routes added in feat/m0-m1-foundation (/login, /auth/verify, /logout):
   //   0. wrangler r2 bucket create vnxsi-media      (once)
-  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags, 0011_partners, 0012_outbound_clicks)
+  //   1. npm run db:migrate:remote -w apps/web      (applies 0003_identity, 0004_builders, 0005_products, 0006_catalog, 0007_inquiries, 0008_requests, 0009_feedback, 0010_feature_flags, 0011_partners, 0012_outbound_clicks, 0013_ops_members, 0014_product_stats, 0015_view_dedupe, 0016_public_stats)
   //   2. wrangler secret put ADMIN_EMAILS
   //      wrangler secret put RESEND_API_KEY         (the Resend sending domain must be verified)
   //   3. npm run deploy
@@ -51,10 +57,16 @@
   // migrate first, then deploy. The daily cron trigger ("0 1 * * *") takes effect on deploy; it also reads the 0007 tables.
   // 0008_requests (M6) ships with the M6 code the same way: migrate first, then deploy (the daily cron reads 0008 too).
   // 0010_feature_flags, 0011_partners and 0012_outbound_clicks (EPIC 21) ship with their code the same way: migrate first, then deploy.
+  // 0014_product_stats (M7) ships with its code the same way: migrate first, then deploy. 0013 is Ops O1 (ops_members).
+  // 0015_view_dedupe (M7) ships with its code the same way: migrate first, then deploy.
+  // 0016_public_stats (M7, hourly snapshot table) ships the same way.
   // The daily cron also deletes outbound clicks older than 13 months, so it reads 0012 too.
   // 0017_user_identities (EPIC 26) ships with its code the same way: migrate first, then deploy. It also adds sessions.method (default 'magic_link'),
   // which the new createSession writes, so the old code keeps working after the migration but the new code does not work before it.
   // The three OAuth flags (oauth_google, oauth_github, oauth_linkedin) stay off until the Owner turns them on (VNX-2608).
+  // (g) Migration order: 0013 (Ops) first, then 0014-0016, all applied before the code that uses them.
+  // (f) Before go-live add Cloudflare rate limits for /p/* and /go/p/*.
+  // (d) ANALYTICS_SALT (secret) may be set any time; counting starts only at D 00:00 UTC.
   // Until this order is followed, deploying main also publishes /login and /auth/verify,
   // which will fail (missing tables / missing mail credentials).
   //
@@ -65,4 +77,10 @@
   // OAuth sign-in (EPIC 26, ADR-012): the client ids and secrets are wrangler secrets, never vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
   // GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET. Local dev: apps/web/.dev.vars. A provider missing
   // either of its two is off whatever its feature flag says. The test driver for OAuth is a vitest binding only and never appears here.
+  // ANALYTICS_SALT (M7): `wrangler secret put ANALYTICS_SALT` with a random value of 32+ characters (e.g. `openssl rand -hex 32`). Local dev:
+  // add ANALYTICS_SALT=<any random string> to apps/web/.dev.vars (git-ignored). Never put it in "vars". While it is unset the Worker counts
+  // no views or clicks and sets no visitor cookie. Rotating it only restarts de-duplication for that day.
+  // ANALYTICS_SALT: set it in production any time after PRIVACY_NOTICE_GO_LIVE is committed and deployed: counting of both views and clicks
+  // starts only at go-live 00:00 UTC (and PRIVACY_NOTICE_GO_LIVE must NEVER be cleared afterwards). Until the salt is set each isolate logs
+  // visitor.no_salt once, which is expected.
 }

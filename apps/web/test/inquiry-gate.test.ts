@@ -29,6 +29,8 @@ describe("M5 exit gate: a signed-out inquiry goes all the way round", () => {
     expect(inquiryPath).toMatch(/^\/vi\/me\/inquiries\/[0-9A-Z]{26}$/);
     const clientCookie = `__Host-vnx_session=${/__Host-vnx_session=([^;]+)/.exec(confirmed.headers.get("set-cookie") ?? "")![1]}`;
     const id = inquiryPath.split("/").at(-1)!;
+    // M7 (spec §8.11): the confirmation that opened the inquiry counted it once for its product.
+    expect((await testEnv.DB.prepare("SELECT COALESCE(SUM(inquiries), 0) AS n FROM product_daily_stats WHERE product_id = ?1").bind(product.id).first<{ n: number }>())?.n).toBe(1);
 
     const toBuilder = outbox[1]!;
     expect(toBuilder.to).toBe("gate5-b@vnx.si");

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
+import type { Bindings } from "../../src/env.ts";
 import { LEGAL_UPDATED_AT } from "../../src/legal/content.ts";
 import { testEnv } from "../helpers.ts";
 
@@ -24,12 +25,12 @@ function partOf(md: string, lang: "EN" | "VI"): string {
 const plain = (s: string) => s.replace(/\*\*/g, "").replace(/`/g, "").replace(/\s+/g, " ").trim();
 
 /** Every title, heading, paragraph and list item of a part, in source order, as plain text. */
-function expectedLines(part: string): string[] {
+function expectedLines(part: string, date: string = LEGAL_UPDATED_AT): string[] {
   return part
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "")
-    .map((line) => line.replace(/^### /, "").replace(/^- /, "").replace("{date}", LEGAL_UPDATED_AT))
+    .map((line) => line.replace(/^### /, "").replace(/^- /, "").replace("{date}", date))
     .map(plain);
 }
 
@@ -42,13 +43,18 @@ const textOf = (html: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const get = (path: string) => createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv);
+const get = (path: string, env: Bindings = testEnv) => createApp().request(new Request(`https://vnx.si${path}`), undefined, env);
+
+// privacy-m7.md is what /privacy shows once the notice window has opened (go-live minus 14 days = 2026-10-06; the real clock is past it).
+const M7_GO_LIVE = "2026-10-20"; // pinned, same as privacy-version.test.ts; the real clock is already past 2026-10-06, so the M7 text shows
+const M7_ENV = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: M7_GO_LIVE } as Bindings;
 
 const CASES = [
-  { name: "terms", path: "/terms", min: 11 },
-  { name: "privacy", path: "/privacy", min: 11 },
-  { name: "media-kit", path: "/media-kit", min: 11 },
-  { name: "disclosure", path: "/disclosure", min: 10 },
+  { name: "terms", path: "/terms", min: 11, env: testEnv, date: LEGAL_UPDATED_AT },
+  { name: "privacy", path: "/privacy", min: 11, env: testEnv, date: LEGAL_UPDATED_AT },
+  { name: "privacy-m7", path: "/privacy", min: 11, env: M7_ENV, date: M7_GO_LIVE },
+  { name: "media-kit", path: "/media-kit", min: 11, env: testEnv, date: LEGAL_UPDATED_AT },
+  { name: "disclosure", path: "/disclosure", min: 10, env: testEnv, date: LEGAL_UPDATED_AT },
 ] as const;
 
 describe("legal pages match docs/legal/*.md word for word (VNX-0705a AC2)", () => {
@@ -56,15 +62,15 @@ describe("legal pages match docs/legal/*.md word for word (VNX-0705a AC2)", () =
     for (const { name } of CASES) expect(sourceOf(name)).toContain("## EN");
   });
 
-  for (const { name, path, min } of CASES) {
+  for (const { name, path, min, env, date } of CASES) {
     for (const [lang, prefix] of [
       ["EN", ""],
       ["VI", "/vi"],
     ] as const) {
       it(`${name} ${lang}: every heading, paragraph and list item appears in order`, async () => {
-        const lines = expectedLines(partOf(sourceOf(name), lang));
+        const lines = expectedLines(partOf(sourceOf(name), lang), date);
         expect(lines.length, name).toBeGreaterThanOrEqual(min);
-        const res = await get(prefix + path);
+        const res = await get(prefix + path, env);
         expect(res.status).toBe(200);
         const text = textOf(mainOf(await res.text()));
         let from = 0;
@@ -80,12 +86,14 @@ describe("legal pages match docs/legal/*.md word for word (VNX-0705a AC2)", () =
   it("leaves out the notes for the Owner and the draft header", async () => {
     for (const { path } of CASES) {
       for (const prefix of ["", "/vi"]) {
-        const text = textOf(mainOf(await (await get(prefix + path)).text()));
-        expect(text, prefix + path).not.toContain("Ghi chú cho Owner");
-        expect(text, prefix + path).not.toContain("bản nháp");
-        expect(text, prefix + path).not.toContain("{date}");
-        expect(text, prefix + path).not.toContain("**");
-        expect(text, prefix + path).not.toContain("`");
+        for (const env of [testEnv, M7_ENV]) {
+          const text = textOf(mainOf(await (await get(prefix + path, env)).text()));
+          expect(text, prefix + path).not.toContain("Ghi chú cho Owner");
+          expect(text, prefix + path).not.toContain("bản nháp");
+          expect(text, prefix + path).not.toContain("{date}");
+          expect(text, prefix + path).not.toContain("**");
+          expect(text, prefix + path).not.toContain("`");
+        }
       }
     }
   });

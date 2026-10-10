@@ -1,3 +1,4 @@
+import type { NumberKey } from "../domain/public-stats.ts";
 import type { Availability, BuilderKind, BuilderStatus, WorkLanguage } from "../domain/builder.ts";
 import type { BudgetBand, InquiryStatus, InquiryType } from "../domain/inquiry.ts";
 import type { InviteStatus, RequestStatus } from "../domain/request.ts";
@@ -152,4 +153,11 @@ export const INVITE_STATUS_KEY: Record<InviteStatus, MessageKey> = {
   not_selected: "invite.status.not_selected",
   declined: "invite.status.declined",
   expired: "invite.status.expired",
+};
+
+export const NUMBER_LABEL: Record<NumberKey, MessageKey> = {
+  count_products: "home.numbers.products",
+  count_builders: "home.numbers.builders",
+  count_requests_30d: "home.numbers.requests",
+  count_countries: "home.numbers.countries",
 };

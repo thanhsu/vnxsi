@@ -29,6 +29,8 @@ export default defineConfig(async () => {
             GITHUB_CLIENT_SECRET: "",
             LINKEDIN_CLIENT_ID: "",
             LINKEDIN_CLIENT_SECRET: "",
+            // Pinned empty so the committed production go-live date never changes the suite; tests that need a date set it per request (M7).
+            PRIVACY_NOTICE_GO_LIVE: "",
           },
         },
       }),

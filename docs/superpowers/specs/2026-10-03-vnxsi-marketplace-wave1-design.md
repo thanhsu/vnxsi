@@ -6,6 +6,7 @@
 - **Thay thế:** [spec v0.1](2026-10-02-vnx-v0.1-design.md) và [plan review/cost](../../plan/2026-10-02-vnx-review-cost-rollout.md) (cả hai: Superseded)
 - **Chiến lược gốc:** [Marketplace OS v1](../../strategy/2026-10-03-marketplace-os-v1.md)
 - **Phụ lục:** [Monetization, Partner, Nội dung (2026-10-04)](2026-10-04-vnxsi-monetization-addendum.md): thay mục 8.11 ở phần đếm demo click; thêm `/go/` vào `robots.txt` (mục 8.8)
+- **Phụ lục:** [Bảng request công khai (2026-10-07)](2026-10-07-vnxsi-public-request-board-addendum.md): request riêng tư mặc định, client opt-in từng request để lên `/requests` (kiểm duyệt, gỡ bất cứ lúc nào, không lộ danh tính); builder bày tỏ quan tâm; mở rộng mục 5.3, 5.4, 5.5
 
 ---
 

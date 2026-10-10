@@ -35,12 +35,12 @@ Sau khi các quyết định còn mở ở mục 9 được chốt, Reviewer vi�
 
 | Nhóm / mục | Route mục tiêu | Nội dung và ranh giới |
 |---|---|---|
-| **Overview** | `/ops` | Queue: builder chờ duyệt, product đang review, feedback mới, request chờ ghép, Inquiry quá hạn. KPI và system health chỉ làm ở O2. |
+| **Overview** | `/ops` | Queue: builder chờ duyệt, product đang review, feedback mới, request chờ ghép, Inquiry quá hạn, "Public requests to review" (publication `pending_review` của request đang mở), "Interests waiting" (interest `pending` của request đang mở, builder công khai). KPI và system health chỉ làm ở O2. |
 | **Marketplace** | nhóm | Không phải một link giả; nhóm mở các mục con đã sẵn sàng. |
 | ↳ Builders | `/ops/marketplace/builders` | Duyệt và quản lý builder theo quyền. |
 | ↳ Products | `/ops/marketplace/products` | Hàng product cần review và các trạng thái đã có trong nghiệp vụ. |
 | ↳ Inquiries | `/ops/marketplace/inquiries` | Theo dõi và xử lý Inquiry theo quyền. |
-| ↳ Requests | `/ops/marketplace/requests` | Hàng request, ghép builder, kết thúc theo state machine hiện có. |
+| ↳ Requests | `/ops/marketplace/requests` | Hàng request, ghép builder, kết thúc theo state machine hiện có. Chi tiết request thêm khối "Public listing" (xem bản gốc, sửa bản công khai, publish, reject, unpublish) và khối "Interested builders" (Invite, Dismiss); Owner và Operator thao tác, ẩn hoàn toàn khi không có `marketplace.act`; bộ lọc `public=pending` và cột "Public" ở danh sách ([phụ lục bảng request công khai, mục 5](2026-10-07-vnxsi-public-request-board-addendum.md)). |
 | ↳ Invites | `/ops/marketplace/invites` | Invite quản trị hiện có, chỉ hiện khi route thật đã chuyển. |
 | **People** | nhóm | Nhóm người dùng và quyền. |
 | ↳ Users | `/ops/people/users` | Người dùng; quyền thao tác theo role matrix. |

@@ -60,8 +60,12 @@ export function hostAllowed(hostname: string, allowed: readonly string[]): boole
   return allowed.some((h) => hostname === h || hostname.endsWith(`.${h}`));
 }
 
-function check(raw: string, allowed: readonly string[]): UrlResult {
-  const fail = (error: UrlError): UrlResult => ({ ok: false, error });
+export type PublicUrlError = Exclude<UrlError, "not_allowed">;
+export type PublicUrlResult = { ok: true; url: string } | { ok: false; error: PublicUrlError };
+
+/** One pass of every rule except the host allowlist. */
+function checkPublic(raw: string): PublicUrlResult {
+  const fail = (error: PublicUrlError): PublicUrlResult => ({ ok: false, error });
   if (raw.length > MAX_URL_LENGTH) return fail("length");
   if (!isPrintableAscii(raw)) return fail("chars");
   if (!hasHttpsPrefix(raw)) return fail("scheme");
@@ -76,8 +80,25 @@ function check(raw: string, allowed: readonly string[]): UrlResult {
   const origin = originError(url);
   if (origin) return fail(origin);
   if (!isPublicHostname(url.hostname)) return fail("host");
-  if (!hostAllowed(url.hostname, allowed)) return fail("not_allowed");
   return { ok: true, url: url.href };
+}
+
+/**
+ * The gate for a product's demo and website URL (M7 ruling M4): every rule of `validateFinalUrl` except the allowlist, with the same double
+ * pass. On success `url` is `new URL(raw).href`, checked again.
+ */
+export function validatePublicUrl(raw: string): PublicUrlResult {
+  const first = checkPublic(raw);
+  if (!first.ok) return first;
+  const second = checkPublic(first.url);
+  if (!second.ok) return second;
+  return second.url === first.url ? second : { ok: false, error: "parse" };
+}
+
+function check(raw: string, allowed: readonly string[]): UrlResult {
+  const core = checkPublic(raw);
+  if (!core.ok) return core;
+  return hostAllowed(new URL(core.url).hostname, allowed) ? core : { ok: false, error: "not_allowed" };
 }
 
 /**

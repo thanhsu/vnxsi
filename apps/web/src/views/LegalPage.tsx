@@ -2,7 +2,7 @@ import type { Child, FC } from "hono/jsx";
 import type { Locale } from "../i18n/locales.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { translator } from "../i18n/t.ts";
-import { LEGAL, LEGAL_UPDATED_AT, type Block, type LegalPageId } from "../legal/content.ts";
+import { LEGAL, LEGAL_UPDATED_AT, type Block, type LegalDoc, type LegalPageId } from "../legal/content.ts";
 import { Layout } from "./Layout.tsx";
 
 export type InlineToken = { kind: "text" | "code" | "strong" | "email"; text: string };
@@ -74,14 +74,15 @@ const META: Record<LegalPageId, { title: MessageKey; description: MessageKey }> 
   disclosure: { title: "legal.disclosure.title", description: "legal.disclosure.description" },
 };
 
-type Props = { locale: Locale; origin: string; signedIn: boolean; id: LegalPageId; /** Inserted right after the section with that index (the disclosure partner list). */ extras?: Partial<Record<number, Child>> };
+type Props = { locale: Locale; origin: string; signedIn: boolean; id: LegalPageId; /** Inserted right after the section with that index (the disclosure partner list). */ extras?: Partial<Record<number, Child>>; docs?: { en: LegalDoc; vi: LegalDoc }; updatedAt?: string };
 
-export const LegalPage: FC<Props> = ({ locale, origin, signedIn, id, extras }) => {
+export const LegalPage: FC<Props> = ({ locale, origin, signedIn, id, extras, docs, updatedAt }) => {
   const tr = translator(locale);
   const page = LEGAL[id];
   // EN and VI have their own text; zh-Hans and zh-Hant show the EN text until VNX-0801 translates it.
   const englishOnly = locale === "zh-Hans" || locale === "zh-Hant";
-  const doc = locale === "vi" ? page.vi : page.en;
+  const source = docs ?? page;
+  const doc = locale === "vi" ? source.vi : source.en;
   return (
     <Layout
       locale={locale}
@@ -97,7 +98,7 @@ export const LegalPage: FC<Props> = ({ locale, origin, signedIn, id, extras }) =
           <h1>{doc.title}</h1>
           {page.dated ? (
             <p class="legal-updated" lang={englishOnly ? locale : undefined}>
-              {tr("legal.updated", { date: LEGAL_UPDATED_AT })}
+              {tr("legal.updated", { date: updatedAt ?? LEGAL_UPDATED_AT })}
             </p>
           ) : null}
           {doc.sections.map((section, i) => (

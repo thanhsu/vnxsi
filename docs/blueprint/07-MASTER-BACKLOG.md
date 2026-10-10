@@ -238,7 +238,7 @@ VNX-1301 và VNX-1302 làm qua mô hình nội dung của EPIC 22 (phụ lục m
 
 | Task | Nội dung | Tag | Trạng thái |
 |---|---|---|---|
-| VNX-1901 | Request a Product công khai (ẩn danh, theo category) | AGENT | 💤 |
+| VNX-1901 | Request a Product công khai (ẩn danh, theo category) | AGENT | thay bằng EPIC 27 |
 | VNX-1902 | Product Opportunity: builder đăng ý tưởng, client đăng ký quan tâm | AGENT | 💤 |
 | VNX-1903 | Thông báo builder khi một nhu cầu đủ ngưỡng | AGENT | 💤 |
 
@@ -335,3 +335,25 @@ Wave 1 (Owner 2026-10-07). Thứ tự và cổng ra ở [../roadmap/WAVE1-ROADMA
 | VNX-2605d | Chỉ liên kết provider mới từ session `magic_link` (ADR-013) và kiểm lại session sau khi đổi code ở nhánh link; **điều kiện bắt buộc trước VNX-2608** (Owner 2026-10-10) | AGENT, HIGH-RISK | ⏳ |
 | VNX-2607 | Chép bổ sung ADR-012 vào phần `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code; merge trước khi bật flag | AGENT | ⏳ |
 | VNX-2608 | Owner bật 3 flag trên production, thử đăng nhập và liên kết với tài khoản thật | HUMAN, HIGH-RISK | ⏳ |
+
+## EPIC 27 — Bảng request công khai
+
+Thay VNX-1901 (Wave 4), kéo lên Wave 1 (Owner 2026-10-07). Phụ lục thiết kế: [../superpowers/specs/2026-10-07-vnxsi-public-request-board-addendum.md](../superpowers/specs/2026-10-07-vnxsi-public-request-board-addendum.md). Plan: [../superpowers/plans/2026-10-07-vnxsi-epic27-public-request-board.md](../superpowers/plans/2026-10-07-vnxsi-epic27-public-request-board.md). Thứ tự và cổng ra ở [../roadmap/WAVE1-ROADMAP.md](../roadmap/WAVE1-ROADMAP.md). Thứ tự thực thi: 2701 → 2702a → 2702b → 2703a → 2704a → 2703b → 2704b → 2705a → 2705b → 2706a → 2706b → 2707a → 2707b → 2709 → 2708.
+
+| Task | Nội dung | Tag | Trạng thái |
+|---|---|---|---|
+| VNX-2701 | Owner duyệt phụ lục, plan, câu chữ VI §12.6, trả lời Open points; chốt thứ tự so với M8 và EPIC 26 | HUMAN | ⏳ |
+| VNX-2702a | Migration (`requests.country`, `request_publications`, `request_interests`) + `db/request-board.ts` + guard audit + test sở hữu bảng + cascade + tiện ích đếm truy vấn | AGENT, FOUNDATION | ⏳ |
+| VNX-2702b | `domain/request-board.ts` (máy trạng thái, `requestVisibility`, parse), cờ `request_board` + `REQUEST_BOARD_GO_LIVE` + `requestBoardEnabled` | AGENT, FOUNDATION | ⏳ |
+| VNX-2703a | Form `/request`: `country` + ô opt-in | AGENT | ⏳ |
+| VNX-2703b | `/me/requests/:id`: khối "Public listing" (opt-in sau, gỡ, opt-in lại, lý do) | AGENT | ⏳ |
+| VNX-2704a | Ops: khối "Public listing" (sửa, publish, reject, unpublish), audit, quyền | AGENT, HIGH-RISK | ⏳ |
+| VNX-2704b | Ops: cột "Public", bộ lọc `public=pending`, thẻ Overview "Public requests to review", 3 email cho client | AGENT, HIGH-RISK | ⏳ |
+| VNX-2705a | `/requests`, `/requests/:publicId`, `requestVisibility`, khối CTA | AGENT, HIGH-RISK | ⏳ |
+| VNX-2705b | SEO: sitemap, `noindex`, hreflang, OG, robots, link `/for-builders` và footer | AGENT, HIGH-RISK | ⏳ |
+| VNX-2706a | Interest: POST + rút, rate limit, trần pending, form trên trang, mục Hub | AGENT | ⏳ |
+| VNX-2706b | Ops: khối "Interested builders", Dismiss, mời → `invited` cùng batch, thẻ Overview "Interests waiting" | AGENT | ⏳ |
+| VNX-2707a | Khung pháp lý theo phiên bản (Privacy 3, Terms 2), cổng ngày, thông báo trước thứ hai | AGENT | ⏳ |
+| VNX-2707b | Chép Privacy/Terms đã duyệt vào `docs/legal/*`, `content.ts`; câu chữ thông báo | AGENT | ⏳ |
+| VNX-2709 | Test cổng ra EPIC 27 (một request đi hết vòng đời qua HTTP), rà soát, báo cáo | AGENT | ⏳ |
+| VNX-2708 | Owner: rule Cloudflare Rate limiting `/requests*`, commit `REQUEST_BOARD_GO_LIVE`, deploy, bật cờ sau ngày hiệu lực, smoke production | HUMAN, HIGH-RISK | ⏳ |

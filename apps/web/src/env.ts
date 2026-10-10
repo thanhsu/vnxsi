@@ -25,6 +25,9 @@ export interface Bindings {
   GITHUB_CLIENT_SECRET?: string;
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
+  PRIVACY_NOTICE_GO_LIVE?: string;
+  /** Secret for the daily visitor hash (VNX-0707a). Unset: no views or clicks are counted and no visitor cookie is set. `wrangler secret put ANALYTICS_SALT`; `.dev.vars` locally; never in the repo. */
+  ANALYTICS_SALT?: string;
 }
 
 export type AppEnv = {

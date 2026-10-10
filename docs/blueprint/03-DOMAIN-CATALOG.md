@@ -32,8 +32,10 @@ Mỗi thực thể thuộc đúng một module (cột `Module` là bản ghi s�
 |---|---|---|---|---|
 | Inquiry | `inquiries` | engagement | 1 | buy / customize / hire / build_similar / request |
 | InquiryMessage | `inquiry_messages` | engagement | 1 | `notified_at` cho gửi lại |
-| Request | `requests` | matching | 1 | không public |
+| Request | `requests` | matching | 1 | riêng tư mặc định; công khai chỉ khi client opt-in (xem `request_publications`) |
 | RequestInvite (+ đề xuất) | `request_invites` | matching | 1 | ≤ 5 đang hoạt động / request |
+| RequestPublication (EPIC 27) | `request_publications` | matching | 1 | tối đa 1 dòng / request; opt-in, kiểm duyệt, bản công khai tách khỏi bản gốc |
+| RequestInterest (EPIC 27) | `request_interests` | matching | 1 | builder bày tỏ quan tâm; Ops xem và mời |
 
 ## Số liệu
 

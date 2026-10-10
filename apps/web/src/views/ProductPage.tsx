@@ -47,12 +47,12 @@ export const ProductPage: FC<Props> = ({ locale, origin, item, tiers, media, bad
           ) : null}
           <p class="row-actions">
             {p.demoUrl ? (
-              <a href={p.demoUrl} rel={EXTERNAL} class="btn" target="_blank">
+              <a href={`/go/p/${p.slug}/demo?src=product_page`} rel={EXTERNAL} class="btn" target="_blank">
                 {tr("productPage.demo")}
               </a>
             ) : null}
             {p.websiteUrl ? (
-              <a href={p.websiteUrl} rel={EXTERNAL} target="_blank">
+              <a href={`/go/p/${p.slug}/site?src=product_page`} rel={EXTERNAL} target="_blank">
                 {tr("productPage.website")}
               </a>
             ) : null}

@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import type { Child } from "hono/jsx";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { firstPublicProducts } from "../db/catalog.ts";
 import { addClientSignup } from "../db/waitlist.ts";
@@ -12,16 +13,17 @@ import { localizedPath } from "../i18n/locales.ts";
 import { LandingPage, type LandingForm } from "../views/LandingPage.tsx";
 import { DECK_SIZE } from "../views/landing/Deck.tsx";
 import { page } from "../views/render.ts";
+import { homeBlocks } from "./home.tsx";
 
 const HOUR = 3600;
 /** Same level as an inquiry (spec §8.2): 10 per IP per hour. */
 const WAITLIST_PER_IP = 10;
 
-type RenderOpts = { joined: boolean; utm: Utm; referrer: string | null; form?: LandingForm; asked?: boolean };
+type RenderOpts = { joined: boolean; utm: Utm; referrer: string | null; form?: LandingForm; asked?: boolean; below?: Promise<Child | null> };
 
 async function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: ContentfulStatusCode = 200) {
   // Real products replace the category cards only once DECK_SIZE are public (plan VNX-0709 §6).
-  const deck = await firstPublicProducts(c.env.DB, DECK_SIZE);
+  const [deck, below] = await Promise.all([firstPublicProducts(c.env.DB, DECK_SIZE), opts.below ?? null]);
   return page(
     c,
     <LandingPage
@@ -33,6 +35,7 @@ async function renderLanding(c: Context<AppEnv>, opts: RenderOpts, status: Conte
       referrer={opts.referrer}
       form={opts.form}
       deck={deck}
+      below={below}
       ask={{ asked: opts.asked === true, siteKey: turnstileSiteKey(c.env), email: c.get("user")?.email ?? "" }}
     />,
     status,
@@ -51,6 +54,7 @@ export function registerLandingRoutes(app: Hono<AppEnv>) {
       asked: c.req.query("asked") === "1",
       utm: utmFrom(c.req.query()),
       referrer: externalReferrerHost(c.req.header("referer"), hostsOf(c)),
+      below: homeBlocks(c),
     }),
   );
 
