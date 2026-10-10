@@ -116,7 +116,8 @@ test("invalid input is refused per field and keeps what was typed", async ({ bui
   await expect(page.getByLabel("Page address")).toHaveAttribute("aria-invalid", "true");
   await expect(page.locator("#pf-slug-error")).toContainText("lowercase letters");
   await expect(page.getByLabel("Page address")).toHaveValue("Bad Slug!");
-  await expect(page.getByRole("alert")).toContainText("Please fix the highlighted fields.");
+  await expect(page.locator("#form-errors")).toContainText("Please fix the highlighted fields.");
+  await expect(page).toHaveTitle(/^Error: /);
 
   await page.getByLabel("Page address").fill(PUBLISHED_PRODUCT.slug);
   const [taken] = await save(`${url}/product`);
