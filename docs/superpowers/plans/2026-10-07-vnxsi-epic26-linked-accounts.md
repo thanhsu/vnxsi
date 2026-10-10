@@ -7377,297 +7377,460 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 12: VNX-2607 — Áp dụng câu chữ Privacy và Terms đã duyệt (bổ sung ADR-012) (CHỜ REBASE, viết lại sau khi rebase EPIC 26 lên `main`)
+### Task 12: VNX-2607 — Áp dụng câu chữ Privacy và Terms đã duyệt (bổ sung ADR-012), cho cả hai phiên bản Privacy
 
-> **TRẠNG THÁI: CHỜ REBASE, viết lại sau khi rebase EPIC 26 lên `main`.** Plan review 2026-10-10: REJECT cho tới khi rebase. Phần bên dưới là bản nháp cũ viết trên nhánh chưa có phần M7 của Privacy; KHÔNG implement nó. Thứ tự: 9c, rebase lên `main`, Task 12 (viết lại), VNX-2604d, VNX-2608. Owner 2026-10-10: E4 = phần bổ sung pháp lý về tài khoản liên kết KHÔNG phải "thay đổi quan trọng" (Terms §12), không báo trước (trả lời câu hỏi mở 7).
->
-> **Nghĩa vụ cho bản viết lại:**
-> - **BLOCKER-1.** `main` có `docs/legal/privacy-m7.md` và bốn hằng `privacyEn`, `privacyVi`, `privacyEnM7`, `privacyViM7`; `/privacy` hiện bản M7 từ `PRIVACY_NOTICE_GO_LIVE` − 14 ngày (xem `main:.ai/context/CURRENT-STATUS.md:301-302`). Bản viết lại phải: áp bổ sung cho CẢ `privacy.md` VÀ `privacy-m7.md` và cả bốn hằng; đặt `__Host-vnx_oauth` ngay sau `__Host-vnx_invite` ở cả hai phiên bản; mỗi phiên bản có bảng neo riêng; chạy mọi kiểm tra của `linked-accounts.test.ts` cho cả hai phiên bản (trang M7 live với `{ ...testEnv, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" }`); cập nhật phần đầu `privacy-m7.md`.
-> - **MEDIUM-2 / E5 (việc Owner lúc deploy):** ngày hiển thị của bản M7 cố định là D. Deploy VNX-2607 trước D−14 nếu được và đặt `LEGAL_UPDATED_AT` bằng ngày deploy 2607; nếu không, một follow-up cho bản M7 hằng "last updated" riêng.
-> - **LOW-2:** không hard-code câu §8 trong test; suy ra từ mục "Bổ sung" hoặc bỏ.
-> - **LOW-4:** thêm khóa rate limit `oauth:ip:*` (IP thô) vào bảng đối chiếu code.
-> - **E6 (Ghi nhận cho lượt pháp lý kế tiếp, không đổi bây giờ):** đổi §2 Security thành "a record of security-relevant actions (admin actions, sign-ins, linking and unlinking accounts)".
-> - Các lệch 1, 2, 3, 5, 6 giữ nguyên chữ. Ghi chú vận hành: xóa theo yêu cầu phải xóa hàng `user_identities` trước (không có `ON DELETE CASCADE`).
+> **Viết lại sau rebase** (nhánh chứa `origin/main` `e78c1c5`, M7, gộp ở `0701acb`; HEAD lúc viết `98c402d`). Bản nháp cũ (viết trên nhánh chưa có phần M7 của Privacy) đã bị thay hoàn toàn. Plan review 2026-10-10 (REJECT bản cũ) và Owner 2026-10-10 (E4) là ràng buộc; các nghĩa vụ BLOCKER-1, MEDIUM-2/E5, LOW-2, LOW-4, E6, E4 và ghi chú xóa tài khoản được xử lý ở dưới (bảng "Nghĩa vụ của bản viết lại, ở đâu").
 
+**Phụ thuộc:** Task 9, 9c, 9d, 11 (đã implement) và việc gộp `main`. **Cổng:** VNX-2607 phải merge và deploy **trước** khi bật bất kỳ cờ provider nào trên production (Owner 2026-10-07; cổng ra EPIC 26). Không có Review Focus riêng; kiểm bằng test câu chữ và test đối chiếu code.
 
-**Phụ thuộc:** Task 9, 11 (và Task 9c nếu đã xong, để câu về session đúng). **Cổng:** VNX-2607 phải merge **trước** khi bật bất kỳ cờ provider nào trên production (Owner 2026-10-07; cổng ra EPIC 26). Không có Review Focus riêng; kiểm bằng test câu chữ.
+**Mục tiêu.** Áp **nguyên văn** hai khối "Bổ sung ADR-012" (Owner APPROVED 2026-10-07; cuối `docs/legal/privacy.md` và `docs/legal/terms.md`, mỗi file có `### EN` và `### VI`) vào: `docs/legal/privacy.md` **và** `docs/legal/privacy-m7.md` (`## EN`, `## VI` của mỗi file), `docs/legal/terms.md`, và `apps/web/src/legal/content.ts` (`privacyEn`, `privacyVi`, `privacyEnM7`, `privacyViM7`, `termsEn`, `termsVi`). Nguồn duy nhất của câu chữ là hai khối đó: **không đổi chữ nào**. Từ `PRIVACY_NOTICE_GO_LIVE` − 14 ngày `/privacy` hiện bản M7 (`routes/legal.tsx` + `domain/privacy-notice.ts` `privacyVersion`, "m7" mãi mãi sau đó), nên bổ sung chỉ ở `privacy.md` sẽ biến mất khi cửa sổ M7 mở. Phần đối chiếu từng mệnh đề với code ở "Đối chiếu với code đã merge"; mệnh đề nào SAI so với code thì nằm ở "Câu hỏi mở cho Owner", không sửa chữ.
 
-**Mục tiêu.** Chép nguyên văn các khối "Bổ sung ADR-012" (Owner APPROVED 2026-10-07) vào đúng chỗ của `## EN` và `## VI` trong `docs/legal/privacy.md` và `docs/legal/terms.md`, rồi vào `apps/web/src/legal/content.ts`, để `/privacy` và `/terms` (4 locale) hiện chúng. **Không đổi chữ nào của câu đã duyệt.** Đối chiếu từng mệnh đề với code thật (bảng dưới); mọi lệch được liệt kê thành câu hỏi mở kèm đề xuất sửa chính xác, không tự sửa.
+**Nghĩa vụ của bản viết lại, ở đâu:**
+
+| Nghĩa vụ | Xử lý |
+|---|---|
+| BLOCKER-1 (cả hai phiên bản, cả bốn hằng, `__Host-vnx_oauth` sau `__Host-vnx_invite`, bảng neo riêng, trang M7 live, phần đầu `privacy-m7.md`) | Step 1 (bảng neo `APPEND_AFTER` theo phiên bản; `VERSIONS` chạy mọi kiểm tra cho `live` và `m7`), Step 3 (md), Step 4 (`content.ts`) |
+| MEDIUM-2 / E5 | "Việc của Owner lúc deploy": gate bắt buộc trước VNX-2608; `LEGAL_UPDATED_AT` không đổi trong task này (Owner 2026-10-10) |
+| LOW-2 (không hard-code câu §8) | Test đọc mọi câu từ mục "Bổ sung"; không có câu nào của bổ sung nằm trong file test (Quyết định kỹ thuật 2) |
+| LOW-4 (`oauth:ip:*`, IP thô) | Test "rate limit" ở nhóm đối chiếu code; dòng bảng đối chiếu |
+| E6 | "Ghi nhận cho lượt pháp lý kế tiếp" (không đổi bây giờ) |
+| S-2 (`auth.login` audit chỉ ghi `{ method }`) | Đóng bằng ghi nhận E6 ("Ghi nhận cho lượt pháp lý kế tiếp"): chữ hiện hành "actions taken by admins" chưa nói tới nhật ký đăng nhập/liên kết; không đổi chữ ở task này |
+| E4 | Owner đã chốt: không phải "thay đổi quan trọng" (Terms §12), không báo trước; ghi vào "Việc của Owner" như quyết định đã có |
+| Xóa tài khoản phải xóa hàng `user_identities` trước | "Nghĩa vụ cho task sau" (ghi chú vận hành, `user_id` không có `ON DELETE CASCADE`) |
 
 **Quyết định kỹ thuật** (Reviewer kiểm):
-1. **Quy ước của file:** các bổ sung M5, M6, EPIC 21 đã được chép thẳng vào `## EN`/`## VI` và ghi vào dòng "Trạng thái" cùng dòng "Đối chiếu code …" ở đầu file, không để lại mục riêng. Với ADR-012, Owner viết sẵn mục "Bổ sung ADR-012" ở cuối file (sau `---`, nên `partOf` của `content.test.ts` không đọc nó). Quyết định: **giữ mục đó làm bản gốc đã duyệt, đổi tiêu đề và dòng trạng thái thành "ĐÃ ÁP DỤNG"** (không xóa: bản gốc Owner duyệt là chứng cứ), và thêm test so từng dòng của nó với `## EN`/`## VI` (Step 1) để hai bản không lệch nhau.
-2. **Test lấy câu chữ từ chính mục "Bổ sung"** (không chép câu vào test): nguồn sự thật duy nhất là văn bản Owner duyệt. Kèm bảng neo (câu đứng ngay sau câu nào) để kiểm vị trí "thêm sau gạch …" và hai chỗ "sửa/thay".
-3. **zh-Hans, zh-Hant:** `views/LegalPage.tsx:82-96` hiện `doc = page.en` kèm `<p class="notice">{tr("legal.englishOnly")}</p>` (đã dịch, ví dụ zh-Hans "本页面目前仅提供英文版本，以英文版本为准。") và `lang="en"` cho thân. Nên không cần sửa `content.ts` riêng cho zh; chỉ cần test bốn trang zh hiện bản EN mới kèm câu "English version applies" đã dịch.
-4. **`LEGAL_UPDATED_AT` không đổi trong task này.** Hằng số dùng chung cho Terms và Privacy (`legal/content.ts:10`, hiện `"2026-10-05"`), Owner chốt khi deploy (dòng "Ngày cập nhật hiển thị" của `terms.md`). Ghi vào "Việc của Owner lúc deploy" và câu hỏi mở 4; `content.test.ts:167` chỉ kiểm `>= "2026-10-05"` nên xanh dù đổi hay không.
-5. **Test ràng buộc câu chữ với code thật** (không chỉ so chữ): tên cookie `__Host-vnx_oauth` bằng `OAUTH_COOKIE`, "up to 10 minutes" bằng `OAUTH_FLOW_TTL_MS` (600 s) và `LINK_INTENT_TTL_MS` ≤ nó, "30 days" bằng `SESSION_TTL_MS`, và tập cột của `user_identities` ghim cứng để một cột mới buộc người sửa đọc lại Privacy §2.
-6. **Cỡ:** không có mã chạy được ngoài chuỗi trong `content.ts`; ≈ 40 dòng `content.ts`, ≈ 80 dòng markdown, ≈ 150 dòng test.
+1. **Giữ hai khối "Bổ sung ADR-012" làm bản gốc đã duyệt, đổi tiêu đề thành "ĐÃ ÁP DỤNG"** (không xóa; Owner duyệt đúng văn bản đó). Quy ước của file: bổ sung M5, M6, EPIC 21 được chép thẳng vào `## EN`/`## VI` và ghi ở dòng "Trạng thái" cùng một bullet "Đối chiếu code …" ở đầu file. Ở đây làm cả hai: chép vào thân và giữ khối gốc (sau `---`, nên `partOf` của `content.test.ts` không đọc nó). Test mới giữ hai bản khớp nhau.
+2. **Test lấy mọi câu chữ và vị trí từ chính khối "Bổ sung"** (LOW-2). Mỗi mục `**Mục N, <chỉ dẫn>:**` được phân tích: "thêm sau gạch / thêm gạch sau / thêm hai gạch sau "<neo>"" (neo lấy từ chỉ dẫn, bỏ dấu `…` cuối), "sửa gạch "<neo>" thành", "thêm gạch" (không có neo: bảng neo theo phiên bản, quyết định của Owner "ngay sau `__Host-vnx_invite`"), "thay … bằng" (thay cả thân mục). Số loại chỉ dẫn được ghim (`SHAPE`), nên khi Owner thêm mục thì test đỏ và buộc người sửa đọc lại.
+3. **Bảng neo riêng cho mỗi phiên bản** (`APPEND_AFTER`): `live` (`privacy.md`): `__Host-vnx_oauth` sau `__Host-vnx_invite`, là gạch cuối mục 5; `m7` (`privacy-m7.md`): sau `__Host-vnx_invite` và **trước** `__Host-vnx_vid`. Cả hai ngôn ngữ.
+4. **zh-Hans, zh-Hant** (đã xác nhận từ code): `views/LegalPage.tsx` đặt `englishOnly = locale === "zh-Hans" || locale === "zh-Hant"`, chọn `doc = source.en` (với `source = docs ?? LEGAL[id]`, nên bản M7 cũng đi qua đường này), in `<p class="notice">{tr("legal.englishOnly")}</p>` rồi thân `lang="en"`. Không cần chuỗi mới, không sửa `LegalPage.tsx`, `routes/legal.tsx` hay file locale.
+5. **`LEGAL_UPDATED_AT` không đổi** (`"2026-10-05"`, `legal/content.ts:10`; `privacy-version.test.ts` ghim đúng giá trị đó cho Terms/Disclosure, `content.test.ts` chỉ kiểm `>=`). Ngày hiển thị của bản M7 là `PRIVACY_NOTICE_GO_LIVE` (biến môi trường). Cả hai là việc của Owner lúc deploy.
+6. **Test đối chiếu code kiểm điều câu chữ nói**, không chép số vào test khi số có trong câu: "10 phút" và "30 ngày" lấy bằng regex từ chính dòng của bản đã chép rồi so với `OAUTH_FLOW_TTL_MS` và `SESSION_TTL_MS`; thời hạn thật của cookie đo trên `Set-Cookie` do `/start` ghi.
+7. **Cỡ:** không có mã chạy được ngoài chuỗi trong `content.ts`.
 
-**Đối chiếu từng mệnh đề với code thật (Task 1-11 đã build, nhánh tại `b27fc27`):**
+**Đối chiếu với code đã merge** (HEAD `98c402d`; Implementer chạy lại Step 5 trước khi commit, ghi SHA vào bullet "Đối chiếu code ADR-012"):
 
 | Mệnh đề đã duyệt | Code thật | Kết quả |
 |---|---|---|
-| Cookie `__Host-vnx_oauth`, "up to 10 minutes" | `auth/oauth-cookie.ts:12` (tên); `domain/oauth.ts:13-14` (luồng 600 s, intent liên kết 120 s); `writeOAuthCookie` đặt `maxAge ≤ 600` | Khớp |
-| Lưu: dịch vụ nào, mã định danh, nhãn (email Google/LinkedIn, username GitHub), thời điểm liên kết, lần đăng nhập gần nhất | `migrations/0017_user_identities.sql`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `id`, `user_id`, `updated_at`, `show_on_profile`) | Khớp, hai lưu ý nhỏ: câu hỏi mở 1 và 2 |
-| "never receive or store the password … do not keep the access keys" | không cột token (test cột Task 1); `auth/oauth/oidc.ts`, `github.ts` dùng token trong một lần `exchange` rồi bỏ; callback chỉ log mã lỗi cố định | Khớp |
-| Sign-in: "session records … including whether … email link or linked account" | `sessions.method` (`magic_link` / `oauth_*`) | Khớp |
-| Builder hiện GitHub username hoặc "LinkedIn verified"; Google không bao giờ; builder không thấy tài khoản liên kết của client | `listPublicBadges` (Task 11): GitHub `login` + link, LinkedIn chỉ `{ provider }`, không Google; test riêng tư Task 11 | Khớp |
-| "Your linked accounts are shown only to you" | `/me` (`listIdentitiesForUser` theo user) và `/hub/profile` (chỉ hàng của builder đó) | Khớp |
-| Dịch vụ đăng nhập biết bạn đăng nhập VNX.SI | luồng OAuth chuyển hướng sang provider | Khớp |
-| "We email you whenever an account is linked to or unlinked from yours" (Privacy §8, Terms §4) | `notify/identity.ts`: hai email tới `users.email`; không gửi khi `already_linked`; gửi lỗi chỉ log, không thử lại | Khớp, một lưu ý: câu hỏi mở 3 |
-| "Linked accounts: until you unlink them or your account is deleted" | `unlinkIdentity` xóa hàng; chưa có luồng xóa tài khoản (`deleteGhostUsers` không chọn user có identity); cột `user_id` không có `ON DELETE CASCADE` | Khớp với chính sách; lưu ý vận hành: câu hỏi mở 6 |
+| Cookie `__Host-vnx_oauth`, "up to 10 minutes" | `auth/oauth-cookie.ts` (`OAUTH_COOKIE`, Lax, HttpOnly, Secure, `maxAge ≤ OAUTH_FLOW_TTL_MS/1000`); `domain/oauth.ts:13-14` (luồng 600 s, intent liên kết 120 s) | Khớp |
+| Lưu: dịch vụ, mã định danh, nhãn (email Google/LinkedIn, username GitHub), thời điểm liên kết, lần đăng nhập gần nhất | `migrations/0017_user_identities.sql`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `id`, `user_id`, `show_on_profile`, `updated_at`) | Khớp (lưu ý đã được duyệt: `label` là tên provider khi provider không trả email; `show_on_profile`, `updated_at` không liệt kê) |
+| Không nhận/lưu mật khẩu, không giữ access key | Không cột token; `auth/oauth/*` dùng token một lần rồi bỏ; callback chỉ log mã lỗi cố định | Khớp |
+| "session records … whether you signed in by email link or with a linked account" | `sessions.method` (`magic_link`, `oauth_google`, `oauth_github`, `oauth_linkedin`) | Khớp |
+| Builder có thể hiện GitHub username hoặc "LinkedIn verified"; Google không bao giờ; builder không thấy tài khoản liên kết của client | `listPublicBadges` (`db/identities.ts`): chỉ builder `approved` + user `active`, `show_on_profile = 1`, provider GitHub/LinkedIn đang bật cờ; LinkedIn không chọn `label`; client không có hàng `builders` | Khớp |
+| "Your linked accounts are shown only to you" | `/me` (`listIdentitiesForUser` theo user), `/hub/profile` (hàng của builder đó); không có view admin | Khớp |
+| "We email you whenever an account is linked to or unlinked from yours" | `notify/identity.ts` `notifyIdentityChange`: tới `users.email`; link ở `routes/oauth.tsx` (không gửi khi `already_linked`), unlink ở `routes/me.tsx`; gửi lỗi chỉ log `notify_failed`, không thử lại | Khớp (route-level đã chứng minh email tới `users.email`: `test/auth/oauth-link.test.ts:276-288`, `test/me/identity-unlink.test.ts:19,59`; test mới chỉ kiểm gửi lỗi không ném), một lưu ý (best-effort): quyết định cũ "lệch 3 giữ nguyên chữ" vẫn đúng, xem câu hỏi mở 2 |
+| Terms §4 câu 2 (ADR-013: liên kết chỉ từ session `magic_link`) | `routes/me.tsx`, `isLinkCapableSession`; session `oauth_*` nhận `/me?link=needsEmailLink` | Đã giải quyết: Owner 2026-10-10 sửa câu thành "Once signed in with the email link, …" (câu hỏi mở 1, đã quyết); khối "Bổ sung" của `terms.md` đổi theo, test đọc từ khối |
+| Privacy §6 "Sessions: up to 30 days, or until you sign out" | `SESSION_TTL_MS` 30 ngày; hủy liên kết P còn kết thúc mọi session `oauth_<P>` (VNX-2605c, `endProviderSessionsStatement` cùng batch) | Vẫn đúng ("tối đa 30 ngày"); câu không nói hết, không sai. Không đổi, xem câu hỏi mở 3 |
+| "Linked accounts: until you unlink them or your account is deleted" | `unlinkIdentity` xóa hàng; chưa có luồng xóa tài khoản | Khớp với chính sách; ghi chú vận hành ở "Nghĩa vụ cho task sau" |
+| §2 Security: IP và hash email trong bộ đếm ngắn hạn "limit how often a form can be used" | Callback OAuth ghi `rate_limits.key = oauth:ip:<IP thô>` (`routes/oauth.tsx`, 20 lần/giờ; `hitRateLimit`); dọn sau 2 ngày (`deleteOldRateLimitWindows`) | Khớp về IP thô và thời hạn; "form" hơi hẹp: ghi nhận E6, không phải lệch |
 
-**Câu hỏi mở cho Owner (đều là lệch nhỏ hoặc quyết định chữ; Planner KHÔNG sửa câu đã duyệt):**
-1. **Nhãn "the email address for Google and LinkedIn".** Khi provider không trả email, `label` là chữ "Google"/"LinkedIn" (quyết định 12), không phải email. Chữ duyệt đúng với trường hợp thường. **Đề xuất: không sửa.** (Nếu muốn chính xác tuyệt đối: "(the email address for Google and LinkedIn when they give one, the username for GitHub)".)
-2. **Cột `show_on_profile` và `updated_at` không được liệt kê** trong câu "we store …". `show_on_profile` là lựa chọn "hiện huy hiệu" của builder, đã được nói ở Mục 3 và 4; `updated_at` là dấu thời gian kỹ thuật. **Đề xuất: không sửa.**
-3. **"We email you whenever …" và gửi thất bại.** Email gửi ngay sau khi lưu, không có hàng đợi gửi lại (Task 9 "Ghi nhận"). **Đề xuất: giữ câu.** Nếu Owner muốn tuyệt đối: đổi "We email you" thành "We try to email you" ở Privacy §8 và Terms §4, VI "Chúng tôi cố gắng gửi email cho bạn"; cần Owner duyệt.
-4. **`LEGAL_UPDATED_AT`.** Terms và Privacy dùng chung một ngày. **Đề xuất: đổi thành ngày deploy của VNX-2607 lên production, trong commit deploy hoặc Owner báo ngày.** Việc của Owner lúc deploy; test không chặn.
-5. **Thêm "or until you unlink the account you signed in with" vào dòng session ở Privacy §6?** Chỉ liên quan nếu Task 9c đã merge. Dòng hiện tại "Sessions: up to 30 days, or until you sign out" vẫn đúng. **Đề xuất: không thêm** (không bắt buộc, tránh sửa câu đã duyệt).
-6. **Xóa tài khoản và `user_identities`.** Câu "until … your account is deleted" đúng về chính sách nhưng chưa có luồng xóa; cột `user_id` không có `ON DELETE CASCADE`, nên xóa tay một dòng `users` đang có identity sẽ lỗi khóa ngoại cho tới khi xóa hàng `user_identities` trước. **Đề xuất: ghi vào quy trình xóa theo yêu cầu (Privacy §7) khi có**; không ảnh hưởng câu chữ.
-7. **Terms §12 hứa báo người dùng đã đăng nhập về thay đổi quan trọng.** Thay đổi ở Terms §4 có tính là quan trọng không? Chưa có cơ chế báo (ghi chú Owner trong `terms.md`). **Đề xuất: không tính là quan trọng** (bổ sung phương thức đăng nhập, không đổi nghĩa vụ); Owner quyết.
+**Câu hỏi mở cho Owner** (câu 1 ĐÃ QUYẾT 2026-10-10; Planner KHÔNG sửa các câu đã duyệt khác, Implementer chép đúng chữ):
+1. **Terms §4 (ĐÃ QUYẾT, Owner 2026-10-10).** Câu 2 của §4 sai một phần so với ADR-013 nên Owner duyệt bản sửa: EN "Once signed in with the email link, you can link a Google, GitHub or LinkedIn account and use it to sign in too." VI "Sau khi đăng nhập bằng link qua email, bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập." Phần còn lại của §4 không đổi. **Implementer sửa khối "Bổ sung ADR-012" của `terms.md` (cả `### EN` và `### VI`) thành hai câu này TRƯỚC, rồi áp §4 vào `terms.md` (`## EN`, `## VI`) và `termsEn`/`termsVi`.** Test đọc từ khối nên tự theo. Dòng cookie Privacy giữ như đã duyệt (không thêm "or account link").
+2. **"We email you …" và gửi thất bại** (cùng lưu ý cũ, đã được ruling "giữ nguyên chữ"): email gửi ngay sau khi lưu, lỗi gửi chỉ log, không hàng đợi. Không đổi. (Đề xuất nếu Owner muốn tuyệt đối: "We try to email you" / "Chúng tôi cố gắng gửi email cho bạn", ở Privacy §8 và Terms §4.)
+3. **Thêm "or until you unlink the account you signed in with" vào dòng session Privacy §6?** Không bắt buộc (câu hiện tại không sai). Đề xuất: không thêm.
 
 **Files:**
-- Modify: `docs/legal/privacy.md`, `docs/legal/terms.md`, `apps/web/src/legal/content.ts`.
+- Modify: `docs/legal/privacy.md`, `docs/legal/privacy-m7.md`, `docs/legal/terms.md`, `apps/web/src/legal/content.ts`.
 - Create: `apps/web/test/legal/linked-accounts.test.ts`.
-- Không sửa: `apps/web/src/views/LegalPage.tsx`, `apps/web/src/routes/legal.tsx`, file locale (không chuỗi giao diện mới), `LEGAL_UPDATED_AT`.
+- Không sửa: `views/LegalPage.tsx`, `routes/legal.tsx`, `domain/privacy-notice.ts`, file locale, `LEGAL_UPDATED_AT`, `content.test.ts`, `privacy-version.test.ts` (phải vẫn xanh nguyên văn).
 
 **Interfaces:**
-- Consumes: `LEGAL`, `LEGAL_UPDATED_AT` (`legal/content.ts`); `OAUTH_COOKIE` (`auth/oauth-cookie.ts`); `OAUTH_FLOW_TTL_MS`, `LINK_INTENT_TTL_MS` (`domain/oauth.ts`); `SESSION_TTL_MS` (`auth/sessions.ts`); `t` (`i18n/t.ts`); `createApp`, `testEnv`.
+- Consumes: `OAUTH_COOKIE` (`auth/oauth-cookie.ts`); `OAUTH_FLOW_TTL_MS`, `LINK_INTENT_TTL_MS` (`domain/oauth.ts`); `SESSION_TTL_MS` (`auth/sessions.ts`); `listPublicBadges` (`db/identities.ts`); `notifyIdentityChange` (`notify/identity.ts`); `outbox`, `clearOutbox`, `FakeMailer` (`email/fake.ts`); `t` (`i18n/t.ts`); `createApp`; `testEnv`; `makeBuilder`, `ensureUser` (`test/fixtures.ts`); `enableProvider`, `startOAuth`, `callbackReq` (`test/oauth-flow.ts`).
 - Produces: không export mới.
 
 - [ ] **Step 1: Test (đỏ).** Tạo `apps/web/test/legal/linked-accounts.test.ts`:
 
 ```ts
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { OAUTH_COOKIE } from "../../src/auth/oauth-cookie.ts";
 import { SESSION_TTL_MS } from "../../src/auth/sessions.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import { listPublicBadges } from "../../src/db/identities.ts";
 import { LINK_INTENT_TTL_MS, OAUTH_FLOW_TTL_MS } from "../../src/domain/oauth.ts";
+import { clearOutbox, FakeMailer, outbox } from "../../src/email/fake.ts";
+import type { Bindings } from "../../src/env.ts";
 import { t } from "../../src/i18n/t.ts";
+import { notifyIdentityChange } from "../../src/notify/identity.ts";
+import { ensureUser, makeBuilder } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
+import { callbackReq, enableProvider, startOAuth } from "../oauth-flow.ts";
 
-// The Owner-approved ADR-012 addendum (2026-10-07) at the foot of docs/legal/*.md is the single source of the wording: the live `## EN`/`## VI`
-// parts must contain every line of it, in the places it names (VNX-2607).
+// The Owner-approved ADR-012 addendum (2026-10-07) at the foot of docs/legal/privacy.md and terms.md is the ONLY source of the wording and of
+// where each line goes. Nothing it says is copied into this file (plan LOW-2): the live text must contain it, in the place it names.
 const SOURCES = import.meta.glob("../../../../docs/legal/*.md", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const sourceOf = (name: string): string => {
   const entry = Object.entries(SOURCES).find(([file]) => file.endsWith(`/docs/legal/${name}.md`));
   if (!entry) throw new Error(`docs/legal/${name}.md not found`);
   return entry[1].replace(/\r\n/g, "\n");
 };
-const partOf = (md: string, lang: "EN" | "VI"): string => {
+type Lang = "EN" | "VI";
+type Version = "live" | "m7";
+/** The `## EN` or `## VI` part, up to the next `---` (same rule as content.test.ts). */
+function partOf(md: string, lang: Lang): string {
   const start = md.indexOf(`\n## ${lang}\n`);
   if (start < 0) throw new Error(`missing ## ${lang}`);
   const body = md.slice(start + `\n## ${lang}\n`.length);
   const end = body.indexOf("\n---");
   return end < 0 ? body : body.slice(0, end);
-};
-/** The wording lines of the addendum's `### EN` or `### VI` block (not the bold "Mục …" instruction lines). */
-const addendumLines = (md: string, lang: "EN" | "VI"): string[] => {
-  const section = md.slice(md.indexOf("\n## Bổ sung ADR-012"));
-  const from = section.indexOf(`\n### ${lang}\n`);
-  if (from < 0) throw new Error(`missing addendum ### ${lang}`);
-  const rest = section.slice(from + `\n### ${lang}\n`.length);
-  const to = rest.indexOf("\n### ");
-  return (to < 0 ? rest : rest.slice(0, to)).split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("**Mục "));
-};
+}
 const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
 const textOf = (html: string) => decode(html.replace(/<\/?(?:strong|code|a|span)\b[^>]*>/g, "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
 const plain = (s: string) => s.replace(/\*\*/g, "").replace(/`/g, "").replace(/\s+/g, " ").trim();
-const live = async (path: string) => textOf(mainOf(await (await createApp().request(new Request(`https://vnx.si${path}`), undefined, testEnv)).text()));
+const bullet = (line: string) => plain(line.replace(/^- /, ""));
 
-// Where each added line goes: `after` is the line it must directly follow (a prefix of that line), `first` starts the added line, `added` is how many lines go there.
-const PRIVACY_PLACES = {
-  EN: [
-    { after: "- **Sign-in:**", first: "- **Linked accounts:**", added: 1 },
-    { after: "- To sign you in and keep you signed in.", first: "- To let you sign in with an account you have linked", added: 1 },
-    { after: "- Builder profiles and approved products are public.", first: "- Your linked accounts are shown only to you.", added: 2 },
-    { after: "- `__Host-vnx_invite`:", first: "- `__Host-vnx_oauth`:", added: 1 },
-    { after: "- Sign-in links:", first: "- Linked accounts: until you unlink them", added: 1 },
-  ],
-  VI: [
-    { after: "- **Đăng nhập:**", first: "- **Tài khoản liên kết:**", added: 1 },
-    { after: "- Đăng nhập và giữ bạn đăng nhập.", first: "- Cho bạn đăng nhập bằng tài khoản đã liên kết", added: 1 },
-    { after: "- Hồ sơ builder và sản phẩm đã duyệt là công khai.", first: "- Tài khoản liên kết của bạn chỉ hiện cho chính bạn.", added: 2 },
-    { after: "- `__Host-vnx_invite`:", first: "- `__Host-vnx_oauth`:", added: 1 },
-    { after: "- Link đăng nhập:", first: "- Tài khoản liên kết: tới khi bạn hủy liên kết", added: 1 },
-  ],
-} as const;
+type Kind = "after" | "replaceBullet" | "append" | "replaceBody";
+interface Edit { section: number; kind: Kind; anchor: string | null; lines: string[] }
 
-describe("the ADR-012 addendum is applied to the live Privacy and Terms text (VNX-2607)", () => {
-  for (const lang of ["EN", "VI"] as const) {
-    it(`privacy ${lang}: every addendum line is in the ${lang} part, in the places it names`, () => {
-      const md = sourceOf("privacy");
-      const part = partOf(md, lang);
-      const lines = part.split("\n");
-      for (const line of addendumLines(md, lang)) expect(part, line.slice(0, 60)).toContain(line);
-      for (const place of PRIVACY_PLACES[lang]) {
-        const at = lines.findIndex((l) => l.startsWith(place.after));
-        expect(at, place.after).toBeGreaterThanOrEqual(0);
-        expect(lines[at + 1]?.startsWith(place.first), `${place.after} is followed by ${place.first}`).toBe(true);
-        expect(lines.slice(at + 1, at + 1 + place.added).every((l) => l.startsWith("- ")), place.first).toBe(true);
-      }
-      expect(lines.filter((l) => l.startsWith(lang === "EN" ? "- **Sign-in:**" : "- **Đăng nhập:**"))).toHaveLength(1); // replaced, not duplicated
+/** The edits of the addendum's `### EN` or `### VI` block, in file order. The instruction text decides the kind; the quoted words are the anchor. */
+function addendumOf(md: string, lang: Lang): Edit[] {
+  const from = md.indexOf("\n## Bổ sung ADR-012");
+  if (from < 0) throw new Error("missing the ADR-012 addendum");
+  const tail = md.slice(from);
+  const start = tail.indexOf(`\n### ${lang}\n`);
+  if (start < 0) throw new Error(`missing addendum ### ${lang}`);
+  const block = tail.slice(start + `\n### ${lang}\n`.length).split("\n### ")[0] ?? "";
+  const edits: Edit[] = [];
+  for (const chunk of block.split(/\n(?=\*\*Mục )/)) {
+    const [header = "", ...rest] = chunk.trim().split("\n");
+    const m = /^\*\*Mục (\d+), (.+):\*\*$/.exec(header);
+    if (!m) continue;
+    const what = m[2] ?? "";
+    const quoted = /"(.+)"/.exec(what)?.[1] ?? null;
+    let kind: Kind;
+    if (/^thêm sau gạch "/.test(what) || /^thêm (hai )?gạch sau "/.test(what)) kind = "after";
+    else if (/^sửa gạch ".+" thành$/.test(what)) kind = "replaceBullet";
+    else if (what === "thêm gạch") kind = "append";
+    else if (/^thay .*bằng$/.test(what)) kind = "replaceBody";
+    else throw new Error(`unknown addendum instruction: ${what}`);
+    edits.push({ section: Number(m[1]), kind, anchor: kind === "after" || kind === "replaceBullet" ? quoted : null, lines: rest.map((l) => l.trim()).filter((l) => l !== "") });
+  }
+  return edits;
+}
+/** The body of section `n` (`**n. Title**` up to the next numbered heading), without the heading. */
+function sectionOf(part: string, n: number): string[] {
+  const lines = part.split("\n");
+  const from = lines.findIndex((l) => l.startsWith(`**${n}. `));
+  if (from < 0) throw new Error(`missing section ${n}`);
+  const to = lines.findIndex((l, i) => i > from && /^\*\*\d+\. /.test(l));
+  return lines.slice(from + 1, to < 0 ? lines.length : to);
+}
+
+// The one instruction without an anchor ("Mục 5, thêm gạch") goes right after `__Host-vnx_invite` (Owner). Each version has its own table:
+// in privacy.md that bullet is the last of section 5; in privacy-m7.md `__Host-vnx_vid` still follows it.
+const APPEND_AFTER: Record<Version, Record<Lang, { after: string; next: string | null }>> = {
+  live: { EN: { after: "- `__Host-vnx_invite`:", next: null }, VI: { after: "- `__Host-vnx_invite`:", next: null } },
+  m7: { EN: { after: "- `__Host-vnx_invite`:", next: "- `__Host-vnx_vid`:" }, VI: { after: "- `__Host-vnx_invite`:", next: "- `__Host-vnx_vid`:" } },
+};
+const SHAPE: Kind[] = ["after", "replaceBullet", "after", "after", "append", "after", "replaceBody"]; // Mục 2 (x2), 3, 4, 5, 6, 8
+const M7_ENV = { ...testEnv, PRIVACY_NOTICE_GO_LIVE: "2026-10-20" } as Bindings; // pinned as in privacy-version.test.ts; the real clock is past 2026-10-06
+const VERSIONS = [
+  { version: "live", file: "privacy", env: testEnv },
+  { version: "m7", file: "privacy-m7", env: M7_ENV },
+] as const;
+const LANGS = [["EN", ""], ["VI", "/vi"]] as const;
+
+/**
+ * Checks that `part` carries every edit where the addendum says, once, and returns, per edit, the text the live page must show
+ * (the anchor line and what follows it, so adjacency is checked on the page too).
+ */
+function applied(part: string, edits: Edit[], version: Version, lang: Lang): string[] {
+  const snippets: string[] = [];
+  for (const edit of edits) {
+    const body = sectionOf(part, edit.section);
+    for (const line of edit.lines) expect(part.split(line).length - 1, `once: ${line.slice(0, 50)}`).toBe(1);
+    if (edit.kind === "replaceBody") {
+      expect(body.filter((l) => l.trim() !== ""), `section ${edit.section} is only the new text`).toEqual(edit.lines);
+      snippets.push(plain(edit.lines.join(" ")));
+      continue;
+    }
+    if (edit.kind === "replaceBullet") {
+      const label = /^- \*\*[^*]+\*\*/.exec(edit.lines[0] ?? "")?.[0] ?? "";
+      expect(label).not.toBe("");
+      expect(body.filter((l) => l.startsWith(label)), `${label} replaced, not duplicated`).toEqual(edit.lines);
+      snippets.push(bullet(edit.lines[0] ?? ""));
+      continue;
+    }
+    let at: number;
+    if (edit.kind === "append") {
+      const place = APPEND_AFTER[version][lang];
+      at = body.findIndex((l) => l.startsWith(place.after));
+      expect(at, place.after).toBeGreaterThanOrEqual(0);
+      const next = body[at + 1 + edit.lines.length];
+      if (place.next === null) expect(next ?? "", "last bullet of the list").toBe("");
+      else expect(next?.startsWith(place.next), `followed by ${place.next}`).toBe(true);
+    } else {
+      const stem = plain((edit.anchor ?? "").replace(/\s*…$/, ""));
+      expect(stem).not.toBe("");
+      at = body.findIndex((l) => l.startsWith("- ") && bullet(l).startsWith(stem));
+      expect(at, `anchor "${stem}" in section ${edit.section}`).toBeGreaterThanOrEqual(0);
+    }
+    expect(body.slice(at + 1, at + 1 + edit.lines.length), `right after the anchor in section ${edit.section}`).toEqual(edit.lines);
+    snippets.push([body[at] ?? "", ...edit.lines].map(bullet).join(" "));
+  }
+  return snippets;
+}
+
+const live = async (path: string, env: Bindings): Promise<string> => textOf(mainOf(await (await createApp().request(new Request(`https://vnx.si${path}`), undefined, env)).text()));
+
+describe("the ADR-012 addendum is applied to the Privacy text, in both versions (VNX-2607)", () => {
+  for (const { version, file } of VERSIONS) {
+    for (const [lang] of LANGS) {
+      it(`${file}.md ${lang}: every addendum line is in the named place, once`, () => {
+        const edits = addendumOf(sourceOf("privacy"), lang);
+        expect(edits.map((e) => e.kind)).toEqual(SHAPE);
+        applied(partOf(sourceOf(file), lang), edits, version, lang);
+      });
+    }
+  }
+
+  it("the M7 version has both new and old neighbours: oauth sits between invite and vid, and the live version has no vid", () => {
+    for (const lang of ["EN", "VI"] as const) {
+      const m7 = sectionOf(partOf(sourceOf("privacy-m7"), lang), 5).filter((l) => l.startsWith("- `"));
+      expect(m7.map((l) => /^- `([^`]+)`/.exec(l)?.[1])).toEqual(["__Host-vnx_session", "__Host-vnx_invite", "__Host-vnx_oauth", "__Host-vnx_vid"]);
+      const current = sectionOf(partOf(sourceOf("privacy"), lang), 5).filter((l) => l.startsWith("- `"));
+      expect(current.map((l) => /^- `([^`]+)`/.exec(l)?.[1])).toEqual(["__Host-vnx_session", "__Host-vnx_invite", "__Host-vnx_oauth"]);
+    }
+  });
+});
+
+describe("the ADR-012 addendum is applied to the Terms text (VNX-2607)", () => {
+  for (const [lang] of LANGS) {
+    it(`terms.md ${lang}: section 4 is the addendum paragraph`, () => {
+      const edits = addendumOf(sourceOf("terms"), lang);
+      expect(edits.map((e) => e.kind)).toEqual(["replaceBody"]);
+      expect(edits[0]?.section).toBe(4);
+      applied(partOf(sourceOf("terms"), lang), edits, "live", lang);
     });
+  }
+});
 
-    it(`terms ${lang}: section 4 is the addendum paragraph, once`, () => {
-      const md = sourceOf("terms");
-      const part = partOf(md, lang);
-      const [paragraph] = addendumLines(md, lang);
-      expect(paragraph).toBeDefined();
-      expect(part).toContain(paragraph ?? "");
-      expect(part.split(paragraph ?? "")).toHaveLength(2);
-      expect(part).not.toContain(lang === "EN" ? "Keep your email account secure; anyone who can read it" : "Hãy giữ an toàn hộp thư của bạn; ai đọc được");
+describe("the live pages show the text, word for word (VNX-2607)", { timeout: 30_000 }, () => {
+  for (const { version, file, env } of VERSIONS) {
+    for (const [lang, prefix] of LANGS) {
+      it(`/privacy (${version}) ${lang}: every addendum line, each right after its anchor`, async () => {
+        const text = await live(`${prefix}/privacy`, env);
+        // Proves the right version was rendered: only the M7 text has the visit cookie.
+        if (version === "m7") expect(text).toContain("__Host-vnx_vid");
+        else expect(text).not.toContain("__Host-vnx_vid");
+        for (const snippet of applied(partOf(sourceOf(file), lang), addendumOf(sourceOf("privacy"), lang), version, lang)) expect(text, snippet.slice(0, 60)).toContain(snippet);
+      });
+    }
+  }
+
+  for (const [lang, prefix] of LANGS) {
+    it(`/terms ${lang}: section 4 is the addendum paragraph`, async () => {
+      const text = await live(`${prefix}/terms`, testEnv);
+      for (const snippet of applied(partOf(sourceOf("terms"), lang), addendumOf(sourceOf("terms"), lang), "live", lang)) expect(text, snippet.slice(0, 60)).toContain(snippet);
     });
   }
 
-  it("privacy section 8 says we e-mail on link and unlink, in the replaced paragraph, in both languages", () => {
-    expect(partOf(sourceOf("privacy"), "EN")).toContain("We email you whenever an account is linked to or unlinked from yours.");
-    expect(partOf(sourceOf("privacy"), "VI")).toContain("Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết với tài khoản của bạn.");
-  });
-
-  it("the live pages show them: EN and VI privacy carry the new cookie and the linked-accounts sentence", async () => {
-    const en = await live("/privacy");
-    expect(en).toContain("__Host-vnx_oauth");
-    expect(en).toContain("up to 10 minutes");
-    expect(en).toContain("Linked accounts: if you link a Google, GitHub or LinkedIn account to your VNX.SI account");
-    expect(en).toContain("Linked accounts: until you unlink them or your account is deleted.");
-    const vi = await live("/vi/privacy");
-    expect(vi).toContain("__Host-vnx_oauth");
-    expect(vi).toContain("tối đa 10 phút");
-    expect(vi).toContain("Tài khoản liên kết: nếu bạn liên kết tài khoản Google, GitHub hoặc LinkedIn với tài khoản VNX.SI");
-    expect(vi).toContain("Tài khoản liên kết: tới khi bạn hủy liên kết hoặc tài khoản của bạn bị xóa.");
-  });
-
-  it("every addendum line is on the live privacy page and the live terms page, word for word", async () => {
-    for (const [lang, prefix] of [["EN", ""], ["VI", "/vi"]] as const) {
-      const privacy = await live(`${prefix}/privacy`);
-      for (const line of addendumLines(sourceOf("privacy"), lang)) expect(privacy, `${lang} ${line.slice(0, 50)}`).toContain(plain(line.replace(/^- /, "")));
-      const terms = await live(`${prefix}/terms`);
-      for (const line of addendumLines(sourceOf("terms"), lang)) expect(terms, `${lang} terms`).toContain(plain(line));
-    }
-    expect(await live("/terms")).toContain("you can link a Google, GitHub or LinkedIn account and use it to sign in too");
-    expect(await live("/vi/terms")).toContain("bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập");
-  });
-
-  it("zh-Hans and zh-Hant show the same English text with their translated 'English version applies' line", async () => {
+  it("zh-Hans and zh-Hant show the EN text, both Privacy versions and Terms, with the translated 'English version applies' line", async () => {
     for (const [locale, prefix] of [["zh-Hans", "/zh-hans"], ["zh-Hant", "/zh-hant"]] as const) {
-      const privacy = await live(`${prefix}/privacy`);
-      expect(privacy, locale).toContain(t(locale, "legal.englishOnly"));
-      expect(privacy, locale).toContain("__Host-vnx_oauth");
-      expect(privacy, locale).toContain("Linked accounts: if you link a Google, GitHub or LinkedIn account");
-      const terms = await live(`${prefix}/terms`);
+      for (const { version, file, env } of VERSIONS) {
+        const text = await live(`${prefix}/privacy`, env);
+        expect(text, `${locale} ${version}`).toContain(t(locale, "legal.englishOnly"));
+        for (const snippet of applied(partOf(sourceOf(file), "EN"), addendumOf(sourceOf("privacy"), "EN"), version, "EN")) expect(text, `${locale} ${version}`).toContain(snippet);
+      }
+      const terms = await live(`${prefix}/terms`, testEnv);
       expect(terms, locale).toContain(t(locale, "legal.englishOnly"));
-      expect(terms, locale).toContain("link a Google, GitHub or LinkedIn account");
+      for (const snippet of applied(partOf(sourceOf("terms"), "EN"), addendumOf(sourceOf("terms"), "EN"), "live", "EN")) expect(terms, locale).toContain(snippet);
     }
   });
 
-  it("the live page does not show the draft header or the instruction lines", async () => {
-    for (const path of ["/privacy", "/vi/privacy", "/terms", "/vi/terms"]) {
-      const text = await live(path);
-      for (const word of ["Bổ sung ADR-012", "ĐÃ ÁP DỤNG", "bản nháp", "**"]) expect(text, `${path} ${word}`).not.toContain(word);
+  it("the live pages do not show the addendum header, its instruction lines or raw markup", async () => {
+    for (const env of [testEnv, M7_ENV]) {
+      for (const path of ["/privacy", "/vi/privacy", "/terms", "/vi/terms"]) {
+        const text = await live(path, env);
+        for (const word of ["Bổ sung ADR-012", "ĐÃ ÁP DỤNG", "**Mục", "Mục 2,", "bản nháp"]) expect(text, `${path} ${word}`).not.toContain(word);
+      }
     }
   });
 });
 
 describe("the sentences match the code (VNX-2607 cross-check)", () => {
-  it("the cookie name and lifetimes named in Privacy sections 5 and 6", () => {
+  beforeEach(async () => {
+    clearOutbox();
+    await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+    resetFlagCache();
+    for (const m of ["error", "warn", "log", "info", "debug"] as const) vi.spyOn(console, m).mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("the cookie name, its 'up to N minutes' and the session 'up to N days' are the code's (both versions, EN and VI)", () => {
     expect(OAUTH_COOKIE).toBe("__Host-vnx_oauth");
-    expect(OAUTH_FLOW_TTL_MS).toBe(10 * 60 * 1000); // "up to 10 minutes"
     expect(LINK_INTENT_TTL_MS).toBeLessThanOrEqual(OAUTH_FLOW_TTL_MS);
-    expect(SESSION_TTL_MS).toBe(30 * 24 * 60 * 60 * 1000); // "up to 30 days"
+    for (const file of ["privacy", "privacy-m7"]) {
+      for (const [lang, minutes, days] of [["EN", /up to (\d+) minutes/, /up to (\d+) days/], ["VI", /tối đa (\d+) phút/, /tối đa (\d+) ngày/]] as const) {
+        const cookies = sectionOf(partOf(sourceOf(file), lang), 5);
+        const oauth = cookies.find((l) => l.startsWith(`- \`${OAUTH_COOKIE}\`:`)) ?? "";
+        const session = cookies.find((l) => l.startsWith("- `__Host-vnx_session`:")) ?? "";
+        expect(Number(minutes.exec(oauth)?.[1]) * 60_000, `${file} ${lang} oauth`).toBe(OAUTH_FLOW_TTL_MS);
+        expect(Number(days.exec(session)?.[1]) * 24 * 60 * 60 * 1000, `${file} ${lang} session`).toBe(SESSION_TTL_MS);
+        // S-1: section 6 "Sessions: up to N days" / "tối đa N ngày" is the same number.
+        const kept = sectionOf(partOf(sourceOf(file), lang), 6).find((l) => l.includes(lang === "EN" ? "Sessions:" : "Phiên đăng nhập:")) ?? "";
+        expect(Number(days.exec(kept)?.[1]) * 24 * 60 * 60 * 1000, `${file} ${lang} section 6 sessions`).toBe(SESSION_TTL_MS);
+      }
+    }
   });
 
-  it("user_identities stores exactly the fields Privacy section 2 lists, and no token", async () => {
-    const { results } = await testEnv.DB.prepare("SELECT name FROM pragma_table_info('user_identities') ORDER BY cid").all<{ name: string }>();
-    // service (provider), its ID (provider_subject), a label, when linked, when last used; plus show_on_profile (covered by section 3) and updated_at.
-    // A new column must be matched by a Privacy change first: edit this list only together with docs/legal/privacy.md.
+  it("/start writes the cookie as the text says: HttpOnly, Secure, and not longer than the stated minutes", async () => {
+    await enableProvider("github");
+    const started = await startOAuth("github");
+    const line = started.res.headers.getSetCookie().find((l) => l.startsWith(`${OAUTH_COOKIE}=`)) ?? "";
+    expect(line).toMatch(/HttpOnly/i);
+    expect(line).toMatch(/Secure/i);
+    expect(Number(/Max-Age=(\d+)/i.exec(line)?.[1])).toBeLessThanOrEqual(OAUTH_FLOW_TTL_MS / 1000);
+  });
+
+  it("user_identities holds exactly what Privacy section 2 lists, and no token", async () => {
+    const { results } = await testEnv.DB.prepare("PRAGMA table_info(user_identities)").all<{ name: string }>();
+    // The text names: the service (provider), its ID (provider_subject), a label, when linked, when last used; show_on_profile is the builder's choice
+    // (sections 3 and 4) and updated_at a timestamp. A new column must be matched by a Privacy change in BOTH versions first: edit this list only with them.
     expect(results.map((r) => r.name)).toEqual(["id", "user_id", "provider", "provider_subject", "label", "show_on_profile", "linked_at", "last_used_at", "updated_at"]);
     for (const r of results) expect(r.name).not.toMatch(/token|secret|password|access|refresh|code|verifier/i);
+  });
+
+  it("a failed link or unlink e-mail never throws (best effort; the recipient is proved at route level by test/auth/oauth-link.test.ts:276-288 and test/me/identity-unlink.test.ts:19,59)", async () => {
+    const user = await ensureUser(`la-${Math.random().toString(36).slice(2, 8)}@example.com`);
+    const base = { to: user.email, locale: "en", provider: "github", label: "octocat", at: new Date().toISOString() } as const;
+    expect(await notifyIdentityChange(testEnv, { ...base, kind: "linked" })).toBe("sent");
+    expect(await notifyIdentityChange(testEnv, { ...base, kind: "unlinked" })).toBe("sent");
+    expect(outbox).toHaveLength(2); // one e-mail per change
+    vi.spyOn(FakeMailer.prototype, "send").mockRejectedValueOnce(new Error("down"));
+    expect(await notifyIdentityChange(testEnv, { ...base, kind: "linked" })).toBe("failed");
+  });
+
+  it("the badge rules in sections 3 and 4: GitHub login and LinkedIn 'verified' for an approved builder who opted in; never Google; never a client; never a pending builder", async () => {
+    const tag = Math.random().toString(36).slice(2, 8);
+    const raw = (userId: string, provider: string, label: string) =>
+      testEnv.DB.prepare("INSERT INTO user_identities (id, user_id, provider, provider_subject, label, show_on_profile, linked_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)")
+        .bind(`id-${tag}-${provider}-${userId}`, userId, provider, `s-${tag}-${provider}-${userId}`, label, new Date().toISOString()).run();
+    const approved = await makeBuilder(`la-ok-${tag}@vnx.si`, `la-ok-${tag}`, "approved");
+    const pending = await makeBuilder(`la-pe-${tag}@vnx.si`, `la-pe-${tag}`, "pending");
+    const client = await ensureUser(`la-cl-${tag}@example.com`);
+    for (const userId of [approved.userId, pending.userId, client.id]) {
+      await raw(userId, "github", `gh-${tag}`);
+      await raw(userId, "linkedin", `li-${tag}@example.com`);
+      await raw(userId, "google", `go-${tag}@example.com`);
+    }
+    expect(await listPublicBadges(testEnv.DB, approved.userId, ["github", "linkedin"])).toEqual([
+      { provider: "github", login: `gh-${tag}`, url: `https://github.com/gh-${tag}` },
+      { provider: "linkedin" }, // no label, no link, no e-mail
+    ]);
+    expect(await listPublicBadges(testEnv.DB, pending.userId, ["github", "linkedin"])).toEqual([]);
+    expect(await listPublicBadges(testEnv.DB, client.id, ["github", "linkedin"])).toEqual([]);
+  });
+
+  it("the sign-in counter stores the raw IP under oauth:ip:* (Privacy section 2, Security; LOW-4)", async () => {
+    await enableProvider("github");
+    const ip = `203.0.113.${100 + Math.floor(Math.random() * 100)}`;
+    await callbackReq("github", {}, undefined, { "cf-connecting-ip": ip });
+    const row = await testEnv.DB.prepare("SELECT key FROM rate_limits WHERE key = ?1").bind(`oauth:ip:${ip}`).first<{ key: string }>();
+    expect(row?.key).toBe(`oauth:ip:${ip}`); // the address itself, not a hash: the text says "your IP address"
   });
 });
 ```
 
-- [ ] **Step 2: Chạy, thấy đỏ.** `npm test -w apps/web -- test/legal/linked-accounts.test.ts` → FAIL (mọi dòng bổ sung chưa có trong `## EN`/`## VI`; `/privacy` chưa có `__Host-vnx_oauth`). Hai test "match the code" xanh sẵn (chúng ghim code, không phụ thuộc chữ).
+- [ ] **Step 2: Chạy, thấy đỏ.** `npm test -w apps/web -- test/legal/linked-accounts.test.ts` → FAIL: mọi test `applied`/live/zh đỏ (bổ sung chưa nằm trong `## EN`/`## VI` của cả hai file Privacy và Terms; `privacy-m7.md` chưa có `__Host-vnx_oauth`). Trong nhóm "match the code" chỉ test đọc "up to N minutes" từ dòng `__Host-vnx_oauth` đỏ (dòng chưa có trong mục 5); các test còn lại xanh sẵn vì chúng ghim code. Lỗi phải là "không tìm thấy neo / dòng ở chỗ đó", không phải lỗi cú pháp hay import.
 
-- [ ] **Step 3: Chép vào markdown (phần md của `linked-accounts` xanh; `content.test.ts` đỏ vì md đã đổi mà trang chưa: đúng, Step 4 sửa).** Trong `docs/legal/privacy.md`, phần `## EN` rồi `## VI`, áp **nguyên văn** từng khối của mục "Bổ sung ADR-012" (copy từ chính file, không gõ lại):
+- [ ] **Step 3: Chép vào markdown.** Áp **nguyên văn** (copy từ khối "Bổ sung" trong chính file, không gõ lại) vào `## EN` rồi `## VI` của **từng** file; làm cả `privacy.md` và `privacy-m7.md`:
 
-| Chỗ | Việc | Nguồn trong mục "Bổ sung" |
+| Chỗ | Việc | `privacy.md` | `privacy-m7.md` |
+|---|---|---|---|
+| Mục 2, gạch "Sign-in" / "Đăng nhập" | **thay** gạch bằng bản "sửa gạch … thành"; **thêm** gạch "Linked accounts" / "Tài khoản liên kết" ngay sau | như nhau | như nhau |
+| Mục 3, sau "To sign you in and keep you signed in." / "Đăng nhập và giữ bạn đăng nhập." | thêm 1 gạch | như nhau | như nhau |
+| Mục 4, sau "Builder profiles and approved products are public." / "Hồ sơ builder và sản phẩm đã duyệt là công khai." | thêm 2 gạch | như nhau | như nhau |
+| Mục 5 | thêm gạch `__Host-vnx_oauth` **ngay sau** `__Host-vnx_invite` | gạch cuối của mục | **trước** `__Host-vnx_vid` |
+| Mục 6, sau "Sign-in links …" / "Link đăng nhập …" | thêm 1 gạch | như nhau | như nhau |
+| Mục 8, đoạn "Sessions and sign-in links …" / "Phiên và link đăng nhập …" | **thay** cả đoạn | như nhau | như nhau |
+
+Trong `terms.md`: **thay** đoạn văn của "4. Your account" (`## EN`) và "4. Tài khoản của bạn" (`## VI`) bằng đoạn của khối "Mục 4"; mục 3 giữ nguyên. Không dòng `---` nào được vào chữ chép (`partOf` cắt ở `\n---`). Không đổi dòng nào trong các khối `### EN`/`### VI` của mục "Bổ sung".
+
+Đầu file (quy ước của file):
+- `privacy.md`, dòng "Trạng thái": thêm sau "**Bổ sung EPIC 21 … 2026-10-05.**": ` **Bổ sung ADR-012 (tài khoản liên kết): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607 (cả `privacy.md` và `privacy-m7.md`).**` Thêm bullet **"Đối chiếu code ADR-012 (`feat/epic26-linked-accounts` tại `<SHA>`):"** (SHA = `git rev-parse --short HEAD` lúc commit): cookie `__Host-vnx_oauth` luồng 600 s, intent liên kết 120 s (`auth/oauth-cookie.ts`, `domain/oauth.ts`); bảng `user_identities`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `show_on_profile`, `updated_at`), không cột token (`migrations/0017_user_identities.sql`); `sessions.method` (`auth/sessions.ts`); hai email báo tới `users.email`, không gửi khi `already_linked`, lỗi gửi chỉ log (`notify/identity.ts`); huy hiệu GitHub `@login` + link, LinkedIn chỉ nhãn "verified", Google không bao giờ, danh tính client không bao giờ tới builder (`db/identities.ts` `listPublicBadges`); bộ đếm đăng nhập OAuth lưu IP thô ở khóa `oauth:ip:*`, 20 lần/giờ (`routes/oauth.tsx`); hủy liên kết xóa hàng và kết thúc session `oauth_<provider>` (`db/identities.ts` `unlinkIdentity`, `auth/sessions.ts`); chưa có luồng xóa tài khoản.
+- `privacy-m7.md`, dòng "Trạng thái": đổi "Phần còn lại giống hệt `privacy.md`." thành "Phần còn lại giống hệt `privacy.md`, kể cả bổ sung ADR-012 (tài khoản liên kết, ĐÃ ÁP DỤNG ở VNX-2607; câu chữ và bảng đối chiếu code ở `privacy.md`; khác duy nhất: cookie `__Host-vnx_oauth` đứng giữa `__Host-vnx_invite` và `__Host-vnx_vid`)." Thêm vào bullet "Hai phiên bản" không cần: đã nói "mọi thay đổi Privacy phải sửa cả hai tệp".
+- `terms.md`, dòng "Trạng thái" (đầu file) và dòng "Trạng thái" của mục "Bổ sung" cuối file (LOW-2/LOW-6): thêm đúng các câu sau (khối mã, chép nguyên):
+
+```text
+Đầu file, nối vào dòng "Trạng thái":
+ **Bổ sung ADR-012 (mục 4): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607; câu 2 của Mục 4 sửa theo Owner 2026-10-10 (ADR-013).**
+
+Mục "Bổ sung" cuối file, dòng "Trạng thái":
+câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012); câu 2 của Mục 4 sửa theo Owner 2026-10-10 (ADR-013: liên kết chỉ từ session `magic_link`). **Đã áp dụng** ở VNX-2607: đoạn dưới đây đã nằm trong `## EN` và `## VI`; `test/legal/linked-accounts.test.ts` đọc khối này làm nguồn. Khi đổi câu chữ sau này, sửa khối này, tệp và `src/legal/content.ts` cùng lúc và hỏi Owner.
+```
+
+  Trước đó, sửa câu 2 trong hai khối `### EN`/`### VI` của `terms.md` như ở câu hỏi mở 1. Với `privacy.md` dùng dòng "Trạng thái" đã nêu ở trên (không có câu về Mục 4).
+- Mục cuối của `privacy.md` và `terms.md`: đổi tiêu đề thành `## Bổ sung ADR-012 (tài khoản liên kết): ĐÃ ÁP DỤNG (VNX-2607), giữ làm bản gốc đã duyệt`. Dòng "Trạng thái" của mục đó thành: ``câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Đã áp dụng** ở VNX-2607: các đoạn dưới đây đã nằm trong `## EN` và `## VI`` (Privacy: của CẢ `privacy.md` và `privacy-m7.md`)``; `test/legal/linked-accounts.test.ts` đọc khối này làm nguồn và kiểm từng dòng còn khớp. Khi đổi câu chữ sau này, sửa khối này, các tệp và `src/legal/content.ts` cùng lúc và hỏi Owner.`` Dòng "Cách áp dụng" đổi sang quá khứ ("VNX-2607 đã chép … vào `src/legal/content.ts`"), bỏ câu "Không chép sớm hơn" và câu "Lưu ý M7" thành: "Đã áp dụng cho cả hai phiên bản; ở `privacy-m7.md` gạch `__Host-vnx_oauth` đứng trước `__Host-vnx_vid`."
+
+Chạy: `npm test -w apps/web -- test/legal/linked-accounts.test.ts -t "applied"` → PASS (nhóm md Privacy hai phiên bản và Terms). Các test trang trực tiếp và `content.test.ts` còn đỏ (md đã đổi mà `content.ts` chưa): đúng, Step 4 sửa.
+
+- [ ] **Step 4: Chép vào `content.ts` (xanh).** `apps/web/src/legal/content.ts`; kiểu `LegalDoc` không đổi. Mỗi gạch là một chuỗi trong mảng `ul`, `**` và dấu `` ` `` giữ như các dòng hiện có, chép từ markdown đã áp ở Step 3 (bỏ `- `; không có dấu `"` nào trong chữ đã duyệt, dấu `'` giữ nguyên). **Sửa từ dưới lên** (số dòng là trước khi sửa):
+
+| Hằng số | Chỗ (dòng hiện tại) | Việc |
 |---|---|---|
-| Mục 2, gạch "Sign-in" / "Đăng nhập" | **thay** gạch cũ bằng bản "sửa gạch … thành", rồi **thêm** gạch "Linked accounts" / "Tài khoản liên kết" ngay sau | hai khối "Mục 2" |
-| Mục 3, sau "To sign you in and keep you signed in." / "Đăng nhập và giữ bạn đăng nhập." | thêm 1 gạch | "Mục 3" |
-| Mục 4, sau "Builder profiles and approved products are public." / "Hồ sơ builder và sản phẩm đã duyệt là công khai." | thêm 2 gạch | "Mục 4" |
-| Mục 5, sau gạch `__Host-vnx_invite` (cuối danh sách) | thêm 1 gạch `__Host-vnx_oauth` | "Mục 5" |
-| Mục 6, sau gạch "Sign-in links …" / "Link đăng nhập …" | thêm 1 gạch | "Mục 6" |
-| Mục 8, đoạn "Sessions and sign-in links …" / "Phiên và link đăng nhập …" | **thay** cả đoạn | "Mục 8" |
+| `termsEn` | "4. Your account", khối `p` (≈ 49-52) | thay bằng đoạn EN của Terms "Mục 4" |
+| `termsVi` | "4. Tài khoản của bạn" (≈ 161-164) | thay bằng đoạn VI |
+| `privacyEn` | 260 `**Sign-in:**`; 280; 298; 315; 325; 346 | thay gạch và thêm "Linked accounts" ngay sau; thêm sau "To sign you in…"; thêm hai gạch sau "Builder profiles…"; thêm `__Host-vnx_oauth` sau `__Host-vnx_invite`; thêm "Linked accounts: until…" sau "Sign-in links…"; thay khối `p` mục 8 |
+| `privacyEnM7` | 385; 406; 425; 442 (vid ở 443); 453; 475 | như trên; mục 5: dòng `__Host-vnx_oauth` chen **giữa** 442 và 443 |
+| `privacyVi` | 514; 534; 552; 569; 579; 600 | như `privacyEn`, bản VI |
+| `privacyViM7` | 639; 660; 679; 696 (vid ở 697); 707; 729 | như `privacyEnM7`, bản VI |
 
-Trong `docs/legal/terms.md`: **thay** đoạn văn của "4. Your account" (`## EN`) và "4. Tài khoản của bạn" (`## VI`, `terms.md:87-88`) bằng đoạn của khối "Mục 4"; mục 3 giữ nguyên. Không có dòng `---` nào trong chữ chép vào (`partOf` cắt ở `\n---`).
-
-Cập nhật đầu hai file (quy ước của file):
-- `privacy.md`, dòng "Trạng thái": thêm ngay sau "**Bổ sung EPIC 21 … 2026-10-05.**": ` **Bổ sung ADR-012 (tài khoản liên kết): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607.**`; thêm bullet **"Đối chiếu code ADR-012 (`feat/epic26-linked-accounts` tại `<SHA>`):"** (SHA từ `git rev-parse --short HEAD` lúc commit) gồm: cookie `__Host-vnx_oauth` 600 s luồng / 120 s intent liên kết (`auth/oauth-cookie.ts`, `domain/oauth.ts`); bảng `user_identities`: `provider`, `provider_subject`, `label`, `linked_at`, `last_used_at` (+ `show_on_profile`, `updated_at`), không cột token (`migrations/0017_user_identities.sql`); `sessions.method` (`auth/sessions.ts`); hai email báo tới `users.email`, không gửi khi `already_linked`, lỗi gửi chỉ log (`notify/identity.ts`); huy hiệu: GitHub `@login` + link, LinkedIn chỉ nhãn "verified", Google không bao giờ, danh tính client không bao giờ tới builder (`db/identities.ts` `listPublicBadges`); lưu giữ: hàng bị xóa khi hủy liên kết, chưa có luồng xóa tài khoản.
-- `terms.md`, dòng "Trạng thái": thêm ` **Bổ sung ADR-012 (mục 4): APPROVED bởi Owner 2026-10-07, ĐÃ ÁP DỤNG ở VNX-2607.**`.
-- Mục cuối của cả hai file: đổi tiêu đề thành `## Bổ sung ADR-012 (tài khoản liên kết): ĐÃ ÁP DỤNG (VNX-2607), giữ làm bản gốc đã duyệt`; dòng "Trạng thái" của mục đó thành: ``câu chữ APPROVED bởi Owner 2026-10-07 (cùng ADR-012). **Đã áp dụng** ở VNX-2607: các đoạn dưới đây đã nằm trong `## EN` và `## VI`; `test/legal/linked-accounts.test.ts` kiểm từng dòng còn khớp. Khi đổi câu chữ sau này, sửa cả hai chỗ (hoặc xóa mục này cùng test đó) và hỏi Owner.``; dòng "Cách áp dụng": đổi sang quá khứ ("VNX-2607 đã chép … vào `src/legal/content.ts`"). Không đổi dòng nào trong hai khối `### EN`/`### VI`.
-
-Chạy: `npm test -w apps/web -- test/legal/linked-accounts.test.ts -t "applied"` → test md ("every addendum line is in the … part", "section 4", "section 8") PASS; các test trang trực tiếp còn đỏ.
-
-- [ ] **Step 4: Chép vào `content.ts` (xanh).** `apps/web/src/legal/content.ts` (không đổi kiểu `LegalDoc`; mỗi dòng gạch là một chuỗi trong `ul`, dấu `` ` `` và `**` giữ như các dòng hiện có; copy từ markdown đã áp ở Step 3). Chỗ sửa:
-
-| Đối tượng (dòng hiện tại) | Sửa |
-|---|---|
-| `termsEn` mục "4. Your account", khối `p` (≈ 49-52) | thay chuỗi bằng đoạn EN của Terms "Mục 4" |
-| `termsVi` mục "4. Tài khoản của bạn" (≈ 161-164) | thay bằng đoạn VI |
-| `privacyEn` mục 2, gạch `**Sign-in:**` (260) | thay bằng bản "sửa gạch thành"; thêm ngay sau một mục `**Linked accounts:** …` |
-| `privacyEn` mục 3, sau `To sign you in and keep you signed in.` (280) | thêm `To let you sign in with an account you have linked and, …` |
-| `privacyEn` mục 4, sau `Builder profiles and approved products are public.` (298) | thêm hai mục `Your linked accounts are shown only to you. …` và `When you sign in with Google, GitHub or LinkedIn, …` |
-| `privacyEn` mục 5, sau `` `__Host-vnx_invite`… `` (315) | thêm `` `__Host-vnx_oauth`: keeps a sign-in … for up to 10 minutes. `` |
-| `privacyEn` mục 6, sau `Sign-in links: 15 minutes. …` (325) | thêm `Linked accounts: until you unlink them or your account is deleted.` |
-| `privacyEn` mục 8, khối `p` (346) | thay bằng đoạn đã duyệt ("… admin actions are logged. We email you whenever an account is linked to or unlinked from yours. No system is perfectly secure; …") |
-| `privacyVi`: sáu chỗ tương ứng (385, 405, 423, 440, 450, 471) | như trên, bản VI |
-
-Ví dụ một chỗ (mục 5 EN; các chỗ khác cùng cách, nguyên văn từ markdown):
+Ví dụ (mục 5 của `privacyEnM7`; cùng cách cho mọi chỗ):
 
 ```ts
             "`__Host-vnx_invite`: remembers a builder invite link for 1 hour.",
             "`__Host-vnx_oauth`: keeps a sign-in with Google, GitHub or LinkedIn secure while you go to that service and back, for up to 10 minutes.",
+            "`__Host-vnx_vid`: a random code, …", // unchanged
 ```
-Chú thích đầu `content.ts` (dòng 3-6): thêm "…and, for the linked-accounts text, 2026-10-07 (VNX-2607)" sau "approved by the Owner 2026-10-04". Không đổi `LEGAL_UPDATED_AT`. Chạy: `npm test -w apps/web -- test/legal` → PASS (`content.test.ts`, `pages.test.ts`, `linked-accounts.test.ts`).
+Chú thích đầu `content.ts` (dòng 3-6): thêm "…and, for the linked-accounts text (ADR-012), 2026-10-07 (VNX-2607)" sau "approved by the Owner 2026-10-04". Không đổi `LEGAL_UPDATED_AT`. Chạy: `npm test -w apps/web -- test/legal` → PASS (`content.test.ts` so từng dòng md với trang ở cả `privacy` và `privacy-m7`; `privacy-version.test.ts`; `pages.test.ts`; `footer.test.ts`; `linked-accounts.test.ts`).
 
-- [ ] **Step 5: Tiêu chí chấp nhận.** (`LA` = `apps/web/test/legal/linked-accounts.test.ts`; `npm test -w apps/web -- <đường dẫn> -t "<tên>"`)
+- [ ] **Step 5: Tiêu chí chấp nhận.** (`LA` = `apps/web/test/legal/linked-accounts.test.ts`; lệnh `npm test -w apps/web -- <đường dẫn> -t "<tên>"`)
 
 | # | Điều kiện | Lệnh |
 |---|---|---|
-| 1 | Mọi dòng bổ sung Privacy có trong `## EN` và `## VI`, đúng chỗ, gạch Sign-in được thay chứ không nhân đôi | `LA -t "privacy EN"` và `LA -t "privacy VI"` |
-| 2 | Terms mục 4 là đoạn mới, đúng một lần, câu cũ biến mất | `LA -t "terms EN"` và `LA -t "terms VI"` |
-| 3 | `/privacy` EN và VI có cookie `__Host-vnx_oauth` và câu "Linked accounts" / "Tài khoản liên kết" | `LA -t "live pages show them"` |
-| 4 | Mọi dòng bổ sung hiện nguyên văn trên `/privacy` và `/terms` (EN, VI) | `LA -t "every addendum line is on the live"` |
-| 5 | zh-Hans, zh-Hant hiện bản EN kèm câu "English version applies" đã dịch | `LA -t "zh-Hans and zh-Hant"` |
-| 6 | Không lộ tiêu đề nháp, "ĐÃ ÁP DỤNG", dòng chỉ dẫn | `LA -t "does not show the draft header"` |
-| 7 | Câu chữ khớp code: tên và thời hạn cookie, 30 ngày, cột `user_identities` không token | `LA -t "match the code"` |
-| 8 | `content.test.ts` (so từng dòng md với trang) và `pages.test.ts` xanh | `npm test -w apps/web -- test/legal` |
-| 9 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test -- --maxWorkers=2` |
+| 1 | Mọi dòng bổ sung Privacy đúng chỗ, đúng một lần, ở CẢ `privacy.md` và `privacy-m7.md`, EN và VI; gạch Sign-in được thay | `LA -t "every addendum line is in the named place"` |
+| 2 | M7: `oauth` giữa `invite` và `vid`; bản hiện hành: `oauth` là gạch cuối | `LA -t "oauth sits between invite and vid"` |
+| 3 | Terms §4 là đoạn mới, EN và VI | `LA -t "section 4 is the addendum paragraph"` |
+| 4 | `/privacy` hiện bổ sung ở bản hiện hành và ở bản M7 (`PRIVACY_NOTICE_GO_LIVE=2026-10-20`), EN và VI, mỗi dòng ngay sau neo; `/terms` | `LA -t "the live pages show the text"` |
+| 5 | zh-Hans, zh-Hant hiện bản EN (cả hai phiên bản Privacy và Terms) kèm câu "English version applies" đã dịch | `LA -t "zh-Hans and zh-Hant"` |
+| 6 | Không lộ tiêu đề bổ sung, "ĐÃ ÁP DỤNG", dòng chỉ dẫn, markup thô | `LA -t "do not show the addendum header"` |
+| 7 | Câu chữ khớp code: tên cookie, "10 phút", "30 ngày", `Set-Cookie`, cột `user_identities` không token, hai email, quy tắc huy hiệu, khóa `oauth:ip:*` IP thô | `LA -t "match the code"` |
+| 8 | `content.test.ts`, `privacy-version.test.ts`, `pages.test.ts` xanh nguyên văn (không sửa file nào của chúng) | `npm test -w apps/web -- test/legal` |
+| 9 | Chỉ 4 tệp sửa (`privacy.md`, `privacy-m7.md`, `terms.md`, `content.ts`) và 1 tệp mới; `LEGAL_UPDATED_AT` không đổi | `git status --short` trước khi commit (tệp test mới hiện là `??`), hoặc `git show --stat HEAD` sau commit; và `grep -n 'LEGAL_UPDATED_AT = ' apps/web/src/legal/content.ts` |
+| 10 | Typecheck và toàn bộ test | `npm run typecheck -w apps/web` và `npm test -- --maxWorkers=2` |
 
 - [ ] **Step 6: Typecheck, toàn bộ test, commit**
 
 ```bash
 npm run typecheck -w apps/web
 npm test -- --maxWorkers=2
-git add docs/legal/privacy.md docs/legal/terms.md apps/web/src/legal/content.ts apps/web/test/legal/linked-accounts.test.ts
-git commit -m "docs(legal): apply the approved linked-accounts text to Privacy and Terms (VNX-2607)
+git add docs/legal/privacy.md docs/legal/privacy-m7.md docs/legal/terms.md apps/web/src/legal/content.ts apps/web/test/legal/linked-accounts.test.ts
+git commit -m "docs(legal): apply the approved linked-accounts text to both Privacy versions and Terms (VNX-2607)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-**Kích cỡ ước tính:** `content.ts` ≈ 40 dòng (chuỗi), markdown ≈ 80 dòng, test ≈ 150 dòng; không có locale. Dưới 600: không tách.
+**Kích cỡ ước tính (không tính chữ markdown):** `content.ts` ≈ 50 dòng (chuỗi), test ≈ 230 dòng; markdown (chữ chép + đầu file) ≈ 100 dòng. Dưới 600: không tách.
 
-**Việc của Owner lúc deploy (không phải của Implementer):**
-- **Merge VNX-2607 và deploy trước khi bật cờ provider nào** (VNX-2608); kiểm `https://vnx.si/privacy`, `/vi/privacy`, `/terms` đã có cookie `__Host-vnx_oauth` và mục "Linked accounts" trên production.
-- Chốt `LEGAL_UPDATED_AT` (câu hỏi mở 4); hằng số này đổi ngày hiển thị của cả Terms lẫn Privacy.
-- Trả lời các câu hỏi mở 1-7 ở trên (không câu nào chặn merge nếu Owner chọn "không sửa").
+**Việc của Owner lúc deploy (không phải của Implementer; liệt kê, không quyết ở đây):**
+- **Thứ tự:** merge và deploy VNX-2607 trước khi bật cờ provider nào (VNX-2608); kiểm `https://vnx.si/privacy`, `/vi/privacy`, `/terms` có `__Host-vnx_oauth` và mục "Linked accounts" trên production, ở bản đang hiện (hiện hành hoặc M7).
+- **E5 (MEDIUM-1; GATE BẮT BUỘC trước VNX-2608, Owner 2026-10-10):**
+  - D đã được commit là `"2026-10-21"` (`PRIVACY_NOTICE_GO_LIVE`; quy tắc 14 ngày ở chú thích `wrangler.jsonc:34`), nên D − 14 đã qua và `/privacy` đang hiện bản M7; "deploy trước D − 14" không còn khả thi.
+  - Deploy VNX-2607 **trước 2026-10-21** thì "Last updated: 2026-10-21" của bản M7 vẫn đúng. Chỉ deploy **sau D** thì ngày đó cũ: khi đó cần một follow-up cho bản M7 có ngày riêng.
+  - Ngày cũ nằm ở **Terms** (§4 đổi; Terms §12 hứa đổi ngày). Owner đặt `LEGAL_UPDATED_AT` bằng ngày deploy thật trong một commit một dòng ngay trước khi deploy, cùng lúc sửa dòng `privacy-version.test.ts:62` (`expect(LEGAL_UPDATED_AT).toBe("2026-10-05")`). VNX-2607 KHÔNG đổi `LEGAL_UPDATED_AT`; `content.test.ts` chỉ kiểm `>= "2026-10-05"`.
+- **E4 (đã quyết 2026-10-10):** bổ sung pháp lý về tài khoản liên kết KHÔNG phải "thay đổi quan trọng" (Terms §12): không báo trước người dùng đã đăng nhập.
+- **Terms §4:** đã quyết (câu hỏi mở 1): chữ sửa theo ADR-013 do Implementer áp; hai câu hỏi mở còn lại không chặn.
+
+**Ghi nhận cho lượt pháp lý kế tiếp (E6; không đổi bây giờ):** Privacy §2 Security đổi thành "a record of security-relevant actions (admin actions, sign-ins, linking and unlinking accounts)" (hiện: "a record of actions taken by admins"), vì `audit_log` ghi cả `auth.login`, link, unlink, hiện/ẩn huy hiệu (cả `data: { provider }` hoặc `{ method }`); và đổi "limit how often a form can be used" thành "a form or sign-in", vì callback OAuth cũng có bộ đếm. Cả hai phải sửa ở CẢ HAI phiên bản Privacy và bốn hằng số.
 
 **Nghĩa vụ cho task sau:**
-- **VNX-2608:** `GET /privacy` và `/terms` trên production có bổ sung ADR-012 (cổng ra EPIC 26) trước khi bật cờ đầu tiên.
-- **Ghi nhận:** nếu về sau thêm cột vào `user_identities` hoặc thêm provider, test "stores exactly the fields" và Privacy §2 phải đổi cùng lúc; chưa có quy trình xóa tài khoản tự động (câu hỏi mở 6).
+- **VNX-2608:** `GET /privacy` và `/terms` trên production có bổ sung ADR-012 trước khi bật cờ đầu tiên (cổng ra EPIC 26).
+- **Ghi chú vận hành (xóa theo yêu cầu, Privacy §7 và câu "until … your account is deleted"):** cột `user_identities.user_id` không có `ON DELETE CASCADE`, nên xóa tài khoản theo yêu cầu phải xóa các hàng `user_identities` của user **trước** hàng `users`; chưa có luồng xóa tự động. Ghi vào quy trình xóa khi có.
+- **Ghi nhận:** thêm cột vào `user_identities` hoặc thêm provider buộc đổi cùng lúc: test "user_identities holds exactly", Privacy §2 (hai phiên bản, bốn hằng) và, nếu đổi chữ, mục "Bổ sung" gốc. Khi nhánh dọn "hai phiên bản Privacy" chạy (sau D + 31 ngày), gộp `privacy-m7.md` vào `privacy.md` thì `APPEND_AFTER` chỉ còn một bảng.
+- **Khi EPIC 27 vào `main`:** nghĩa vụ ở `CURRENT-STATUS.md` (các tệp `privacy-board.md`, `terms-board.md` và hằng tương ứng) áp thêm cho bổ sung này; Task này viết trên nhánh chưa có chúng, kiểm lại danh sách tệp Privacy/Terms khi rebase.
 
-#### Kết quả review Task 12: chưa review (Planner đã viết, chờ Opus review plan)
+#### Kết quả review Task 12 viết lại (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, LOW-1..6, S-1, S-2; Terms §4 sửa theo Owner 2026-10-10; ngày cập nhật Terms do Owner đặt lúc deploy (gate trước VNX-2608)
 
 #### Kết quả review Task 9c và 12 (Opus, 2026-10-10): 9c APPROVE_WITH_CHANGES đã sửa HIGH-1, MEDIUM-1, LOW-1, LOW-3, S1; 12 REJECT, viết lại sau rebase; E1–E4 do Owner duyệt 2026-10-10
 
@@ -8143,7 +8306,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Nghĩa vụ cho task sau:**
 - **VNX-2608:** thử bằng provider thật: đăng nhập bằng GitHub, vào `/me`, xác nhận không có nút Link mà có ghi chú; đăng nhập bằng link qua email rồi liên kết thêm Google thành công.
-- **Task 12 (VNX-2607, viết lại sau rebase):** Terms §4 / Privacy không nói rằng liên kết đòi session magic link; câu đã duyệt vẫn đúng ("Once signed in, you can link…"); không cần đổi chữ, ghi vào bảng đối chiếu code.
+- **Task 12 (VNX-2607, viết lại sau rebase):** Terms §4 / Privacy không nói rằng liên kết đòi session magic link; câu đã duyệt vẫn đúng ("Once signed in, you can link…"); không cần đổi chữ, ghi vào bảng đối chiếu code. **ĐÃ BỊ THAY THẾ** bởi Task 12 và quyết định Owner 2026-10-10: câu 2 của Terms §4 sửa thành "Once signed in with the email link, …" (ADR-013); xem Task 12, câu hỏi mở 1.
 - **Ghi nhận:** thông báo `needsEmailLink` dẫn người dùng tới "đăng xuất"; chưa có nút đăng xuất ngay trên `/me`. Nếu Owner muốn, task riêng.
 
 #### Kết quả review Task 9d (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, MEDIUM-2, LOW-1..3, S-1..3; câu chữ Owner duyệt 2026-10-10
