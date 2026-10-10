@@ -25,20 +25,22 @@ export async function settle(page: Page, opts: { motion?: boolean } = {}): Promi
  * time-based animation has finished. Infinite ones (the Live strip) and scroll-driven ones (chart growth, tied to the scroll position, not to time) are left alone.
  */
 async function finiteAnimationsDone(page: Page): Promise<void> {
-  const unfinished = () =>
-    page.evaluate(() =>
-      document
+  const pending = () =>
+    document
+      .getAnimations()
+      .filter((a) => a.timeline === document.timeline && a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== "finished" && a.playState !== "idle")
+      .map((a) => (a instanceof CSSAnimation ? a.animationName : a instanceof CSSTransition ? a.transitionProperty : "animation"));
+  try {
+    await page.waitForFunction(() => {
+      const left = document
         .getAnimations()
-        .filter((a) => a.timeline === document.timeline && a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== "finished" && a.playState !== "idle")
-        .map((a) => (a instanceof CSSAnimation ? a.animationName : a instanceof CSSTransition ? a.transitionProperty : "animation")),
-    );
-  const deadline = Date.now() + 5_000;
-  let left = await unfinished();
-  while (left.length > 0 && Date.now() < deadline) {
-    await page.waitForTimeout(100);
-    left = await unfinished();
+        .filter((a) => a.timeline === document.timeline && a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== "finished" && a.playState !== "idle");
+      return left.length === 0;
+    }, undefined, { timeout: 5_000 });
+  } catch {
+    const left = await page.evaluate(pending);
+    throw new Error(`E2E infrastructure: finite animations still running after 5 s: ${left.join(", ")}`);
   }
-  if (left.length > 0) throw new Error(`E2E infrastructure: finite animations still running after 5 s: ${left.join(", ")}`);
 }
 
 /** Runs axe and returns the violations, with no policy applied. */
