@@ -37,6 +37,16 @@ export function isStaffSession(method: SessionMethod): boolean {
   return method === "magic_link";
 }
 
+/**
+ * Only a magic-link session may start or finish linking a NEW provider account (ADR-013): adding a way to sign in must prove the mailbox.
+ * Its own name and constant on purpose: today it equals `isStaffSession`, but that one is the /ops and /admin rule (decision 9) and the two may diverge.
+ * Unlinking is allowed for every session and does not call this.
+ */
+export const LINK_SESSION_METHOD: SessionMethod = "magic_link";
+export function isLinkCapableSession(method: SessionMethod): boolean {
+  return method === LINK_SESSION_METHOD;
+}
+
 /** Each provider has its own feature flag: off hides the button and makes the callback 404 (ADR-012 §1). */
 export const PROVIDER_FLAG: Record<OAuthProvider, FlagKey> = {
   google: "oauth_google",
@@ -76,5 +86,5 @@ export interface UserIdentity {
   updatedAt: string;
 }
 
-/** Why a link was refused. `already_linked` is the same user and the same provider account (nothing to do). */
-export type LinkRefusal = "already_linked" | "provider_account_taken" | "user_has_provider";
+/** Why a link was refused. `already_linked` is the same user and the same provider account (nothing to do). `session_ended`: the session that asked to link is gone or is not a magic-link session (ADR-013). */
+export type LinkRefusal = "already_linked" | "provider_account_taken" | "user_has_provider" | "session_ended";

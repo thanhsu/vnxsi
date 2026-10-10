@@ -568,6 +568,8 @@ export const vi: Messages = {
   "me.identities.unlink": "Hủy liên kết {provider}",
   "me.identities.notice.unlinked": "Đã hủy liên kết tài khoản. Bạn vẫn đăng nhập được bằng link qua email.",
   "me.identities.notice.notLinked": "Tài khoản đó chưa được liên kết nên không có gì thay đổi.",
+  "me.identities.emailToLink": "Muốn liên kết thêm tài khoản, hãy đăng xuất rồi đăng nhập bằng link qua email. Bạn vẫn hủy liên kết được ở đây.",
+  "me.identities.notice.needsEmailLink": "Muốn liên kết tài khoản mới, bạn cần đăng nhập bằng link qua email. Hãy đăng xuất, đăng nhập bằng link qua email rồi thử lại.",
   "email.identityLinked.subject": "Đã liên kết {provider} với tài khoản VNX.SI của bạn",
   "email.identityLinked.body": "Một tài khoản {provider} đã được liên kết với tài khoản VNX.SI của bạn lúc {time}. Từ giờ tài khoản đó dùng được để đăng nhập.",
   "email.identityLinked.notYou": "Không phải bạn? Hãy đăng nhập bằng link qua email, hủy liên kết ở /me và viết cho contact@vnx.si.",

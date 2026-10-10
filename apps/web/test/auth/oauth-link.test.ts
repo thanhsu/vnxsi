@@ -84,12 +84,12 @@ describe("callback with a link flow (ADR-012 §4)", () => {
     expect(res.headers.get("location")).toBe(location);
   });
 
-  it("works from an OAuth session too, and keeps its method", async () => {
+  it("works from a magic_link session, and keeps its method (an oauth_* session may not link: ADR-013, oauth-link-session.test.ts)", async () => {
     await enableProvider("google");
-    const { user, cookie } = await signIn(emailOf("lan"), { method: "oauth_github" });
+    const { user, cookie } = await signIn(emailOf("lan"), { method: "magic_link" });
     const { res } = await comeBack("google", cookie, identityOf());
     expect(res.headers.get("location")).toBe("/me?link=ok");
-    expect(await count("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'oauth_github'", user.id)).toBe(1);
+    expect(await count("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'magic_link'", user.id)).toBe(1);
     expect(await sessionsOf(user.id)).toBe(1);
   });
 

@@ -7,7 +7,7 @@ import { listIdentitiesForUser, unlinkIdentity } from "../db/identities.ts";
 import { listClientInquiries, listMessages } from "../db/inquiries.ts";
 import { listClientRequests } from "../db/requests.ts";
 import type { InquirySummary } from "../domain/inquiry.ts";
-import { isOAuthProvider, sessionMethodFor } from "../domain/identity.ts";
+import { isLinkCapableSession, isOAuthProvider, sessionMethodFor } from "../domain/identity.ts";
 import { newLinkIntent } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
@@ -18,7 +18,7 @@ import { notifyIdentityChange } from "../notify/identity.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
 import { InquiryThread } from "../views/InquiryThread.tsx";
-import { LINK_NOTICES, LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
+import { LINK_NOTICES, type LinkNotice, LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
 import { RequestList } from "../views/me/RequestList.tsx";
 import { Layout } from "../views/Layout.tsx";
 import { page } from "../views/render.ts";
@@ -77,7 +77,7 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
           <h2>{tr("me.inquiries.title")}</h2>
           <InquiryList locale={locale} items={inquiries} viewer="client" base="/me/inquiries" />
         </section>
-        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} notice={notice} />
+        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} notice={notice} canLink={isLinkCapableSession(user.method)} />
       </Layout>,
     );
   });
@@ -88,6 +88,9 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
     const found = await enabledProvider(c);
     const raw = readSessionCookie(c);
     if (!found || !raw) return errorResponse(c, "notFound", 404);
+    // ADR-013: only a magic-link session starts a link. Nothing is written and nothing redirects to `start`; the owner is told what to do.
+    const refused: LinkNotice = "needsEmailLink"; // typed against the one LINK_NOTICES source
+    if (!isLinkCapableSession(c.get("user")!.method)) return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${refused}`, 303);
     const now = Date.now();
     writeOAuthCookie(c, newLinkIntent({ provider: found.provider, sessionHash: await linkSessionHash(raw) }, now), now);
     return c.redirect(`/auth/oauth/${found.provider}/start?lang=${c.get("locale")}`, 303);

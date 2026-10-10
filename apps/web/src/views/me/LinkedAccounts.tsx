@@ -4,7 +4,7 @@ import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 
 /** The closed set of `/me?link=` results: the one source for the callback, the route and this view. */
-export const LINK_NOTICES = ["ok", "taken", "hasProvider", "failed", "unlinked", "notLinked"] as const;
+export const LINK_NOTICES = ["ok", "taken", "hasProvider", "failed", "unlinked", "notLinked", "needsEmailLink"] as const;
 export type LinkNotice = (typeof LINK_NOTICES)[number];
 
 const NOTICE_KEY = {
@@ -14,14 +14,15 @@ const NOTICE_KEY = {
   failed: "me.identities.notice.failed",
   unlinked: "me.identities.notice.unlinked",
   notLinked: "me.identities.notice.notLinked",
+  needsEmailLink: "me.identities.notice.needsEmailLink",
 } as const;
-const STATUS: readonly LinkNotice[] = ["ok", "unlinked", "notLinked"]; // told, not warned: only failed, taken, hasProvider are alerts
+const STATUS: readonly LinkNotice[] = ["ok", "unlinked", "notLinked", "needsEmailLink"]; // told, not warned: only failed, taken, hasProvider are alerts
 
 /**
  * The owner's own page (ADR-012 §4): the providers that are linked or linkable (Owner 2026-10-08), nothing at all when there are none.
  * `label` is shown here and nowhere else. `linkable` is the flag-and-credentials rule decided by the route; a linked row shows whatever the flag says. A linked row always offers Unlink, whatever the flag says; the section stays for `unlinked`/`notLinked` even with no rows left.
  */
-export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdentity[]; linkable: readonly OAuthProvider[]; notice?: LinkNotice }> = ({ locale, identities, linkable, notice }) => {
+export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdentity[]; linkable: readonly OAuthProvider[]; notice?: LinkNotice; canLink: boolean }> = ({ locale, identities, linkable, notice, canLink }) => {
   const tr = translator(locale);
   const rows = OAUTH_PROVIDERS.filter((p) => identities.some((i) => i.provider === p) || linkable.includes(p));
   if (rows.length === 0 && notice !== "unlinked" && notice !== "notLinked") return null;
@@ -36,6 +37,7 @@ export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdent
       {rows.length > 0 ? (
         <>
       <p class="muted">{tr("me.identities.intro")}</p>
+      {!canLink && notice !== "needsEmailLink" && rows.some((p) => linkable.includes(p) && !identities.some((i) => i.provider === p)) ? <p class="muted">{tr("me.identities.emailToLink")}</p> : null}
       <div class="table-wrap">
         <table class="data">
           <tbody>
@@ -56,7 +58,7 @@ export const LinkedAccounts: FC<{ locale: Locale; identities: readonly UserIdent
                           {tr("me.identities.unlink", { provider: name })}
                         </button>
                       </form>
-                    ) : linkable.includes(provider) ? (
+                    ) : canLink && linkable.includes(provider) ? (
                       <form method="post" action={localizedPath(locale, `/me/identities/${provider}/link`)}>
                         <button class="btn btn-ghost" type="submit">
                           {tr("me.identities.link", { provider: name })}

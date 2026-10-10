@@ -568,6 +568,8 @@ export const zhHant: Messages = {
   "me.identities.unlink": "取消連結 {provider} 帳號",
   "me.identities.notice.unlinked": "已取消連結該帳號。你仍可用電子郵件登入。",
   "me.identities.notice.notLinked": "該帳號並未連結，未作任何更改。",
+  "me.identities.emailToLink": "要連結其他帳號，請先登出，再用電子郵件登入。你仍可在此取消連結。",
+  "me.identities.notice.needsEmailLink": "連結新帳號需要用電子郵件登入。請登出，再用電子郵件登入後再試一次。",
   "email.identityLinked.subject": "{provider} 已連結到你的 VNX.SI 帳戶",
   "email.identityLinked.body": "一個 {provider} 帳號已於 {time} 連結到你的 VNX.SI 帳戶，現在可以用它登入。",
   "email.identityLinked.notYou": "不是你本人操作？請用電子郵件登入，在 /me 取消連結，並寄信至 contact@vnx.si。",

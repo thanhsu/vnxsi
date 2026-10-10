@@ -46,6 +46,7 @@ describe("an unlink racing a sign-in (VNX-2605c, decision 10)", () => {
       } finally {
         await testEnv.DB.prepare(`DROP TRIGGER IF EXISTS ${c.name}`).run(); // always dropped
       }
+      expect(await n("SELECT count(*) AS n FROM user_identities WHERE user_id = ?1", user.id)).toBe(0); // the trigger ran: the identity is gone
       expect(await n("SELECT count(*) AS n FROM sessions WHERE user_id = ?1 AND method = 'oauth_github'", user.id)).toBe(0);
       expect(await n("SELECT count(*) AS n FROM audit_log WHERE entity = 'user' AND entity_id = ?1 AND action = 'auth.login'", user.id)).toBe(0);
     });

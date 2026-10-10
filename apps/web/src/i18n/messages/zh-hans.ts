@@ -568,6 +568,8 @@ export const zhHans: Messages = {
   "me.identities.unlink": "取消关联 {provider} 账号",
   "me.identities.notice.unlinked": "已取消关联该账号。你仍可用邮箱登录。",
   "me.identities.notice.notLinked": "该账号并未关联，未作任何更改。",
+  "me.identities.emailToLink": "要关联其他账号，请先退出登录，再用邮箱登录。你仍可在此取消关联。",
+  "me.identities.notice.needsEmailLink": "关联新账号需要用邮箱登录。请退出登录，再用邮箱登录后重试。",
   "email.identityLinked.subject": "{provider} 已关联到你的 VNX.SI 账户",
   "email.identityLinked.body": "一个 {provider} 账号已于 {time} 关联到你的 VNX.SI 账户，现在可以用它登录。",
   "email.identityLinked.notYou": "不是你本人操作？请用邮箱登录，在 /me 取消关联，并发邮件至 contact@vnx.si。",

@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { adminEmails } from "../auth/admin.ts";
+import { sha256Hex } from "../auth/crypto.ts";
 import { readSessionCookie, writeSessionCookie } from "../auth/cookies.ts";
 import { getOAuthProvider, isProviderConfigured } from "../auth/oauth/index.ts";
 import type { ExchangeFailure, ProviderClient } from "../auth/oauth/provider.ts";
@@ -10,7 +11,7 @@ import { isFlagEnabled } from "../db/flags.ts";
 import { findIdentityByProviderSubject, linkIdentity, touchIdentityLogin } from "../db/identities.ts";
 import { notifyIdentityChange } from "../notify/identity.ts";
 import { findUserById, markLogin } from "../db/users.ts";
-import { isOAuthProvider, OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG, sessionMethodFor } from "../domain/identity.ts";
+import { isLinkCapableSession, isOAuthProvider, OAUTH_PROVIDERS, type OAuthProvider, PROVIDER_FLAG, sessionMethodFor } from "../domain/identity.ts";
 import { buildAuthorizeUrl, checkCallbackState, codeChallengeS256, generateNonce, generateState, generateVerifier, flowMatchesSession, newFlowCookie, oauthRedirectUri, resolveStartIntent, type FlowCookie } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { isLocale, type Locale, localeFromPath, localizedPath } from "../i18n/locales.ts";
@@ -67,14 +68,14 @@ const backToMe = (c: Context<AppEnv>, locale: Locale, notice: LinkNotice) => c.r
 
 /**
  * The `link` flow of the callback (ADR-012 §4). It needs the session that asked, checked BEFORE the code is spent, and attaches the
- * provider account to THAT user and nothing else: no session is created or changed, no one is signed in, no e-mail is compared.
+ * provider account to THAT user and nothing else (checked BEFORE the code is spent and again inside the write, ADR-013): no session is created or changed, no one is signed in, no e-mail is compared.
  */
 async function finishLink(c: Context<AppEnv>, input: { provider: OAuthProvider; client: ProviderClient; flow: FlowCookie; nowMs: number }) {
   const { provider, client, flow, nowMs } = input;
   const user = c.get("user");
   const raw = readSessionCookie(c);
-  // `user` is null for an expired or suspended session (Task 2 LOW-2).
-  if (!user || !raw || !flowMatchesSession(flow, await linkSessionHash(raw))) return failed(c, provider, "session_mismatch", flow.locale);
+  // `user` is null for an expired or suspended session (Task 2 LOW-2). ADR-013, before the code is spent: a live magic-link session, and the one that asked.
+  if (!user || !raw || !isLinkCapableSession(user.method) || !flowMatchesSession(flow, await linkSessionHash(raw))) return failed(c, provider, "session_mismatch", flow.locale);
 
   const code = c.req.query("code");
   if (c.req.query("error") !== undefined) {
@@ -91,7 +92,10 @@ async function finishLink(c: Context<AppEnv>, input: { provider: OAuthProvider; 
     return backToMe(c, flow.locale, "failed");
   }
 
-  const linked = await linkIdentity(c.env.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: new Date(nowMs).toISOString() });
+  // After the exchange, the same check INSIDE the write (a session ended meanwhile writes nothing): `requireSession`.
+  const nowIso = new Date(nowMs).toISOString();
+  const linked = await linkIdentity(c.env.DB, { userId: user.id, provider, subject: result.identity.subject, label: result.identity.label, now: nowIso, requireSession: { idHash: await sha256Hex(raw) } });
+  if (!linked.ok && linked.reason === "session_ended") return failed(c, provider, "session_mismatch", flow.locale); // not /me?link=failed: with no session /me would bounce to /login and lose the message
   // Only a real new link is told to the owner (not `already_linked`: nothing changed, and a replayed callback must not mail). The send never undoes the link.
   if (linked.ok) await notifyIdentityChange(c.env, { kind: "linked", to: user.email, locale: user.locale, provider, label: linked.identity.label, at: linked.identity.linkedAt, requestId: c.get("requestId") });
   if (linked.ok || linked.reason === "already_linked") return backToMe(c, flow.locale, "ok");
@@ -108,7 +112,8 @@ export function registerOAuthRoutes(app: Hono<AppEnv>) {
     const now = Date.now();
     // Task 2 LOW-2: a link intent counts only for a session that is alive now (`user` is null for an expired or suspended one).
     const raw = readSessionCookie(c);
-    const sessionHash = c.get("user") && raw ? await linkSessionHash(raw) : null;
+    const user = c.get("user");
+    const sessionHash = user && raw && isLinkCapableSession(user.method) ? await linkSessionHash(raw) : null; // ADR-013: any other session is, for linking, no session: a plain sign-in follows
     // An intent from POST …/link, or (MEDIUM-2) a live LINK flow of this very session (Back, refresh). Check `intent === "link"`
     // explicitly: `flowMatchesSession` is true for every signin flow.
     const cookie = readOAuthCookie(c, provider, now);

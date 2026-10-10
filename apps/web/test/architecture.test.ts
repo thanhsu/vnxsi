@@ -313,3 +313,12 @@ describe("OAuth callback never touches Ops invites (ADR-012 §6, F3)", () => {
     expect(sources[OAUTH_ROUTE] ?? "").not.toMatch(/findUserByEmail|createUser|ops_member|OpsInvite/);
   });
 });
+
+describe("linking needs a magic-link session (VNX-2605d, ADR-013)", () => {
+  it("the only caller of linkIdentity passes requireSession, and linking code never uses the staff predicate", () => {
+    const callers = Object.entries(sources).filter(([file, src]) => /\blinkIdentity\(/.test(src) && file !== "../src/db/identities.ts");
+    expect(callers.map(([file]) => file)).toEqual(["../src/routes/oauth.tsx"]);
+    expect(callers[0]?.[1]).toMatch(/requireSession: \{ idHash: await sha256Hex\(raw\)/);
+    for (const file of ["../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/views/me/LinkedAccounts.tsx"]) expect(sources[file], file).not.toContain("isStaffSession");
+  });
+});

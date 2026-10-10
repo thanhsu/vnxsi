@@ -1,4 +1,4 @@
-import { type BadgeProvider, githubProfileUrl, IDENTITY_AUDIT, type LinkRefusal, type OAuthProvider, type PublicBadge, type UserIdentity } from "../domain/identity.ts";
+import { type BadgeProvider, githubProfileUrl, IDENTITY_AUDIT, LINK_SESSION_METHOD, type LinkRefusal, type OAuthProvider, type PublicBadge, type UserIdentity } from "../domain/identity.ts";
 import { ulid } from "../lib/ulid.ts";
 import { auditStatement } from "./audit.ts";
 
@@ -55,21 +55,24 @@ export async function listIdentitiesForUser(db: D1Database, userId: string): Pro
  * Links a provider account to a user and audits it, atomically. `ON CONFLICT DO NOTHING` covers both UNIQUE constraints; when nothing
  * was inserted, one read says why: the same user already holds this account (`already_linked`, nothing changes), another user holds it
  * (`provider_account_taken`, who is never returned), or this user holds a different account of that provider (`user_has_provider`).
+ * `requireSession` (ADR-013): the row is written only while that session is alive and is a magic-link session of this user, checked INSIDE the INSERT
+ * (one statement, so nothing can slip in between). Without a live one nothing is written and no audit row follows (it is guarded on the identity row); the answer is `session_ended`.
  */
 export async function linkIdentity(
   db: D1Database,
-  input: { userId: string; provider: OAuthProvider; subject: string; label: string; now: string },
+  input: { userId: string; provider: OAuthProvider; subject: string; label: string; now: string; /** The session that asked (ADR-013): the row is written only while it is alive and a magic-link session of this user. */ requireSession?: { idHash: string } },
 ): Promise<LinkResult> {
   const id = ulid(Date.parse(input.now));
   const [insert] = await db.batch<{ id: string }>([
     db
       .prepare(
         `INSERT INTO user_identities (id, user_id, provider, provider_subject, label, show_on_profile, linked_at, last_used_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, NULL, ?6)
+         SELECT ?1, ?2, ?3, ?4, ?5, 0, ?6, NULL, ?6
+         WHERE (?7 IS NULL OR EXISTS (SELECT 1 FROM sessions WHERE id_hash = ?7 AND user_id = ?2 AND method = ?8 AND expires_at > ?6))
          ON CONFLICT DO NOTHING
          RETURNING id`,
       )
-      .bind(id, input.userId, input.provider, input.subject, input.label, input.now),
+      .bind(id, input.userId, input.provider, input.subject, input.label, input.now, input.requireSession?.idHash ?? null, LINK_SESSION_METHOD),
     auditStatement(
       db,
       { actorUserId: input.userId, action: IDENTITY_AUDIT.link, entity: "user", entityId: input.userId, data: { provider: input.provider }, now: input.now },
@@ -80,6 +83,14 @@ export async function linkIdentity(
     const identity = await findIdentityById(db, id);
     if (!identity) throw new Error("identity insert failed");
     return { ok: true, identity };
+  }
+  if (input.requireSession) {
+    // Nothing was inserted: if the session is the reason, say so before any conflict answer.
+    const alive = await db
+      .prepare("SELECT 1 AS ok FROM sessions WHERE id_hash = ?1 AND user_id = ?2 AND method = ?3 AND expires_at > ?4")
+      .bind(input.requireSession.idHash, input.userId, LINK_SESSION_METHOD, input.now)
+      .first<{ ok: number }>();
+    if (!alive) return { ok: false, reason: "session_ended" };
   }
   const holder = await findIdentityByProviderSubject(db, input.provider, input.subject);
   if (holder) return { ok: false, reason: holder.userId === input.userId ? "already_linked" : "provider_account_taken" };

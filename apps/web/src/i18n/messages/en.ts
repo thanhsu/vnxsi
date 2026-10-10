@@ -566,6 +566,8 @@ export const en = {
   "me.identities.unlink": "Unlink {provider}",
   "me.identities.notice.unlinked": "Account unlinked. You can still sign in with an email link.",
   "me.identities.notice.notLinked": "That account wasn't linked, so nothing changed.",
+  "me.identities.emailToLink": "To link another account, sign out, then sign in with an email link. You can still unlink accounts here.",
+  "me.identities.notice.needsEmailLink": "To link a new account, you need to be signed in with an email link. Sign out, sign in with an email link, then try again.",
   "email.identityLinked.subject": "{provider} was linked to your VNX.SI account",
   "email.identityLinked.body": "A {provider} account was linked to your VNX.SI account on {time}. It can now be used to sign in.",
   "email.identityLinked.notYou": "Not you? Sign in with an email link, unlink it at /me and write to contact@vnx.si.",

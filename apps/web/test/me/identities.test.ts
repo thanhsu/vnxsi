@@ -41,7 +41,7 @@ describe("/me: Sign-in & linked accounts (VNX-2605a-1; visibility decided by the
     }
   });
 
-  it("one flag on: the section shows only that provider, with its Link button (every signed-in user)", async () => {
+  it("one flag on: the section shows only that provider; a magic_link session has its Link button, an oauth_* session the note instead (ADR-013)", async () => {
     await enableProvider("github");
     resetFlagCache();
     for (const method of ["magic_link", "oauth_google"] as const) {
@@ -49,12 +49,19 @@ describe("/me: Sign-in & linked accounts (VNX-2605a-1; visibility decided by the
       const html = (await meHtml(cookie)).html;
       expect(sectionOf(html)).toContain("Sign-in & linked accounts");
       const rows = rowsOf(html);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toContain("GitHub");
-      expect(rows[0]).toContain("Not linked");
-      expect(rows[0]).toContain('action="/me/identities/github/link"');
-      expect(rows[0]).toContain('method="post"');
-      expect(rows[0]).toContain("Link GitHub");
+      expect(rows, method).toHaveLength(1);
+      expect(rows[0], method).toContain("GitHub");
+      expect(rows[0], method).toContain("Not linked");
+      if (method === "magic_link") {
+        expect(rows[0]).toContain('action="/me/identities/github/link"');
+        expect(rows[0]).toContain('method="post"');
+        expect(rows[0]).toContain("Link GitHub");
+        expect(sectionOf(html)).not.toContain("To link another account, sign out");
+      } else {
+        expect(rows[0]).not.toContain("/github/link");
+        expect(rows[0]).not.toContain("Link GitHub");
+        expect(sectionOf(html)).toContain("To link another account, sign out, then sign in with an email link."); // me.identities.emailToLink
+      }
     }
   });
 
