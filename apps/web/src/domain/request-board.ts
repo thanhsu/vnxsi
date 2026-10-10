@@ -109,9 +109,19 @@ export function requestVisibility(requestStatus: RequestStatus, publicationStatu
 /** Control and format characters (zero-width, bidi overrides, ...). */
 const CONTROL = /[\p{Cc}\p{Cf}]/u;
 
-/** A control or format character in multi-line text; line breaks and tabs are allowed. */
+/**
+ * Multi-line text (description, notes): control characters other than line break and tab are refused, and so are the bidi
+ * overrides and isolates (U+202A-202E, U+2066-2069) that can reorder text. Other format characters stay allowed: ZWJ and
+ * ZWNJ (emoji sequences, Indic and Persian scripts), soft hyphen, variation selectors. A leading BOM is stripped by cleanText.
+ */
+const BAD_IN_TEXT = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
 function hasControl(s: string): boolean {
-  return CONTROL.test(s.replace(/[\n\t]/g, ""));
+  return BAD_IN_TEXT.test(s.replace(/[\n\t]/g, ""));
+}
+
+/** Line breaks normalised, a leading BOM dropped, trimmed. */
+function cleanText(raw: string): string {
+  return normalizeNewlines(raw).replace(/^\uFEFF/, "").trim();
 }
 
 export type TextError = "required" | "too_short" | "too_long" | "invalid";
@@ -125,7 +135,7 @@ export function parsePublicListing(values: { title: string; description: string 
   else if (cpLength(title) > PUBLIC_TITLE_MAX) errors.title = "too_long";
   else if (CONTROL.test(title)) errors.title = "invalid";
 
-  const description = normalizeNewlines(values.description).trim();
+  const description = cleanText(values.description);
   if (!description) errors.description = "required";
   else if (cpLength(description) < PUBLIC_DESCRIPTION_MIN) errors.description = "too_short";
   else if (cpLength(description) > PUBLIC_DESCRIPTION_MAX) errors.description = "too_long";
@@ -136,7 +146,7 @@ export function parsePublicListing(values: { title: string; description: string 
 
 /** The reason Ops gives on reject or unpublish: required, at most 1000. */
 export function parseReviewNote(raw: string): { ok: true; note: string } | { ok: false; error: TextError } {
-  const note = normalizeNewlines(raw).trim();
+  const note = cleanText(raw);
   if (!note) return { ok: false, error: "required" };
   if (cpLength(note) > REVIEW_NOTE_MAX) return { ok: false, error: "too_long" };
   if (hasControl(note)) return { ok: false, error: "invalid" };
@@ -149,7 +159,7 @@ const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 /** "I'm interested" form: an optional note up to 500 and an optional product id (a ULID; ownership is checked in SQL). */
 export function parseInterestForm(values: { note: string; productId: string }): { ok: true; input: { note: string | null; productId: string | null } } | { ok: false; errors: InterestFormErrors } {
   const errors: InterestFormErrors = {};
-  const note = normalizeNewlines(values.note).trim();
+  const note = cleanText(values.note);
   if (cpLength(note) > INTEREST_NOTE_MAX) errors.note = "too_long";
   else if (hasControl(note)) errors.note = "invalid";
   const productId = values.productId.trim();
@@ -158,11 +168,25 @@ export function parseInterestForm(values: { note: string; productId: string }): 
   return { ok: true, input: { note: note || null, productId: productId || null } };
 }
 
-/** The first 200 code points of the public description on one line (line breaks become spaces), with an ellipsis when cut. Never splits a surrogate pair. */
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * The start of the public description on one line (all whitespace runs become one space), at most 200 code points,
+ * cut between grapheme clusters (never inside a ZWJ emoji, a flag or a letter with its combining marks), with an ellipsis when cut.
+ */
 export function publicExcerpt(description: string): string {
-  const flat = normalizeNewlines(description).replace(/\s*\n\s*/g, " ").trim();
-  const points = [...flat];
-  return points.length > EXCERPT_LENGTH ? `${points.slice(0, EXCERPT_LENGTH).join("")}…` : flat;
+  const flat = description.replace(/\s+/g, " ").trim();
+  if (cpLength(flat) <= EXCERPT_LENGTH) return flat;
+  let out = "";
+  let used = 0;
+  for (const { segment } of GRAPHEMES.segment(flat)) {
+    const n = cpLength(segment);
+    if (used + n > EXCERPT_LENGTH) break;
+    out += segment;
+    used += n;
+  }
+  if (out === "") out = [...flat].slice(0, EXCERPT_LENGTH).join("");
+  return `${out}…`;
 }
 
 export interface BoardQuery {

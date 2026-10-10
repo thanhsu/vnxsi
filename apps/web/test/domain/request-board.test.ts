@@ -199,11 +199,38 @@ describe("parsePublicListing (L1: code points)", () => {
 
   it("control and format characters are invalid: in a title any, in a description all but line breaks and tabs", () => {
     expect(parse("a\u0007b", desc(40))).toEqual({ ok: false, errors: { title: "invalid" } });
-    expect(parse("a‮b", desc(40))).toEqual({ ok: false, errors: { title: "invalid" } });
+    expect(parse("a\u202eb", desc(40))).toEqual({ ok: false, errors: { title: "invalid" } });
     expect(parse("a\tb", desc(40))).toEqual({ ok: false, errors: { title: "invalid" } });
     expect(parse("t", `${desc(40)}\u0000`)).toEqual({ ok: false, errors: { description: "invalid" } });
-    expect(parse("t", `${desc(40)}​`)).toEqual({ ok: false, errors: { description: "invalid" } });
+    expect(parse("t", `${desc(40)}\u200b`).ok).toBe(true); // ZWSP is a format character, allowed in multi-line text (M-1)
     expect(parse("t", `${desc(20)}\n\t${desc(20)}`).ok).toBe(true);
+  });
+
+  it("M-1: description accepts ZWJ and flag emoji, soft hyphen, variation selectors, Vietnamese NFC and NFD, Chinese", () => {
+    const text = (extra: string) => `${extra} ${"d".repeat(40)}`;
+    for (const extra of ["👩‍💻", "👨‍👩‍👧", "🏳️‍🌈", "soft\u00adhyphen", "heart️", "zw\u200cnj", "Tiếng Việt có dấu: Hà Nội", "Tiếng Việt".normalize("NFD"), "我们需要一个在线预订系统，带短信提醒"]) {
+      expect(parse("t", text(extra)).ok, extra).toBe(true);
+    }
+    expect(parse("t", text("Ví dụ".normalize("NFD"))).ok).toBe(true);
+  });
+
+  it("M-1: bidi overrides and isolates and other control characters are still refused in a description", () => {
+    for (const bad of ["\u202e", "\u202a", "\u202d", "\u2066", "\u2069", "\u0085", "\u0000", "\u001b"]) {
+      expect(parse("t", `${"d".repeat(40)}${bad}x`), JSON.stringify(bad)).toEqual({ ok: false, errors: { description: "invalid" } });
+    }
+  });
+
+  it("M-1: a leading BOM is stripped; the title rule is unchanged (any format character refused)", () => {
+    expect(parse("t", `\ufeff${"d".repeat(40)}`)).toEqual({ ok: true, input: { title: "t", description: "d".repeat(40) } });
+    expect(parse("a‍b", "d".repeat(40))).toEqual({ ok: false, errors: { title: "invalid" } });
+    expect(parse("a\u00adb", "d".repeat(40))).toEqual({ ok: false, errors: { title: "invalid" } });
+  });
+
+  it("M-1: code-point counts still agree with SQL length(): a ZWJ sequence counts every code point", () => {
+    const family = "👨‍👩‍👧"; // 5 code points
+    expect([...family]).toHaveLength(5);
+    expect(parse("t", family.repeat(8)).ok).toBe(true); // 40 code points
+    expect(parse("t", family.repeat(7))).toEqual({ ok: false, errors: { description: "too_short" } }); // 35
   });
 
   it("reports both errors together", () => {
@@ -251,6 +278,24 @@ describe("publicExcerpt", () => {
   it("counts CJK characters as one each", () => {
     expect(publicExcerpt("需".repeat(200))).toBe("需".repeat(200));
     expect(publicExcerpt("需".repeat(201))).toBe(`${"需".repeat(200)}…`);
+  });
+
+  it("L-1: cuts between graphemes: no dangling ZWJ, no split flag, no letter parted from its combining mark", () => {
+    const woman = "👩‍💻"; // 3 code points
+    const cut = publicExcerpt(`${"a".repeat(198)}${woman}tail`);
+    expect(cut).toBe(`${"a".repeat(198)}…`); // the 3-code-point cluster does not fit in the last 2: dropped whole
+    expect(cut).not.toMatch(/‍…$/);
+    const flag = "🏳️‍🌈"; // 4 code points
+    expect(publicExcerpt(`${"a".repeat(197)}${flag}z`)).toBe(`${"a".repeat(197)}…`);
+    const nfd = "ệ".normalize("NFD"); // e + dot below + circumflex: 3 code points
+    expect([...nfd]).toHaveLength(3);
+    expect(publicExcerpt(`${"a".repeat(199)}${nfd}b`)).toBe(`${"a".repeat(199)}…`);
+    expect(publicExcerpt(`${"a".repeat(197)}${nfd}b`)).toBe(`${"a".repeat(197)}${nfd}…`);
+    for (const text of [woman.repeat(100), nfd.repeat(100), "🇻🇳".repeat(100)]) expect([...publicExcerpt(text)].length).toBeLessThanOrEqual(201);
+  });
+
+  it("L-1: any whitespace run (tabs, spaces, no-break) becomes one space", () => {
+    expect(publicExcerpt("a \t b\u00A0\u00A0c\n\nd")).toBe("a b c d");
   });
 
   it("turns line breaks into single spaces, before counting", () => {

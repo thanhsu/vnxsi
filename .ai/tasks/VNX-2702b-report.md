@@ -31,3 +31,9 @@ Implementer: Claude. Branch `feat/epic27-request-board`. Base `ebc597b`.
 5. The M7 superset checks have empty replaced-lines lists on purpose; they cannot be filled before the board texts exist (2707b). A third test asserts the source files and the OAuth sentence exist so the checks cannot become silent no-ops.
 6. FlagsPage text and the vi/zh descriptions are my wording (AI translation, native review before promotion as for other strings).
 7. No `request_board` read happens before go-live (middleware calls the gate; date first). After go-live every request reads the flag through the 60 s cache.
+
+## Vòng sửa 1 (review `.ai/reviews/VNX-2702b-review.md`, APPROVE_AFTER_FIXES)
+- **M-1:** văn bản nhiều dòng (mô tả công khai, ghi chú review, ghi chú interest) giờ từ chối `\p{Cc}` (trừ `\n`, `\t`; `\r` đã chuẩn hóa) và riêng các ký tự bidi U+202A-202E, U+2066-2069. ZWJ, ZWNJ, soft hyphen, variation selector, ZWSP được phép; BOM đầu chuỗi bị bỏ (`cleanText`). Quy tắc tiêu đề giữ nguyên (`Cc`+`Cf`). Test: `👩‍💻`, `👨‍👩‍👧`, `🏳️‍🌈`, soft hyphen, ZWNJ, tiếng Việt NFC và NFD, tiếng Trung qua; U+202A/202D/202E/2066/2069, U+0085, NUL, ESC bị từ chối; BOM bị bỏ; ghi chú review và interest cùng quy tắc; tiêu đề vẫn từ chối ZWJ và soft hyphen. Độ dài vẫn theo code point: chuỗi ZWJ 5 code point x 7 = 35 (too_short), x 8 = 40 (qua), và test DB xác nhận CHECK `length()` đồng ý.
+- **L-1:** `publicExcerpt` gộp mọi khoảng trắng bằng `\s+` rồi cắt theo grapheme (`Intl.Segmenter`, có sẵn trong workerd, test chạy xanh) giữ trần 200 code point; có dự phòng cắt theo code point nếu một grapheme đơn lẻ vượt trần. Test: ZWJ emoji, cờ ghép và chữ NFD tại biên 200, tab/NBSP.
+- Ghi chú: test trước đây khẳng định U+200B (ZWSP) bị từ chối trong mô tả; theo quy tắc đã duyệt nay là được phép, nên đổi thành khẳng định chấp nhận.
+- Kết quả: typecheck 0 lỗi; bộ 2702b 9 file, 129 test xanh, 2 skipped; toàn bộ 193 file, 2391 test xanh, 2 skipped.

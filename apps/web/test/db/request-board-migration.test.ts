@@ -144,4 +144,13 @@ describe("0018_request_board (addendum §6)", () => {
     expect(parse(e.repeat(120), e.repeat(40)).ok).toBe(true);
     expect(parse("t", e.repeat(4001)).ok).toBe(false);
   });
+
+  it("M-1: a ZWJ sequence counts every code point in the SQL CHECK too, as in the parser", async () => {
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467); // 5 code points
+    const { request } = await makeRequest({ tag: "rbm-zwj" });
+    await expect(insertPublication(request.id, { public_description: family.repeat(7) })).rejects.toThrow(); // 35 code points: below 40
+    expect(parsePublicListing({ title: "t", description: family.repeat(7) }).ok).toBe(false);
+    await insertPublication(request.id, { public_description: family.repeat(8) }); // 40 code points
+    expect(parsePublicListing({ title: "t", description: family.repeat(8) }).ok).toBe(true);
+  });
 });
