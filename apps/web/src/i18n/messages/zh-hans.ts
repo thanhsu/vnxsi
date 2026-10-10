@@ -74,6 +74,8 @@ export const zhHans: Messages = {
   "builder.field.hourlyRate": "时薪（美元，可选）",
   "builder.form.choose": "请选择…",
   "builder.form.errorSummary": "请修正标出的字段。",
+  "form.error.titlePrefix": "错误：",
+  "form.error.summaryTitle": "有问题需要修正",
   "builder.error.handle": "请使用 3–30 个小写字母、数字或连字符，并以字母或数字开头和结尾。",
   "builder.error.handleReserved": "该用户名已被保留，请换一个。",
   "builder.error.handleTaken": "该用户名已被占用。",
