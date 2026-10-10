@@ -28,3 +28,10 @@ Results:
 
 ## Ghi nhan
 - Line endings: git warned LF to CRLF on touched files (autocrlf); no content effect.
+
+## Fix round R1 (review của merge)
+
+- LOW-1: docstring of `isStaff` in `apps/web/src/auth/staff.ts` now says it is the admin e-mail and flag check (`isAdminUser`) and that the /admin guard also requires a magic-link session. Comment only.
+- SUGGESTION-1: `test/public/builder-badges.test.ts` Top builders order test asserts each `optIn` returns "changed".
+- SUGGESTION-3: `test/ops/guard.test.ts` new case: root Owner with an oauth_* session on `/ops/monetization/merchants` gets the same sealed 404 as an anonymous visitor.
+- Tests: builder-badges, ops/guard, auth/staff plus typecheck (see commit message run).

@@ -296,11 +296,11 @@ describe("the badge never changes the order of builders (ADR-004)", () => {
     expect(before.indexOf(owners[0]!.handle)).toBeLessThan(before.indexOf(owners[2]!.handle));
     for (const b of owners.slice(1)) { // the lower-ranked ones, to catch any lift
       await link(b.userId, "github", `tb-${b.handle}`);
-      await optIn(b.userId, "github");
+      expect(await optIn(b.userId, "github")).toBe("changed");
     }
     expect(await order()).toEqual(before);
     await link(owners[0]!.userId, "linkedin", `tb-${t}@example.com`);
-    await optIn(owners[0]!.userId, "linkedin");
+    expect(await optIn(owners[0]!.userId, "linkedin")).toBe("changed");
     expect(await order()).toEqual(before);
     expect(JSON.stringify(topBuilders(await loadBuilderTallies(testEnv.DB, NOW)))).not.toMatch(/verified via|github|linkedin/i);
   });
