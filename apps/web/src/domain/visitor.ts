@@ -59,7 +59,7 @@ export async function visitorHash(salt: string | undefined, day: string, visitor
 
 export interface CountContext {
   isBot: boolean;
-  /** Our team: the same predicate as the /admin guard (`isStaff`). */
+  /** Our team: the admin e-mail and flag check or an Ops member (`isStaff`); the /admin guard ALSO requires a magic-link session, staff do not. */
   isStaff: boolean;
   /** The signed-in user is the builder of this product. */
   isOwnBuilder: boolean;

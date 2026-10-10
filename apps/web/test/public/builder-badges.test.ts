@@ -4,10 +4,12 @@ import { setBuilderStatus } from "../../src/db/builders.ts";
 import { searchProducts } from "../../src/db/catalog.ts";
 import { searchBuilders } from "../../src/db/directory.ts";
 import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { loadBuilderTallies } from "../../src/db/public-stats.ts";
 import { linkIdentity, listPublicBadges, setShowOnProfile } from "../../src/db/identities.ts";
 import type { BuilderStatus } from "../../src/domain/builder.ts";
 import { parseCatalogQuery } from "../../src/domain/catalog.ts";
 import { PROVIDER_FLAG, type OAuthProvider } from "../../src/domain/identity.ts";
+import { topBuilders } from "../../src/domain/public-stats.ts";
 import type { Bindings } from "../../src/env.ts";
 import { addLiveProduct, ensureUser, makeBuilder, signIn } from "../fixtures.ts";
 import { formPost, getReq, testEnv } from "../helpers.ts";
@@ -277,6 +279,30 @@ describe("the badge never changes the order of builders (ADR-004)", () => {
     await link(owners[0]!.userId, "linkedin", `oc-${t}@example.com`);
     await optIn(owners[0]!.userId, "linkedin");
     expect(await order()).toEqual(before);
+  });
+
+  it("the Top builders order (topBuilders over loadBuilderTallies) is identical with and without badges", async () => {
+    const t = tag();
+    const NOW = "2026-10-05T12:05:00.000Z";
+    const owners = [];
+    for (const [n, products] of [["a", 3], ["b", 2], ["c", 1]] as const) {
+      const b = await makeBuilder(`tb-${n}-${t}@vnx.si`, `tb-${n}-${t}`, "approved");
+      for (let i = 0; i < products; i++) await addLiveProduct(b, `tb-${n}${i}-${t}`, { badges: ["demo_verified"] }); // verified tab: a 3, b 2, c 1
+      owners.push(b);
+    }
+    const order = async () => topBuilders(await loadBuilderTallies(testEnv.DB, NOW))?.verified?.map((e) => e.handle) ?? [];
+    const before = await order();
+    expect(before.length).toBeGreaterThanOrEqual(3); // positive: a real tab to protect
+    expect(before.indexOf(owners[0]!.handle)).toBeLessThan(before.indexOf(owners[2]!.handle));
+    for (const b of owners.slice(1)) { // the lower-ranked ones, to catch any lift
+      await link(b.userId, "github", `tb-${b.handle}`);
+      await optIn(b.userId, "github");
+    }
+    expect(await order()).toEqual(before);
+    await link(owners[0]!.userId, "linkedin", `tb-${t}@example.com`);
+    await optIn(owners[0]!.userId, "linkedin");
+    expect(await order()).toEqual(before);
+    expect(JSON.stringify(topBuilders(await loadBuilderTallies(testEnv.DB, NOW)))).not.toMatch(/verified via|github|linkedin/i);
   });
 
   it("the directory order is identical with no badges, with badges on the others, and with all badges on", async () => {

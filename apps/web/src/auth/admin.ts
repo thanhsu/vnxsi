@@ -10,7 +10,7 @@ export function adminEmails(env: Pick<Bindings, "ADMIN_EMAILS">): Set<string> {
   );
 }
 
-/** The /admin guard predicate. ADMIN_EMAILS is the source of truth (removing an e-mail revokes access on the next request). Never widened. */
+/** The admin e-mail and flag check, not the whole /admin guard: `requireAdmin` ALSO requires a magic-link session. ADMIN_EMAILS is the source of truth (removing an e-mail revokes access on the next request). Never widened. */
 export function isAdminUser(user: Pick<SessionUser, "email" | "isAdmin"> | null | undefined, env: Pick<Bindings, "ADMIN_EMAILS">): boolean {
   return !!user && user.isAdmin && adminEmails(env).has(user.email);
 }

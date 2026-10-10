@@ -9,7 +9,7 @@ const admins = { ADMIN_EMAILS: "owner@vnx.si, Second@VNX.si" };
 const su = (email: string, isAdmin: boolean): SessionUser => ({ id: `no-such-user-${email}`, email, locale: "en", isAdmin, method: "magic_link" });
 const envWith = (ADMIN_EMAILS: string | undefined) => ({ DB: testEnv.DB, ADMIN_EMAILS });
 
-describe("isAdminUser: exactly the /admin guard expression (requireAdmin calls it)", () => {
+describe("isAdminUser: the admin e-mail and flag check (requireAdmin calls it, and the /admin guard ALSO requires a magic-link session)", () => {
   it("is true for an admin user whose e-mail is in ADMIN_EMAILS", () => {
     expect(isAdminUser({ email: "owner@vnx.si", isAdmin: true }, admins)).toBe(true);
     expect(isAdminUser({ email: "second@vnx.si", isAdmin: true }, admins)).toBe(true);
@@ -28,7 +28,7 @@ describe("isAdminUser: exactly the /admin guard expression (requireAdmin calls i
   });
 });
 
-describe("isStaff (async; the /admin guard or any Ops member)", () => {
+describe("isStaff (async; the admin predicate or any Ops member, however they signed in)", () => {
   it("is true for an admin user in ADMIN_EMAILS", async () => {
     expect(await isStaff(envWith(admins.ADMIN_EMAILS), su("owner@vnx.si", true))).toBe(true);
   });
@@ -37,6 +37,15 @@ describe("isStaff (async; the /admin guard or any Ops member)", () => {
     expect(await isStaff(envWith(admins.ADMIN_EMAILS), su("gone@vnx.si", true))).toBe(false);
     expect(await isStaff(envWith(undefined), su("owner@vnx.si", true))).toBe(false);
     expect(await isStaff(envWith(admins.ADMIN_EMAILS), null)).toBe(false);
+  });
+  it("is true for the owner and for an Ops member whatever the sign-in: an oauth_* session is still staff (excluded from stats)", async () => {
+    expect(await isStaff(envWith(admins.ADMIN_EMAILS), { ...su("owner@vnx.si", true), method: "oauth_github" })).toBe(true);
+    const owner = await ensureUser("owner@vnx.si");
+    const member = await ensureUser("staff-oauth@vnx.si");
+    const now = new Date().toISOString();
+    await testEnv.DB.prepare("INSERT INTO ops_members (user_id, role, granted_by, granted_at, updated_at) VALUES (?1, 'viewer', ?2, ?3, ?3)").bind(member.id, owner.id, now).run();
+    for (const method of ["oauth_google", "oauth_github", "oauth_linkedin"] as const)
+      expect(await isStaff(envWith(admins.ADMIN_EMAILS), { id: member.id, email: member.email, locale: member.locale, isAdmin: false, method })).toBe(true);
   });
   it("is true for an Ops member of the lowest role (Viewer) who is not an admin; false for a plain user", async () => {
     const owner = await ensureUser("owner@vnx.si");
