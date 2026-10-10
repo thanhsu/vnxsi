@@ -20,3 +20,9 @@
 
 ## Ghi nhan
 - VNX-2605c (end `oauth_<provider>` sessions on unlink) remains required before VNX-2608, per plan.
+
+## Fix round R1 (test-only)
+- M1: `oauth-link.test.ts` "already_linked": second callback now asserts `expectBack(res2, "/me?link=ok")` and link audit count stays 1.
+- M2: exact log key set `["code","event","kind","provider","requestId"]` asserted in `identity-unlink.test.ts` and `oauth-link.test.ts` (failing-mailer tests).
+- M3: new test in `identity-unlink.test.ts`: a `vi` owner (signIn with locale vi before linking) unlinks; the only URL in text and html is `${APP_ORIGIN}/vi/me`.
+- Run: `npx vitest run test/auth/oauth-link.test.ts test/me/identity-unlink.test.ts --maxWorkers=1 --no-file-parallelism` -> 2 files, 44 tests passed. `npm run typecheck -w apps/web` exit 0. No source changes.

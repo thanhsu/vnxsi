@@ -171,6 +171,7 @@ describe("POST /me/identities/:provider/unlink (VNX-2605b)", () => {
     const lines = logged();
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0] ?? "")).toMatchObject({ event: "identity.mail_failed", kind: "unlinked", provider: "github", code: "notify_failed" });
+    expect(Object.keys(JSON.parse(lines[0] ?? "")).sort()).toEqual(["code", "event", "kind", "provider", "requestId"]);
     for (const secret of [email, label, "boom", "SECRET"]) expect(lines[0]).not.toContain(secret);
   });
 
@@ -184,6 +185,17 @@ describe("POST /me/identities/:provider/unlink (VNX-2605b)", () => {
     expect(body).not.toContain(cookie.split("=")[1] ?? "x");
     expect(body).not.toMatch(/[?&]t=|token=|code=|state=|\/auth\//i);
     expect([...new Set(body.match(/https?:\/\/[^\s"<]+/g) ?? [])]).toEqual([`${testEnv.APP_ORIGIN}/me`]);
+  });
+});
+
+describe("the manage URL in the e-mail follows users.locale (VNX-2605b R1)", () => {
+  it("a vi owner gets exactly ${APP_ORIGIN}/vi/me, with no query, in text and html", async () => {
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email, { locale: "vi" }); // before linking: ensureUser alone would make it "en"
+    await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    await unlink("github", cookie);
+    const mail = mailTo(email)[0];
+    for (const part of [mail?.text ?? "", mail?.html ?? ""]) expect([...new Set(part.match(/https?:\/\/[^\s"<]+/g) ?? [])]).toEqual([`${testEnv.APP_ORIGIN}/vi/me`]);
   });
 });
 

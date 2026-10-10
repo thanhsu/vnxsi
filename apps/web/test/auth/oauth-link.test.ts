@@ -304,10 +304,12 @@ describe("the 'account linked' e-mail (VNX-2605b)", () => {
   it("the same account again sends nothing (already_linked changes nothing)", async () => {
     await enableProvider("github");
     const email = emailOf("lan");
-    const { cookie } = await signIn(email);
+    const { user, cookie } = await signIn(email);
     const identity = identityOf();
     await comeBack("github", cookie, identity);
-    await comeBack("github", cookie, identity);
+    const { res: res2 } = await comeBack("github", cookie, identity);
+    expectBack(res2, "/me?link=ok");
+    expect(await linkAudits(user.id)).toBe(1);
     expect(mailTo(email)).toHaveLength(1);
   });
 
@@ -336,6 +338,7 @@ describe("the 'account linked' e-mail (VNX-2605b)", () => {
     expect(await identitiesOf(user.id)).toBe(1);
     expect(await linkAudits(user.id)).toBe(1);
     expect(loggedCodes()).toEqual(["notify_failed"]);
+    expect(Object.keys(JSON.parse(logged()[0] ?? "")).sort()).toEqual(["code", "event", "kind", "provider", "requestId"]);
     for (const line of logged()) for (const secret of [email, identity.label, "boom", "SECRET"]) expect(line).not.toContain(secret);
   });
 
