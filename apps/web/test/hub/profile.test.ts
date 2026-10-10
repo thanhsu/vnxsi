@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { findBuilderByUserId } from "../../src/db/builders.ts";
 import { makeBuilder, profileValues, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 
@@ -85,7 +85,9 @@ describe("Builder Hub profile", () => {
     const { cookie } = await asBuilder("prof-errors@vnx.si", "prof-errors");
     const bad = await app().request(formPost("/hub/profile", profileValues({ handle: "prof-errors", name: "" }), { cookie }), undefined, testEnv);
     expect(bad.status).toBe(400);
-    expect(await bad.text()).toContain("Enter a name (up to 80 characters).");
+    const html = await bad.text();
+    expect(html).toContain("Enter a name (up to 80 characters).");
+    expectErrorSummary(html, ["name"]);
     const taken = await app().request(formPost("/hub/profile", profileValues({ handle: "prof-other" }), { cookie }), undefined, testEnv);
     expect(taken.status).toBe(409);
     expect(await taken.text()).toContain("This handle is already taken.");
