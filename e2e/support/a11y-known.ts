@@ -17,8 +17,4 @@ export type KnownA11y = {
   finding: string;
 };
 
-export const KNOWN_A11Y: readonly KnownA11y[] = [
-  // R1 of the VNX-0802 review: without JS the back cards of the hero deck stack over the front one and cover its buttons. Fixed by VNX-0807 T2, which removes these entries.
-  { page: "/", locale: "en", variant: "nojs", ruleId: "target-size", reason: "back cards of the deck are not inert without JS", finding: "VNX-0802 R1" },
-  { page: "/", locale: "vi", variant: "nojs", ruleId: "target-size", reason: "back cards of the deck are not inert without JS", finding: "VNX-0802 R1" },
-];
+export const KNOWN_A11Y: readonly KnownA11y[] = [];

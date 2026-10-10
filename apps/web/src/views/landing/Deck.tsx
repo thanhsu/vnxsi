@@ -57,8 +57,14 @@ const Shot: FC = () => (
   </div>
 );
 
+/**
+ * Cards behind the front one are inert and hidden from assistive tech from the server on, so they are out of reach and cannot be tapped
+ * even when landing.js does not run (VNX-0802 R1). landing.js sets the same attributes when it rotates the deck.
+ */
+const behind = (slot: number): { inert?: boolean; "aria-hidden"?: string } => (slot === 0 ? {} : { inert: true, "aria-hidden": "true" });
+
 const CategoryCard: FC<{ category: Category; slot: number; tr: Translate; builderHref: string }> = ({ category, slot, tr, builderHref }) => (
-  <article class={`deck-card tint-${TINTS[slot]}`} data-kind="category" data-category={category} data-slot={String(slot)}>
+  <article class={`deck-card tint-${TINTS[slot]}`} data-kind="category" data-category={category} data-slot={String(slot)} {...behind(slot)}>
     <div class="deck-card-top">
       <span>{tr(CATEGORY_KEY[category])}</span>
       <span>{tr("landing.deck.open")}</span>
@@ -87,7 +93,7 @@ const CategoryCard: FC<{ category: Category; slot: number; tr: Translate; builde
 );
 
 const ProductDeckCard: FC<{ product: DeckProduct; slot: number; locale: Locale; tr: Translate }> = ({ product, slot, locale, tr }) => (
-  <article class={`deck-card tint-${TINTS[slot]}`} data-kind="product" data-slot={String(slot)}>
+  <article class={`deck-card tint-${TINTS[slot]}`} data-kind="product" data-slot={String(slot)} {...behind(slot)}>
     <div class="deck-card-top">
       <span>{product.category ? tr(CATEGORY_KEY[product.category]) : ""}</span>
       <span>{tr(PRODUCT_LANG_KEY[product.primaryLang])}</span>
