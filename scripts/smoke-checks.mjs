@@ -13,6 +13,8 @@ export const COVERED_GAP_MS = 600;
 // The Cloudflare rule is 20 requests / 10 s / IP on /p/* and /go/*; we never send more than half of it.
 export const WINDOW_MS = 10_000;
 export const WINDOW_MAX = 10;
+// Stop early (exit 1) after this many checks in a row that failed with a network error on both attempts (site down).
+export const MAX_CONSECUTIVE_NETWORK_ERRORS = 3;
 
 export const LOCALE_PREFIXES = ["", "/vi", "/zh-hans", "/zh-hant"];
 const SLUG_OK = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -144,11 +146,13 @@ export function buildChecks({ slug = null } = {}) {
   }
 
   // 3. Ops console: sealed 404, never stored, never indexed. Only the canonical, unprefixed /ops carries the Ops
-  //    headers (app.ts mounts opsHeaders on /ops and /ops/*), so /vi/ops is a plain 404 and only the status is checked.
+  //    headers (app.ts mounts opsHeaders on /ops and /ops/*). /vi/ops is a plain 404 that still gets no-store (noStorePrivate)
+  //    and the page's meta noindex, but no X-Robots-Tag: that gap is VNX-2502 F3, deferred to VNX-2508. When 2508 lands,
+  //    assert /vi/ops like /ops.
   for (const path of ["/ops", "/ops/x"]) {
     add({ id: `ops-sealed ${path}`, path, status: 404, asserts: [headerIncludes("cache-control", "no-store"), headerIncludes("x-robots-tag", "noindex")] });
   }
-  add({ id: "ops-not-localized /vi/ops", path: "/vi/ops", status: 404 });
+  add({ id: "ops-not-localized /vi/ops", path: "/vi/ops", status: 404, asserts: [headerIncludes("cache-control", "no-store"), noindexAny] });
 
   // 4. Unknown product / outbound paths: 404 and noindex (X-Robots-Tag on /go, meta robots on /p error pages).
   for (const prefix of LOCALE_PREFIXES) add({ id: `product-404 ${prefix}/p/<none>`, path: `${prefix}/p/${MISSING}`, status: 404, asserts: [noindexAny] });
@@ -274,9 +278,13 @@ export async function run({ argv = [], env = {}, fetch: doFetch, sleep, now, log
     }
   }
 
-  const rows = [];
   let privacy = null;
   const counts = { pass: 0, retry: 0, fail: 0 };
+  let netErrors = 0;
+  let aborted = false;
+  const w = Math.max(5, ...checks.map((c) => c.id.length));
+  log(`smoke ${opts.base}${ctx.isProd ? "" : " (non-production: HSTS and sitemap origin not asserted)"}`);
+  log(`${pad("STATUS", 13)} ${pad("check", w)} detail`);
   for (const check of checks) {
     let r = await attempt(check);
     let status = "PASS";
@@ -289,14 +297,18 @@ export async function run({ argv = [], env = {}, fetch: doFetch, sleep, now, log
     else if (status === "PASS") counts.pass++;
     else counts.retry++;
     if (r.res && check.capture && !r.reasons.length) privacy = check.capture(r.res);
-    rows.push({ status, id: check.id, detail: r.reasons.length ? r.reasons.join("; ") : `${check.method} ${check.path} -> ${r.res.status}` });
+    const detail = r.reasons.length ? r.reasons.join("; ") : `${check.method} ${check.path} -> ${r.res.status}`;
+    // Printed as each check finishes, so an outage shows up at once instead of after the whole table.
+    log(`${pad(status, 13)} ${pad(check.id, w)} ${detail}`);
+    netErrors = status === "FAIL" && r.res === null ? netErrors + 1 : 0;
+    if (netErrors >= MAX_CONSECUTIVE_NETWORK_ERRORS) {
+      aborted = true;
+      log(`ABORT: ${netErrors} network errors in a row; the site looks unreachable. Remaining checks skipped.`);
+      break;
+    }
   }
 
-  log(`smoke ${opts.base}${ctx.isProd ? "" : " (non-production: HSTS and sitemap origin not asserted)"}`);
-  const w = Math.max(5, ...rows.map((r) => r.id.length));
-  log(`${pad("STATUS", 13)} ${pad("check", w)} detail`);
-  for (const r of rows) log(`${pad(r.status, 13)} ${pad(r.id, w)} ${r.detail}`);
-  log(`${counts.pass} pass, ${counts.retry} pass-after-retry, ${counts.fail} fail`);
+  log(`${counts.pass} pass, ${counts.retry} pass-after-retry, ${counts.fail} fail${aborted ? " (aborted early)" : ""}`);
   log(`Privacy: Last updated ${privacy ?? "not found"}`);
   return counts.fail > 0 ? 1 : 0;
 }

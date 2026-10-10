@@ -56,3 +56,9 @@ All 64 rows PASS (0 retry, 0 FAIL), grouped:
 | privacy last-updated (2026-10-21), api/health | 2 | PASS |
 
 Summary line: `64 pass, 0 pass-after-retry, 0 fail`. Re-verified after resume: `npm run test:scripts` 16/16 pass; `npm test` 164 files / 1913 tests and typecheck exit 0 (run before the interruption).
+
+## Vòng sửa 1 (review F3, F7)
+
+- F3: check `ops-not-localized /vi/ops` giờ assert 404 + `Cache-Control: no-store` + noindex (header hoặc meta). Chú thích nêu thiếu `X-Robots-Tag` là VNX-2502 F3, dời sang VNX-2508. Test mới: pass với no-store + meta noindex; fail khi thiếu no-store hoặc noindex. Mô hình app giả trong test cho `/vi/ops` có `no-store`.
+- F7: mỗi dòng kết quả in ngay khi check xong (tiêu đề in trước, tóm tắt ở cuối). Hằng `MAX_CONSECUTIVE_NETWORK_ERRORS = 3`: sau 3 check liên tiếp lỗi mạng ở cả hai lần thử thì in `ABORT`, bỏ phần còn lại, mã thoát 1 (tóm tắt ghi "aborted early"). Check thành công hoặc lỗi không phải mạng thì đặt lại bộ đếm. Test mới: streaming (dòng đầu in trước request cuối), dừng sớm (6 request, mã 1), bộ đếm được đặt lại.
+- Kiểm: `npm run test:scripts` 20/20 pass. `npm run smoke` production một lần: 64 pass, 0 pass-after-retry, 0 fail, mã thoát 0, Privacy 2026-10-21.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
-import { buildBudgetPlan, buildChecks, evaluate, extractLastUpdated, isRateCovered, parseArgs, run, UsageError, WINDOW_MAX, WINDOW_MS } from "../smoke-checks.mjs";
+import { MAX_CONSECUTIVE_NETWORK_ERRORS, buildBudgetPlan, buildChecks, evaluate, extractLastUpdated, isRateCovered, parseArgs, run, UsageError, WINDOW_MAX, WINDOW_MS } from "../smoke-checks.mjs";
 
 const CTX = { base: "https://vnx.si", isProd: true };
 const CSP = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-ancestors 'none'";
@@ -17,7 +17,7 @@ function goodResponse(path) {
   const notFound = '<html><meta name="robots" content="noindex"/></html>';
   const sealed = { ...html, "cache-control": "no-store", "x-robots-tag": "noindex, nofollow" };
   if (/^\/(admin|hub|me)$/.test(rest)) return res(303, { ...sec, location: `${prefix}/login?next=${encodeURIComponent(path)}` });
-  if (rest === "/ops" || rest.startsWith("/ops/")) return prefix ? res(404, html, notFound) : res(404, sealed, notFound);
+  if (rest === "/ops" || rest.startsWith("/ops/")) return prefix ? res(404, { ...html, "cache-control": "no-store" }, notFound) : res(404, sealed, notFound);
   if (rest.startsWith("/p/zz-")) return res(404, html, notFound);
   if (rest.startsWith("/go/zz-") || rest.startsWith("/go/p/zz-")) return res(404, sealed, notFound);
   if (path === "/robots.txt") return res(200, { ...sec, "content-type": "text/plain" }, "User-agent: *\nAllow: /media/products/\nDisallow: /go/\nDisallow: /ops\nDisallow: /hub\nDisallow: /vi/hub\n\nSitemap: https://vnx.si/sitemap.xml\n");
@@ -233,4 +233,53 @@ test("against a real local HTTP server: 500s give exit 1, correct answers give e
       server.close();
     }
   }
+});
+
+test("/vi/ops: no-store and noindex (meta) pass; missing no-store fails", () => {
+  const check = byId(buildChecks(), "ops-not-localized /vi/ops");
+  const ok = res(404, { "cache-control": "no-store" }, '<meta name="robots" content="noindex"/>');
+  assert.deepEqual(evaluate(check, ok, CTX), []);
+  assert.ok(evaluate(check, res(404, {}, '<meta name="robots" content="noindex"/>'), CTX).some((m) => m.includes("no-store")));
+  assert.ok(evaluate(check, res(404, { "cache-control": "no-store" }, "x"), CTX).some((m) => m.includes("noindex")));
+});
+
+test("rows are printed as each check finishes (streaming)", async () => {
+  const w = world();
+  const events = [];
+  const inner = w.fetch;
+  w.fetch = async (url, init) => {
+    events.push("fetch " + new URL(url).pathname);
+    return inner(url, init);
+  };
+  await runWith(w, [], { log: (l) => events.push("log " + l.slice(0, 13).trim()) });
+  const firstRow = events.findIndex((e) => e === "log PASS");
+  const lastFetch = events.map((e) => e.startsWith("fetch")).lastIndexOf(true);
+  assert.ok(firstRow !== -1 && firstRow < lastFetch, "first row is logged before the last request is sent");
+});
+
+test("stops with exit 1 after consecutive network errors", async () => {
+  const w = world();
+  w.fetch = async (url, init) => {
+    w.calls.push({ path: new URL(url).pathname });
+    throw new Error("down");
+  };
+  const { code, lines } = await runWith(w);
+  assert.equal(code, 1);
+  assert.equal(w.calls.length, MAX_CONSECUTIVE_NETWORK_ERRORS * 2);
+  assert.ok(lines.some((l) => l.startsWith("ABORT")));
+  assert.ok(lines.some((l) => /aborted early/.test(l)));
+});
+
+test("a successful check resets the consecutive network error count", async () => {
+  let n = 0;
+  const w = world();
+  const inner = w.fetch;
+  // Every 3rd request round (check+retry = 2 calls) alternates: error, error, ok ... never 3 failed checks in a row.
+  w.fetch = async (url, init) => {
+    n++;
+    if (Math.floor((n - 1) / 2) % 3 !== 2) throw new Error("flaky");
+    return inner(url, init);
+  };
+  const { lines } = await runWith(w);
+  assert.ok(!lines.some((l) => l.startsWith("ABORT")));
 });
