@@ -153,6 +153,7 @@ _Cập nhật lần cuối: 2026-10-06 bởi Reviewer (Claude), phiên trang too
 | Sửa sau review toàn nhánh M7 | ✅ | 37f86bc | ghi chú deploy `wrangler.jsonc`, test bảo vệ cấu hình, làm chắc test; 1913/1913 |
 | Merge M7 vào `main` | ✅ | 38bf414 | merge `--no-ff` của `56ffb91`, Owner duyệt 2026-10-07; đã push. **Đã deploy 2026-10-07** (version `8e1e141d`); Owner kiểm trình duyệt 8b xong 2026-10-08 |
 | VNX-0805 Runbook deploy + script smoke | ✅ | bdede61…9e38683 | `docs/runbooks/deploy.md` (12 mục, tiếng Việt), `scripts/smoke.mjs` (`npm run smoke`, 64 kiểm tra, chỉ GET/HEAD, ≤ 10 request/10 s vào đường có rate limit), `npm run test:scripts` (20 test, chạy trong CI); review `.ai/reviews/VNX-0805-review.md` APPROVE WITH CHANGES → sửa → APPROVE; merge vào `main`, đã push |
+| VNX-0802 Playwright + axe (E2E) | ✅ | 88b4739…41ba788 | `e2e/` ở gốc repo: 49 test Chromium (homepage tự động hóa checklist 8b, form Inquiry, editor, login thật qua `/auth/verify`, 22 lượt axe WCAG 2.2 AA, bắt vi phạm CSP + lỗi console mọi trang); `wrangler dev` local cổng 8799, D1 seed cố định, không cửa sau, không bao giờ nhắm vnx.si; `npm run e2e` (~1 phút); job `e2e` trong CI; `@playwright/test` 1.64.0, `@axe-core/playwright` 4.13.0 ghim cứng; review `.ai/reviews/VNX-0802-review.md` APPROVE WITH CHANGES → sửa `4bc99de` → APPROVE; merge vào `main`, đã push |
 
 ## Việc của Owner khi deploy M7
 
@@ -313,6 +314,7 @@ Owner, trước khi ElevenLabs chạy thật:
 
 - **Deploy sau khi merge M4:** áp `0006_catalog` cùng lúc với code M4 (ghi trong `wrangler.jsonc`). Trước lần `db:migrate:remote` đầu tiên: thử `0006_catalog` trên một D1 remote nháp (trigram, trigger, `json_each` trong trigger, `wrangler d1 export`).
 - ✅ **M7:** `/for-builders` đã vào sitemap kèm alternate, link header trong `<nav>`; `/go/` không có tiền tố locale.
+- **Sau VNX-0802 (a11y, chờ Owner chọn trước hay sau ra mắt M8):** một task gom (R1) homepage không JS vi phạm WCAG 2.2 AA `target-size`: thẻ sau của chồng thẻ hero (`views/landing/Deck.tsx`) chỉ được `inert`/`aria-hidden` bởi `landing.js` → render sẵn từ server; (F8) mẫu lỗi chung cho mọi form render server (tiền tố "Lỗi:" ở `<title>`, khối tóm tắt lỗi có link, chuyển focus không cần JS, test E2E); (R2) E2E dừng sớm khi tài nguyên cùng origin tải lỗi + quét `/` khi chặn `landing.js`/`home.js`. AC13 (job `e2e` xanh trên GitHub) kiểm sau push.
 - **Sau VNX-0805:** VNX-2508 siết check `/vi/ops` trong `scripts/smoke-checks.mjs`; VNX-0804 thêm check `www` → apex; mọi task đổi Terms/Privacy (và task dọn sau 2026-11-21) cập nhật ngày "Last updated" mong đợi trong runbook; lần sao lưu FTS5 thật đầu tiên thử lệnh mục 10 trên D1 nháp trước. Mỗi lần deploy: làm theo `docs/runbooks/deploy.md`, chạy `npm run smoke`.
 - **M8 (runbook):** backup D1 khi có bảng ảo FTS5 (bỏ `products_fts` và trigger → export → tạo lại và backfill, hoặc dùng Time Travel).
 
@@ -333,6 +335,12 @@ Owner, trước khi ElevenLabs chạy thật:
 
 ## Ghi nhận (minor, chưa làm)
 
+- **VNX-0802:**
+  - (F3) Implementer chạy `git checkout -- package.json` một lần (chỉ thay đổi chưa commit của chính nó, có khai báo). Từ nay handoff ghi rõ: hoàn tác bằng cách sửa file, không checkout/restore/reset.
+  - (F4) Không có `.ai/tasks/VNX-0802-handoff.md` (lặp VNX-0805 F9): plan đã duyệt + lệnh giao việc dùng làm handoff.
+  - Plan ghi wrangler 4.149.0; lockfile đang dùng 4.147.0.
+  - Máy dev: `workerd.exe` cũ của phiên khác có lúc giữ ~9.000 socket → E2E lỗi `ERR_ADDRESS_IN_USE`/`ERR_NO_BUFFER_SPACE` (xem `e2e/README.md`).
+  - R3, R5 (gợi ý): F1 nên đòi giá trị trung gian là số; quét axe "with motion" nên chờ animation xong.
 - **VNX-0805:**
   - (F4) Dòng "Production lần 3" ghi `/vi/ops` là 404 kín có `no-store` + `X-Robots-Tag`; thực tế `/vi/ops` có `no-store` và meta noindex nhưng **không** có `X-Robots-Tag` (từ `d447cf4`, không phải thoái lui; VNX-2502 F3, để VNX-2508).
   - (F9) VNX-0805 không có `.ai/tasks/VNX-0805-handoff.md`: plan đã duyệt dùng làm handoff.
