@@ -134,6 +134,7 @@ describe("/hub/profile: public badge switch (VNX-2606a)", () => {
     const off = sectionOf(await profileHtml(cookie));
     expect(off).not.toMatch(/(Show|Hide) GitHub/); // the intro names GitHub, so check the row itself
     expect(off).not.toContain("@octo-flag");
+    expect(off).not.toContain("<strong>GitHub</strong>");
     expect(off).not.toContain("/hub/identities/github/");
     expect(off).toContain("Show LinkedIn on my public profile"); // linkedin is independent
     expect(await flagOf(builder.userId, "github")).toBe(1); // the flag does not change the stored choice
@@ -142,6 +143,10 @@ describe("/hub/profile: public badge switch (VNX-2606a)", () => {
     await setProvider("github", false);
     await setProvider("linkedin", false);
     expect(await profileHtml(cookie)).not.toContain('id="badges"'); // both off: no section
+    // The POST deliberately skips the flag check: with the flag off the builder can still switch the badge off (privacy-protective direction).
+    expect(await flagOf(builder.userId, "github")).toBe(1);
+    expect((await post("github", { show: "0" }, cookie)).status).toBe(303);
+    expect(await flagOf(builder.userId, "github")).toBe(0);
   });
 
   it("google is 404 even when posted by hand (its flag stays 0); an unknown provider is 404", async () => {
@@ -194,10 +199,11 @@ describe("/hub/profile: public badge switch (VNX-2606a)", () => {
     expect(out.status).toBe(303);
     expect(out.headers.get("location")).toMatch(/^\/login/);
     const { cookie, user } = await signIn(`bt-nb-${tag()}@vnx.si`);
-    await linkedUser(`bt-nb2-${tag()}@vnx.si`, "github", { subject: `s-${tag()}`, label: "octo-nb" });
+    const other = await linkedUser(`bt-nb2-${tag()}@vnx.si`, "github", { subject: `s-${tag()}`, label: "octo-nb" });
     const res = await post("github", { show: "1" }, cookie);
     expect(res.headers.get("location")).toBe("/hub/apply");
     expect(await flagOf(user.id, "github")).toBeUndefined();
+    expect(await flagOf(other.user.id, "github")).toBe(0); // the other user's row is untouched
   });
 
   it("the body limit is 64 KB", async () => {

@@ -20,3 +20,9 @@
 ## Decisions / notes
 - No node_modules problems. Line endings preserved per file.
 - Ghi nhan: none.
+
+## Fix round R1 (test only)
+- M1: in the E1 test, with `oauth_github` off, `post("github", {show:"0"})` gives 303 and the stored flag becomes 0 (placed after the both-off check so the earlier re-enable steps are unaffected).
+- M3: the non-builder test keeps the other user's `linkedUser` result and asserts its `show_on_profile` stays 0.
+- M4: the E1 test also asserts `not.toContain("<strong>GitHub</strong>")`.
+- Command: `npx vitest run test/hub/badge-toggle.test.ts --maxWorkers=1 --no-file-parallelism` -> 18 passed.
