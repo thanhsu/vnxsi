@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { sha256Hex } from "../../src/auth/crypto.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
-import { followMagicLink, formPost, testEnv } from "../helpers.ts";
+import { expectErrorSummary, followMagicLink, formPost, testEnv } from "../helpers.ts";
 
 function tokenFrom(text: string): string {
   const m = /\/auth\/verify\?t=([A-Za-z0-9_-]{43})/.exec(text);
@@ -98,6 +98,35 @@ describe("magic link login", () => {
     const statuses = [];
     for (let i = 0; i < 6; i++) statuses.push((await app.request(formPost("/login", { email: "flood@vnx.si" }), undefined, testEnv)).status);
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+  });
+
+  it("shows the shared error summary: a field error links to the e-mail box, a rate limit is form-level", async () => {
+    const app = createApp();
+    const bad = await app.request(formPost("/login", { email: "nope" }), undefined, testEnv);
+    const html = await bad.text();
+    expectErrorSummary(html, ["email"]);
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-describedby="email-error"');
+
+    const clean = await (await app.request("https://vnx.si/login", {}, testEnv)).text();
+    expect(clean).not.toContain("form-errors");
+    expect(clean).not.toContain('aria-invalid');
+    expect(clean).toMatch(/<title>[^<]*<\/title>/);
+    expect(/<title>([^<]*)<\/title>/.exec(clean)?.[1]).not.toMatch(/^Error:/);
+
+    let limited: Response | undefined;
+    for (let i = 0; i < 6; i++) limited = await app.request(formPost("/login", { email: "summary-flood@vnx.si" }), undefined, testEnv);
+    expect(limited!.status).toBe(429);
+    const flood = await limited!.text();
+    expectErrorSummary(flood, [], { formLevel: 1 });
+    expect(flood).not.toContain('aria-invalid');
+    expect(flood).not.toContain('id="email-error"');
+  });
+
+  it("uses the Vietnamese pattern on a bad e-mail", async () => {
+    const res = await createApp().request(formPost("/vi/login", { email: "nope" }), undefined, testEnv);
+    expect(res.status).toBe(400);
+    expectErrorSummary(await res.text(), ["email"], { titlePrefix: "Lỗi:" });
   });
 
   it("escapes HTML in a rejected email value", async () => {

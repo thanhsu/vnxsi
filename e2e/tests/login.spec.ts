@@ -23,9 +23,18 @@ test("the sign-in form refuses a bad e-mail and accepts a good one", async ({ pa
   await page.getByLabel("Email").fill("not-an-email");
   const [bad] = await Promise.all([page.waitForResponse((r) => r.request().method() === "POST"), page.getByRole("button", { name: "Send sign-in link" }).click()]);
   expect(bad.status()).toBe(400);
-  await expect(page.getByRole("alert")).toContainText("doesn't look right");
+  // VNX-0807 error pattern: title prefix, focused summary with one link to the field, no role="alert".
+  await expect(page).toHaveTitle(/^Error: /);
+  const summary = page.locator("#form-errors");
+  await expect(summary).toBeFocused();
+  await expect(summary.getByRole("heading", { level: 2 })).toHaveText("There is a problem");
+  await expect(summary.getByRole("link")).toHaveCount(1);
+  await expect(summary).toContainText("doesn't look right");
+  await expect(page.locator("[role=alert]")).toHaveCount(0);
   await expect(page.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByLabel("Email")).toHaveValue("not-an-email");
+  await summary.getByRole("link").click();
+  await expect(page.getByLabel("Email")).toBeFocused();
 
   await page.getByLabel("Email").fill("ada.login@example.test");
   const [ok] = await Promise.all([page.waitForResponse((r) => r.request().method() === "POST"), page.getByRole("button", { name: "Send sign-in link" }).click()]);

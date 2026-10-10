@@ -17,7 +17,7 @@ import { requestOrigin } from "../http/origin.ts";
 import { notifyIdentityChange } from "../notify/identity.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
-import { InquiryThread } from "../views/InquiryThread.tsx";
+import { InquiryThread, threadErrorItems } from "../views/InquiryThread.tsx";
 import { LINK_NOTICES, type LinkNotice, LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
 import { RequestList } from "../views/me/RequestList.tsx";
 import { Layout } from "../views/Layout.tsx";
@@ -34,7 +34,7 @@ async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: Th
   const title = tr("inbox.to", { name: summary.builderName });
   return page(
     c,
-    <Layout locale={locale} title={`${title} · VNX.SI`} origin={requestOrigin(c)} rest={rest} noindex signedIn>
+    <Layout locale={locale} title={`${title} · VNX.SI`} origin={requestOrigin(c)} rest={rest} noindex signedIn invalid={threadErrorItems({ summary, viewer: "client", ...extra }, tr).length > 0}>
       <p>
         <a href={localizedPath(locale, "/me")}>{tr("me.title")}</a>
       </p>
