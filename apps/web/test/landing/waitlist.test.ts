@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { externalReferrerHost, siteHosts } from "../../src/domain/waitlist-input.ts";
 import { t } from "../../src/i18n/t.ts";
-import { formPost, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, testEnv } from "../helpers.ts";
 
 type Row = {
   email: string;
@@ -161,6 +161,12 @@ describe("POST /waitlist (VNX-0708)", () => {
     expect(html).toContain('value="not-an-email"');
     expect(html).toContain('aria-describedby="waitlist-email-error"');
     expect(html).toMatch(/<p id="waitlist-email-error" class="error-msg"[^>]*>Email chưa đúng định dạng\.<\/p>/);
+    // VNX-0807: title prefix, one focused summary inside #notify linking the field; the page is still the landing page (same canonical, no robots tag).
+    const body = expectErrorSummary(html, ["waitlist-email"], { titlePrefix: "Lỗi:" });
+    expect(body).toContain("Email chưa đúng định dạng.");
+    expect(html.indexOf('id="form-errors"')).toBeGreaterThan(html.indexOf('id="notify"'));
+    expect(html).toContain('<link rel="canonical" href="https://vnx.si/vi/"');
+    expect(html).not.toContain('name="robots"');
     expect(await countOf("not-an-email")).toBe(0);
   });
 
@@ -197,6 +203,7 @@ describe("POST /waitlist (VNX-0708)", () => {
     expect(blocked.status).toBe(429);
     const html = await blocked.text();
     expect(html).toContain(t("vi", "landing.form.error.rateLimited"));
+    expectErrorSummary(html, [], { formLevel: 1, titlePrefix: "Lỗi:" }); // the rate-limit line is a form-level summary item
     expect(html).toContain('value="rl-11@example.com"');
     expect(await countOf("rl-11@example.com")).toBe(0);
 

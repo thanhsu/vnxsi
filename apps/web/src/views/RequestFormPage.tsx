@@ -5,8 +5,9 @@ import { CATEGORIES } from "../domain/product.ts";
 import { DESCRIPTION_MAX, DESCRIPTION_MIN, TITLE_MAX, type RequestErrors, type RequestFieldError, type RequestFormValues } from "../domain/request.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
-import { translator } from "../i18n/t.ts";
+import { translator, type Translate } from "../i18n/t.ts";
 import { BUDGET_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "./labels.ts";
+import { FormErrorSummary, type FormErrorItem } from "./FormErrorSummary.tsx";
 import { Layout } from "./Layout.tsx";
 
 const ERROR_KEY: Record<RequestFieldError, MessageKey> = {
@@ -30,14 +31,35 @@ type Props = {
   formError?: string;
 };
 
+/** Summary lines in page order (VNX-0807): the form-level error first, then each field error linked to its input. */
+export function requestErrorItems(p: Pick<Props, "errors" | "formError" | "signedIn">, tr: Translate): FormErrorItem[] {
+  const items: FormErrorItem[] = p.formError ? [{ href: "", message: p.formError }] : [];
+  const fields: [keyof RequestErrors, string, MessageKey][] = [
+    ["title", "rq-title", "request.form.titleField"],
+    ["description", "rq-description", "request.form.descriptionField"],
+    ["category", "rq-category", "request.form.category"],
+    ["budgetBand", "rq-budget", "inquiry.form.budget"],
+    ["deadline", "rq-deadline", "inquiry.form.deadline"],
+    ["languages", "rq-languages", "request.form.languages"],
+    ["name", "rq-name", "inquiry.form.name"],
+    ["email", p.signedIn ? "" : "rq-email", "inquiry.form.email"],
+  ];
+  for (const [field, id, label] of fields) {
+    const code = p.errors[field];
+    if (code) items.push({ href: id ? `#${id}` : "", message: `${tr(label)}: ${tr(ERROR_KEY[code])}` });
+  }
+  return items;
+}
+
 /** Spec §5.7 step 1. A public page (in the sitemap); the request itself is never public. */
 export const RequestFormPage: FC<Props> = (p) => {
   const tr = translator(p.locale);
   const title = tr("request.form.title");
+  const summary = requestErrorItems(p, tr);
   const err = (field: keyof RequestErrors) => {
     const code = p.errors[field];
     return code ? (
-      <p id={`rq-${field}-error`} class="error-msg" role="alert">
+      <p id={`rq-${field}-error`} class="error-msg">
         {tr(ERROR_KEY[code])}
       </p>
     ) : null;
@@ -45,15 +67,11 @@ export const RequestFormPage: FC<Props> = (p) => {
   const aria = (field: keyof RequestErrors) => (p.errors[field] ? { "aria-invalid": "true", "aria-describedby": `rq-${field}-error` } : {});
   const blocked = !p.signedIn && p.siteKey === null;
   return (
-    <Layout locale={p.locale} title={`${title} · VNX.SI`} description={tr("request.form.intro")} origin={p.origin} rest="/request" signedIn={p.signedIn}>
+    <Layout locale={p.locale} title={`${title} · VNX.SI`} description={tr("request.form.intro")} origin={p.origin} rest="/request" signedIn={p.signedIn} invalid={summary.length > 0}>
       <section class="card wide">
         <h1>{title}</h1>
         <p>{tr("request.form.intro")}</p>
-        {p.formError ? (
-          <p class="error-msg" role="alert">
-            {p.formError}
-          </p>
-        ) : null}
+        <FormErrorSummary tr={tr} items={summary} />
         {blocked ? (
           <p class="notice">
             {tr("request.form.unavailable")} <a href={localizedPath(p.locale, `/login?next=${encodeURIComponent(localizedPath(p.locale, "/request"))}`)}>{tr("nav.signIn")}</a>
@@ -104,9 +122,9 @@ export const RequestFormPage: FC<Props> = (p) => {
             </div>
             <fieldset class="field" {...aria("languages")}>
               <legend>{tr("request.form.languages")}</legend>
-              {WORK_LANGUAGES.map((l) => (
+              {WORK_LANGUAGES.map((l, i) => (
                 <label class="choice">
-                  <input type="checkbox" name="languages" value={l} checked={p.values.languages.includes(l)} /> {tr(LANGUAGE_KEY[l])}
+                  <input type="checkbox" id={i === 0 ? "rq-languages" : undefined} name="languages" value={l} checked={p.values.languages.includes(l)} /> {tr(LANGUAGE_KEY[l])}
                 </label>
               ))}
               {err("languages")}
