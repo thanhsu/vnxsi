@@ -47,6 +47,7 @@ Quy ước: mọi lệnh chạy từ **gốc repo** trừ khi có dòng `cd apps
    npm run typecheck -w apps/web
    npm test
    npm run test:scripts
+   npm run e2e        # VNX-0802: Playwright + axe trên wrangler dev cục bộ (cổng 8799); lần đầu trên máy: npm run e2e:install. Xem e2e/README.md
    ```
    Máy thiếu bộ nhớ (workerd báo "JavaScript heap out of memory" ở heap rất nhỏ) là lỗi môi trường, không phải lỗi code: kiểm `workerd.exe` còn sót, rồi chạy `npm test -w apps/web -- --maxWorkers=2`. Không chạy hai bộ test cùng lúc trong một worktree.
 4. Xem migration chưa áp trên production (lệnh này chỉ đọc danh sách, không đọc dữ liệu dòng):
