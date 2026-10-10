@@ -1,6 +1,6 @@
 # VNX-0807 — a11y: homepage không JS (target-size) và mẫu lỗi chung cho form render phía server · Plan
 
-- **Trạng thái:** Draft, chờ Owner duyệt (Owner đã đồng ý làm trước ra mắt M8; câu chữ UI mục "Câu hỏi mở" OQ-1 cần duyệt).
+- **Trạng thái:** **APPROVED** (Opus duyệt thay Owner theo ủy quyền M6+, 2026-10-10). OQ-1: Owner duyệt nguyên văn câu chữ (2026-10-10): tiền tố tiêu đề EN `Error:` / VI `Lỗi:` / zh-Hans `错误：` / zh-Hant `錯誤：`; tiêu đề khối tóm tắt EN `There is a problem` / VI `Có lỗi cần sửa` / zh-Hans `有问题需要修正` / zh-Hant `有問題需要修正` (zh do AI dịch). OQ-2..OQ-5 theo mặc định của plan (có form waitlist; chấp nhận thẻ sau inert khi không JS; bỏ `role="alert"` ở lỗi từng trường; T6 sau khi EPIC 26 merge, T1–T5 có thể ra mắt trước).
 - **Roadmap:** `docs/roadmap/WAVE1-ROADMAP.md` → M8, VNX-0807 (ID đề xuất; Reviewer thêm vào roadmap/backlog sau). Task theo dõi của `.ai/reviews/VNX-0802-review.md` (R1, F8, R2, R3, R5) và nghĩa vụ "Sau VNX-0802 (a11y…)" trong `.ai/context/CURRENT-STATUS.md`.
 - **Spec / NFR:** `docs/blueprint/02-NFR.md` mục Khả năng tiếp cận (WCAG 2.2 AA cho mọi trang công khai và form; vùng chạm >= 44 px; focus nhìn thấy; form có label). WCAG 2.2: 2.5.8 Target Size (AA), 3.3.1 Error Identification (A), 3.3.3 Error Suggestion (AA), 2.4.2 Page Titled (A), 4.1.3 Status Messages (AA).
 - **ADR:** ADR-003 (i18n: 4 locale, parity key; `zh-*` do AI dịch, cần người bản xứ đọc trước khi quảng bá). Không cần ADR mới (không đổi kiến trúc; thêm một component view và một prop của `Layout`).
