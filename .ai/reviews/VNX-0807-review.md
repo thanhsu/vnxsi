@@ -86,3 +86,33 @@ Các điểm đã xét và **không** thành phát hiện:
 7. Reviewer: re-review T6, cập nhật `e2e/README.md` (số test, mục login), backlog VNX-0807 → ✅, `CURRENT-STATUS.md`.
 
 **Ghi vào `CURRENT-STATUS.md` (Reviewer/Orchestrator):** form `/admin/*`, `/ops/*` ngoài phạm vi (mẫu cũ); `form.error.*` zh do AI dịch vào danh sách người bản xứ đọc (VNX-0801, kèm F7); `autofocus` trên `tabindex=-1` chỉ kiểm ở Chromium (WebKit cũ có thể bỏ qua; vẫn còn tiền tố title và khối ở đầu); lượt `nojs` cho chế độ thẻ product khi seed E2E có >= 3 product công khai (F9); E2E cho form hub/thread/invitations hiện chỉ có Vitest; F6 chờ Owner xác nhận số VNX-0808.
+
+## Re-review (vòng sửa 1, `0bfb515..dd73e0d`)
+
+- **Ngày:** 2026-10-10. **Đã đọc:** toàn bộ diff `0bfb515..dd73e0d` (9 tệp) và mục "Vòng sửa 1" của báo cáo.
+- **Lệnh đã chạy lại trên `dd73e0d`:** `npm run e2e`: 59 passed (1,4 phút), không retry, có 2 test waitlist mới (EN, VI) xanh; sau khi chạy không còn listener 8799/9329, không còn `workerd`. `npm run test:scripts`: 52/52. `npm run e2e:typecheck`: sạch. (Implementer báo typecheck 0 lỗi, Vitest 165/1919, e2e 59 hai lần; Reviewer không chạy lại Vitest vì vòng sửa chỉ đổi 2 dòng src có test đi kèm, và lượt E2E đã phủ cả hai.)
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| F1 | Đóng | `LandingPage.tsx`: action `localizedPath(locale, "/waitlist")`, không fragment. E2E `form-errors.spec.ts` "landing waitlist: bad email" (EN + VI): 400, `page.url()` không có hash, title `Error:`/`Lỗi:`, `#form-errors` có focus, liên kết đưa focus vào `#waitlist-email`, giá trị giữ nguyên, không `role="alert"`. Luồng thành công không đổi: `routes/landing.tsx:63` vẫn redirect 303 tới `<locale>/?joined=1#notify` (Vitest `test/landing/waitlist.test.ts:37,50-52,192` khóa header `location`); redirect spam cũng vậy. Test `test/landing/page.test.ts` cập nhật đúng hai chỗ. |
+| F4 | Đóng | `routes/contact.tsx:92`: 503 khi không có site key không truyền `formError`, giống route request; test đòi câu `contact.form.unavailable` xuất hiện đúng một lần. Hệ quả chấp nhận được: trang 503 đó không có tiền tố title/tóm tắt (không có form để sửa, chỉ còn thông báo kèm liên kết đăng nhập/email), như request. Khi có site key mà Turnstile không phản hồi, mục tóm tắt vẫn có. |
+| F5 | Đóng | `hasFormErrors` và dòng test của nó đã xóa; không còn tham chiếu. |
+| F8 | Đóng | `e2e/support/a11y.ts`: một định nghĩa `__unfinished` cài vào trang, dùng cho cả chờ và thông báo lỗi; lượt "with motion" xanh. |
+| F2 | Chuyển T6 | Không đổi (như kế hoạch). |
+| F3 | Đóng | Chỉ là mô tả, đã ghi nhận. |
+| F6, F7 | Chờ Owner | Không đổi. |
+| F9 | Nghĩa vụ | Không đổi. |
+
+Không có phát hiện mới. Phạm vi vòng sửa đúng bốn mục đã duyệt, không cải tiến lân cận, không đụng tệp EPIC 26.
+
+**Verdict cuối cho T1–T5: APPROVE.** AC8 nay đạt cho mọi form nhóm A trừ phần tiền tố title của `/me` thread và `/hub/profile` (F2, T6). T1–T5 có thể merge vào `main` theo OQ-5; T6 làm trên nhánh riêng sau khi EPIC 26 merge, theo checklist ở mục "Nghĩa vụ để lại cho task sau".
+
+Reviewer cập nhật `e2e/README.md` (59 test, waitlist trong `form-errors.spec.ts`, ngân sách POST `/waitlist`).
+
+**Mục cần ghi vào `CURRENT-STATUS.md`:**
+
+- VNX-0807 T1–T5: APPROVE (review này), nhánh `feat/vnx-0807-a11y`, SHA đầu nhánh lúc merge; T6 mở, chờ EPIC 26 merge.
+- Quyết định phát sinh: hai route sửa ngoài plan (`hub-products.tsx`, `hub-inquiries.tsx`) để báo `invalid`; khối tóm tắt đặt ngay trước `<form>` ở Inquiry/Request/Contact/Waitlist/Invitations; form waitlist không còn fragment `#notify` ở `action` (fragment làm trình duyệt bỏ `autofocus`; quy tắc chung: form dùng mẫu lỗi không đặt fragment ở `action`); contact 503 không có site key không hiện `formError`.
+- Nghĩa vụ T6: login, hồ sơ hub, tiền tố title của `/me` thread, E2E login (checklist trong review).
+- Chờ Owner: F6 (ID: task HUMAN "mời ~100 builder" chuyển VNX-0807 → VNX-0808), F7 (dấu cách sau `：` ở tiền tố zh).
+- Ghi nhận: form `/admin/*`, `/ops/*` vẫn mẫu lỗi cũ (ngoài phạm vi); `form.error.*` zh do AI dịch vào danh sách người bản xứ đọc (VNX-0801); `autofocus` trên `tabindex=-1` chỉ kiểm ở Chromium; lượt `nojs` cho chế độ thẻ product khi seed E2E có >= 3 product công khai (F9); form hub/thread/invitations mới chỉ có Vitest cho mẫu lỗi; AC14 (CI xanh) sau khi Owner cho push.
