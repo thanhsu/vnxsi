@@ -35,6 +35,13 @@ describe("countD1Queries (VNX-2702a)", () => {
     expect(queries()).toBe(first);
   });
 
+  it("counts the flag read even when the cache was primed after the counter was made", async () => {
+    const { env, queries } = countD1Queries();
+    await isFlagEnabled(testEnv.DB, "partner_referral"); // primes the cache through testEnv, outside the count
+    await isFlagEnabled(env.DB, "partner_referral"); // first touch of env.DB resets it, so this read hits D1 and is counted
+    expect(queries()).toBe(1);
+  });
+
   it("works through createApp().request and sees the queries of a real request", async () => {
     const { env, queries } = countD1Queries();
     const res = await createApp().request(getReq("/"), undefined, env);

@@ -33,3 +33,13 @@ Implementer: Claude (Opus 5.5 label per commit trailer). Branch `feat/epic27-req
 - `RANKING_FILES` entries for `domain/request-board.ts` (2702b), `routes/request-board.tsx`, `routes/ops-request-board.tsx`, `views/requests/*` still to add when those files exist (comment left in the test).
 - The flag-cache count helper is verified against `affiliate`/`partner_referral`; `request_board` does not exist until 2702b.
 - Nothing pushed, merged, deployed or run against a remote D1.
+
+## Vòng sửa 1 (review `.ai/reviews/VNX-2702a-review.md`, APPROVE_AFTER_FIXES)
+- **M-1:** `ViewerRelation.approvedBuilder` thay bằng `builder: "none" | "approved" | "not_approved"` trong cùng một truy vấn (`CASE` với `NOT EXISTS builders` / hằng L9 / còn lại). Test: người lạ `none`; `pending`, `rejected`, `suspended`, và builder `approved` có user `suspended` -> `not_approved`; builder hợp lệ -> `approved`.
+- **M-2:** `BuilderInterestItem.closedAt` thêm; `publicTitle` chỉ khi publication `published` và request khác `removed`, ngược lại null (`CASE` trong SQL). Test: request đóng có `closedAt`, client gỡ -> null, request `removed` -> null.
+- **L-1:** bỏ `findPublicationByPublicId` (không có nơi dùng); test dùng `findPublicListing` và các ca dương/âm tương ứng.
+- **L-2:** `clientUserId` bắt buộc ở `optInStatement`, `reOptInStatement`, `withdrawStatement`; bỏ nhánh `IS NULL OR` trong SQL; test cập nhật (helper `ownerOf`), ca chủ lạ vẫn trả 0 dòng.
+- **L-4:** `countD1Queries` reset cache cờ ở lần đầu `env.DB` được đọc (không phải lúc tạo bộ đếm và không phải ở truy vấn đầu, vì cache hit không có truy vấn nào); test: cache được mồi qua `testEnv` sau khi tạo bộ đếm vẫn đếm đúng 1 lượt đọc cờ.
+- **L-5:** ca "smaller cap" viết lại với request mới: 1 pending sẵn, `cap: 1` -> null, `cap: 2` -> tạo được.
+- Không làm (theo chỉ đạo): S-1 (cùng 2702b), S-2 (cùng 2706a).
+- Kết quả: typecheck 0 lỗi; bộ 2702a 6 file / 119 test xanh; toàn bộ xem commit message/phản hồi.

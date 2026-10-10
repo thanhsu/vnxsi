@@ -126,21 +126,21 @@ const BUILDER_APPROVED_ACTIVE = "b.status = 'approved' AND u.status = 'active'";
 
 /**
  * First opt-in: inserts the publication as pending_review, only when the request exists in a state that can take it
- * (pending_verification and submitted for the creation path, matching for a later opt-in), has no publication yet and, when
- * `clientUserId` is given, belongs to that client. 0 rows when any of that fails (a second opt-in does not insert a second row).
+ * (pending_verification and submitted for the creation path, matching for a later opt-in), has no publication yet and belongs to
+ * `clientUserId` (required, enforced in the SQL). 0 rows when any of that fails (a second opt-in does not insert a second row).
  * On the creation path it follows the request INSERT in the same db.batch, so the request is visible to its EXISTS.
  */
-export function optInStatement(db: D1Database, input: { requestId: string; publicId?: string; consentVersion: string; now: string; clientUserId?: string }): D1PreparedStatement {
+export function optInStatement(db: D1Database, input: { requestId: string; publicId?: string; consentVersion: string; now: string; clientUserId: string }): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO request_publications (request_id, public_id, status, opted_in_at, consent_version, created_at, updated_at)
        SELECT ?1, ?2, 'pending_review', ?4, ?3, ?4, ?4
        WHERE EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status IN ('submitted', 'matching', 'pending_verification')
-                       AND (?5 IS NULL OR r.client_user_id = ?5))
+                       AND r.client_user_id = ?5)
          AND NOT EXISTS (SELECT 1 FROM request_publications x WHERE x.request_id = ?1)
        RETURNING *`,
     )
-    .bind(input.requestId, input.publicId ?? ulid(Date.parse(input.now)), input.consentVersion, input.now, input.clientUserId ?? null);
+    .bind(input.requestId, input.publicId ?? ulid(Date.parse(input.now)), input.consentVersion, input.now, input.clientUserId);
 }
 
 /**
@@ -148,15 +148,15 @@ export function optInStatement(db: D1Database, input: { requestId: string; publi
  * Keeps public_id, published_at and the last public text (an earlier first publication keeps its place in the order);
  * resets opted_in_at, consent_version and ended_at. A rejected or unpublished publication cannot come back (0 rows).
  */
-export function reOptInStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; consentVersion: string; now: string; clientUserId?: string }): D1PreparedStatement {
+export function reOptInStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; consentVersion: string; now: string; clientUserId: string }): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE request_publications SET status = 'pending_review', opted_in_at = ?4, consent_version = ?3, ended_at = NULL, updated_at = ?4
        WHERE request_id = ?1 AND status = 'withdrawn' AND updated_at = ?2
-         AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status IN ${OPEN_REQUEST} AND (?5 IS NULL OR r.client_user_id = ?5))
+         AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status IN ${OPEN_REQUEST} AND r.client_user_id = ?5)
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.consentVersion, input.now, input.clientUserId ?? null);
+    .bind(input.requestId, input.expectedUpdatedAt, input.consentVersion, input.now, input.clientUserId);
 }
 
 /** Ops publishes: pending_review -> published with the (possibly edited) public text. published_at is set the first time only. Needs an open request. */
@@ -207,17 +207,17 @@ export function unpublishStatement(db: D1Database, input: { requestId: string; e
 
 /**
  * The client withdraws consent: pending_review or published -> withdrawn. Never conditioned on the request's status and never
- * read through a flag (withdrawing consent must always work). When `clientUserId` is given it must own the request.
+ * read through a flag (withdrawing consent must always work). `clientUserId` must own the request (required, enforced in the SQL).
  */
-export function withdrawStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; now: string; clientUserId?: string }): D1PreparedStatement {
+export function withdrawStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; now: string; clientUserId: string }): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE request_publications SET status = 'withdrawn', ended_at = ?3, updated_at = ?3
        WHERE request_id = ?1 AND status IN ('pending_review', 'published') AND updated_at = ?2
-         AND (?4 IS NULL OR EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.client_user_id = ?4))
+         AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.client_user_id = ?4)
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.now, input.clientUserId ?? null);
+    .bind(input.requestId, input.expectedUpdatedAt, input.now, input.clientUserId);
 }
 
 /** The publication a batched compare-and-set returned, or null when it lost. */
@@ -372,12 +372,6 @@ function toListing(r: ListingRow): PublicListing {
   };
 }
 
-/** The listing by its public id in any publication status, without identifying columns. The caller decides visibility. */
-export async function findPublicationByPublicId(db: D1Database, publicId: string): Promise<PublicListing | null> {
-  const row = await db.prepare(`${LISTING_SELECT} WHERE p.public_id = ?1`).bind(publicId).first<ListingRow>();
-  return row ? toListing(row) : null;
-}
-
 /** The listing behind /requests/:publicId: a published publication (open or closed request; requestVisibility decides what shows). */
 export async function findPublicListing(db: D1Database, publicId: string): Promise<PublicListing | null> {
   const row = await db.prepare(`${LISTING_SELECT} WHERE p.public_id = ?1 AND p.status = 'published'`).bind(publicId).first<ListingRow>();
@@ -431,14 +425,15 @@ export async function listSitemapRequests(db: D1Database, limit = 2000): Promise
 
 /**
  * H2: what the signed-in viewer is to this listing, in ONE query (call it only for a signed-in viewer). `ownRequestId` is set
- * only when the viewer is the client of the request; nobody else ever receives a request id. `approvedBuilder` is the L9
- * condition (approved builder on an active account) so the call to action needs no second query (additive to the planned shape).
+ * only when the viewer is the client of the request; nobody else ever receives a request id. `builder` is the viewer's builder state (the "approved" branch is the L9
+ * condition) so the call to action needs no second query (additive to the planned shape).
  */
 export interface ViewerRelation {
   ownRequestId: string | null;
   inviteId: string | null;
   interest: { id: string; status: InterestStatus } | null;
-  approvedBuilder: boolean;
+  /** The viewer as a builder: no builders row, approved on an active account (L9), or any other state. Feeds the call-to-action table without a second query. */
+  builder: "none" | "approved" | "not_approved";
 }
 
 export async function findViewerRelation(db: D1Database, publicId: string, userId: string): Promise<ViewerRelation> {
@@ -448,18 +443,20 @@ export async function findViewerRelation(db: D1Database, publicId: string, userI
          (SELECT x.id FROM request_invites x WHERE x.request_id = r.id AND x.builder_id = ?2) AS invite_id,
          (SELECT i.id FROM request_interests i WHERE i.request_id = r.id AND i.builder_id = ?2) AS interest_id,
          (SELECT i.status FROM request_interests i WHERE i.request_id = r.id AND i.builder_id = ?2) AS interest_status,
-         EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?2 AND ${BUILDER_APPROVED_ACTIVE}) AS approved_builder
+         CASE WHEN NOT EXISTS (SELECT 1 FROM builders nb WHERE nb.user_id = ?2) THEN 'none'
+              WHEN EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?2 AND ${BUILDER_APPROVED_ACTIVE}) THEN 'approved'
+              ELSE 'not_approved' END AS builder_state
        FROM request_publications p JOIN requests r ON r.id = p.request_id
        WHERE p.public_id = ?1`,
     )
     .bind(publicId, userId)
-    .first<{ own_request_id: string | null; invite_id: string | null; interest_id: string | null; interest_status: InterestStatus | null; approved_builder: number }>();
-  if (!row) return { ownRequestId: null, inviteId: null, interest: null, approvedBuilder: false };
+    .first<{ own_request_id: string | null; invite_id: string | null; interest_id: string | null; interest_status: InterestStatus | null; builder_state: ViewerRelation["builder"] }>();
+  if (!row) return { ownRequestId: null, inviteId: null, interest: null, builder: "none" };
   return {
     ownRequestId: row.own_request_id,
     inviteId: row.invite_id,
     interest: row.interest_id && row.interest_status ? { id: row.interest_id, status: row.interest_status } : null,
-    approvedBuilder: row.approved_builder === 1,
+    builder: row.builder_state,
   };
 }
 
@@ -491,21 +488,26 @@ export interface BuilderInterestItem {
   status: InterestStatus;
   createdAt: string;
   publicId: string;
+  /** The public title only while the publication is published and the request not removed; null otherwise. */
   publicTitle: string | null;
   requestStatus: RequestStatus;
+  /** For requestVisibility (the 30-day window of a closed request). */
+  closedAt: string | null;
   publicationStatus: PublicationStatus;
 }
 
 export async function listBuilderInterests(db: D1Database, builderId: string, limit = 100): Promise<BuilderInterestItem[]> {
   const { results } = await db
     .prepare(
-      `SELECT i.id, i.status, i.created_at, p.public_id, p.public_title, p.status AS pub_status, r.status AS request_status
+      `SELECT i.id, i.status, i.created_at, p.public_id,
+         CASE WHEN p.status = 'published' AND r.status <> 'removed' THEN p.public_title END AS public_title,
+         p.status AS pub_status, r.status AS request_status, r.closed_at
        FROM request_interests i JOIN request_publications p ON p.request_id = i.request_id JOIN requests r ON r.id = i.request_id
        WHERE i.builder_id = ?1 ORDER BY i.created_at DESC, i.id DESC LIMIT ?2`,
     )
     .bind(builderId, limit)
-    .all<{ id: string; status: InterestStatus; created_at: string; public_id: string; public_title: string | null; pub_status: PublicationStatus; request_status: RequestStatus }>();
-  return results.map((r) => ({ id: r.id, status: r.status, createdAt: r.created_at, publicId: r.public_id, publicTitle: r.public_title, requestStatus: r.request_status, publicationStatus: r.pub_status }));
+    .all<{ id: string; status: InterestStatus; created_at: string; public_id: string; public_title: string | null; pub_status: PublicationStatus; request_status: RequestStatus; closed_at: string | null }>();
+  return results.map((r) => ({ id: r.id, status: r.status, createdAt: r.created_at, publicId: r.public_id, publicTitle: r.public_title, requestStatus: r.request_status, closedAt: r.closed_at, publicationStatus: r.pub_status }));
 }
 
 export async function findInterestFor(db: D1Database, requestId: string, builderId: string): Promise<Interest | null> {

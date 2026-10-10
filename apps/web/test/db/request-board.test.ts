@@ -9,7 +9,6 @@ import {
   dismissInterestStatement,
   editPublicStatement,
   findInterestFor,
-  findPublicationByPublicId,
   findPublicationByRequestId,
   findPublicListing,
   findViewerRelation,
@@ -41,6 +40,10 @@ const at = (ms: number) => new Date(Date.parse(T0) + ms).toISOString();
 const DESC = "We need online booking with SMS reminders for three salons in Hanoi.";
 const CV = "2026-12-01";
 
+async function ownerOf(requestId: string): Promise<string> {
+  return (await db().prepare("SELECT client_user_id AS id FROM requests WHERE id = ?1").bind(requestId).first<{ id: string }>())!.id;
+}
+
 async function ops(tag: string) {
   return (await ensureUser(`${tag}-ops@vnx.si`)).id;
 }
@@ -51,7 +54,7 @@ async function run1<T>(stmt: D1PreparedStatement, read: (r: D1Result | undefined
 }
 
 async function optIn(requestId: string, now = T0, extra: { publicId?: string; clientUserId?: string } = {}): Promise<Publication | null> {
-  return run1(optInStatement(db(), { requestId, consentVersion: CV, now, ...extra }), returnedPublication);
+  return run1(optInStatement(db(), { requestId, consentVersion: CV, now, clientUserId: await ownerOf(requestId), ...extra }), returnedPublication);
 }
 
 /** A request with a published listing. Returns the pieces tests need. */
@@ -145,7 +148,7 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
     expect(await reject(pub.updatedAt, "   ", at(500))).toBeNull();
     const rejected = await reject(pub.updatedAt, "Contains a phone number", at(1000));
     expect(rejected).toMatchObject({ status: "rejected", reviewNote: "Contains a phone number", reviewedBy: reviewer, endedAt: at(1000) });
-    const back = await run1(reOptInStatement(db(), { requestId: request.id, expectedUpdatedAt: rejected!.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication);
+    const back = await run1(reOptInStatement(db(), { clientUserId: await ownerOf(request.id), requestId: request.id, expectedUpdatedAt: rejected!.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication);
     expect(back).toBeNull();
   });
 
@@ -156,7 +159,7 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
     const done = await unpublish("Not a real brief", at(1000));
     expect(done).toMatchObject({ status: "unpublished", reviewNote: "Not a real brief", endedAt: at(1000), publishedAt: T0 });
     expect(await unpublish("again", at(2000), done!.updatedAt)).toBeNull();
-    expect(await run1(reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: done!.updatedAt, consentVersion: CV, now: at(3000) }), returnedPublication)).toBeNull();
+    expect(await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: done!.updatedAt, consentVersion: CV, now: at(3000) }), returnedPublication)).toBeNull();
     const pendingOne = await makeRequest({ tag: "rb-unpub-pending" });
     const pub = (await optIn(pendingOne.request.id))!;
     expect(await run1(unpublishStatement(db(), { requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, reviewNote: "x", reviewedBy: live.reviewer, now: at(1000) }), returnedPublication)).toBeNull();
@@ -165,7 +168,7 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
   it("lets the client withdraw from pending_review and from published, even when the request is closed", async () => {
     const pendingOne = await makeRequest({ tag: "rb-wd-p" });
     const pub = (await optIn(pendingOne.request.id))!;
-    expect(await run1(withdrawStatement(db(), { requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, now: at(1000) }), returnedPublication)).toMatchObject({ status: "withdrawn", endedAt: at(1000) });
+    expect(await run1(withdrawStatement(db(), { clientUserId: await ownerOf(pendingOne.request.id), requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, now: at(1000) }), returnedPublication)).toMatchObject({ status: "withdrawn", endedAt: at(1000) });
 
     const live = await published("rb-wd-live");
     await db().prepare("UPDATE requests SET status = 'closed', closed_at = ?2 WHERE id = ?1").bind(live.request.id, at(10)).run();
@@ -176,9 +179,9 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
 
   it("M4: opt-in again after a withdrawal resets exactly the consent columns and keeps the rest", async () => {
     const live = await published("rb-reopt");
-    const wd = (await run1(withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
-    expect(await run1(reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: at(3), consentVersion: "2027-01-01", now: at(2000) }), returnedPublication)).toBeNull(); // stale
-    const back = (await run1(reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: "2027-01-01", now: at(2000) }), returnedPublication))!;
+    const wd = (await run1(withdrawStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
+    expect(await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: at(3), consentVersion: "2027-01-01", now: at(2000) }), returnedPublication)).toBeNull(); // stale
+    const back = (await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: "2027-01-01", now: at(2000) }), returnedPublication))!;
     expect(back).toEqual({
       ...live.publication, // public_id, public_title, public_description, published_at, reviewed_by, reviewed_at, review_note, created_at all kept
       status: "pending_review",
@@ -195,11 +198,11 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
 
   it("opt-in again needs an open request and the right owner", async () => {
     const live = await published("rb-reopt-closed");
-    const wd = (await run1(withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
+    const wd = (await run1(withdrawStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
     const stranger = await ensureUser("rb-reopt-x@vnx.si");
     expect(await run1(reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000), clientUserId: stranger.id }), returnedPublication)).toBeNull();
     await db().prepare("UPDATE requests SET status = 'closed' WHERE id = ?1").bind(live.request.id).run();
-    expect(await run1(reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication)).toBeNull();
+    expect(await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication)).toBeNull();
   });
 
   it("guards audit rows on the publication compare-and-set (a lost compare-and-set writes none)", async () => {
@@ -293,7 +296,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     for (let i = 0; i < 31; i++) {
       const made = createRequestStatements(db(), { clientUserId: client.id, clientName: "Minh Tran", title: `cap ${i}`, description: DESC, category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "submitted", locale: "en", now: T0 });
       ids.push(made.id);
-      statements.push(...made.statements, optInStatement(db(), { requestId: made.id, consentVersion: CV, now: T0 }), publishStatement(db(), { requestId: made.id, expectedUpdatedAt: T0, title: `cap ${i}`, description: DESC, reviewedBy: reviewer, now: T0 }));
+      statements.push(...made.statements, optInStatement(db(), { requestId: made.id, consentVersion: CV, now: T0, clientUserId: client.id }), publishStatement(db(), { requestId: made.id, expectedUpdatedAt: T0, title: `cap ${i}`, description: DESC, reviewedBy: reviewer, now: T0 }));
     }
     await db().batch(statements);
     for (let i = 0; i < 30; i++) expect(await express(ids[i]!, builder.userId, { now: at(i) }), `interest ${i}`).not.toBeNull();
@@ -303,9 +306,17 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     await db().prepare("UPDATE request_publications SET status = 'withdrawn' WHERE request_id = ?1").bind(ids[1]).run();
     expect(await express(ids[30]!, builder.userId, { now: at(300) })).not.toBeNull();
     const freed = await createRequestStatements(db(), { clientUserId: client.id, clientName: "M", title: "x", description: DESC, category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "submitted", locale: "en", now: T0 });
-    await db().batch([...freed.statements, optInStatement(db(), { requestId: freed.id, consentVersion: CV, now: T0 }), publishStatement(db(), { requestId: freed.id, expectedUpdatedAt: T0, title: "x", description: DESC, reviewedBy: reviewer, now: T0 })]);
+    await db().batch([...freed.statements, optInStatement(db(), { requestId: freed.id, consentVersion: CV, now: T0, clientUserId: client.id }), publishStatement(db(), { requestId: freed.id, expectedUpdatedAt: T0, title: "x", description: DESC, reviewedBy: reviewer, now: T0 })]);
     expect(await express(freed.id, builder.userId, { now: at(400) })).not.toBeNull(); // 30 open again: 28 + 1 + 1
-    expect(await express(ids[2]!, builder.userId, { cap: 1 })).toBeNull(); // a smaller cap is honoured (pair also exists)
+  });
+
+  it("honours the cap it is given (fresh request, so only the cap decides)", async () => {
+    const builder = await approvedBuilder("rb-cap2-b");
+    const first = await published("rb-cap2-a");
+    expect(await express(first.request.id, builder.userId)).not.toBeNull(); // 1 pending now
+    const fresh = await published("rb-cap2-f");
+    expect(await express(fresh.request.id, builder.userId, { cap: 1 })).toBeNull();
+    expect(await express(fresh.request.id, builder.userId, { cap: 2 })).not.toBeNull();
   });
 
   it("withdraws only the builder's own pending interest, compare-and-set on updated_at", async () => {
@@ -385,7 +396,7 @@ describe("db/request-board: public reads (VNX-2702a)", () => {
     const closed = await published("rb-read-closed");
     await db().prepare("UPDATE requests SET status = 'closed', closed_at = ?2 WHERE id = ?1").bind(closed.request.id, T0).run();
     const wd = await published("rb-read-wd");
-    await run1(withdrawStatement(db(), { requestId: wd.request.id, expectedUpdatedAt: wd.publication.updatedAt, now: at(5) }), returnedPublication);
+    await run1(withdrawStatement(db(), { clientUserId: await ownerOf(wd.request.id), requestId: wd.request.id, expectedUpdatedAt: wd.publication.updatedAt, now: at(5) }), returnedPublication);
     const rows = await listOpenPublications(db(), {}, 500, 0);
     const ids = rows.map((r) => r.publicId);
     expect(ids).toContain(live.publication.publicId);
@@ -394,7 +405,7 @@ describe("db/request-board: public reads (VNX-2702a)", () => {
     expect(ids).not.toContain(wd.publication.publicId);
     const mine = rows.find((r) => r.publicId === live.publication.publicId)!;
     expect(mine).toMatchObject({ publicTitle: "rb-read public title", country: "VN", category: "booking", budgetBand: "2k-10k", requestStatus: "submitted", publicationStatus: "published" });
-    for (const row of [mine, (await findPublicListing(db(), live.publication.publicId))!, (await findPublicationByPublicId(db(), live.publication.publicId))!]) {
+    for (const row of [mine, (await findPublicListing(db(), live.publication.publicId))!]) {
       for (const key of FORBIDDEN_KEYS) expect(Object.keys(row), key).not.toContain(key);
       const text = JSON.stringify(row);
       expect(text).not.toContain(live.request.id);
@@ -412,7 +423,6 @@ describe("db/request-board: public reads (VNX-2702a)", () => {
     const pendingOne = await makeRequest({ tag: "rb-find-pend" });
     const pub = (await optIn(pendingOne.request.id))!;
     expect(await findPublicListing(db(), pub.publicId)).toBeNull();
-    expect(await findPublicationByPublicId(db(), pub.publicId)).toMatchObject({ publicationStatus: "pending_review" });
     expect(await findPublicListing(db(), "01NOSUCHPUBLICID0000000000")).toBeNull();
   });
 
@@ -465,20 +475,28 @@ describe("db/request-board: H2 findViewerRelation, one query, no foreign request
     const invite = inviteBuildersBatch(db(), { requestId: live.request.id, builderIds: [invited.userId], invitedBy: admin.id, now: at(1000) });
     await db().batch(invite.statements);
     const pid = live.publication.publicId;
-    expect(await findViewerRelation(db(), pid, live.client.id)).toEqual({ ownRequestId: live.request.id, inviteId: null, interest: null, approvedBuilder: false });
-    expect(await findViewerRelation(db(), pid, interested.userId)).toEqual({ ownRequestId: null, inviteId: null, interest: { id: interest.id, status: "pending" }, approvedBuilder: true });
-    expect(await findViewerRelation(db(), pid, invited.userId)).toEqual({ ownRequestId: null, inviteId: invite.inviteIds[0], interest: null, approvedBuilder: true });
-    expect(await findViewerRelation(db(), pid, stranger.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, approvedBuilder: false });
+    expect(await findViewerRelation(db(), pid, live.client.id)).toEqual({ ownRequestId: live.request.id, inviteId: null, interest: null, builder: "none" });
+    expect(await findViewerRelation(db(), pid, interested.userId)).toEqual({ ownRequestId: null, inviteId: null, interest: { id: interest.id, status: "pending" }, builder: "approved" });
+    expect(await findViewerRelation(db(), pid, invited.userId)).toEqual({ ownRequestId: null, inviteId: invite.inviteIds[0], interest: null, builder: "approved" });
+    expect(await findViewerRelation(db(), pid, stranger.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, builder: "none" });
     expect(JSON.stringify(await findViewerRelation(db(), pid, stranger.id))).not.toContain(live.request.id);
-    expect(await findViewerRelation(db(), "01NOSUCHPUBLICID0000000000", live.client.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, approvedBuilder: false });
+    expect(await findViewerRelation(db(), "01NOSUCHPUBLICID0000000000", live.client.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, builder: "none" });
   });
 
-  it("says a suspended builder is not an approved builder (L9)", async () => {
-    const live = await published("rb-rel-susp");
-    const builder = await approvedBuilder("rb-rel-susp-b");
-    await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(builder.userId).run();
-    expect((await findViewerRelation(db(), live.publication.publicId, builder.userId)).approvedBuilder).toBe(false);
+  it("gives three builder states: none, approved, not_approved (L9)", async () => {
+    const live = await published("rb-rel-state");
+    const pid = live.publication.publicId;
+    const state = async (userId: string) => (await findViewerRelation(db(), pid, userId)).builder;
+    expect(await state((await ensureUser("rb-rel-state-plain@vnx.si")).id)).toBe("none");
+    expect(await state((await approvedBuilder("rb-rel-state-ok")).userId)).toBe("approved");
+    for (const status of ["pending", "rejected", "suspended"] as const) {
+      expect(await state((await makeBuilder(`rb-rel-state-${status}@vnx.si`, `rb-rel-state-${status}`, status)).userId), status).toBe("not_approved");
+    }
+    const userSuspended = await approvedBuilder("rb-rel-state-us");
+    await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(userSuspended.userId).run();
+    expect(await state(userSuspended.userId)).toBe("not_approved");
   });
+
 });
 
 describe("db/request-board: Ops and Hub reads (VNX-2702a)", () => {
@@ -523,6 +541,25 @@ describe("db/request-board: Ops and Hub reads (VNX-2702a)", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ publicId: live.publication.publicId, publicTitle: "rb-hub public title", status: "pending", requestStatus: "submitted" });
     expect(JSON.stringify(items)).not.toContain(live.request.id);
+    expect(items[0]?.closedAt).toBeNull();
+  });
+
+  it("M-2: gives closedAt, and the public title only while the listing is published and the request not removed", async () => {
+    const live = await published("rb-hub2");
+    const builder = await approvedBuilder("rb-hub2-b");
+    await express(live.request.id, builder.userId);
+    await db().prepare("UPDATE requests SET status = 'closed', closed_at = ?2 WHERE id = ?1").bind(live.request.id, at(50)).run();
+    let item = (await listBuilderInterests(db(), builder.userId))[0]!;
+    expect(item).toMatchObject({ closedAt: at(50), publicTitle: "rb-hub2 public title", requestStatus: "closed" });
+    await run1(withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(100), clientUserId: live.client.id }), returnedPublication);
+    item = (await listBuilderInterests(db(), builder.userId))[0]!;
+    expect(item.publicTitle).toBeNull(); // the client withdrew: the wording never leaves the db layer
+    expect(item.publicationStatus).toBe("withdrawn");
+    const removed = await published("rb-hub3");
+    await express(removed.request.id, builder.userId);
+    await db().prepare("UPDATE requests SET status = 'removed', closed_at = ?2 WHERE id = ?1").bind(removed.request.id, at(60)).run();
+    const row = (await listBuilderInterests(db(), builder.userId)).find((i) => i.publicId === removed.publication.publicId)!;
+    expect(row.publicTitle).toBeNull();
   });
 
   it("reads publication statuses for a page of requests", async () => {
