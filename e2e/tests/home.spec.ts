@@ -53,11 +53,11 @@ test("count-up runs through values and ends on the printed value", async ({ page
     const el = counts.nth(i);
     await scrollToCenter(el);
     const final = formatEn((await el.getAttribute("data-count"))!);
-    // The animation lasts 1200 ms; poll the recorded texts instead of sleeping: it must have shown a value other than the final one, and end on the final one.
+    // The animation lasts 1200 ms; poll the recorded texts instead of sleeping: it must have shown a different NUMBER than the final one (an empty or placeholder text in between is not a count-up), and end on the final one.
     await expect
       .poll(async () => {
         const seen = (await history())[i] ?? [];
-        return { moved: seen.some((t) => t !== final), last: seen[seen.length - 1] };
+        return { moved: seen.some((t) => /\d/.test(t) && t !== final), last: seen[seen.length - 1] };
       }, { message: `count ${final}`, timeout: 4_000 })
       .toEqual({ moved: true, last: final });
   }

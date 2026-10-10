@@ -9,12 +9,16 @@ export type KnownA11y = {
   /** Path as scanned, e.g. "/" or "/b/e2e-builder/hire". */
   page: string;
   locale: "en" | "vi";
-  /** Scan variant: omitted = the default scan; "mobile" = 360 px wide; "motion" = default scan with motion allowed. */
-  variant?: "mobile" | "motion";
+  /** Scan variant: omitted = the default scan; "mobile" = 360 px wide; "motion" = default scan with motion allowed; "nojs" = the page scripts are blocked. */
+  variant?: "mobile" | "motion" | "nojs";
   ruleId: string;
   selector?: string;
   reason: string;
   finding: string;
 };
 
-export const KNOWN_A11Y: readonly KnownA11y[] = [];
+export const KNOWN_A11Y: readonly KnownA11y[] = [
+  // R1 of the VNX-0802 review: without JS the back cards of the hero deck stack over the front one and cover its buttons. Fixed by VNX-0807 T2, which removes these entries.
+  { page: "/", locale: "en", variant: "nojs", ruleId: "target-size", reason: "back cards of the deck are not inert without JS", finding: "VNX-0802 R1" },
+  { page: "/", locale: "vi", variant: "nojs", ruleId: "target-size", reason: "back cards of the deck are not inert without JS", finding: "VNX-0802 R1" },
+];
