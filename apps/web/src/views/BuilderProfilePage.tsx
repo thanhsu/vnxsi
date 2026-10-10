@@ -1,5 +1,6 @@
 import type { FC } from "hono/jsx";
 import type { Builder } from "../domain/builder.ts";
+import { PROVIDER_NAME, type PublicBadge } from "../domain/identity.ts";
 import type { PortfolioItem } from "../domain/portfolio.ts";
 import type { Product } from "../domain/product.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
@@ -11,11 +12,12 @@ import { Layout } from "./Layout.tsx";
 import { PlainText } from "./PlainText.tsx";
 
 const EXTERNAL = "nofollow ugc noopener";
+const BADGE_REL = "nofollow noopener noreferrer";
 
-type Props = { locale: Locale; origin: string; builder: Builder; portfolio: PortfolioItem[]; products: Product[]; signedIn: boolean };
+type Props = { locale: Locale; origin: string; builder: Builder; portfolio: PortfolioItem[]; products: Product[]; badges: PublicBadge[]; signedIn: boolean };
 
 /** Spec §5.2 builder profile. */
-export const BuilderProfilePage: FC<Props> = ({ locale, origin, builder, portfolio, products, signedIn }) => {
+export const BuilderProfilePage: FC<Props> = ({ locale, origin, builder, portfolio, products, badges, signedIn }) => {
   const tr = translator(locale);
   return (
     <Layout locale={locale} title={`${builder.name} · VNX.SI`} description={builder.headline} origin={origin} rest={`/b/${builder.handle}`} signedIn={signedIn}>
@@ -25,6 +27,24 @@ export const BuilderProfilePage: FC<Props> = ({ locale, origin, builder, portfol
           <p class="muted">
             @{builder.handle} · {tr(KIND_KEY[builder.kind])} · {countryName(locale, builder.country)}
           </p>
+          {badges.length > 0 ? (
+            <ul class="verified-list" aria-label={tr("bprofile.verified.heading")}>
+              {badges.map((b) =>
+                b.provider === "github" ? (
+                  <li class="verified">
+                    <a href={b.url} rel={BADGE_REL} target="_blank">
+                      @{b.login}
+                    </a>{" "}
+                    <span>{tr("bprofile.verifiedVia", { provider: PROVIDER_NAME.github })}</span>
+                  </li>
+                ) : (
+                  <li class="verified">
+                    <span>{tr("bprofile.verifiedVia", { provider: PROVIDER_NAME.linkedin })}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+          ) : null}
           <p class="lead">{builder.headline}</p>
           <p class="ask">
             <a class="btn" href={localizedPath(locale, `/b/${builder.handle}/hire`)}>

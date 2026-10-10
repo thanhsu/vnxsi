@@ -8,6 +8,7 @@ declare global {
       ADMIN_EMAILS: string;
       MAIL_DRIVER: string;
       TURNSTILE_DRIVER: string;
+      OAUTH_DRIVER: string;
     }
   }
 }

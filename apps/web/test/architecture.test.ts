@@ -51,6 +51,7 @@ const WRITERS: Record<string, string> = {
   public_stats: "../src/db/public-stats.ts",
   ops_members: "../src/db/ops-members.ts",
   ops_member_invites: "../src/db/ops-members.ts",
+  user_identities: "../src/db/identities.ts",
 };
 
 /** Table names behind a write: INSERT, INSERT OR IGNORE/REPLACE, REPLACE INTO, UPDATE, DELETE (VNX-0701b). */
@@ -275,6 +276,148 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
   });
 });
 
+// ADR-012 §5, ADR-004: linked identities are read and written only by their module. Ranking, public and builder-facing code
+// never touch the table. Each task adds the files it creates (2604b: routes/oauth.tsx; 2605a: routes/me.tsx; 2606a: routes/hub.tsx (the builder's own switch); 2606b: routes/builder-profile.tsx, ...).
+// db/audit.ts is on the list only because the identity audit guard reads `id` and `user_id` of the row; it reads nothing else.
+const IDENTITY_ALLOWED = new Set<string>(["../src/db/identities.ts", "../src/db/audit.ts", "../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/routes/hub.tsx", "../src/routes/builder-profile.tsx"]);
+
+describe("linked identities stay in their module (ADR-012 §5, ADR-004)", () => {
+  it("the allowlist holds only files that exist, and no ranking file is on it", () => {
+    for (const file of IDENTITY_ALLOWED) expect(sources[file], file).toBeDefined();
+    for (const file of RANKING_FILES) expect(IDENTITY_ALLOWED.has(file), file).toBe(false);
+  });
+
+  it("ranking files import no identities module and run no SQL on user_identities", () => {
+    for (const file of RANKING_FILES) {
+      expect(sources[file], `${file} imports db/identities`).not.toMatch(/from\s+["'][^"']*\/db\/identities\.ts["']/);
+      expect(sources[file], `${file} reads user_identities`).not.toMatch(/\b(?:FROM|JOIN|INTO|UPDATE)\s+user_identities\b/);
+    }
+  });
+
+  it("only allowlisted files import db/identities.ts or run SQL on user_identities", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (IDENTITY_ALLOWED.has(file)) continue;
+      expect(src, `${file} imports db/identities`).not.toMatch(/from\s+["'][^"']*\/db\/identities\.ts["']/);
+      expect(src, `${file} touches user_identities`).not.toMatch(/\b(?:FROM|JOIN|INTO|UPDATE)\s+user_identities\b/);
+    }
+  });
+});
+
+// VNX-2606b (ADR-004, ADR-012 §5): the identity badge is never an input to ranking, and a client's linked accounts never reach builder-facing or public code.
+const SHOW_FLAG_FILES = new Set(["../src/domain/identity.ts", "../src/db/identities.ts", "../src/views/hub/ProfilePage.tsx"]);
+const IDENTITY_WORDS = /user_identities|show_on_profile|showOnProfile|listPublicBadges|PublicBadge|githubProfileUrl|domain\/identity|db\/identities/;
+
+describe("unlinking ends the provider's sessions (VNX-2605c)", () => {
+  it("db/ imports nothing from auth/ (ARCHITECTURE.md §2): the unlink batch receives its sessions statement", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (!file.startsWith("../src/db/")) continue;
+      expect(src, `${file} imports auth/`).not.toMatch(/from\s+["']\.\.\/auth\//);
+    }
+  });
+
+  it("the only caller of unlinkIdentity passes it endProviderSessionsStatement, and only auth/sessions.ts deletes sessions", () => {
+    const callers = Object.entries(sources).filter(([file, src]) => /\bunlinkIdentity\(/.test(src) && file !== "../src/db/identities.ts");
+    expect(callers.map(([file]) => file)).toEqual(["../src/routes/me.tsx"]);
+    expect(callers[0]?.[1]).toContain("endProviderSessionsStatement(");
+    for (const [file, src] of Object.entries(sources)) if (/DELETE FROM sessions/.test(src)) expect(file).toBe("../src/auth/sessions.ts");
+  });
+});
+
+describe("the identity badge stays out of ranking and builder-facing code (ADR-004, ADR-012 §5)", () => {
+  it("the identities allowlist is exactly the files that read or write the table", () => {
+    expect([...IDENTITY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/identities.ts", "../src/routes/builder-profile.tsx", "../src/routes/hub.tsx", "../src/routes/me.tsx", "../src/routes/oauth.tsx"]);
+  });
+
+  it("no ranking, catalogue, directory or suggestion file mentions identities, the badge flag or the badge query", () => {
+    for (const file of RANKING_FILES) expect(sources[file], `${file} touches identities`).not.toMatch(IDENTITY_WORDS);
+  });
+
+  it("only the identity module and the builder's own switch view mention show_on_profile", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (SHOW_FLAG_FILES.has(file)) continue;
+      expect(src, `${file} reads the badge flag`).not.toMatch(/show_on_profile|showOnProfile/);
+    }
+  });
+
+  it("builder-facing client code (inbox, thread, invitations, notices) does not touch identities", () => {
+    for (const file of [...BUILDER_FACING_FILES, "../src/routes/hub-invitations.tsx", "../src/views/ProposalView.tsx"]) {
+      expect(sources[file], file).toBeDefined();
+      expect(sources[file], `${file} touches identities`).not.toMatch(IDENTITY_WORDS);
+    }
+  });
+
+  it("the public profile route reads identities only through listPublicBadges, and the hub only its own builder's rows", () => {
+    const profile = sources["../src/routes/builder-profile.tsx"] ?? "";
+    const calls = (src: string, name: string) => (src.match(new RegExp(`${name}\\(`, "g")) ?? []).length;
+    const exact = (src: string, re: RegExp) => (src.match(re) ?? []).length;
+    expect(calls(profile, "listPublicBadges")).toBeGreaterThan(0);
+    expect(calls(profile, "listPublicBadges")).toBe(exact(profile, /listPublicBadges\(c\.env\.DB, builder\.userId, providers\)/g)); // every call is for the builder shown
+    for (const name of ["listIdentitiesForUser", "findIdentityByProviderSubject", "linkIdentity", "unlinkIdentity", "setShowOnProfile"]) expect(profile, name).not.toContain(name);
+    const hub = sources["../src/routes/hub.tsx"] ?? "";
+    expect(calls(hub, "listIdentitiesForUser")).toBeGreaterThan(0);
+    expect(calls(hub, "listIdentitiesForUser")).toBe(exact(hub, /listIdentitiesForUser\(c\.env\.DB, builder\.userId\)/g)); // every call is for the signed-in builder
+    expect(calls(hub, "setShowOnProfile")).toBeGreaterThan(0);
+    expect(calls(hub, "setShowOnProfile")).toBe(exact(hub, /setShowOnProfile\(c\.env\.DB, \{ userId: c\.get\("builder"\)\.userId,/g));
+    for (const name of ["findIdentityByProviderSubject", "linkIdentity", "unlinkIdentity", "listPublicBadges"]) expect(hub, name).not.toContain(name);
+  });
+
+  it("views import no db module (the badge reaches the page as a plain prop)", () => {
+    for (const file of ["../src/views/BuilderProfilePage.tsx", "../src/views/hub/ProfilePage.tsx", "../src/views/BuilderCard.tsx"]) {
+      expect(sources[file], file).toBeDefined();
+      expect(sources[file], `${file} imports db`).not.toMatch(/from\s+["'][^"']*\/db\//);
+    }
+  });
+});
+
+// ADR-012 §6, F3: the OAuth callback never looks up or accepts an Ops invitation (that stays a magic-link act, ADR-010 §3).
+const OAUTH_ROUTE = "../src/routes/oauth.tsx";
+
+/** Files reachable from `entry` through value imports (`import type` is erased, so it is not a dependency). */
+function reachableFrom(entry: string): Set<string> {
+  const seen = new Set<string>();
+  const queue = [entry];
+  while (queue.length) {
+    const file = queue.pop() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const src = sources[file] ?? "";
+    for (const m of src.matchAll(/^\s*(?:import|export)\s+(?!type\b)[^"';]*?from\s+["'](\.[^"']+)["']/gm)) {
+      const parts = file.slice(0, file.lastIndexOf("/")).split("/");
+      for (const seg of (m[1] ?? "").split("/")) {
+        if (seg === "..") parts.pop();
+        else if (seg !== ".") parts.push(seg);
+      }
+      const target = parts.join("/");
+      if (sources[target]) queue.push(target);
+    }
+  }
+  return seen;
+}
+
+describe("OAuth callback never touches Ops invites (ADR-012 §6, F3)", () => {
+  it("routes/oauth.tsx exists and reaches neither db/ops-members.ts nor auth/ops.ts", () => {
+    expect(sources[OAUTH_ROUTE]).toBeDefined();
+    const reached = reachableFrom(OAUTH_ROUTE);
+    expect(reached.has("../src/db/identities.ts")).toBe(true); // the walk really follows imports
+    // Positive control (L6): the same walk does find ops-members.ts from the Ops console route, so a `false` above means something.
+    expect(reachableFrom("../src/routes/ops.tsx").has("../src/db/ops-members.ts")).toBe(true);
+    expect(reached.has("../src/db/ops-members.ts")).toBe(false);
+    expect(reached.has("../src/auth/ops.ts")).toBe(false);
+  });
+
+  it("routes/oauth.tsx never reads an e-mail to find a user, nor mentions Ops invites", () => {
+    expect(sources[OAUTH_ROUTE] ?? "").not.toMatch(/findUserByEmail|createUser|ops_member|OpsInvite/);
+  });
+});
+
+describe("linking needs a magic-link session (VNX-2605d, ADR-013)", () => {
+  it("the only caller of linkIdentity passes requireSession, and linking code never uses the staff predicate", () => {
+    const callers = Object.entries(sources).filter(([file, src]) => /\blinkIdentity\(/.test(src) && file !== "../src/db/identities.ts");
+    expect(callers.map(([file]) => file)).toEqual(["../src/routes/oauth.tsx"]);
+    expect(callers[0]?.[1]).toMatch(/requireSession: \{ idHash: await sha256Hex\(raw\)/);
+    for (const file of ["../src/routes/oauth.tsx", "../src/routes/me.tsx", "../src/views/me/LinkedAccounts.tsx"]) expect(sources[file], file).not.toContain("isStaffSession");
+  });
+});
 describe("single render choke point (VNX-0701c)", () => {
   it("positive control: render.ts itself calls c.html(", () => {
     expect(sources["../src/views/render.ts"]).toMatch(/\bc\.html\(/);

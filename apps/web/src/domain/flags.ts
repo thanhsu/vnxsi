@@ -1,7 +1,19 @@
 /** Feature flags (monetization addendum §3.1). Pure: no Hono, no D1. */
 
 /** Every valid flag. A flag with no row in `feature_flags` is off. */
-export const FLAG_KEYS = ["affiliate", "partner_referral", "sponsored_listings", "ads", "lead_generation", "ai_content", "content_indexing"] as const;
+export const FLAG_KEYS = [
+  "affiliate",
+  "partner_referral",
+  "sponsored_listings",
+  "ads",
+  "lead_generation",
+  "ai_content",
+  "content_indexing",
+  // ADR-012 (EPIC 26): one per OAuth provider; off hides the button and makes the callback 404.
+  "oauth_google",
+  "oauth_github",
+  "oauth_linkedin",
+] as const;
 
 export type FlagKey = (typeof FLAG_KEYS)[number];
 export type FlagState = Record<FlagKey, boolean>;

@@ -1,21 +1,30 @@
 import type { Context, Hono } from "hono";
+import { clearSessionCookie, readSessionCookie } from "../auth/cookies.ts";
 import { requireUser } from "../auth/middleware.ts";
+import { linkSessionHash, writeOAuthCookie } from "../auth/oauth-cookie.ts";
+import { endProviderSessionsStatement } from "../auth/sessions.ts";
+import { listIdentitiesForUser, unlinkIdentity } from "../db/identities.ts";
 import { listClientInquiries, listMessages } from "../db/inquiries.ts";
 import { listClientRequests } from "../db/requests.ts";
 import type { InquirySummary } from "../domain/inquiry.ts";
+import { isLinkCapableSession, isOAuthProvider, sessionMethodFor } from "../domain/identity.ts";
+import { newLinkIntent } from "../domain/oauth.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
+import { notifyIdentityChange } from "../notify/identity.ts";
 import { errorResponse } from "../views/error-response.tsx";
 import { InquiryList } from "../views/hub/InquiriesPage.tsx";
 import { InquiryThread } from "../views/InquiryThread.tsx";
+import { LINK_NOTICES, type LinkNotice, LinkedAccounts } from "../views/me/LinkedAccounts.tsx";
 import { RequestList } from "../views/me/RequestList.tsx";
 import { Layout } from "../views/Layout.tsx";
 import { page } from "../views/render.ts";
 import { loadForSide, postInquiryAction, type ThreadExtra } from "./hub-inquiries.tsx";
 import { openPendingInquiry } from "./inquiry-confirm.ts";
+import { availableProviders, enabledProvider } from "./oauth.tsx";
 
 async function threadPage(c: Context<AppEnv>, summary: InquirySummary, extra: ThreadExtra = {}, status: 200 | 400 = 200) {
   const locale = c.get("locale");
@@ -51,7 +60,8 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
     const locale = c.get("locale");
     const tr = translator(locale);
     const user = c.get("user")!;
-    const [inquiries, requests] = await Promise.all([listClientInquiries(c.env.DB, user.id), listClientRequests(c.env.DB, user.id)]);
+    const notice = LINK_NOTICES.find((v) => v === c.req.query("link"));
+    const [inquiries, requests, identities, linkable] = await Promise.all([listClientInquiries(c.env.DB, user.id), listClientRequests(c.env.DB, user.id), listIdentitiesForUser(c.env.DB, user.id), availableProviders(c)]);
     return page(
       c,
       <Layout locale={locale} title={`${tr("me.title")} · VNX.SI`} origin={requestOrigin(c)} rest="/me" noindex signedIn>
@@ -67,9 +77,38 @@ export function registerMeRoutes(app: Hono<AppEnv>) {
           <h2>{tr("me.inquiries.title")}</h2>
           <InquiryList locale={locale} items={inquiries} viewer="client" base="/me/inquiries" />
         </section>
+        <LinkedAccounts locale={locale} identities={identities} linkable={linkable} notice={notice} canLink={isLinkCapableSession(user.method)} />
       </Layout>,
     );
+  });
 
+  // ADR-012 §4: "Link" is a POST (the Origin check is global). It writes one 120 s cookie for THIS session and sends the browser to the
+  // same-site start. It never redirects off-site (`form-action 'self'`); start shows the page with the link to the provider.
+  onLocalized(app, "post", "/me/identities/:provider/link", requireUser, async (c) => {
+    const found = await enabledProvider(c);
+    const raw = readSessionCookie(c);
+    if (!found || !raw) return errorResponse(c, "notFound", 404);
+    // ADR-013: only a magic-link session starts a link. Nothing is written and nothing redirects to `start`; the owner is told what to do.
+    const refused: LinkNotice = "needsEmailLink"; // typed against the one LINK_NOTICES source
+    if (!isLinkCapableSession(c.get("user")!.method)) return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${refused}`, 303);
+    const now = Date.now();
+    writeOAuthCookie(c, newLinkIntent({ provider: found.provider, sessionHash: await linkSessionHash(raw) }, now), now);
+    return c.redirect(`/auth/oauth/${found.provider}/start?lang=${c.get("locale")}`, 303);
+  });
+
+  // ADR-012 §4: unlink is always allowed, flag on or off, configured or not (the e-mail link always remains). A POST that answers
+  // 303 to the same site only. `unlinkIdentity` filters by this user, audits `{ provider }` in its batch, and returns null (no audit) when nothing was linked, and ends every session of this user made through that provider.
+  onLocalized(app, "post", "/me/identities/:provider/unlink", requireUser, async (c) => {
+    const provider = c.req.param("provider");
+    if (!isOAuthProvider(provider)) return errorResponse(c, "notFound", 404);
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    // VNX-2605c: the same batch ends EVERY session of this user made through `provider`, the caller's own included (Owner E1 = b1).
+    const removed = await unlinkIdentity(c.env.DB, { userId: user.id, provider, now, endSessions: endProviderSessionsStatement(c.env.DB, { userId: user.id, provider }) });
+    if (removed) await notifyIdentityChange(c.env, { kind: "unlinked", to: user.email, locale: user.locale, provider, label: removed.label, at: now, requestId: c.get("requestId") });
+    // The caller's own session was deleted too when it came in through this provider: clear its cookie. The redirect is unchanged; `requireUser` then sends them to /login?next=…
+    if (removed && user.method === sessionMethodFor(provider)) clearSessionCookie(c);
+    return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${removed ? "unlinked" : "notLinked"}`, 303);
   });
 
   onLocalized(app, "get", "/me/inquiries/:id", requireUser, async (c) => {

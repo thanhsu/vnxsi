@@ -61,6 +61,9 @@
   // 0015_view_dedupe (M7) ships with its code the same way: migrate first, then deploy.
   // 0016_public_stats (M7, hourly snapshot table) ships the same way.
   // The daily cron also deletes outbound clicks older than 13 months, so it reads 0012 too.
+  // 0017_user_identities (EPIC 26) ships with its code the same way: migrate first, then deploy. It also adds sessions.method (default 'magic_link'),
+  // which the new createSession writes, so the old code keeps working after the migration but the new code does not work before it.
+  // The three OAuth flags (oauth_google, oauth_github, oauth_linkedin) stay off until the Owner turns them on (VNX-2608).
   // (g) Migration order: 0013 (Ops) first, then 0014-0016, all applied before the code that uses them.
   // (f) Before go-live add Cloudflare rate limits for /p/* and /go/p/*.
   // (d) ANALYTICS_SALT (secret) may be set any time; counting starts only at D 00:00 UTC.
@@ -71,6 +74,9 @@
   // Resend, also in local dev. Local dev without a key: set MAIL_DRIVER=console in apps/web/.dev.vars.
   // Tests use "fake". Production leaves it unset and sends through RESEND_API_KEY.
   //
+  // OAuth sign-in (EPIC 26, ADR-012): the client ids and secrets are wrangler secrets, never vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  // GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET. Local dev: apps/web/.dev.vars. A provider missing
+  // either of its two is off whatever its feature flag says. The test driver for OAuth is a vitest binding only and never appears here.
   // ANALYTICS_SALT (M7): `wrangler secret put ANALYTICS_SALT` with a random value of 32+ characters (e.g. `openssl rand -hex 32`). Local dev:
   // add ANALYTICS_SALT=<any random string> to apps/web/.dev.vars (git-ignored). Never put it in "vars". While it is unset the Worker counts
   // no views or clicks and sets no visitor cookie. Rotating it only restarts de-duplication for that day.

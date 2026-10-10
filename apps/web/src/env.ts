@@ -16,6 +16,15 @@ export interface Bindings {
   TURNSTILE_SECRET?: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_DRIVER?: string;
+  /** EPIC 26 (ADR-012): "fake" swaps in the test provider, and only next to the fake mailer (auth/oauth/index.ts). Never set in wrangler.jsonc. */
+  OAUTH_DRIVER?: string;
+  /** OAuth client credentials: `wrangler secret put …` and apps/web/.dev.vars only. A provider missing either of its two is off. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  LINKEDIN_CLIENT_ID?: string;
+  LINKEDIN_CLIENT_SECRET?: string;
   PRIVACY_NOTICE_GO_LIVE?: string;
   /** Secret for the daily visitor hash (VNX-0707a). Unset: no views or clicks are counted and no visitor cookie is set. `wrangler secret put ANALYTICS_SALT`; `.dev.vars` locally; never in the repo. */
   ANALYTICS_SALT?: string;

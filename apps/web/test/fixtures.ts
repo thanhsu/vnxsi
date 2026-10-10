@@ -20,6 +20,7 @@ import type { ProductFields } from "../src/domain/product-input.ts";
 import type { Inquiry, InquiryStatus, InquiryType } from "../src/domain/inquiry.ts";
 import type { ClientRequest, RequestInvite, RequestStatus } from "../src/domain/request.ts";
 import type { BadgeKind, Category, DeliveryModel, Product } from "../src/domain/product.ts";
+import type { SessionMethod } from "../src/domain/identity.ts";
 import { testEnv } from "./helpers.ts";
 
 export function profileValues(overrides: Partial<BuilderFormValues> = {}): BuilderFormValues {
@@ -63,10 +64,10 @@ export async function makeBuilder(email: string, handle: string, status: Builder
 }
 
 /** Creates (or reuses) a user and a live session; returns the Cookie header value. */
-export async function signIn(email: string, opts: { admin?: boolean; locale?: string } = {}): Promise<{ user: UserRow; cookie: string }> {
+export async function signIn(email: string, opts: { admin?: boolean; locale?: string; method?: SessionMethod } = {}): Promise<{ user: UserRow; cookie: string }> {
   const user = await ensureUser(email, opts.locale);
   if (opts.admin) await testEnv.DB.prepare("UPDATE users SET is_admin = 1 WHERE id = ?1").bind(user.id).run();
-  return { user, cookie: `__Host-vnx_session=${await createSession(testEnv.DB, user.id, new Date())}` };
+  return { user, cookie: `__Host-vnx_session=${await createSession(testEnv.DB, user.id, new Date(), opts.method)}` };
 }
 
 /** A builder (default approved) with one fresh draft product. */

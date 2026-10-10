@@ -2,7 +2,7 @@
  * Terms, Privacy, Media kit (VNX-0705a) and Disclosure (VNX-2104b). Plain data: no Hono, no D1.
  *
  * Copied word for word from the `## EN` and `## VI` parts of docs/legal/terms.md, privacy.md, media-kit.md and disclosure.md
- * (approved by the Owner 2026-10-04); test/legal/content.test.ts compares the rendered pages with those files.
+ * (approved by the Owner 2026-10-04 and, for the linked-accounts text (ADR-012), 2026-10-07 (VNX-2607)); test/legal/content.test.ts compares the rendered pages with those files.
  * Change the source file first, then this file, in the same task. zh-Hans and zh-Hant show the EN text (VNX-0801 translates).
  */
 
@@ -48,7 +48,7 @@ const termsEn: LegalDoc = {
     {
       heading: "4. Your account",
       blocks: [
-        { p: "You sign in with a one-time link sent to your email. Keep your email account secure; anyone who can read it can sign in as you. Tell us at contact@vnx.si if you think someone else has used your account." },
+        { p: "You sign in with a one-time link sent to your email. Once signed in with the email link, you can link a Google, GitHub or LinkedIn account and use it to sign in too. Keep your email account and any linked accounts secure; anyone who can use them can sign in as you. We email you whenever an account is linked or unlinked. Tell us at contact@vnx.si if you think someone else has used your account." },
       ],
     },
     {
@@ -160,7 +160,7 @@ const termsVi: LegalDoc = {
     {
       heading: "4. Tài khoản của bạn",
       blocks: [
-        { p: "Bạn đăng nhập bằng link dùng một lần gửi tới email. Hãy giữ an toàn hộp thư của bạn; ai đọc được hộp thư đó đều có thể đăng nhập như bạn. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn." },
+        { p: "Bạn đăng nhập bằng link dùng một lần gửi tới email. Sau khi đăng nhập bằng link qua email, bạn có thể liên kết tài khoản Google, GitHub hoặc LinkedIn và dùng nó để đăng nhập. Hãy giữ an toàn hộp thư và các tài khoản đã liên kết; ai dùng được chúng đều có thể đăng nhập như bạn. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết. Báo cho chúng tôi qua contact@vnx.si nếu bạn nghĩ có người khác đã dùng tài khoản của bạn." },
       ],
     },
     {
@@ -257,7 +257,8 @@ const privacyEn: LegalDoc = {
         {
           ul: [
             "**Account:** your email address, the display name you choose, your language, whether you are an admin, and when you last signed in.",
-            "**Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash).",
+            "**Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash), including whether you signed in by email link or with a linked account.",
+            "**Linked accounts:** if you link a Google, GitHub or LinkedIn account to your VNX.SI account, we store which service it is, the ID that service gives your account, and a label so you can recognise it (the email address for Google and LinkedIn, the username for GitHub), plus when you linked it and when you last signed in with it. When you sign in with one of these services, it sends us your basic profile; we keep only what is listed here. We never receive or store the password of that account, and we do not keep the access keys the service gives us.",
             "**Builder profile and products:** what you enter in your profile and listings (name, headline, bio, country, skills, rates, links, product descriptions, prices, images). This content is **public** once approved.",
             "**Inquiries:** when you contact a builder, the name you type, your messages, the type of request, your budget range, an optional deadline, and the product or builder it is about. If you are not signed in, we also take your email address and create an account for it; nothing reaches the builder until you confirm that email.",
             "**Requests:** when you post a request, the name you type, the title, the description, the category, your budget range, an optional deadline and the languages you want to work in. If you are not signed in, we also take your email address and create an account for it; nothing is reviewed until you confirm that email.",
@@ -278,6 +279,7 @@ const privacyEn: LegalDoc = {
         {
           ul: [
             "To sign you in and keep you signed in.",
+            "To let you sign in with an account you have linked and, if you are a builder and choose to, to show on your public profile that you own a GitHub or LinkedIn account.",
             "To show builder profiles and products publicly, and to review them before they go public.",
             "To email you about your account, your listings, or, if you joined the waitlist, when the marketplace opens.",
             "To pass inquiries and replies between clients and builders, and to email the other side when there is a new message (the email includes the message).",
@@ -296,6 +298,8 @@ const privacyEn: LegalDoc = {
         {
           ul: [
             "Builder profiles and approved products are public.",
+            "Your linked accounts are shown only to you. A builder can choose to show their GitHub username, or the fact that their LinkedIn account is verified, on their public profile. Google accounts are never shown, and builders never see a client's linked accounts.",
+            "When you sign in with Google, GitHub or LinkedIn, that service knows you signed in to VNX.SI and handles that under its own privacy policy.",
             "Builders do not see clients' email addresses. A builder sees the name you typed, your messages, your budget range and deadline; a builder invited to your request also sees the request.",
             "When you follow a link to a partner you leave VNX.SI. The partner can see that you came from VNX.SI, and the click code if the link carries one. It handles your data under its own privacy policy, and it may set its own cookies or tracking when you arrive on its site.",
             "Messages sent through the contact form are read only by the VNX.SI team; a copy is delivered to our mailbox through Resend.",
@@ -313,6 +317,7 @@ const privacyEn: LegalDoc = {
           ul: [
             "`__Host-vnx_session`: keeps you signed in, for up to 30 days.",
             "`__Host-vnx_invite`: remembers a builder invite link for 1 hour.",
+            "`__Host-vnx_oauth`: keeps a sign-in with Google, GitHub or LinkedIn secure while you go to that service and back, for up to 10 minutes.",
           ],
         },
       ],
@@ -323,6 +328,7 @@ const privacyEn: LegalDoc = {
         {
           ul: [
             "Sign-in links: 15 minutes. Sessions: up to 30 days, or until you sign out.",
+            "Linked accounts: until you unlink them or your account is deleted.",
             "Rate-limit counters (including IP addresses): deleted regularly once they expire.",
             "Outbound click records: deleted after 13 months.",
             "Inquiries and their messages: while your account exists, under the same rule as your account below. Inquiries you never confirmed, and accounts created for them that were never confirmed: deleted after 48 hours.",
@@ -343,7 +349,7 @@ const privacyEn: LegalDoc = {
     {
       heading: "8. Security",
       blocks: [
-        { p: "Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. No system is perfectly secure; tell us at contact@vnx.si if you find a problem." },
+        { p: "Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. We email you whenever an account is linked to or unlinked from yours. No system is perfectly secure; tell us at contact@vnx.si if you find a problem." },
       ],
     },
     {
@@ -382,7 +388,8 @@ const privacyEnM7: LegalDoc = {
         {
           ul: [
             "**Account:** your email address, the display name you choose, your language, whether you are an admin, and when you last signed in.",
-            "**Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash).",
+            "**Sign-in:** one-time sign-in links (stored only as a hash, valid for 15 minutes) and session records (stored only as a hash), including whether you signed in by email link or with a linked account.",
+            "**Linked accounts:** if you link a Google, GitHub or LinkedIn account to your VNX.SI account, we store which service it is, the ID that service gives your account, and a label so you can recognise it (the email address for Google and LinkedIn, the username for GitHub), plus when you linked it and when you last signed in with it. When you sign in with one of these services, it sends us your basic profile; we keep only what is listed here. We never receive or store the password of that account, and we do not keep the access keys the service gives us.",
             "**Builder profile and products:** what you enter in your profile and listings (name, headline, bio, country, skills, rates, links, product descriptions, prices, images). This content is **public** once approved.",
             "**Inquiries:** when you contact a builder, the name you type, your messages, the type of request, your budget range, an optional deadline, and the product or builder it is about. If you are not signed in, we also take your email address and create an account for it; nothing reaches the builder until you confirm that email.",
             "**Requests:** when you post a request, the name you type, the title, the description, the category, your budget range, an optional deadline and the languages you want to work in. If you are not signed in, we also take your email address and create an account for it; nothing is reviewed until you confirm that email.",
@@ -404,6 +411,7 @@ const privacyEnM7: LegalDoc = {
         {
           ul: [
             "To sign you in and keep you signed in.",
+            "To let you sign in with an account you have linked and, if you are a builder and choose to, to show on your public profile that you own a GitHub or LinkedIn account.",
             "To show builder profiles and products publicly, and to review them before they go public.",
             "To email you about your account, your listings, or, if you joined the waitlist, when the marketplace opens.",
             "To pass inquiries and replies between clients and builders, and to email the other side when there is a new message (the email includes the message).",
@@ -423,6 +431,8 @@ const privacyEnM7: LegalDoc = {
         {
           ul: [
             "Builder profiles and approved products are public.",
+            "Your linked accounts are shown only to you. A builder can choose to show their GitHub username, or the fact that their LinkedIn account is verified, on their public profile. Google accounts are never shown, and builders never see a client's linked accounts.",
+            "When you sign in with Google, GitHub or LinkedIn, that service knows you signed in to VNX.SI and handles that under its own privacy policy.",
             "Builders do not see clients' email addresses. A builder sees the name you typed, your messages, your budget range and deadline; a builder invited to your request also sees the request.",
             "When you follow a link to a partner you leave VNX.SI. The partner can see that you came from VNX.SI, and the click code if the link carries one. It handles your data under its own privacy policy, and it may set its own cookies or tracking when you arrive on its site.",
             "Messages sent through the contact form are read only by the VNX.SI team; a copy is delivered to our mailbox through Resend.",
@@ -440,6 +450,7 @@ const privacyEnM7: LegalDoc = {
           ul: [
             "`__Host-vnx_session`: keeps you signed in, for up to 30 days.",
             "`__Host-vnx_invite`: remembers a builder invite link for 1 hour.",
+            "`__Host-vnx_oauth`: keeps a sign-in with Google, GitHub or LinkedIn secure while you go to that service and back, for up to 10 minutes.",
             "`__Host-vnx_vid`: a random code, not linked to your name, e-mail address or account, used only to count visits to product pages. It expires at the end of the current day (UTC). We do not set it if your browser sends the Global Privacy Control signal (`Sec-GPC: 1`).",
           ],
         },
@@ -451,6 +462,7 @@ const privacyEnM7: LegalDoc = {
         {
           ul: [
             "Sign-in links: 15 minutes. Sessions: up to 30 days, or until you sign out.",
+            "Linked accounts: until you unlink them or your account is deleted.",
             "Rate-limit counters (including IP addresses): deleted regularly once they expire.",
             "Outbound click records: deleted after 13 months.",
             "Daily de-duplication records: deleted after 2 days.",
@@ -472,7 +484,7 @@ const privacyEnM7: LegalDoc = {
     {
       heading: "8. Security",
       blocks: [
-        { p: "Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. No system is perfectly secure; tell us at contact@vnx.si if you find a problem." },
+        { p: "Sessions and sign-in links are stored only as hashes, the site is served over HTTPS only, and admin actions are logged. We email you whenever an account is linked to or unlinked from yours. No system is perfectly secure; tell us at contact@vnx.si if you find a problem." },
       ],
     },
     {
@@ -511,7 +523,8 @@ const privacyVi: LegalDoc = {
         {
           ul: [
             "**Tài khoản:** email, tên hiển thị bạn chọn, ngôn ngữ, bạn có phải admin không, và lần đăng nhập gần nhất.",
-            "**Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash).",
+            "**Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash), gồm cả việc bạn đăng nhập bằng link qua email hay bằng tài khoản liên kết.",
+            "**Tài khoản liên kết:** nếu bạn liên kết tài khoản Google, GitHub hoặc LinkedIn với tài khoản VNX.SI, chúng tôi lưu đó là dịch vụ nào, mã định danh dịch vụ đó cấp cho tài khoản của bạn, và một nhãn để bạn nhận ra (email với Google và LinkedIn, tên người dùng với GitHub), cùng thời điểm liên kết và lần gần nhất bạn đăng nhập bằng nó. Khi bạn đăng nhập bằng một trong các dịch vụ này, dịch vụ gửi cho chúng tôi thông tin hồ sơ cơ bản; chúng tôi chỉ giữ những gì ghi ở đây. Chúng tôi không bao giờ nhận hay lưu mật khẩu của tài khoản đó, và không giữ khóa truy cập mà dịch vụ cấp cho chúng tôi.",
             "**Hồ sơ builder và sản phẩm:** những gì bạn nhập vào hồ sơ và listing (tên, tiêu đề, giới thiệu, quốc gia, kỹ năng, mức giá, link, mô tả sản phẩm, giá, hình ảnh). Nội dung này **công khai** sau khi được duyệt.",
             "**Yêu cầu (Inquiry):** khi bạn liên hệ một builder, tên bạn gõ, các tin nhắn, loại yêu cầu, khoảng ngân sách, hạn chót (nếu có), và sản phẩm hoặc builder được hỏi. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; builder chưa nhận được gì cho tới khi bạn xác nhận email.",
             "**Nhu cầu (request):** khi bạn đăng nhu cầu, tên bạn gõ, tiêu đề, mô tả, danh mục, khoảng ngân sách, hạn chót (nếu có) và các ngôn ngữ bạn muốn làm việc. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; nhu cầu chưa được xem xét cho tới khi bạn xác nhận email.",
@@ -532,6 +545,7 @@ const privacyVi: LegalDoc = {
         {
           ul: [
             "Đăng nhập và giữ bạn đăng nhập.",
+            "Cho bạn đăng nhập bằng tài khoản đã liên kết và, nếu bạn là builder và tự chọn, hiện trên hồ sơ công khai rằng bạn sở hữu tài khoản GitHub hoặc LinkedIn.",
             "Hiển thị công khai hồ sơ builder và sản phẩm, và duyệt chúng trước khi công khai.",
             "Gửi email về tài khoản, listing của bạn, hoặc, nếu bạn vào danh sách chờ, báo khi chợ mở.",
             "Chuyển yêu cầu và trả lời giữa client và builder, và gửi email báo bên kia khi có tin nhắn mới (email có kèm nội dung tin nhắn).",
@@ -550,6 +564,8 @@ const privacyVi: LegalDoc = {
         {
           ul: [
             "Hồ sơ builder và sản phẩm đã duyệt là công khai.",
+            "Tài khoản liên kết của bạn chỉ hiện cho chính bạn. Builder có thể chọn hiện tên người dùng GitHub, hoặc việc tài khoản LinkedIn đã được xác minh, trên hồ sơ công khai. Tài khoản Google không bao giờ được hiện, và builder không bao giờ thấy tài khoản liên kết của client.",
+            "Khi bạn đăng nhập bằng Google, GitHub hoặc LinkedIn, dịch vụ đó biết bạn đã đăng nhập vào VNX.SI và xử lý việc này theo chính sách quyền riêng tư của họ.",
             "Builder không thấy email của client. Builder thấy tên bạn gõ, các tin nhắn, khoảng ngân sách và hạn chót; builder được mời vào nhu cầu của bạn thấy thêm nhu cầu đó.",
             "Khi bạn bấm link tới một partner, bạn rời VNX.SI. Partner thấy được bạn đến từ VNX.SI, và mã bấm nếu link có mang. Họ xử lý dữ liệu của bạn theo chính sách quyền riêng tư của họ, và có thể đặt cookie hoặc theo dõi riêng khi bạn vào trang của họ.",
             "Tin nhắn gửi qua form liên hệ chỉ đội ngũ VNX.SI đọc; một bản được chuyển tới hộp thư của chúng tôi qua Resend.",
@@ -567,6 +583,7 @@ const privacyVi: LegalDoc = {
           ul: [
             "`__Host-vnx_session`: giữ bạn đăng nhập, tối đa 30 ngày.",
             "`__Host-vnx_invite`: ghi nhớ link mời builder trong 1 giờ.",
+            "`__Host-vnx_oauth`: giữ an toàn cho lượt đăng nhập bằng Google, GitHub hoặc LinkedIn trong lúc bạn sang dịch vụ đó và quay lại, tối đa 10 phút.",
           ],
         },
       ],
@@ -577,6 +594,7 @@ const privacyVi: LegalDoc = {
         {
           ul: [
             "Link đăng nhập: 15 phút. Phiên đăng nhập: tối đa 30 ngày, hoặc tới khi bạn đăng xuất.",
+            "Tài khoản liên kết: tới khi bạn hủy liên kết hoặc tài khoản của bạn bị xóa.",
             "Bộ đếm giới hạn (gồm địa chỉ IP): được xóa định kỳ khi hết hạn.",
             "Bản ghi lượt bấm link ra ngoài: xóa sau 13 tháng.",
             "Yêu cầu và tin nhắn: trong thời gian tài khoản tồn tại, theo cùng quy tắc với tài khoản bên dưới. Yêu cầu bạn chưa xác nhận, và tài khoản tạo cho chúng mà chưa từng xác nhận: xóa sau 48 giờ.",
@@ -597,7 +615,7 @@ const privacyVi: LegalDoc = {
     {
       heading: "8. Bảo mật",
       blocks: [
-        { p: "Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề." },
+        { p: "Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết với tài khoản của bạn. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề." },
       ],
     },
     {
@@ -636,7 +654,8 @@ const privacyViM7: LegalDoc = {
         {
           ul: [
             "**Tài khoản:** email, tên hiển thị bạn chọn, ngôn ngữ, bạn có phải admin không, và lần đăng nhập gần nhất.",
-            "**Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash).",
+            "**Đăng nhập:** link đăng nhập dùng một lần (chỉ lưu dạng hash, hiệu lực 15 phút) và bản ghi phiên đăng nhập (chỉ lưu dạng hash), gồm cả việc bạn đăng nhập bằng link qua email hay bằng tài khoản liên kết.",
+            "**Tài khoản liên kết:** nếu bạn liên kết tài khoản Google, GitHub hoặc LinkedIn với tài khoản VNX.SI, chúng tôi lưu đó là dịch vụ nào, mã định danh dịch vụ đó cấp cho tài khoản của bạn, và một nhãn để bạn nhận ra (email với Google và LinkedIn, tên người dùng với GitHub), cùng thời điểm liên kết và lần gần nhất bạn đăng nhập bằng nó. Khi bạn đăng nhập bằng một trong các dịch vụ này, dịch vụ gửi cho chúng tôi thông tin hồ sơ cơ bản; chúng tôi chỉ giữ những gì ghi ở đây. Chúng tôi không bao giờ nhận hay lưu mật khẩu của tài khoản đó, và không giữ khóa truy cập mà dịch vụ cấp cho chúng tôi.",
             "**Hồ sơ builder và sản phẩm:** những gì bạn nhập vào hồ sơ và listing (tên, tiêu đề, giới thiệu, quốc gia, kỹ năng, mức giá, link, mô tả sản phẩm, giá, hình ảnh). Nội dung này **công khai** sau khi được duyệt.",
             "**Yêu cầu (Inquiry):** khi bạn liên hệ một builder, tên bạn gõ, các tin nhắn, loại yêu cầu, khoảng ngân sách, hạn chót (nếu có), và sản phẩm hoặc builder được hỏi. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; builder chưa nhận được gì cho tới khi bạn xác nhận email.",
             "**Nhu cầu (request):** khi bạn đăng nhu cầu, tên bạn gõ, tiêu đề, mô tả, danh mục, khoảng ngân sách, hạn chót (nếu có) và các ngôn ngữ bạn muốn làm việc. Nếu bạn chưa đăng nhập, chúng tôi lấy thêm email và tạo tài khoản cho email đó; nhu cầu chưa được xem xét cho tới khi bạn xác nhận email.",
@@ -658,6 +677,7 @@ const privacyViM7: LegalDoc = {
         {
           ul: [
             "Đăng nhập và giữ bạn đăng nhập.",
+            "Cho bạn đăng nhập bằng tài khoản đã liên kết và, nếu bạn là builder và tự chọn, hiện trên hồ sơ công khai rằng bạn sở hữu tài khoản GitHub hoặc LinkedIn.",
             "Hiển thị công khai hồ sơ builder và sản phẩm, và duyệt chúng trước khi công khai.",
             "Gửi email về tài khoản, listing của bạn, hoặc, nếu bạn vào danh sách chờ, báo khi chợ mở.",
             "Chuyển yêu cầu và trả lời giữa client và builder, và gửi email báo bên kia khi có tin nhắn mới (email có kèm nội dung tin nhắn).",
@@ -677,6 +697,8 @@ const privacyViM7: LegalDoc = {
         {
           ul: [
             "Hồ sơ builder và sản phẩm đã duyệt là công khai.",
+            "Tài khoản liên kết của bạn chỉ hiện cho chính bạn. Builder có thể chọn hiện tên người dùng GitHub, hoặc việc tài khoản LinkedIn đã được xác minh, trên hồ sơ công khai. Tài khoản Google không bao giờ được hiện, và builder không bao giờ thấy tài khoản liên kết của client.",
+            "Khi bạn đăng nhập bằng Google, GitHub hoặc LinkedIn, dịch vụ đó biết bạn đã đăng nhập vào VNX.SI và xử lý việc này theo chính sách quyền riêng tư của họ.",
             "Builder không thấy email của client. Builder thấy tên bạn gõ, các tin nhắn, khoảng ngân sách và hạn chót; builder được mời vào nhu cầu của bạn thấy thêm nhu cầu đó.",
             "Khi bạn bấm link tới một partner, bạn rời VNX.SI. Partner thấy được bạn đến từ VNX.SI, và mã bấm nếu link có mang. Họ xử lý dữ liệu của bạn theo chính sách quyền riêng tư của họ, và có thể đặt cookie hoặc theo dõi riêng khi bạn vào trang của họ.",
             "Tin nhắn gửi qua form liên hệ chỉ đội ngũ VNX.SI đọc; một bản được chuyển tới hộp thư của chúng tôi qua Resend.",
@@ -694,6 +716,7 @@ const privacyViM7: LegalDoc = {
           ul: [
             "`__Host-vnx_session`: giữ bạn đăng nhập, tối đa 30 ngày.",
             "`__Host-vnx_invite`: ghi nhớ link mời builder trong 1 giờ.",
+            "`__Host-vnx_oauth`: giữ an toàn cho lượt đăng nhập bằng Google, GitHub hoặc LinkedIn trong lúc bạn sang dịch vụ đó và quay lại, tối đa 10 phút.",
             "`__Host-vnx_vid`: một mã ngẫu nhiên, không gắn với tên, email hay tài khoản của bạn, chỉ dùng để đếm lượt truy cập trang product. Cookie hết hạn vào cuối ngày hiện tại (UTC). Chúng tôi không đặt cookie này nếu trình duyệt của bạn gửi tín hiệu Global Privacy Control (`Sec-GPC: 1`).",
           ],
         },
@@ -705,6 +728,7 @@ const privacyViM7: LegalDoc = {
         {
           ul: [
             "Link đăng nhập: 15 phút. Phiên đăng nhập: tối đa 30 ngày, hoặc tới khi bạn đăng xuất.",
+            "Tài khoản liên kết: tới khi bạn hủy liên kết hoặc tài khoản của bạn bị xóa.",
             "Bộ đếm giới hạn (gồm địa chỉ IP): được xóa định kỳ khi hết hạn.",
             "Bản ghi lượt bấm link ra ngoài: xóa sau 13 tháng.",
             "Bản ghi chống đếm trùng theo ngày: xóa sau 2 ngày.",
@@ -726,7 +750,7 @@ const privacyViM7: LegalDoc = {
     {
       heading: "8. Bảo mật",
       blocks: [
-        { p: "Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề." },
+        { p: "Phiên và link đăng nhập chỉ được lưu dạng hash, trang chỉ phục vụ qua HTTPS, và thao tác của admin được ghi lại. Chúng tôi gửi email cho bạn mỗi khi có tài khoản được liên kết hoặc hủy liên kết với tài khoản của bạn. Không hệ thống nào an toàn tuyệt đối; hãy báo cho chúng tôi qua contact@vnx.si nếu bạn phát hiện vấn đề." },
       ],
     },
     {

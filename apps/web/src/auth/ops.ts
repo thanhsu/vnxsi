@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { findOpsAccess } from "../db/ops-members.ts";
 import { can, resolveRole, type OpsCapability, type OpsRole } from "../domain/ops.ts";
+import { isStaffSession } from "../domain/identity.ts";
 import type { AppEnv, Bindings } from "../env.ts";
 import { ErrorPage } from "../views/ErrorPage.tsx";
 import { page } from "../views/render.ts";
@@ -36,7 +37,10 @@ export async function resolveOpsRole(env: Pick<Bindings, "DB" | "ADMIN_EMAILS">,
 /** Lets the request through only for a role holding `capability`, and sets `opsRole`; anyone else gets opsNotFound. */
 export function requireOps(capability: OpsCapability): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
-    const role = await resolveOpsRole(c.env, c.get("user"));
+    const user = c.get("user");
+    // An OAuth session is never staff (ADR-012 §6): the same sealed 404 as every other denial. Checked here, not in resolveOpsRole.
+    if (!user || !isStaffSession(user.method)) return opsNotFound(c);
+    const role = await resolveOpsRole(c.env, user);
     if (!role || !can(role, capability)) return opsNotFound(c);
     c.set("opsRole", role);
     await next();

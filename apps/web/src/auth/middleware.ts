@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { findBuilderByUserId } from "../db/builders.ts";
+import { isStaffSession } from "../domain/identity.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
 import { errorResponse } from "../views/error-response.tsx";
@@ -38,7 +39,8 @@ export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = c.get("user");
   if (!user) return toLogin(c);
   // ADMIN_EMAILS is the source of truth: removing an e-mail revokes access on the next request.
-  if (!isAdminUser(user, c.env)) return errorResponse(c, "forbidden", 403);
+  // A session that did not come from a magic link gets the same 403 as any other non-admin (ADR-012 §6, decision 9).
+  if (!isAdminUser(user, c.env) || !isStaffSession(user.method)) return errorResponse(c, "forbidden", 403);
   await next();
 };
 

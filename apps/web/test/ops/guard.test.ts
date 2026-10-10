@@ -2,10 +2,11 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { sessionMiddleware } from "../../src/auth/middleware.ts";
-import { opsHeaders, opsNotFound, requireOps } from "../../src/auth/ops.ts";
+import { opsHeaders, opsNotFound, requireOps, resolveOpsRole } from "../../src/auth/ops.ts";
 import type { SessionUser } from "../../src/auth/sessions.ts";
 import { deleteOpsMemberStatement } from "../../src/db/ops-members.ts";
 import { setUserStatusStatement } from "../../src/db/users.ts";
+import { SESSION_METHODS } from "../../src/domain/identity.ts";
 import type { GrantableRole } from "../../src/domain/ops.ts";
 import type { AppEnv, Bindings } from "../../src/env.ts";
 import { requestBodyLimit } from "../../src/http/body-limit.ts";
@@ -103,7 +104,7 @@ async function unsuspend(userId: string) {
   await setUserStatusStatement(testEnv.DB, { id: userId, from: "suspended", to: "active", now: new Date().toISOString() }).run();
 }
 
-const sessionUser = (u: { id: string; email: string }): SessionUser => ({ id: u.id, email: u.email, locale: "en", isAdmin: false });
+const sessionUser = (u: { id: string; email: string }): SessionUser => ({ id: u.id, email: u.email, locale: "en", isAdmin: false, method: "magic_link" });
 
 describe("sealed 404 under /ops (AC1, spec §5)", () => {
   it("answers the five denials with the same status, headers and body", async () => {
@@ -335,5 +336,73 @@ describe("no login redirect, no 403 under /ops (AC4, spec §5)", () => {
         }
       }
     }
+  });
+});
+
+const OAUTH_METHODS = SESSION_METHODS.filter((m) => m !== "magic_link");
+
+describe("OAuth sessions never reach /ops (ADR-012 §6, decision 9)", () => {
+  it("has three OAuth methods to cover", () => {
+    expect(OAUTH_METHODS).toEqual(["oauth_google", "oauth_github", "oauth_linkedin"]);
+  });
+
+  it("gives an ADMIN_EMAILS owner with an oauth_* session the same sealed 404 as an anonymous visitor, on GET and POST", async () => {
+    const real = createApp();
+    const fake = opsApp();
+    // Control: the same user through a magic link still gets in.
+    const magic = await signIn(ROOT);
+    expect((await send(real, "/ops", { cookie: magic.cookie })).res.status).toBe(200);
+    expect((await send(fake, "/ops/fake", { cookie: magic.cookie })).body).toBe("view:owner");
+    expect((await send(fake, "/ops/fake", { cookie: magic.cookie, method: "POST" })).body).toBe("act:owner");
+
+    const cases: Array<[string, Opts]> = [
+      ["/ops", {}],
+      ["/ops/marketplace/builders", {}],
+      ["/ops/marketplace/builders/x/approve", { method: "POST" }],
+    ];
+    for (const method of OAUTH_METHODS) {
+      const oauth = await signIn(ROOT, { method });
+      for (const [path, opts] of cases) {
+        const anonymous = await denial(real, path, opts);
+        const got = await denial(real, path, { ...opts, cookie: oauth.cookie });
+        expect(anonymous.status, `${method} ${path}`).toBe(404);
+        expect(got, `${method} ${path}`).toEqual(anonymous);
+        expect(got.headers, `${method} ${path}`).toContainEqual(["cache-control", "no-store"]);
+        expect(got.headers, `${method} ${path}`).toContainEqual(["x-robots-tag", "noindex, nofollow"]);
+      }
+      // The guarded fake routes (view, team.manage, act) refuse too.
+      const fakes: Array<[string, Opts]> = [["/ops/fake", {}], ["/ops/fake/team", {}], ["/ops/fake", { method: "POST" }]];
+      for (const [path, opts] of fakes) {
+        expect(await denial(fake, path, { ...opts, cookie: oauth.cookie }), `${method} ${path}`).toEqual(await denial(fake, path, opts));
+      }
+    }
+  });
+
+  it("refuses an oauth_* session of an Ops member too, and a stale session naming the owner", async () => {
+    const operator = await member(`ops-guard-oauth-${tag()}@vnx.si`, "operator");
+    const oauth = await signIn(operator.user.email, { method: "oauth_google" });
+    const reference = await denial(opsApp(), "/ops/fake");
+    expect(await denial(opsApp(), "/ops/fake", { cookie: oauth.cookie })).toEqual(reference);
+    expect((await send(opsApp(), "/ops/fake", { cookie: operator.cookie })).body).toBe("view:operator");
+    const root = await ensureUser(ROOT);
+    expect(await denial(opsApp({ ...sessionUser(root), method: "oauth_linkedin" }), "/ops/fake")).toEqual(reference);
+  });
+
+  it("gives the root Owner with an oauth_* session the same sealed 404 on a real /ops/monetization path", async () => {
+    const real = createApp();
+    const anonymous = await denial(real, "/ops/monetization/merchants");
+    expect(anonymous.status).toBe(404);
+    for (const method of OAUTH_METHODS) {
+      const oauth = await signIn(ROOT, { method });
+      const got = await denial(real, "/ops/monetization/merchants", { cookie: oauth.cookie });
+      expect(got, method).toEqual(anonymous);
+      expect(got.headers, method).toContainEqual(["cache-control", "no-store"]);
+    }
+  });
+
+  it("leaves the resolver alone: resolveOpsRole still names the role of a user whose session came from OAuth (M7 isStaff relies on it)", async () => {
+    const root = await ensureUser(ROOT);
+    expect(await resolveOpsRole(env, { ...sessionUser(root), method: "oauth_github" })).toBe("owner");
+    expect(await resolveOpsRole(env, sessionUser(root))).toBe("owner");
   });
 });

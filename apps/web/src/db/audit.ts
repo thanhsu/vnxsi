@@ -26,6 +26,11 @@ export type AuditInviteGuard = InviteGuard;
 export type AuditFeedbackGuard = FeedbackGuard;
 /** Written only when that feature flag row's last write carries this write id, i.e. this batch's upsert changed it (see setFlag). */
 export type AuditFlagGuard = { flagKey: string; writeId: string };
+/**
+ * Written only when that `user_identities` row exists now and belongs to that user (ADR-012 §4). Link: after the batch's INSERT
+ * (the id is a fresh ULID, so the row exists only if that INSERT went through). Unlink: before the batch's DELETE, since the row is gone after it.
+ */
+export type AuditIdentityGuard = { identityId: string; userId: string };
 /** Written only when that merchant / program / offer row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
 export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs" | "offers"; id: string; writeId: string };
 
@@ -34,18 +39,27 @@ export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
  * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id,
- * `partnerTable` + `id` on that merchant / program / offer row's last write id.
+ * `partnerTable` + `id` on that merchant / program / offer row's last write id, `identityId` + `userId` on the identity row existing for that user.
  */
 export function auditStatement(
   db: D1Database,
   input: AuditInput,
-  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard,
+  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard | AuditIdentityGuard,
 ): D1PreparedStatement {
   const id = ulid(Date.parse(input.now));
   const data = JSON.stringify(input.data ?? {});
   const values = [id, input.actorUserId, input.action, input.entity, input.entityId, data, input.now];
   if (!onlyIf) {
     return db.prepare("INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)").bind(...values);
+  }
+  if ("identityId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM user_identities WHERE id = ?8 AND user_id = ?9)`,
+      )
+      .bind(...values, onlyIf.identityId, onlyIf.userId);
   }
   if ("userId" in onlyIf) {
     return db

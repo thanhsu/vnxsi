@@ -13,6 +13,9 @@ const DESC: Record<FlagKey, MessageKey> = {
   lead_generation: "flags.desc.lead_generation",
   ai_content: "flags.desc.ai_content",
   content_indexing: "flags.desc.content_indexing",
+  oauth_google: "flags.desc.oauth_google",
+  oauth_github: "flags.desc.oauth_github",
+  oauth_linkedin: "flags.desc.oauth_linkedin",
 };
 
 export const FlagsPage: FC<{ locale: Locale; origin: string; flags: FlagState; done: boolean }> = (p) => {

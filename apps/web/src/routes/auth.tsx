@@ -22,6 +22,7 @@ import { ConfirmLinkPage, InvalidLinkPage, LoginPage, LoginSentPage } from "../v
 import { errorResponse } from "../views/error-response.tsx";
 import { page } from "../views/render.ts";
 import { openPendingInquiry } from "./inquiry-confirm.ts";
+import { availableProviders } from "./oauth.tsx";
 import { openPendingRequest } from "./request-confirm.ts";
 
 const LoginForm = z.object({ email: z.string().trim().toLowerCase().pipe(z.email().max(254)) });
@@ -78,8 +79,8 @@ async function invalidLink(c: Context<AppEnv>, raw: string) {
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
-  onLocalized(app, "get", "/login", (c) =>
-    page(c, <LoginPage locale={c.get("locale")} origin={origin(c)} next={safeNext(c.req.query("next"))} />),
+  onLocalized(app, "get", "/login", async (c) =>
+    page(c, <LoginPage locale={c.get("locale")} origin={origin(c)} next={safeNext(c.req.query("next"))} providers={await availableProviders(c)} />),
   );
 
   onLocalized(app, "post", "/login", async (c) => {
@@ -87,10 +88,12 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const tr = translator(locale);
     const form = await c.req.parseBody();
     const next = safeNext(form.next);
+    const retry = async (status: 400 | 429 | 502, email: string, error: string) =>
+      page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={error} providers={await availableProviders(c)} />, status);
     const parsed = LoginForm.safeParse({ email: form.email });
     if (!parsed.success) {
       const typed = typeof form.email === "string" ? form.email : "";
-      return page(c, <LoginPage locale={locale} origin={origin(c)} email={typed} next={next} error={tr("login.error.email")} />, 400);
+      return retry(400, typed, tr("login.error.email"));
     }
     const email = parsed.data.email;
     const now = new Date();
@@ -98,7 +101,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const byEmail = await hitRateLimit(c.env.DB, `login:email:${await sha256Hex(email)}`, 5, HOUR, now.getTime());
     const byIp = await hitRateLimit(c.env.DB, `login:ip:${ip}`, 20, HOUR, now.getTime());
     if (!byEmail.allowed || !byIp.allowed) {
-      return page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={tr("login.error.rateLimited")} />, 429);
+      return retry(429, email, tr("login.error.rateLimited"));
     }
 
     const token = await createLoginToken(c.env.DB, { email, purpose: "login", locale, inviteCodeHash: readInviteCookie(c) }, now);
@@ -109,7 +112,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
       await getMailer(c.env).send({ to: email, ...loginEmail(locale, link.toString()) });
     } catch (err) {
       console.error(JSON.stringify({ requestId: c.get("requestId"), event: "login.mail_failed", error: String(err) }));
-      return page(c, <LoginPage locale={locale} origin={origin(c)} email={email} next={next} error={tr("login.error.sendFailed")} />, 502);
+      return retry(502, email, tr("login.error.sendFailed"));
     }
     return page(c, <LoginSentPage locale={locale} origin={origin(c)} email={email} />);
   });

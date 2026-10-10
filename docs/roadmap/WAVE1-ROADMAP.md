@@ -174,7 +174,7 @@ Plan: `docs/superpowers/plans/2026-10-05-vnxsi-m7-metrics.md` (Owner duyệt 202
 
 ## EPIC 26 — Tài khoản liên kết Google, GitHub, LinkedIn (ADR-012)
 
-Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR-012 Accepted 2026-10-07. Plan riêng ở `docs/superpowers/plans/`, viết trước khi bắt đầu epic. Thứ tự so với M8 do Owner chốt khi duyệt plan. Phụ thuộc: VNX-2602 → 2603 → 2604, 2605 → 2606; VNX-2601 trước khi thử trên môi trường thật; VNX-2607 trước VNX-2608.
+Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR-012 Accepted 2026-10-07. Plan riêng ở `docs/superpowers/plans/`, viết trước khi bắt đầu epic. Plan `docs/superpowers/plans/2026-10-07-vnxsi-epic26-linked-accounts.md` (Approved 2026-10-07; VNX-2603…2606 tách a/b/c). **Thứ tự so với M8 (Owner 2026-10-07):** làm ngay, merge với cả ba cờ tắt, M8 không chờ; VNX-2608 chỉ sau khi ra mắt ổn định. **Lệch dòng VNX-2603 (Reviewer duyệt 2026-10-07):** không kiểm chữ ký ID token bằng JWKS (OIDC Core §3.1.3.7), vẫn kiểm `iss`/`aud`/`azp`/`exp`/`nonce`. Phụ thuộc: VNX-2602 → 2603 → 2604, 2605 → 2606; VNX-2601 trước khi thử trên môi trường thật; VNX-2607 trước VNX-2608.
 
 | Task | Nội dung | Tag |
 |---|---|---|
@@ -184,6 +184,9 @@ Owner xếp vào Wave 1 ngày 2026-10-07, bật cả ba provider cùng lúc. ADR
 | VNX-2604 | Đăng nhập: nút provider ở `/login`, start/callback intent `signin`, trang "chưa liên kết" chung, chặn user `suspended`, rate limit, audit `auth.login` có `method`; resolver Ops chỉ nhận session `magic_link` | AGENT, HIGH-RISK |
 | VNX-2605 | `/me` mục "Đăng nhập & tài khoản liên kết": liên kết (POST có Origin check → 303 → GET start), hủy liên kết, xung đột identity, audit, email báo 4 locale | AGENT, HIGH-RISK |
 | VNX-2606 | Huy hiệu: bật/tắt `show_on_profile` ở `/hub/profile`, hiện trên `/b/:handle` (GitHub có link, LinkedIn không link, Google không bao giờ); không vào xếp hạng | AGENT |
+| VNX-2604d | Logo chính thức của Google, GitHub, LinkedIn trong nút `/login` (file SVG do Owner giao ở VNX-2601, theo brand guideline từng provider); **điều kiện bắt buộc trước VNX-2608** (Owner 2026-10-08) | AGENT |
+| VNX-2605c | Kết thúc các session `oauth_<provider>` khi hủy liên kết provider đó (trừ session đang thực hiện) và/hoặc "đăng xuất các phiên khác"; **điều kiện bắt buộc trước VNX-2608** (Owner 2026-10-10: kẻ chiếm phiên đã liên kết tài khoản của họ còn giữ session tới 30 ngày sau khi bị hủy liên kết) | AGENT, HIGH-RISK |
+| VNX-2605d | Chỉ liên kết provider mới từ session `magic_link` (ADR-013) và kiểm lại session sau khi đổi code ở nhánh link; **điều kiện bắt buộc trước VNX-2608** (Owner 2026-10-10) | AGENT, HIGH-RISK |
 | VNX-2607 | Chép bổ sung ADR-012 vào phần `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code; merge trước khi bật flag | AGENT |
 | VNX-2608 | Owner bật 3 flag trên production, thử đăng nhập và liên kết với tài khoản thật | HUMAN, HIGH-RISK |
 
