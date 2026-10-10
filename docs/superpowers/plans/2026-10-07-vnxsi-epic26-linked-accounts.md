@@ -28,6 +28,7 @@
 - **(2026-10-08) Câu chữ Task 6** (trang "chưa liên kết", trang lỗi, nút đăng nhập bằng email) duyệt nguyên văn 4 locale; zh-Hant dùng 連結 cho liên kết tài khoản; giữ "trang tài khoản" tới Task 8.
 - **(2026-10-08) Task 8:** mục `/me` "Đăng nhập & tài khoản liên kết" chỉ hiện khi có ít nhất một provider khả dụng (cờ bật và đã cấu hình) hoặc user có ít nhất một identity; hàng đã liên kết vẫn hiện khi cờ của nó tắt (để còn hủy liên kết), lệch ADR-012 §4 "cho mọi user"; câu chữ `/me`, trang trung gian, thông báo (kể cả `taken` nói "đã liên kết với tài khoản VNX.SI khác" kèm contact@vnx.si) và câu `oauth.notLinked.body` mới Owner duyệt nguyên văn 4 locale.
 - **(2026-10-07) Email báo liên kết/hủy liên kết** gồm: tên provider, `label`, thời điểm (UTC), và câu "Không phải bạn? Đăng nhập bằng link qua email, hủy liên kết ở `/me` và viết cho contact@vnx.si". Email chỉ gửi tới `users.email` của chính chủ.
+- **(2026-10-10) Task 9:** câu chữ nút hủy liên kết, hai thông báo, hai email (gồm dòng link `/me` trơn) duyệt nguyên văn 4 locale; câu "Không phải bạn?" của email hủy liên kết là "kiểm tra các tài khoản liên kết ở /me"; mục `/me` chỉ-thông-báo chỉ cho `unlinked`/`notLinked`; thêm task VNX-2605c (kết thúc session `oauth_<provider>` khi hủy liên kết), bắt buộc trước VNX-2608.
 
 ## Quyết định thiết kế của Reviewer (Opus đã duyệt có chỉnh, 2026-10-07)
 
@@ -117,11 +118,12 @@ Không chặn Task 1. Đây là các quy tắc nghiệp vụ hoặc nội dung m
 | 7 | VNX-2604c | Nút provider ở `/login` (theo cờ + cấu hình), CSS; **chỉ chữ, logo tách sang VNX-2604d** (lệch "logo tự host" của dòng này, Reviewer duyệt 2026-10-08) | 6 | 10, 12 |
 | 8 | VNX-2605a | `/me` mục "Đăng nhập & tài khoản liên kết" (liệt kê), `POST …/link` (Origin, intent vào cookie, 303), nhánh `link` ở callback, xung đột identity; kiểm tay chuỗi redirect | 6 | 4, 5, 12 |
 | 9 | VNX-2605b | `POST …/unlink`; email báo liên kết và hủy liên kết 4 locale (`email/templates/identity.ts`) | 8 | 6 |
+| — | VNX-2605c | Kết thúc các session `oauth_<provider>` khi hủy liên kết provider đó (trừ session đang thực hiện), và/hoặc "đăng xuất các phiên khác"; **điều kiện bắt buộc trước VNX-2608**; plan chi tiết sau | 9 | 6 |
 | 10 | VNX-2606a | `setShowOnProfile` và công tắc ở `/hub/profile` (theo câu hỏi mở 5) | 1 | 8 |
 | 11 | VNX-2606b | Huy hiệu trên `/b/:handle` (GitHub link, LinkedIn nhãn, Google không); test không lộ client và không vào xếp hạng | 10, 8 | 8 |
 | 12 | VNX-2607 | Chép bổ sung ADR-012 vào `## EN`/`## VI` của `docs/legal/privacy.md`, `terms.md` và `src/legal/content.ts`, đối chiếu code thật (tên cột, cookie, thời hạn); merge trước khi bật cờ | 9, 11 | — |
 | — | VNX-2604d | Logo chính thức trong nút `/login` (file do Owner giao ở VNX-2601), CSS `.oauth-logo`, test file tồn tại. Phải xong **trước** VNX-2608 (Owner 2026-10-08, ADR-012 "Hệ quả": nút theo guideline thương hiệu của từng provider) | 2601, 7 | 10, 12 |
-| — | VNX-2608 | **HUMAN, HIGH-RISK.** Owner bật 3 cờ trên production, thử đăng nhập và liên kết bằng tài khoản thật | 2601, 12, 2604d | — |
+| — | VNX-2608 | **HUMAN, HIGH-RISK.** Owner bật 3 cờ trên production, thử đăng nhập và liên kết bằng tài khoản thật | 2601, 12, 2604d, 2605c | — |
 
 Mỗi task kết thúc bằng `npm run typecheck -w apps/web` và `npm test` xanh rồi mới commit.
 
@@ -5200,3 +5202,639 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **Thuật ngữ cho Task 9 (hủy liên kết):** vi "hủy liên kết", zh-Hans 取消关联, zh-Hant 取消連結.
 
 #### Kết quả review Task 8 (Opus, 2026-10-08): APPROVE_WITH_CHANGES (a-1, a-2), đã sửa MEDIUM-1..4, LOW-1..3; câu chữ và hiển thị mục /me do Owner duyệt 2026-10-08
+
+### Task 9: VNX-2605b — Hủy liên kết từ `/me`, email báo liên kết và hủy liên kết
+
+**Phụ thuộc:** Task 8 (a-1 và a-2, đã APPROVE). **Review Focus:** 6 (audit và email 4 locale, không token), 4, 11.
+
+**Mục tiêu.** `POST /me/identities/:provider/unlink` (luôn được phép, kể cả khi cờ của provider tắt); nút "Hủy liên kết" trong ô hành động của hàng đã liên kết; hai email báo (liên kết, hủy liên kết) gửi tới `users.email` của chính chủ, nội dung theo quyết định Owner 2026-10-07: tên provider, `label`, thời điểm UTC, câu "Không phải bạn? …". Không đổi schema, không đổi `db/identities.ts` (hàm `unlinkIdentity` của Task 1 đã ghi audit `auth.identity.unlink` với `{ provider }` cùng batch).
+
+**Quyết định kỹ thuật** (từ code thật; Reviewer kiểm):
+1. **Chữ ký thật của Task 1:** `unlinkIdentity(db, { userId, provider, now }) → Promise<UserIdentity | null>`: null và không audit khi user không có identity của provider đó; luôn lọc theo `user_id` nên không bao giờ chạm hàng của người khác. Route chỉ cần phân biệt `null` và khác `null`.
+2. **Tên provider lạ → 404** (`isOAuthProvider`, như `POST …/link`); provider hợp lệ nhưng chưa liên kết → 303 `?link=notLinked`, không lỗi, không audit, không email. Unlink không kiểm cờ và không kiểm cấu hình (`enabledProvider` KHÔNG được gọi): magic link luôn còn nên không bao giờ khóa người dùng ngoài.
+3. **`already_linked` không gửi email.** Lý do: không có gì thay đổi (không hàng mới, không audit mới); gửi lại cho mỗi lần quay lại từ provider sẽ cho phép ai đó có phiên đang mở bắn email lặp tới chủ hộp thư bằng cách lặp luồng. Email chỉ đi cùng một sự kiện đã audit. (Khớp dòng của Task 8 "already_linked coi như thành công không gửi email".)
+4. **Locale của email = `users.locale` của chính chủ** (`SessionUser.locale`, rơi về `en` nếu không phải `Locale`), không phải locale của request: đúng mẫu `notify()` của `routes/admin.tsx` (`userLocale`) và `notify/request.ts` (`party.locale`). Redirect về `/me` thì theo locale của request (người đang xem), như `POST …/link`.
+5. **`await` tại chỗ trong try/catch, không `waitUntil`.** Mẫu hiện có: `routes/admin.tsx` `notify()` và `notify/*` đều `await getMailer(env).send` rồi nuốt lỗi; `waitUntil` chỉ có ở `routes/go.ts` (đếm click, cần `ExecutionContext` mà test không có). Chờ gửi xong cho bằng chứng xác định trong test (outbox đầy đủ khi response về) và không thêm đường chạy mới; độ trễ một lần gửi Resend chấp nhận được cho thao tác hiếm này. Lỗi gửi **không hoàn tác** liên kết hay hủy liên kết (đã commit ở D1) và không đổi `?link=` mà người dùng thấy.
+6. **Log lỗi gửi là mã cố định:** `{ requestId, event: "identity.mail_failed", kind, provider, code: "notify_failed" }`. Lệch có chủ ý khỏi `notify()` cũ (log `error: String(err)`): lỗi Resend có thể chứa địa chỉ nhận, còn email này mang `label`. Không log địa chỉ, `label`, nội dung hay `err`.
+7. **Một module `notify/identity.ts`** (cùng chỗ với `notify/inquiry.ts`, `notify/request.ts`) giữ việc dựng URL, chọn locale, gửi, bắt lỗi; hai nơi gọi (callback `link`, route `unlink`) chỉ một dòng. Template ở `email/templates/identity.ts` theo mẫu `builder-decision.ts` (khóa `t()`, `parts.ts` cho HTML đã escape).
+8. **Email không có hành động nào:** không token, `code`, `state`, không link đăng nhập; chỉ một URL trơn tới `/me` (trang cần đăng nhập, GET, không tham số). Thời điểm là chính `now` đã ghi vào audit và `linked_at` (ISO cắt thành `YYYY-MM-DD HH:mm UTC`).
+9. **`label` chỉ có trong email gửi chủ** và trong ô `/me` của chủ; không vào audit, URL redirect, log. `label` được `escapeHtml` ở phần HTML.
+10. **Thông báo sau hủy:** mở rộng tập đóng `LINK_NOTICES` thêm `unlinked`, `notLinked` (một nguồn duy nhất; `me.tsx` và `LinkedAccounts` đã dùng nó, không sửa chỗ nào khác). Khi người dùng vừa hủy hàng cuối cùng và mọi cờ tắt, `LinkedAccounts` sẽ trả `null` (quyết định Owner 2026-10-08) và thông báo biến mất; sửa nhỏ, Owner duyệt 2026-10-10 và thu hẹp: chỉ khi `notice` là `unlinked` hoặc `notLinked` (không phải `ok`, `failed`, …) mà không còn hàng thì vẫn vẽ `<section id="identities">` chỉ gồm tiêu đề và thông báo (không bảng, không form).
+11. **Cỡ:** ≈ 120 dòng mã, ≈ 330 dòng test: dưới 600, không tách.
+
+**Đã chốt (Owner 2026-10-10; không còn câu hỏi mở):** (a) câu "Không phải bạn?" của email hủy liên kết dùng "kiểm tra các tài khoản liên kết ở /me", email liên kết giữ "hủy liên kết ở /me"; (b) mục chỉ-thông-báo chỉ cho `unlinked` và `notLinked` (quyết định kỹ thuật 10); (c) giữ dòng link `/me` trơn trong email. Toàn bộ câu chữ ở bảng dưới được duyệt nguyên văn.
+
+**Files:**
+- Create: `apps/web/src/email/templates/identity.ts`, `apps/web/src/notify/identity.ts`, `apps/web/test/email/identity-templates.test.ts`, `apps/web/test/me/identity-unlink.test.ts`.
+- Modify: `apps/web/src/routes/me.tsx` (route unlink), `apps/web/src/routes/oauth.tsx` (móc email trong `finishLink`), `apps/web/src/views/me/LinkedAccounts.tsx` (nút, hai thông báo, mục khi chỉ có thông báo), 4 file `apps/web/src/i18n/messages/*.ts`.
+- Test (sửa): `apps/web/test/me/identities.test.ts` (ba assertion của 8a-1 nói "unlink là của Task 9"), `apps/web/test/auth/oauth-link.test.ts` (thêm khối email, hai dòng thông báo).
+
+**Interfaces:**
+- Consumes: `unlinkIdentity`, `LinkResult` (`db/identities.ts`); `isOAuthProvider`, `PROVIDER_NAME`, `OAuthProvider` (`domain/identity.ts`); `requireUser`; `getMailer` (`email/index.ts`); `FakeMailer`, `outbox`, `clearOutbox` (`email/fake.ts`); `p`, `link`, `wrap` (`email/parts.ts`); `translator`; `isLocale`, `localizedPath`; `NotifyOutcome` (kiểu, `notify/request.ts`); `SessionUser.email/locale`.
+- Produces: `identityLinkedEmail(locale, input)`, `identityUnlinkedEmail(locale, input)`, `formatUtc(iso)` (`email/templates/identity.ts`); `notifyIdentityChange(env, input) → Promise<NotifyOutcome>` (`notify/identity.ts`); `LINK_NOTICES` thêm `"unlinked" | "notLinked"`; route `POST /me/identities/:provider/unlink` (4 tiền tố locale).
+
+**Khóa i18n mới (Owner duyệt nguyên văn 2026-10-10, gồm dòng link `/me` trơn; thêm ngay sau `me.identities.notice.failed` của từng file, KHÔNG có chú thích "BẢN NHÁP" trong file locale; `{provider}`, `{label}`, `{time}` là tham số). Dòng `email.identity.account` bị bỏ khỏi email khi `label` bằng tên provider (không lặp "GitHub … Account: GitHub").**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `me.identities.unlink` | Unlink {provider} | Hủy liên kết {provider} | 取消关联 {provider} 账号 | 取消連結 {provider} 帳號 |
+| `me.identities.notice.unlinked` | Account unlinked. You can still sign in with an email link. | Đã hủy liên kết tài khoản. Bạn vẫn đăng nhập được bằng link qua email. | 已取消关联该账号。你仍可用邮箱登录。 | 已取消連結該帳號。你仍可用電子郵件登入。 |
+| `me.identities.notice.notLinked` | That account wasn't linked, so nothing changed. | Tài khoản đó chưa được liên kết nên không có gì thay đổi. | 该账号并未关联，未作任何更改。 | 該帳號並未連結，未作任何更改。 |
+| `email.identityLinked.subject` | {provider} was linked to your VNX.SI account | Đã liên kết {provider} với tài khoản VNX.SI của bạn | {provider} 已关联到你的 VNX.SI 账户 | {provider} 已連結到你的 VNX.SI 帳戶 |
+| `email.identityLinked.body` | A {provider} account was linked to your VNX.SI account on {time}. It can now be used to sign in. | Một tài khoản {provider} đã được liên kết với tài khoản VNX.SI của bạn lúc {time}. Từ giờ tài khoản đó dùng được để đăng nhập. | 一个 {provider} 账号已于 {time} 关联到你的 VNX.SI 账户，现在可以用它登录。 | 一個 {provider} 帳號已於 {time} 連結到你的 VNX.SI 帳戶，現在可以用它登入。 |
+| `email.identityLinked.notYou` | Not you? Sign in with an email link, unlink it at /me and write to contact@vnx.si. | Không phải bạn? Hãy đăng nhập bằng link qua email, hủy liên kết ở /me và viết cho contact@vnx.si. | 不是你本人操作？请用邮箱登录，在 /me 取消关联，并发邮件至 contact@vnx.si。 | 不是你本人操作？請用電子郵件登入，在 /me 取消連結，並寄信至 contact@vnx.si。 |
+| `email.identityUnlinked.subject` | {provider} was unlinked from your VNX.SI account | Đã hủy liên kết {provider} khỏi tài khoản VNX.SI của bạn | {provider} 已从你的 VNX.SI 账户取消关联 | {provider} 已從你的 VNX.SI 帳戶取消連結 |
+| `email.identityUnlinked.body` | The {provider} account was unlinked from your VNX.SI account on {time}. It can no longer be used to sign in. | Tài khoản {provider} đã được hủy liên kết khỏi tài khoản VNX.SI của bạn lúc {time}. Tài khoản đó không còn dùng để đăng nhập được nữa. | {provider} 账号已于 {time} 从你的 VNX.SI 账户取消关联，不能再用它登录。 | {provider} 帳號已於 {time} 從你的 VNX.SI 帳戶取消連結，無法再用它登入。 |
+| `email.identityUnlinked.notYou` | Not you? Sign in with an email link, check your linked accounts at /me and write to contact@vnx.si. | Không phải bạn? Hãy đăng nhập bằng link qua email, kiểm tra các tài khoản liên kết ở /me và viết cho contact@vnx.si. | 不是你本人操作？请用邮箱登录，在 /me 查看关联账号，并发邮件至 contact@vnx.si。 | 不是你本人操作？請用電子郵件登入，在 /me 查看連結帳號，並寄信至 contact@vnx.si。 |
+| `email.identity.account` | Account: {label} | Tài khoản: {label} | 账号：{label} | 帳號：{label} |
+| `email.identity.manage` | Your linked accounts: | Tài khoản liên kết của bạn: | 你的关联账号： | 你的連結帳號： |
+
+- [ ] **Step 1: Test template (đỏ).** Tạo `apps/web/test/email/identity-templates.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import type { Locale } from "../../src/i18n/locales.ts";
+import { formatUtc, identityLinkedEmail, identityUnlinkedEmail } from "../../src/email/templates/identity.ts";
+
+const AT = "2026-10-09T07:05:33.123Z";
+const input = { provider: "github", label: "lan-nguyen", at: AT, manageUrl: "https://vnx.si/me" } as const;
+const SUBJECTS: Record<Locale, [string, string]> = {
+  en: ["GitHub was linked to your VNX.SI account", "GitHub was unlinked from your VNX.SI account"],
+  vi: ["Đã liên kết GitHub với tài khoản VNX.SI của bạn", "Đã hủy liên kết GitHub khỏi tài khoản VNX.SI của bạn"],
+  "zh-Hans": ["GitHub 已关联到你的 VNX.SI 账户", "GitHub 已从你的 VNX.SI 账户取消关联"],
+  "zh-Hant": ["GitHub 已連結到你的 VNX.SI 帳戶", "GitHub 已從你的 VNX.SI 帳戶取消連結"],
+};
+const UNLINK_WORD: Record<Locale, string> = { en: "unlink", vi: "hủy liên kết", "zh-Hans": "取消关联", "zh-Hant": "取消連結" };
+
+describe("formatUtc", () => {
+  it("is the ISO instant to the minute, in UTC", () => {
+    expect(formatUtc(AT)).toBe("2026-10-09 07:05 UTC");
+  });
+});
+
+describe("identity e-mails (VNX-2605b)", () => {
+  for (const [locale, [linked, unlinked]] of Object.entries(SUBJECTS) as Array<[Locale, [string, string]]>) {
+    it(`${locale}: subject, provider, label, UTC time, the Not-you line and contact@vnx.si`, () => {
+      const a = identityLinkedEmail(locale, input);
+      const b = identityUnlinkedEmail(locale, input);
+      expect(a.subject).toBe(linked);
+      expect(b.subject).toBe(unlinked);
+      for (const mail of [a, b]) {
+        expect(mail.text).toContain("GitHub");
+        expect(mail.text).toContain("lan-nguyen");
+        expect(mail.text).toContain("2026-10-09 07:05 UTC");
+        expect(mail.text).toContain("contact@vnx.si");
+        expect(mail.text).toContain("/me");
+        expect(mail.html).toContain(`lang="${locale}"`);
+        expect(mail.html).toContain("contact@vnx.si");
+      }
+      expect(a.text.toLowerCase()).toContain(UNLINK_WORD[locale]); // the linked mail tells the owner how to undo it
+    });
+  }
+
+  it("leaves out the Account line when the label is just the provider name", () => {
+    const mail = identityLinkedEmail("en", { ...input, label: "GitHub" });
+    expect(mail.text).not.toContain("Account:");
+    expect(mail.html).not.toContain("Account:");
+    expect(identityLinkedEmail("en", input).text).toContain("Account: lan-nguyen");
+  });
+
+  it("escapes the label in html and keeps it verbatim in text", () => {
+    const mail = identityLinkedEmail("en", { ...input, label: '<script>x</script>"&' });
+    expect(mail.html).not.toContain("<script>");
+    expect(mail.html).toContain("&lt;script&gt;x&lt;/script&gt;&quot;&amp;");
+    expect(mail.text).toContain('<script>x</script>"&');
+  });
+
+  it("carries no action: the only URL is the plain /me link, with no query or fragment", () => {
+    for (const mail of [identityLinkedEmail("vi", input), identityUnlinkedEmail("zh-Hant", input)]) {
+      const urls = `${mail.text} ${mail.html}`.match(/https?:\/\/[^\s"<]+/g) ?? [];
+      expect([...new Set(urls)]).toEqual(["https://vnx.si/me"]);
+      expect(`${mail.text}${mail.html}`).not.toMatch(/[?&]t=|token|code=|state=|verify/i);
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Chạy, thấy đỏ.** `npm test -w apps/web -- test/email/identity-templates.test.ts` → FAIL (không tìm thấy module `email/templates/identity.ts`).
+
+- [ ] **Step 3: Khóa i18n, template, `notify/identity.ts`.** Thêm 11 khóa ở bảng trên vào `en.ts`, `vi.ts`, `zh-hans.ts`, `zh-hant.ts`. `apps/web/src/email/templates/identity.ts`:
+
+```ts
+import { type OAuthProvider, PROVIDER_NAME } from "../../domain/identity.ts";
+import type { Locale } from "../../i18n/locales.ts";
+import { translator } from "../../i18n/t.ts";
+import { link, p, wrap } from "../parts.ts";
+
+export interface IdentityEmailInput {
+  provider: OAuthProvider;
+  /** E-mail or login of the provider account. Goes only to the account's owner. */
+  label: string;
+  /** ISO instant of the audited change. */
+  at: string;
+  /** Absolute, plain (no query): the owner's /me. */
+  manageUrl: string;
+}
+
+/** `2026-10-09T07:05:33.123Z` → `2026-10-09 07:05 UTC`. */
+export const formatUtc = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
+
+const KEYS = {
+  linked: { subject: "email.identityLinked.subject", body: "email.identityLinked.body", notYou: "email.identityLinked.notYou" },
+  unlinked: { subject: "email.identityUnlinked.subject", body: "email.identityUnlinked.body", notYou: "email.identityUnlinked.notYou" },
+} as const;
+
+function compose(kind: keyof typeof KEYS, locale: Locale, input: IdentityEmailInput) {
+  const tr = translator(locale);
+  const k = KEYS[kind];
+  const provider = PROVIDER_NAME[input.provider];
+  const body = tr(k.body, { provider, time: formatUtc(input.at) });
+  // The label repeats the provider name when the provider gave no e-mail (decision 12): then the line says nothing.
+  const account = input.label === provider ? null : tr("email.identity.account", { label: input.label });
+  const notYou = tr(k.notYou);
+  const manage = tr("email.identity.manage");
+  return {
+    subject: tr(k.subject, { provider }),
+    text: [body, ...(account ? [account] : []), "", notYou, "", manage, input.manageUrl].join("\n"),
+    html: wrap(locale, [p(body), ...(account ? [p(account)] : []), p(notYou), p(manage), link(input.manageUrl)]),
+  };
+}
+
+export const identityLinkedEmail = (locale: Locale, input: IdentityEmailInput) => compose("linked", locale, input);
+export const identityUnlinkedEmail = (locale: Locale, input: IdentityEmailInput) => compose("unlinked", locale, input);
+```
+`apps/web/src/notify/identity.ts`:
+
+```ts
+import type { OAuthProvider } from "../domain/identity.ts";
+import { getMailer } from "../email/index.ts";
+import { identityLinkedEmail, identityUnlinkedEmail } from "../email/templates/identity.ts";
+import type { Bindings } from "../env.ts";
+import { isLocale, localizedPath } from "../i18n/locales.ts";
+import type { NotifyOutcome } from "./request.ts";
+
+export interface IdentityChange {
+  kind: "linked" | "unlinked";
+  /** `users.email` of the account owner: the only address these e-mails ever go to. */
+  to: string;
+  /** `users.locale`. */
+  locale: string;
+  provider: OAuthProvider;
+  label: string;
+  at: string;
+  requestId?: string;
+}
+
+/**
+ * Tells the owner that a sign-in account was linked or unlinked (ADR-012 §4, Owner 2026-10-07). Awaited by the caller, never throws:
+ * the change is already committed, so a failed send is one log line with fixed words (no address, no label, no error text) and "failed".
+ */
+export async function notifyIdentityChange(env: Bindings, change: IdentityChange): Promise<NotifyOutcome> {
+  try {
+    const locale = isLocale(change.locale) ? change.locale : "en";
+    const manageUrl = new URL(localizedPath(locale, "/me"), env.APP_ORIGIN).toString();
+    const build = change.kind === "linked" ? identityLinkedEmail : identityUnlinkedEmail;
+    await getMailer(env).send({ to: change.to, ...build(locale, { provider: change.provider, label: change.label, at: change.at, manageUrl }) });
+    return "sent";
+  } catch {
+    console.error(JSON.stringify({ requestId: change.requestId, event: "identity.mail_failed", kind: change.kind, provider: change.provider, code: "notify_failed" }));
+    return "failed";
+  }
+}
+```
+Chạy lại Step 1 → PASS; `npm test -w apps/web -- test/i18n` → PASS (parity).
+
+- [ ] **Step 4: Test route, nút, email (đỏ).** Tạo `apps/web/test/me/identity-unlink.test.ts`:
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache } from "../../src/db/flags.ts";
+import { clearOutbox, FakeMailer, outbox } from "../../src/email/fake.ts";
+import { formatUtc } from "../../src/email/templates/identity.ts";
+import type { Bindings } from "../../src/env.ts";
+import { signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+import { enableProvider, linkedUser } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}-${Math.random().toString(36).slice(2, 8)}`;
+const emailOf = (who: string) => `${who}-${tag()}@example.com`; // per-test addresses: no global counts, D1 is shared
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const n = async (sql: string, ...binds: unknown[]) => (await testEnv.DB.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0;
+const rowsOf = (userId: string, provider: string) => n("SELECT count(*) AS n FROM user_identities WHERE user_id = ?1 AND provider = ?2", userId, provider);
+const audits = async (userId: string) =>
+  (await testEnv.DB.prepare("SELECT data FROM audit_log WHERE entity = 'user' AND entity_id = ?1 AND action = 'auth.identity.unlink' ORDER BY id").bind(userId).all<{ data: string }>()).results.map((r) => r.data);
+const mailTo = (address: string) => outbox.filter((m) => m.to === address);
+const unlink = (provider: string, cookie: string, path = `/me/identities/${provider}/unlink`, headers: Record<string, string> = {}, env: Bindings = testEnv) =>
+  createApp().request(formPost(path, {}, { cookie, ...headers }), undefined, env);
+const withoutCredentials = { ...testEnv, OAUTH_DRIVER: undefined } as Bindings;
+
+const spies: Array<ReturnType<typeof vi.spyOn>> = [];
+beforeEach(async () => {
+  clearOutbox();
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+  for (const m of ["error", "warn", "log", "info", "debug"] as const) spies.push(vi.spyOn(console, m).mockImplementation(() => {}));
+});
+afterEach(() => {
+  spies.splice(0).forEach((s) => s.mockRestore());
+  vi.restoreAllMocks();
+});
+const logged = () => spies.flatMap((s) => s.mock.calls).map((args) => args.map(String).join(" "));
+
+describe("POST /me/identities/:provider/unlink (VNX-2605b)", () => {
+  it("removes the row, audits {provider} only, mails the owner once, and 303s to /me with the notice", async () => {
+    const email = emailOf("lan");
+    const label = `l-${tag()}@gmail.example`; // e-mail-shaped, as Google and LinkedIn labels are
+    const { user } = await linkedUser(email, "github", { subject: `sub-${tag()}`, label });
+    const { cookie } = await signIn(email);
+    const res = await unlink("github", cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+    expect(await rowsOf(user.id, "github")).toBe(0);
+    expect(await audits(user.id)).toEqual(['{"provider":"github"}']);
+    const mails = mailTo(email);
+    expect(mails).toHaveLength(1);
+    expect(mails[0]?.to).toBe(email);
+    expect(mails[0]?.subject).toBe("GitHub was unlinked from your VNX.SI account");
+    expect(mails[0]?.text).toContain("GitHub");
+    expect(mails[0]?.text).toContain(label);
+    const audit = await testEnv.DB.prepare("SELECT created_at FROM audit_log WHERE entity = 'user' AND entity_id = ?1 AND action = 'auth.identity.unlink'").bind(user.id).first<{ created_at: string }>();
+    expect(mails[0]?.text).toContain(formatUtc(audit?.created_at ?? "")); // the audited instant, in UTC
+    expect(mails[0]?.text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
+    expect(mails[0]?.text).toContain("contact@vnx.si");
+    expect(outbox).toHaveLength(1); // never to the label or anyone else
+    expect(res.headers.get("location")).not.toContain(label);
+  });
+
+  it("the e-mail is in users.locale, not in the request locale; the redirect follows the request", async () => {
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email, { locale: "vi" }); // first: `linkedUser` reuses this user, and `ensureUser` alone would make it "en"
+    await linkedUser(email, "google", { subject: `sub-${tag()}`, label: `g-${tag()}@gmail.example` });
+    const res = await unlink("google", cookie, "/zh-hant/me/identities/google/unlink");
+    expect(res.headers.get("location")).toBe("/zh-hant/me?link=unlinked");
+    expect(mailTo(email)).toHaveLength(1);
+    expect(mailTo(email)[0]?.subject).toBe("Đã hủy liên kết Google khỏi tài khoản VNX.SI của bạn");
+  });
+
+  it("works whether the provider's flag is off, on, or its credentials are missing", async () => {
+    for (const mode of ["off", "on", "unconfigured"] as const) {
+      if (mode === "on") {
+        await enableProvider("github");
+        resetFlagCache();
+      }
+      const email = emailOf(`lan-${mode}`);
+      const { user } = await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+      const { cookie } = await signIn(email);
+      const res = await unlink("github", cookie, undefined, {}, mode === "unconfigured" ? withoutCredentials : testEnv);
+      expect(res.headers.get("location"), mode).toBe("/me?link=unlinked");
+      expect(await rowsOf(user.id, "github"), mode).toBe(0);
+      expect(mailTo(email), mode).toHaveLength(1);
+    }
+  });
+
+  it("a provider the user has not linked: notLinked, nothing changes, no audit, no e-mail; the other provider stays", async () => {
+    const lan = emailOf("lan");
+    const { user } = await linkedUser(lan, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(lan);
+    const res = await unlink("linkedin", cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/me?link=notLinked");
+    expect(await rowsOf(user.id, "github")).toBe(1);
+    expect(await audits(user.id)).toEqual([]);
+    expect(mailTo(lan)).toHaveLength(0);
+  });
+
+  it("never touches another user's row: B posting unlink for a provider only A holds changes nothing", async () => {
+    const a = emailOf("a");
+    const b = emailOf("b");
+    const { user: userA } = await linkedUser(a, "github", { subject: `sub-${tag()}`, label: `a-${tag()}` });
+    const { user: userB } = await linkedUser(b, "google", { subject: `sub-${tag()}`, label: `b-${tag()}@gmail.example` });
+    const { cookie } = await signIn(b);
+    const res = await unlink("github", cookie);
+    expect(res.headers.get("location")).toBe("/me?link=notLinked");
+    expect(await rowsOf(userA.id, "github")).toBe(1);
+    expect(await rowsOf(userB.id, "google")).toBe(1);
+    expect(await audits(userA.id)).toEqual([]);
+    expect(await audits(userB.id)).toEqual([]);
+    expect(mailTo(a)).toHaveLength(0);
+    expect(mailTo(b)).toHaveLength(0);
+  });
+
+  it("a second press is notLinked: one audit row, one e-mail", async () => {
+    const email = emailOf("lan");
+    const { user } = await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(email);
+    expect((await unlink("github", cookie)).headers.get("location")).toBe("/me?link=unlinked");
+    expect((await unlink("github", cookie)).headers.get("location")).toBe("/me?link=notLinked");
+    expect(await audits(user.id)).toHaveLength(1);
+    expect(mailTo(email)).toHaveLength(1);
+  });
+
+  it("refuses a missing or foreign Origin (403) and changes nothing", async () => {
+    const email = emailOf("lan");
+    const { user } = await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(email);
+    for (const headers of [{ origin: "https://evil.example" }, { origin: "null" }]) expect((await unlink("github", cookie, undefined, headers)).status).toBe(403);
+    const noOrigin = new Request("https://vnx.si/me/identities/github/unlink", { method: "POST", headers: { cookie } });
+    expect((await createApp().request(noOrigin, undefined, testEnv)).status).toBe(403);
+    expect(await rowsOf(user.id, "github")).toBe(1);
+    expect(mailTo(email)).toHaveLength(0);
+  });
+
+  it("signed out goes to /login and changes nothing", async () => {
+    const email = emailOf("lan");
+    const { user } = await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const res = await createApp().request(formPost("/me/identities/github/unlink", {}), undefined, testEnv);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/login");
+    expect(await rowsOf(user.id, "github")).toBe(1);
+  });
+
+  it("an unknown provider is 404; the body limit is 64 KB; the redirect never leaves the site", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(email);
+    expect((await unlink("facebook", cookie)).status).toBe(404);
+    const big = new Request("https://vnx.si/me/identities/github/unlink", {
+      method: "POST",
+      headers: { origin: "https://vnx.si", cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: `x=${"a".repeat(70 * 1024)}`,
+    });
+    expect((await createApp().request(big, undefined, testEnv)).status).toBe(413);
+    const res = await unlink("github", cookie, "/me/identities/github/unlink?next=https://evil.example&redirect=//evil.example");
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+  });
+
+  it("a failing mailer keeps the unlink and logs one fixed code: no address, label, error text or secret", async () => {
+    const email = emailOf("lan");
+    const label = `secret-label-${tag()}`;
+    const { user } = await linkedUser(email, "github", { subject: `sub-${tag()}`, label });
+    const { cookie } = await signIn(email);
+    vi.spyOn(FakeMailer.prototype, "send").mockRejectedValue(new Error(`boom to ${email} ${label} token=SECRET`)); // restored by afterEach
+    const res = await unlink("github", cookie);
+    expect(res.headers.get("location")).toBe("/me?link=unlinked");
+    expect(await rowsOf(user.id, "github")).toBe(0);
+    expect(await audits(user.id)).toHaveLength(1);
+    const lines = logged();
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? "")).toMatchObject({ event: "identity.mail_failed", kind: "unlinked", provider: "github", code: "notify_failed" });
+    for (const secret of [email, label, "boom", "SECRET"]) expect(lines[0]).not.toContain(secret);
+  });
+
+  it("the e-mail carries no session id, code or action link; its only URL is the plain /me", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "linkedin", { subject: `sub-${tag()}`, label: "LinkedIn" });
+    const { cookie } = await signIn(email);
+    await unlink("linkedin", cookie);
+    const mail = mailTo(email)[0];
+    const body = `${mail?.text}\n${mail?.html}`;
+    expect(body).not.toContain(cookie.split("=")[1] ?? "x");
+    expect(body).not.toMatch(/[?&]t=|token=|code=|state=|\/auth\//i);
+    expect([...new Set(body.match(/https?:\/\/[^\s"<]+/g) ?? [])]).toEqual([`${testEnv.APP_ORIGIN}/me`]);
+  });
+});
+
+describe("the Unlink button on /me (VNX-2605b)", () => {
+  const meHtml = async (path: string, cookie: string) => decode(await (await createApp().request(getReq(path, cookie), undefined, testEnv)).text());
+  const section = (html: string) => html.match(/<section id="identities">.*?<\/section>/s)?.[0] ?? "";
+
+  it("a linked row has a post form to unlink in every locale, even with the flag off; an unlinked row has none", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(email);
+    const cases: Array<[string, string, string]> = [
+      ["/me", "/me/identities/github/unlink", "Unlink GitHub"],
+      ["/vi/me", "/vi/me/identities/github/unlink", "Hủy liên kết GitHub"],
+      ["/zh-hans/me", "/zh-hans/me/identities/github/unlink", "取消关联 GitHub 账号"],
+      ["/zh-hant/me", "/zh-hant/me/identities/github/unlink", "取消連結 GitHub 帳號"],
+    ];
+    for (const [path, action, text] of cases) {
+      const html = section(await meHtml(path, cookie));
+      expect(html, path).toContain(`<form method="post" action="${action}">`);
+      expect(html, path).toContain(text);
+      expect(html, path).not.toContain('/link"'); // flags are off: nothing is linkable
+    }
+    await enableProvider("google");
+    resetFlagCache();
+    const rows = section(await meHtml("/me", cookie)).match(/<tr>.*?<\/tr>/gs) ?? [];
+    const google = rows.find((r) => r.includes("Google")) ?? "";
+    expect(google).toContain("/me/identities/google/link");
+    expect(google).not.toContain("unlink");
+  });
+
+  it("with no rows and every flag off, ?link=ok and ?link=failed render no section at all", async () => {
+    const { cookie } = await signIn(emailOf("lan"));
+    for (const value of ["ok", "failed"]) expect(await meHtml(`/me?link=${value}`, cookie), value).not.toContain('id="identities"');
+    const html = await meHtml("/me?link=notLinked", cookie);
+    expect(section(html)).toContain("That account wasn't linked, so nothing changed.");
+    expect(section(html)).toContain('role="status"');
+  });
+
+  it("after the last row is unlinked with every flag off, the notice is still shown (no rows, no form)", async () => {
+    const email = emailOf("lan");
+    await linkedUser(email, "github", { subject: `sub-${tag()}`, label: `l-${tag()}` });
+    const { cookie } = await signIn(email);
+    const res = await unlink("github", cookie);
+    const html = section(await meHtml(res.headers.get("location") ?? "/me", cookie));
+    expect(html).toContain("Account unlinked. You can still sign in with an email link.");
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("<tr>");
+    expect(await meHtml("/me", cookie)).not.toContain('id="identities"');
+  });
+});
+```
+Sửa `apps/web/test/me/identities.test.ts` (ba chỗ của 8a-1 chốt "unlink là của Task 9"): (1) test "every flag off and one linked account": đổi `expect(sectionOf(html)).not.toContain("<form")` thành `expect(sectionOf(html)).toContain('action="/me/identities/google/unlink"'); expect(sectionOf(html)).not.toContain('/link"');`; (2) test "a linked provider whose flag is off stays visible…": đổi `expect(rows[1]).not.toContain("<form")` thành `expect(rows[1]).toContain("/me/identities/linkedin/unlink")`; (3) test "a label equal to the provider name…": bỏ ý "unlink là của Task 9" khỏi tên, thay `expect((rowsOf(html)[0] ?? "").match(/LinkedIn/g)).toHaveLength(1)` bằng `expect(rowsOf(html)[0]).not.toContain('class="muted"')` và bỏ dòng `not.toContain("unlink")`. Thêm hai dòng vào `it.each` của "/me notices for ?link=" trong `test/auth/oauth-link.test.ts`: `["/me", "unlinked", "Account unlinked. You can still sign in with an email link."]`, `["/vi/me", "notLinked", "Tài khoản đó chưa được liên kết nên không có gì thay đổi."]`.
+
+- [ ] **Step 5: Chạy, thấy đỏ.** `npm test -w apps/web -- test/me/identity-unlink.test.ts test/me/identities.test.ts` → FAIL (route chưa có: 404; nút chưa có).
+
+- [ ] **Step 6: Cài đặt `LinkedAccounts`, route (xanh).**
+
+`apps/web/src/views/me/LinkedAccounts.tsx`: đổi tập thông báo và bảng khóa:
+
+```tsx
+export const LINK_NOTICES = ["ok", "taken", "hasProvider", "failed", "unlinked", "notLinked"] as const;
+const NOTICE_KEY = {
+  ok: "me.identities.notice.ok",
+  taken: "me.identities.notice.taken",
+  hasProvider: "me.identities.notice.hasProvider",
+  failed: "me.identities.notice.failed",
+  unlinked: "me.identities.notice.unlinked",
+  notLinked: "me.identities.notice.notLinked",
+} as const;
+const STATUS: readonly LinkNotice[] = ["ok", "unlinked", "notLinked"]; // told, not warned: only failed, taken, hasProvider are alerts
+```
+Cập nhật docstring (bỏ câu "Unlink is VNX-2605b…"). Thân component: `if (rows.length === 0 && notice !== "unlinked" && notice !== "notLinked") return null;` (Owner 2026-10-10: chỉ hai thông báo của unlink mới giữ mục khi không còn hàng); khối thông báo: `class={notice === "ok" ? "notice good" : "notice"}` và `role={STATUS.includes(notice) ? "status" : "alert"}` (`unlinked`, `notLinked` là `role="status"` với `class="notice"` trơn); bọc `<p class="muted">{intro}</p>` và `<div class="table-wrap">…</div>` trong `{rows.length > 0 ? (<>…</>) : null}`; ô thứ ba của hàng:
+
+```tsx
+                  <td>
+                    {linked ? (
+                      <form method="post" action={localizedPath(locale, `/me/identities/${provider}/unlink`)}>
+                        <button class="btn btn-ghost" type="submit">
+                          {tr("me.identities.unlink", { provider: name })}
+                        </button>
+                      </form>
+                    ) : linkable.includes(provider) ? (
+                      <form method="post" action={localizedPath(locale, `/me/identities/${provider}/link`)}>
+                        <button class="btn btn-ghost" type="submit">
+                          {tr("me.identities.link", { provider: name })}
+                        </button>
+                      </form>
+                    ) : null}
+                  </td>
+```
+`apps/web/src/routes/me.tsx`: thêm `unlinkIdentity` vào dòng import `../db/identities.ts`, import `isOAuthProvider` từ `../domain/identity.ts` và `notifyIdentityChange` từ `../notify/identity.ts`; đặt ngay sau route `…/link`:
+
+```ts
+  // ADR-012 §4: unlink is always allowed, flag on or off, configured or not (the e-mail link always remains). A POST that answers
+  // 303 to the same site only. `unlinkIdentity` filters by this user, audits `{ provider }` in its batch, and returns null (no audit) when nothing was linked.
+  onLocalized(app, "post", "/me/identities/:provider/unlink", requireUser, async (c) => {
+    const provider = c.req.param("provider");
+    if (!isOAuthProvider(provider)) return errorResponse(c, "notFound", 404);
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    const removed = await unlinkIdentity(c.env.DB, { userId: user.id, provider, now });
+    if (removed) await notifyIdentityChange(c.env, { kind: "unlinked", to: user.email, locale: user.locale, provider, label: removed.label, at: now, requestId: c.get("requestId") });
+    return c.redirect(`${localizedPath(c.get("locale"), "/me")}?link=${removed ? "unlinked" : "notLinked"}`, 303);
+  });
+```
+Chạy lại Step 5 → PASS.
+
+- [ ] **Step 7: Test email báo liên kết (đỏ).** Trong `apps/web/test/auth/oauth-link.test.ts`: import thêm `clearOutbox, FakeMailer, outbox` (`../../src/email/fake.ts`) và `formatUtc` (`../../src/email/templates/identity.ts`); trong `beforeEach` hiện có thêm `clearOutbox();`; thêm cuối file (dùng lại `comeBack`, `loggedCodes`, `logged`, `expectBack`, `identitiesOf`, `linkAudits`, `emailOf`, `identityOf`; nếu `logged` chưa export trong file thì nó đã là hàm cục bộ cùng file):
+
+```ts
+describe("the 'account linked' e-mail (VNX-2605b)", () => {
+  const mailTo = (address: string) => outbox.filter((m) => m.to === address);
+
+  it("a new link sends exactly one e-mail, to users.email, with provider, label and the audited UTC time", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { user, cookie } = await signIn(email);
+    const identity = { subject: `sub-${tag()}`, label: `l-${tag()}@gmail.example` }; // e-mail-shaped label
+    const { res } = await comeBack("github", cookie, identity);
+    expectBack(res, "/me?link=ok");
+    const mails = mailTo(email);
+    expect(mails).toHaveLength(1);
+    expect(mails[0]?.to).toBe(email);
+    expect(outbox).toHaveLength(1); // nothing to the label or anyone else
+    expect(mails[0]?.subject).toBe("GitHub was linked to your VNX.SI account");
+    expect(mails[0]?.text).toContain(identity.label);
+    const row = await testEnv.DB.prepare("SELECT linked_at FROM user_identities WHERE user_id = ?1").bind(user.id).first<{ linked_at: string }>();
+    expect(mails[0]?.text).toContain(formatUtc(row?.linked_at ?? ""));
+    expect(mails[0]?.text).toContain("contact@vnx.si");
+  });
+
+  it("is in users.locale", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email, { locale: "zh-Hant" });
+    await comeBack("github", cookie, identityOf(), "/vi");
+    expect(mailTo(email)[0]?.subject).toBe("GitHub 已連結到你的 VNX.SI 帳戶");
+  });
+
+  it("the same account again sends nothing (already_linked changes nothing)", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email);
+    const identity = identityOf();
+    await comeBack("github", cookie, identity);
+    await comeBack("github", cookie, identity);
+    expect(mailTo(email)).toHaveLength(1);
+  });
+
+  it("a conflict ('taken', 'hasProvider') sends nothing to anyone", async () => {
+    await enableProvider("github");
+    const shared = identityOf();
+    await linkedUser(emailOf("holder"), "github", shared);
+    const { cookie } = await signIn(emailOf("lan"));
+    expectBack((await comeBack("github", cookie, shared)).res, "/me?link=taken");
+    const mine = emailOf("mine");
+    await linkedUser(mine, "github", identityOf());
+    const { cookie: mineCookie } = await signIn(mine);
+    expectBack((await comeBack("github", mineCookie, identityOf())).res, "/me?link=hasProvider");
+    expect(outbox).toHaveLength(0);
+  });
+
+  it("a failing mailer keeps the link and the audit; one fixed log code, nothing else", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { user, cookie } = await signIn(email);
+    const identity = identityOf();
+    const send = vi.spyOn(FakeMailer.prototype, "send").mockRejectedValue(new Error(`boom ${email} ${identity.label} token=SECRET`));
+    const { res } = await comeBack("github", cookie, identity);
+    send.mockRestore(); // only this spy: `vi.restoreAllMocks()` would also drop the console spies the log assertions need
+    expectBack(res, "/me?link=ok");
+    expect(await identitiesOf(user.id)).toBe(1);
+    expect(await linkAudits(user.id)).toBe(1);
+    expect(loggedCodes()).toEqual(["notify_failed"]);
+    for (const line of logged()) for (const secret of [email, identity.label, "boom", "SECRET"]) expect(line).not.toContain(secret);
+  });
+
+  it("carries no state, verifier, nonce, code or session id, and no action link", async () => {
+    await enableProvider("github");
+    const email = emailOf("lan");
+    const { cookie } = await signIn(email);
+    const { link, code } = await comeBack("github", cookie, identityOf());
+    const mail = mailTo(email)[0];
+    const body = `${mail?.text}\n${mail?.html}`;
+    for (const secret of [link.flow?.state, link.flow?.verifier, link.flow?.nonce, code, cookie.split("=")[1]]) expect(body).not.toContain(secret ?? "x");
+    expect(body).not.toMatch(/[?&]t=|token=|code=|state=|\/auth\//i);
+    expect([...new Set(body.match(/https?:\/\/[^\s"<]+/g) ?? [])]).toEqual([`${testEnv.APP_ORIGIN}/me`]);
+  });
+});
+```
+Trong `apps/web/test/auth/oauth-link.test.ts` cần thêm hàm cục bộ `const logged = () => …` nếu chưa có (file đã có `loggedCodes` dựng từ `spies`; xuất `logged` bằng cách tách dòng `spies.flatMap(...)` thành hàm `logged` rồi `loggedCodes` gọi nó). Trong `identity-unlink.test.ts` `afterEach` gọi `vi.restoreAllMocks()` sau khi đã `mockRestore` các spy console.
+
+Chạy `npm test -w apps/web -- test/auth/oauth-link.test.ts` → FAIL ở "sends exactly one", "is in users.locale", "failing mailer" (chưa có email); các test "sends nothing" đã xanh, đúng.
+
+- [ ] **Step 8: Móc email trong `finishLink` (xanh).** `apps/web/src/routes/oauth.tsx`: import `notifyIdentityChange` từ `../notify/identity.ts` (không import thêm gì từ `db/`). Thay dòng chú thích `VNX-2605b` và dòng `if (linked.ok || …)` ngay sau `linkIdentity` bằng:
+
+```ts
+  // Only a real new link is told to the owner (not `already_linked`: nothing changed, and a replayed callback must not mail). The send never undoes the link.
+  if (linked.ok) await notifyIdentityChange(c.env, { kind: "linked", to: user.email, locale: user.locale, provider, label: linked.identity.label, at: linked.identity.linkedAt, requestId: c.get("requestId") });
+  if (linked.ok || linked.reason === "already_linked") return backToMe(c, flow.locale, "ok");
+```
+Chạy lại Step 7 → PASS.
+
+- [ ] **Step 9: Tiêu chí chấp nhận.** (`UN` = `apps/web/test/me/identity-unlink.test.ts`, `LK` = `apps/web/test/auth/oauth-link.test.ts`; chạy `npm test -w apps/web -- <đường dẫn> -t "<tên>"`)
+
+| # | Điều kiện | Lệnh |
+|---|---|---|
+| 1 | Hủy: hàng mất, audit `{provider}` duy nhất, một email tới đúng `users.email` có provider + `label` + giờ UTC, 303 `/me?link=unlinked` | `UN -t "removes the row"` |
+| 2 | Email theo `users.locale`; redirect theo locale của request | `UN -t "users.locale"` |
+| 3 | Cờ tắt, bật, thiếu cấu hình: vẫn hủy được | `UN -t "works whether"` |
+| 4 | Chưa liên kết, hoặc hàng của người khác: không đổi gì, không audit, không email, không lỗi to | `UN -t "has not linked"` và `UN -t "never touches another user"` |
+| 5 | Bấm hai lần: một audit, một email | `UN -t "second press"` |
+| 6 | Origin ngoài 403; chưa đăng nhập về `/login`; 404 tên lạ; 413; không redirect ra ngoài | `UN -t "foreign Origin"`, `UN -t "signed out"`, `UN -t "unknown provider"` |
+| 7 | Lỗi gửi mail không hoàn tác, log đúng một mã cố định, không địa chỉ/label/lỗi (hủy và liên kết) | `UN -t "failing mailer"` và `LK -t "failing mailer"` |
+| 8 | Email liên kết: đúng một lần khi liên kết mới, không gửi khi `already_linked` hay xung đột | `LK -t "account linked"` |
+| 9 | Không token/`code`/`state`/session trong email nào; URL duy nhất là `/me` trơn | `UN -t "carries no session id"`, `LK -t "no state"`, `npm test -w apps/web -- test/email/identity-templates.test.ts` |
+| 10 | Nút hủy 4 locale, kể cả cờ tắt; thông báo vẫn hiện sau hủy hàng cuối | `UN -t "Unlink button"` |
+| 11 | 4 locale đủ khóa | `npm test -w apps/web -- test/i18n/parity.test.ts` |
+| 12 | Ranh giới module (`me.tsx`, `oauth.tsx` đã trong allowlist; `notify/identity.ts` và template không import `db/identities`) | `npm test -w apps/web -- test/architecture.test.ts` |
+| 13 | Không hồi quy Task 8 | `npm test -w apps/web -- test/me test/auth` |
+| 14 | Typecheck, toàn bộ test | `npm run typecheck -w apps/web` và `npm test` |
+
+- [ ] **Step 10: Typecheck, toàn bộ test, commit**
+
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/email/templates/identity.ts apps/web/src/notify/identity.ts apps/web/src/routes/me.tsx apps/web/src/routes/oauth.tsx apps/web/src/views/me/LinkedAccounts.tsx \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/email/identity-templates.test.ts apps/web/test/me/identity-unlink.test.ts apps/web/test/me/identities.test.ts apps/web/test/auth/oauth-link.test.ts
+git commit -m "feat(web): unlink a linked account from /me and e-mail the owner on link and unlink (VNX-2605b)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Kích cỡ ước tính:** mã ≈ 120 dòng (template 40, notify 30, route 12, `LinkedAccounts` 25, `oauth.tsx` 4, `me.tsx` imports 4), test ≈ 330 dòng (templates 50, unlink 190, link-mail 80, sửa cũ 10), locale 11 khóa × 4 file. Dưới 600 không tính locale: không tách.
+
+**Nghĩa vụ cho task sau:**
+- **Task 12 (VNX-2607):** câu Privacy "We email you whenever an account is linked to or unlinked from yours" nay đúng với code (hai email, tới `users.email`, chứa `label`); đối chiếu khi chép: email không chứa token và không gửi cho `already_linked`.
+- **VNX-2608:** thử bằng provider thật: email tới hộp thư thật cho cả hai sự kiện, đúng giờ UTC, hiển thị ổn ở Gmail; xác nhận Resend không từ chối `label` lạ (GitHub login, email).
+- **VNX-2605c (bắt buộc trước VNX-2608, Owner 2026-10-10):** hủy liên kết hiện không kết thúc session `oauth_<provider>` đang sống; kẻ đã liên kết tài khoản của mình rồi đăng nhập bằng nó vẫn giữ phiên tới 30 ngày sau khi bị hủy liên kết. Task 9 giữ nguyên phạm vi; khoảng hở này ghi ở đây và xử lý ở VNX-2605c.
+- **Ghi nhận:** lỗi gửi mail chỉ có một dòng log, không có hàng đợi gửi lại (như M6: "không có cột retry"); nếu Owner muốn bảo đảm giao, đó là task riêng.
+
+#### Kết quả review Task 9 (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, MEDIUM-2, LOW-1..3, S1, S2; câu chữ và các quyết định do Owner duyệt 2026-10-10
