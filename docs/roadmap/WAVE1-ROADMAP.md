@@ -168,7 +168,7 @@ Plan: `docs/superpowers/plans/2026-10-05-vnxsi-m7-metrics.md` (Owner duyệt 202
 | VNX-0804 | Production: Resend domain, secrets, R2, migration remote | HUMAN, HIGH-RISK |
 | VNX-0805 | Runbook `docs/runbooks/deploy.md` (trạng thái prod, rollback), script smoke | AGENT |
 | VNX-0806 | Mời 20 builder sáng lập đầu tiên | HUMAN |
-| VNX-0807 | a11y: homepage không JS (thẻ sau của deck `inert`, review VNX-0802 R1), mẫu lỗi chung cho form render phía server (tiền tố `<title>`, khối tóm tắt có liên kết, focus không cần JS; review VNX-0802 F8), độ tin cậy E2E (R2, R3, R5). Plan `.ai/plans/VNX-0807-plan.md`. T1–T5 trước; T6 (login, hồ sơ hub, tiêu đề thread `/me`) sau khi EPIC 26 merge | AGENT |
+| VNX-0807 | a11y: homepage không JS (thẻ sau của deck `inert`, review VNX-0802 R1), mẫu lỗi chung cho form render phía server (tiền tố `<title>`, khối tóm tắt có liên kết, focus không cần JS; review VNX-0802 F8), độ tin cậy E2E (R2, R3, R5). Plan `.ai/plans/VNX-0807-plan.md`. T1–T5 trước; T6 (login, hồ sơ hub, tiêu đề thread `/me`) sau khi EPIC 26 merge (xong 2026-10-10) | AGENT |
 
 **Cổng ra Wave 1:** đạt điều kiện sang Wave 2 ở spec mục 2 (~100 product published).
 
