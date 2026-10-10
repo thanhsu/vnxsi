@@ -8,3 +8,8 @@ apps/web/worker-configuration.d.ts
 
 # Worktrees the coding agent creates (a full copy of the repo; never commit them).
 .claude/worktrees/
+
+# E2E (VNX-0802): local D1 of the suite and Playwright output.
+e2e/.state/
+playwright-report/
+test-results/

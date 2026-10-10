@@ -7,7 +7,15 @@
     "dev": "npm run dev -w apps/web",
     "deploy": "npm run deploy -w apps/web",
     "smoke": "node scripts/smoke.mjs",
-    "test:scripts": "node --test \"scripts/test/**/*.test.mjs\""
+    "test:scripts": "node --test \"scripts/test/**/*.test.mjs\"",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:headed": "playwright test -c e2e/playwright.config.ts --headed",
+    "e2e:typecheck": "tsc -p e2e/tsconfig.json --noEmit",
+    "e2e:install": "playwright install chromium"
   },
-  "engines": { "node": ">=22.18" }
+  "engines": { "node": ">=22.18" },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.64.0"
+  }
 }
