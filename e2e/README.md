@@ -37,7 +37,7 @@ Trình duyệt nằm ở `%LOCALAPPDATA%\ms-playwright` (Linux: `~/.cache/ms-pla
 |---|---|---|
 | `E2E_PORT` | `8799` | Cổng của `wrangler dev` dưới test. Không dùng 8787 (của `npm run dev` ở phiên khác). |
 | `E2E_INSPECTOR_PORT` | `9329` | Cổng inspector của workerd (mặc định 9229 của wrangler hay bị chiếm). Phải khác `E2E_PORT`. |
-| `E2E_RETRIES` | `0` ở máy local, `1` khi có `CI` | Số lần chạy lại test lỗi. Chỉ dùng làm biện pháp tạm khi máy rơi kết nối (mục "Sự cố"). Test nào phải retry mới xanh thì ghi vào báo cáo. |
+| `E2E_RETRIES` | `0` ở máy local, `1` khi có `CI` | Số lần chạy lại test lỗi. Chỉ dùng làm biện pháp tạm khi máy rơi kết nối (mục "Sự cố"). Test nào phải retry mới xanh thì ghi vào báo cáo. Tối đa `2`: seed chỉ có token đăng nhập cho 3 lần thử (`ATTEMPTS` trong `seed/fixtures.mjs`), lần thử thứ 4 của một test login dừng với lỗi rõ ràng. |
 | `E2E_CHANNEL` | trống (Chromium đi kèm) | `chrome` hoặc `msedge`: dùng trình duyệt đã cài sẵn thay cho bản tải về, khi đĩa chật. |
 | `BASE_URL` | trống | Chỉ nhận `http(s)://localhost` hoặc `127.0.0.1` đúng cổng `E2E_PORT`; mọi host khác bị từ chối ngay khi nạp cấu hình. Thường không cần đặt. |
 | `CI` | trống | Có giá trị thì `retries` = 1 và `test.only` bị cấm. |
@@ -97,7 +97,7 @@ Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản pr
 Mailer giả giữ outbox trong bộ nhớ của worker, Playwright không đọc được. Thay vào đó seed ghi thẳng vào D1 cục bộ:
 
 - một dòng `sessions` cho builder chính (fixture `builderPage` đặt cookie `__Host-vnx_session` tương ứng);
-- sáu dòng `login_tokens` dùng một lần (`OK_1`, `OK_2`, `OK_NEXT`, `OK_NEXT_EVIL`, `OK_A11Y`, `EXPIRED`), mỗi test tiêu token riêng.
+- các dòng `login_tokens`: mỗi token dùng một lần (`OK_1`, `OK_2`, `OK_NEXT`, `OK_NEXT_EVIL`) có một bản cho mỗi lần thử (`OK_1`, `OK_1_R1`, `OK_1_R2`; chọn bằng `tokenFor(key, test.info().retry)`), cộng `OK_A11Y` (chỉ GET, không tiêu) và `EXPIRED`. Mỗi test tiêu token riêng, nên retry vẫn có token mới.
 
 DB chỉ lưu sha256 của token và session, giống app. Token thô nằm trong `seed/fixtures.mjs` và chỉ có nghĩa với DB trong `e2e/.state/`; production không có dòng nào khớp. Không có route, cờ hay biến nào được thêm vào `apps/web`: bước xác minh vẫn đi qua `GET /auth/verify?t=` rồi `POST /auth/verify` do trình duyệt thật gửi, với `Origin` thật. Đây cũng là cách test Vitest đăng nhập (`signIn` trong `apps/web/test/fixtures.ts`).
 
@@ -105,7 +105,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
 
 - Import `test` và `expect` từ `../support/test`, **không** từ `@playwright/test` (chỉ `meta.spec.ts` được làm khác, vì nó cố tình gây lỗi). Fixture tự động ở đó chặn mọi request ra ngoài `localhost`/`127.0.0.1` và làm đỏ test khi có vi phạm CSP, `console.error` hay lỗi trang chưa bắt. Bộ nghe chỉ gắn vào fixture `page` (và `builderPage`, cùng một trang): trang mở bằng `context.newPage()` không được nghe.
 - Không ngủ theo thời gian cố định (hàm wait-for-timeout của `page`). Dùng assertion web-first (`toHaveText`, `toBeVisible`) hoặc `expect.poll`. `npm run test:scripts` có test quét các file `.ts`/`.mjs`/`.json` trong `e2e/` để chặn hàm đó, URL production và chuỗi giống secret; lệnh grep của AC12 trong plan quét cả thư mục, nên README này cố ý không viết nguyên tên hàm.
-- Mỗi test tự đủ, không phụ thuộc thứ tự: tạo product riêng, dùng token riêng (thêm token mới vào `seed/fixtures.mjs`).
+- Mỗi test tự đủ, không phụ thuộc thứ tự và chạy lại được: tạo product riêng (tên và slug theo `test.info().retry`, vì app gắn hậu tố ngẫu nhiên khi slug đã có), dùng token riêng qua `tokenFor` (thêm token mới vào `ONE_USE` trong `seed/fixtures.mjs`).
 - **Ngân sách POST** (hạn mức theo IP dùng chung khóa `unknown` vì `wrangler dev` không có `cf-connecting-ip`). Chỉ form hợp lệ mới bị đếm:
 
   | Route | Hạn mức trong app | Bộ test hiện dùng |
@@ -115,7 +115,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
   | `POST /auth/verify` | không có | 4 |
 
   Thêm spec có POST thì cập nhật bảng này. Với `E2E_RETRIES` lớn, một test lỗi nhiều lần có thể chạm hạn mức (429).
-- Đổi seed: chạy `npm run test:scripts`. `scripts/test/e2e-seed.test.mjs` áp mọi migration lên SQLite trong bộ nhớ, kiểm khóa ngoại và các ngưỡng `MIN` của homepage. Ngưỡng `MIN` được chép tay từ `apps/web/src/domain/public-stats.ts`: đổi ở app thì sửa cả test.
+- Đổi seed: chạy `npm run test:scripts`. `scripts/test/e2e-seed.test.mjs` áp mọi migration lên SQLite trong bộ nhớ, kiểm khóa ngoại và các ngưỡng `MIN` của homepage. Test đọc bảng `MIN` thẳng từ `apps/web/src/domain/public-stats.ts` (regex trên văn bản), nên ngưỡng ở app tăng thì test này đỏ trước cả `global-setup`.
 - Quét a11y: `await scanA11y(page, { page: "/duong-dan", locale: "en" })`. Vi phạm làm đỏ test. Vi phạm có sẵn mà task hiện tại không được sửa app thì thêm vào `support/a11y-known.ts` kèm mã phát hiện; mục không còn khớp vi phạm nào cũng làm đỏ test. Danh sách hiện rỗng.
 
 ## Đọc kết quả
@@ -124,6 +124,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
 - Lỗi axe in `id (impact): help` và danh sách selector của từng node.
 - `E2E setup: homepage snapshot not ready ...`: seed thấp hơn một ngưỡng `MIN` (thường do ai đó đổi ngưỡng ở app). Chạy `npm run test:scripts` để biết khối nào.
 - `E2E infrastructure: /assets/app.css did not load`: trang không có CSS (lỗi mạng của máy, xem dưới), không phải lỗi a11y.
+- Một script của trang (`landing.js`, `home.js`) nạp lỗi (`net::ERR_NO_BUFFER_SPACE` ...) thì axe quét trang ở trạng thái "không JavaScript" và có thể báo vi phạm **thật** của trạng thái đó (ví dụ `target-size` trên thẻ sau của deck homepage khi `landing.js` không chạy, review VNX-0802). Xem dòng `console.error: Failed to load resource` trong cùng test trước khi kết luận: lỗi nạp là của máy, còn vi phạm thì là phát hiện riêng.
 
 ## Sự cố
 
@@ -134,7 +135,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
   Get-Process -Id <PID> | Select-Object Id, ProcessName, StartTime
   ```
 
-  Máy khỏe có khoảng 100-200 socket `Bound`. Chỉ dừng tiến trình do chính mình khởi động. Không dừng được thì tạm chạy `E2E_RETRIES=3 npm run e2e` và ghi các test phải retry mới xanh vào báo cáo.
+  Máy khỏe có khoảng 100-200 socket `Bound`. Chỉ dừng tiến trình do chính mình khởi động. Không dừng được thì tạm chạy `E2E_RETRIES=2 npm run e2e` và ghi các test phải retry mới xanh vào báo cáo.
 - **`workerd` mồ côi** (Playwright bị giết cứng, cổng 8799 vẫn bị giữ): tìm PID bằng `Get-NetTCPConnection -LocalPort 8799 -State Listen` rồi `taskkill /PID <pid> /T /F`. `taskkill /IM workerd.exe /F` chỉ khi chắc chắn không phiên nào khác đang chạy `wrangler dev` hay `npm test`.
 - **Bộ nhớ:** không chạy `npm run e2e` cùng lúc với `npm test` toàn bộ trên máy dùng chung. workerd báo "JavaScript heap out of memory" ở heap rất nhỏ nghĩa là máy hết commit memory.
 - **Không bao giờ `rm -rf node_modules`** trong worktree (link workspace trỏ vào `apps/web` và Git Bash xóa theo link). Cần cài lại thì `npm ci`.

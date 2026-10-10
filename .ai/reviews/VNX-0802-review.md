@@ -79,3 +79,58 @@
 - **Task a11y theo dõi cho Owner (F8), đề xuất làm trước ra mắt M8:** một mẫu lỗi form thống nhất cho mọi form render phía server (Inquiry, login, request, contact, các bước product, hồ sơ builder): (1) `<title>` có tiền tố "Lỗi:"/"Error:" khi trả 4xx; (2) khối tóm tắt lỗi ở đầu form, liệt kê từng lỗi kèm liên kết tới field; (3) chuyển focus không cần JS bằng `autofocus` lên khối tóm tắt (`tabindex="-1"`) hoặc field lỗi đầu tiên; (4) thêm test E2E cho focus và tóm tắt. Không phải vi phạm WCAG 2.2 AA theo axe, nên Owner có thể dời sau ra mắt.
 - **P2 của plan** vẫn mở: upload ảnh R2, gửi duyệt/xuất bản, inquiry khi đã đăng nhập, request board, tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang 4xx, Firefox/WebKit, cảm ứng.
 - **`CURRENT-STATUS.md`:** cập nhật khi có verdict cuối, kèm "Ghi nhận" F3 và F4, và ghi rằng báo cáo nói wrangler 4.147.0 (lock) chứ không phải 4.149.0 như plan.
+
+## Re-review (vòng sửa 1, `4bc99de`)
+
+- **Ngày:** 2026-10-10. **Đã đọc:** diff `58e2948..4bc99de` (`serve.mjs`, `seed/fixtures.mjs`, `editor.spec.ts`, `home.spec.ts`, `login.spec.ts`, `e2e-seed.test.mjs`, mục "Vòng sửa 1" của báo cáo); thêm `public/assets/landing.js`, `views/landing/Deck.tsx` và CSS `.deck-card` để chẩn đoán lần đỏ mà Implementer gặp.
+- **Lệnh đã chạy lại:**
+  - `npm run e2e` **hai lần liên tiếp**: **49 passed (1.1 m)** và **49 passed (1.1 m)**, không retry. Trước khi chạy: 103 socket `Bound` (máy khỏe), cổng 8799/9329 trống.
+  - `npm run test:scripts`: `# tests 52  # pass 52  # fail 0`. `npm run e2e:typecheck`: exit 0.
+  - `git diff --stat origin/main -- apps/`: rỗng.
+  - `git reflog`: từ khi tạo worktree chỉ có các commit của task. Mục `reset: moving to HEAD` lúc 13:07:45 là do `git worktree add`, trước commit plan. Không thấy checkout hay reset trong vòng sửa. Báo cáo khai không dùng `checkout`/`restore`/`reset`; `restore` một file không để lại dấu trong reflog, nên bằng chứng ở đây là lời khai cộng với cây làm việc sạch.
+  - **Thí nghiệm của Reviewer** (script tạm ngoài repo, server riêng `E2E_PORT=8821`, dừng cả cây tiến trình sau đó): chạy axe trên `/` khi chặn `landing.js` hoặc `home.js` bằng `route.abort`, với `reducedMotion` là `no-preference` và `reduce`, quét lúc vừa tải và sau khi transition xong.
+
+    | Trạng thái | Lúc tải | Sau transition |
+    |---|---|---|
+    | bình thường, có chuyển động | `color-contrast` (8 node: nút hero, thẻ deck đang fade) | sạch |
+    | bình thường, `reduce` | sạch | sạch |
+    | **chặn `landing.js`**, có chuyển động | `color-contrast` (như trên) + **`target-size` `.btn-sm.btn-primary[href$="market-product-03"]`** | **`target-size`** (cùng node) |
+    | **chặn `landing.js`**, `reduce` | **`target-size`** (cùng node) | **`target-size`** (cùng node) |
+    | chặn `home.js` | như bình thường | sạch |
+
+### Đánh giá các bản sửa
+
+| # | Kết quả | Ghi chú |
+|---|---|---|
+| F1 | ✓ Đóng | `recordCounts` (init script + `MutationObserver`, gắn trước script đầu tiên) ghi lịch sử chữ của từng `[data-count]`. Test count-up đòi có một giá trị khác số cuối **và** giá trị cuối đúng bằng `formatEn(data-count)`. Test reduced-motion cuộn tới từng ô (lúc `IntersectionObserver` sẽ chạy nếu JS bỏ qua `reduce`) rồi đòi lịch sử đúng bằng `[final]`. Cả hai giờ đỏ nếu animation không chạy, dừng ở số sai, hoặc đi qua 0 khi `reduce`. Xem R3 (gợi ý nhỏ). |
+| F2 | ✓ Đóng (theo đọc mã) | Mỗi token dùng một lần có 3 bản; `tokenFor(key, retry)` ném lỗi rõ khi vượt số lần thử. Editor đặt tên và slug theo `test.info().retry`. Chưa có retry thật để kích, nhưng test seed khẳng định mọi token khác nhau và đều được gieo. Ngân sách rate limit vẫn dư với 3 lần thử. README đã sửa theo (R4). |
+| F5 | ✓ Đóng | Chỉ kiểm `process.argv`; test node vẫn đếm đúng 2 lần `--remote`. |
+| F6 | ✓ Đóng | `MIN` đọc từ `public-stats.ts` bằng regex, kèm test "mọi ngưỡng là số nguyên dương", nên regex hỏng thì test đỏ chứ không im lặng. |
+| F7 | ✓ Đóng | Có chú thích trong khối "JavaScript off". |
+
+### Lần đỏ Implementer gặp (1 trong 4 lần chạy): lỗi máy hay lỗi thật?
+
+**Nguyên nhân kích hoạt là lỗi máy, nhưng vi phạm axe là thật.** `net::ERR_NO_BUFFER_SPACE` là cạn bộ đệm socket cục bộ, cùng sự cố đã ghi trong báo cáo. Hai lần chạy liên tiếp của Reviewer trên máy khỏe đều xanh, nên đây không phải flake của test hay của bản sửa.
+
+Tuy vậy, `target-size` mà axe báo khi `landing.js` không nạp **không phải vi phạm giả**. Thí nghiệm trên cho thấy nó lặp lại tất định mỗi khi `landing.js` không chạy (JavaScript tắt, script bị chặn, mạng lỗi), ở cả hai chế độ chuyển động. Lý do: `Deck.tsx` render sẵn ba thẻ chồng nhau theo `data-slot`, nhưng chỉ `landing.js` mới đặt `inert` + `aria-hidden` cho các thẻ phía sau. Thiếu script thì nút "xem product" của thẻ sau vẫn là một đích bấm, bị thẻ trước che gần hết, nên phần còn bấm được nhỏ hơn mức 24 px của WCAG 2.2 SC 2.5.8 (AA). Trang này được thiết kế để chạy cả khi không có JS (theo chú thích của `Deck.tsx` và `landing.js`), nên đây là lỗi của app ở một trạng thái được hỗ trợ.
+
+### Phát hiện mới
+
+| # | Mức | File:dòng | Vấn đề | Đề xuất | Ai sửa |
+|---|---|---|---|---|---|
+| R1 | MEDIUM (app, ngoài phạm vi) | `apps/web/src/views/landing/Deck.tsx:61,90`; `public/assets/landing.js:15-19` | Khi `landing.js` không chạy, homepage vi phạm WCAG 2.2 AA `target-size` (2.5.8) trên nút của thẻ deck phía sau (`.btn-sm.btn-primary[href$="market-product-03"]`). Lỗi tất định, đã tái hiện. Bộ E2E không bao giờ quét trạng thái này: mọi lượt quét đều có JS, và axe không chạy được trong context tắt JS. | Task sửa app do Owner duyệt. Ví dụ: render thẻ sau với `inert`/`aria-hidden` ngay từ server rồi để `landing.js` bật/tắt, hoặc chỉ xếp chồng khi có lớp do JS gắn. Không sửa trong VNX-0802 (OQ-1). | Owner quyết, task mới |
+| R2 | LOW | `e2e/support/a11y.ts:11-17`; `e2e/tests/a11y.spec.ts` | `settle()` chỉ kiểm `app.css`. Khi một script cùng origin nạp lỗi, axe làm đỏ test trước, còn lỗi nạp chỉ hiện ở teardown của fixture CSP/console, nên khó phân biệt "máy lỗi" với "app lỗi". Ngoài ra trạng thái "không có `landing.js`" chưa được quét có chủ ý (R1). | (a) `settle()` ghi `requestfailed` của tài nguyên cùng origin và ném `E2E infrastructure: <url> failed (<errorText>)` trước khi quét. (b) Thêm một biến thể quét `/` với `route.abort` cho `/assets/landing.js` và `/assets/home.js` (giả lập không JS mà axe vẫn chạy được), kèm một mục `KNOWN_A11Y` trỏ tới mã phát hiện của R1 cho tới khi app được sửa. Làm cùng task R1. | Implementer (trong task R1) |
+| R3 | SUGGESTION | `e2e/tests/home.spec.ts:56-62` | `moved` cũng đúng nếu lịch sử có một chuỗi rỗng, ghi lúc parser chèn phần tử trước phần text. Thực tế chưa xảy ra (lịch sử reduced-motion đúng bằng `[final]` ở mọi lần chạy), nhưng điều kiện có thể chặt hơn. | Đòi giá trị trung gian là một số (`/\d/`) khác số cuối. | Implementer, khi tiện |
+| R4 | LOW (tài liệu, Reviewer đã sửa) | `e2e/README.md` | README khuyên `E2E_RETRIES=3`, nhưng seed chỉ có token cho 3 lần thử (retry 0..2), nên lần thử thứ 4 của test login sẽ ném lỗi. README cũng còn mô tả token và `MIN` theo bản cũ. | Đã sửa trong commit của re-review này: tối đa `E2E_RETRIES=2`, mô tả `tokenFor`/`ONE_USE`, `MIN` đọc từ nguồn, và ghi chú "script nạp lỗi thì axe có thể báo vi phạm thật của trạng thái không JS". | Reviewer-writer (xong) |
+| R5 | SUGGESTION | `e2e/support/a11y.ts:11-17` | Khi có chuyển động, ngay lúc tải axe thấy `color-contrast` tạm thời (hero và deck đang fade). Lượt "en / with motion" hiện chờ count-up xong nên đã qua transition, nhưng đó là nhờ thời gian chứ không phải một điều kiện được kiểm. | Với biến thể `motion`, `settle()` chờ mọi animation hữu hạn (`document.getAnimations()`, bỏ qua animation lặp vô hạn) kết thúc rồi mới quét. | Implementer, khi tiện |
+
+### Verdict cuối
+
+**APPROVE.** Các bản sửa F1, F2, F5, F6, F7 đúng và đủ. Hai lần `npm run e2e` liên tiếp xanh 49/49 không retry; `test:scripts` 52/52; typecheck sạch; `apps/` không đổi. Lần đỏ Implementer gặp là do mạng của máy, không phải flake của bộ test. Tuy nhiên nó làm lộ một vi phạm **thật** của app (R1, MEDIUM), đúng loại việc OQ-1 để ngoài task này. Các mục còn mở không chặn merge VNX-0802:
+
+- **Cho Owner:** duyệt một task a11y theo dõi gồm ba phần:
+  - R1: deck homepage khi không có `landing.js`. MEDIUM, nên làm trước khi ra mắt M8 vì là vi phạm WCAG 2.2 AA thật.
+  - F8: mẫu lỗi chung cho các form render phía server (tiêu đề, tóm tắt lỗi, focus).
+  - R2: E2E báo rõ khi tài nguyên nạp lỗi, và quét trạng thái không có `landing.js` kèm một mục `KNOWN_A11Y`.
+- **AC13** vẫn chờ push: xem job `e2e` của `web-ci`, thời gian job, `dependency-review` và `gitleaks`.
+- R3 và R5 là gợi ý, làm khi tiện.
