@@ -340,8 +340,8 @@ Owner, trước khi ElevenLabs chạy thật:
   - Quy tắc: form dùng mẫu báo lỗi không được để fragment trong `action` (trình duyệt bỏ `autofocus`); waitlist đã bỏ `#notify` (thành công vẫn về `/?joined=1#notify`).
   - Form `/admin/*`, `/ops/*` giữ mẫu lỗi cũ (ngoài phạm vi). Mẫu lỗi ở form hub, thread, invitations chỉ có test Vitest. `autofocus` trên `tabindex=-1` chỉ thử trên Chromium.
   - (F9) Thêm quét không JS cho chồng thẻ product khi seed E2E có ≥ 3 product công khai.
-  - (F6, chờ Owner) Task HUMAN "mời ~100 builder" đổi mã VNX-0807 → VNX-0808 vì trùng.
-  - (F7, VNX-0801) Chuỗi `form.error.*` zh do AI dịch; tiền tố zh `错误：` + dấu cách ASCII, nhờ người bản xứ đọc lại.
+  - (F6) Task HUMAN "mời ~100 builder" đổi mã VNX-0807 → VNX-0808 vì trùng: Owner xác nhận 2026-10-10.
+  - (F7, VNX-0801, Owner đồng ý 2026-10-10) Chuỗi `form.error.*` zh do AI dịch; tiền tố zh `错误：` + dấu cách ASCII: đã vào danh sách người bản xứ đọc lại.
 - **VNX-0802:**
   - (F3) Implementer chạy `git checkout -- package.json` một lần (chỉ thay đổi chưa commit của chính nó, có khai báo). Từ nay handoff ghi rõ: hoàn tác bằng cách sửa file, không checkout/restore/reset.
   - (F4) Không có `.ai/tasks/VNX-0802-handoff.md` (lặp VNX-0805 F9): plan đã duyệt + lệnh giao việc dùng làm handoff.
