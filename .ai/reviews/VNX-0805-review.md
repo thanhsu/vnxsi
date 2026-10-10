@@ -79,3 +79,7 @@
 - **VNX-0804 (`www` → apex):** thêm check redirect `www.vnx.si` vào bảng smoke và bỏ dòng "chưa kiểm" ở mục 7.
 - **Task dọn Privacy hai bản (sau 2026-11-21) và mọi task đổi Terms/Privacy:** cập nhật ngày "Last updated" mong đợi ở mục 4 và mục 11 của runbook.
 - **Lần sao lưu FTS5 thật đầu tiên (Owner):** thử đúng lệnh ở mục 10 (sau F1) trên D1 nháp, rồi ghi kết quả vào runbook.
+
+## Re-review (2026-10-10, controller Opus)
+
+**Verdict cuối: APPROVE.** Vòng sửa 1: `6d9f0f3` (Implementer: F3 check `/vi/ops` có `no-store` + noindex, F7 in từng dòng và dừng sau 3 lỗi mạng liên tiếp) và `9e38683` (Reviewer-writer: F1, F2, F3, F5, F6, F8 trong runbook). Đã chạy lại: `npm run test:scripts` 20/20; `git diff --stat origin/main -- apps/ package-lock.json` rỗng; smoke production (Implementer, một lần) 64/64. F4, F9, F10 ghi vào `CURRENT-STATUS.md` mục Ghi nhận.
