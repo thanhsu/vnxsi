@@ -849,6 +849,7 @@ export const zhHant: Messages = {
   "flags.desc.oauth_google": "使用 Google 登入和連結帳號。關閉後隱藏按鈕，回呼回傳 404。",
   "flags.desc.oauth_github": "使用 GitHub 登入和連結帳號。關閉後隱藏按鈕，回呼回傳 404。",
   "flags.desc.oauth_linkedin": "使用 LinkedIn 登入和連結帳號。關閉後隱藏按鈕，回呼回傳 404。",
+  "flags.desc.request_board": "公開需求板（/requests）：需求表單上的公開選項、需求列表與頁尾連結。僅在 REQUEST_BOARD_GO_LIVE 當天及之後且此開關開啟時生效。關閉後全部隱藏（頁面回傳 404）；客戶仍可撤回，營運仍可拒絕或下架。",
   "admin.nav.merchants": "商家",
   "partner.saved": "已儲存。",
   "partner.status.active": "啟用",

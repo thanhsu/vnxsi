@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deleteExpiredPendingRequests, deletePendingRequestStatement } from "../../src/db/requests.ts";
+import { parsePublicListing } from "../../src/domain/request-board.ts";
 import { ulid } from "../../src/lib/ulid.ts";
 import { makeBuilder, makeRequest } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
@@ -125,5 +126,22 @@ describe("0018_request_board (addendum §6)", () => {
     expect(await count("SELECT COUNT(*) AS n FROM request_interests WHERE request_id = ?1", old.request.id)).toBe(0);
     expect(await count("SELECT COUNT(*) AS n FROM request_publications WHERE request_id = ?1", fresh.request.id)).toBe(1);
     expect(await count("SELECT COUNT(*) AS n FROM request_interests WHERE request_id = ?1", fresh.request.id)).toBe(1);
+  });
+
+  it("S-1: the CHECK length() counts code points, and the domain parser counts the same way", async () => {
+    const e = "😀"; // 2 UTF-16 code units, 1 code point
+    const lengthOf = async (v: string) => (await db().prepare("SELECT length(?1) AS n").bind(v).first<{ n: number }>())!.n;
+    expect(await lengthOf(e.repeat(20))).toBe(20);
+    const { request } = await makeRequest({ tag: "rbm-cp" });
+    // 120 emoji = 240 code units: the title CHECK (1..120) accepts it; 20 emoji = 40 code units but 20 code points: the description CHECK (40..4000) refuses it.
+    await expect(insertPublication(request.id, { public_title: e.repeat(121) })).rejects.toThrow();
+    await expect(insertPublication(request.id, { public_description: e.repeat(20) })).rejects.toThrow();
+    await insertPublication(request.id, { public_title: e.repeat(120), public_description: e.repeat(40) });
+    // The parser agrees on each of those four cases.
+    const parse = (title: string, description: string) => parsePublicListing({ title, description });
+    expect(parse(e.repeat(121), "d".repeat(40)).ok).toBe(false);
+    expect(parse("t", e.repeat(20)).ok).toBe(false);
+    expect(parse(e.repeat(120), e.repeat(40)).ok).toBe(true);
+    expect(parse("t", e.repeat(4001)).ok).toBe(false);
   });
 });

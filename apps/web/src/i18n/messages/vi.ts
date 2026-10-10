@@ -850,6 +850,7 @@ export const vi: Messages = {
   "flags.desc.oauth_google": "Đăng nhập và liên kết bằng Google. Tắt thì ẩn nút và callback trả 404.",
   "flags.desc.oauth_github": "Đăng nhập và liên kết bằng GitHub. Tắt thì ẩn nút và callback trả 404.",
   "flags.desc.oauth_linkedin": "Đăng nhập và liên kết bằng LinkedIn. Tắt thì ẩn nút và callback trả 404.",
+  "flags.desc.request_board": "Bảng request công khai (/requests): ô opt-in ở form request, các tin đăng và link ở chân trang. Chỉ có hiệu lực từ REQUEST_BOARD_GO_LIVE trở đi và khi cờ này bật. Tắt thì ẩn tất cả (trang trả 404); client vẫn gỡ được tin đăng, Ops vẫn từ chối hoặc gỡ được.",
   "admin.nav.merchants": "Merchant",
   "partner.saved": "Đã lưu.",
   "partner.status.active": "Đang hoạt động",

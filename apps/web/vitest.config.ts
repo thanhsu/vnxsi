@@ -31,6 +31,8 @@ export default defineConfig(async () => {
             LINKEDIN_CLIENT_SECRET: "",
             // Pinned empty so the committed production go-live date never changes the suite; tests that need a date set it per request (M7).
             PRIVACY_NOTICE_GO_LIVE: "",
+            // Pinned empty too (EPIC 27): the committed production date never changes the suite; a test that needs the board on sets a past date in the env of its own request.
+            REQUEST_BOARD_GO_LIVE: "",
           },
         },
       }),

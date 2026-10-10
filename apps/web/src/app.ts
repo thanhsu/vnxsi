@@ -37,6 +37,7 @@ import { registerAdminFeedbackRoutes } from "./routes/admin-feedback.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
+import { isRequestBoardEnabled } from "./http/request-board.ts";
 import { registerAdminFlagRoutes } from "./routes/admin-flags.tsx";
 import { registerAdminMerchantRoutes } from "./routes/admin-merchants.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
@@ -61,6 +62,11 @@ export function createApp() {
   app.use("*", originCheck);
   app.use("*", requestBodyLimit);
   app.use("*", sessionMiddleware);
+  // EPIC 27 (M1): the board gate. Checks the date first, so no D1 read happens before REQUEST_BOARD_GO_LIVE.
+  app.use("*", async (c, next) => {
+    c.set("requestBoard", await isRequestBoardEnabled(c.env));
+    await next();
+  });
   app.use("*", noStorePrivate);
 
   registerLandingRoutes(app);

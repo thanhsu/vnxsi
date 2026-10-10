@@ -847,6 +847,7 @@ export const en = {
   "flags.desc.oauth_google": "Sign-in and linking with Google. Off hides the button and the callback answers 404.",
   "flags.desc.oauth_github": "Sign-in and linking with GitHub. Off hides the button and the callback answers 404.",
   "flags.desc.oauth_linkedin": "Sign-in and linking with LinkedIn. Off hides the button and the callback answers 404.",
+  "flags.desc.request_board": "Public request board (/requests): the opt-in on the request form, the listings and the footer link. Takes effect only on and after REQUEST_BOARD_GO_LIVE and only while this flag is on. Off hides all of it (pages answer 404); clients can still withdraw a listing and Ops can still reject or unpublish.",
   "admin.nav.merchants": "Merchants",
   "partner.saved": "Saved.",
   "partner.status.active": "Active",

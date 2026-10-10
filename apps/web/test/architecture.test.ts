@@ -141,6 +141,7 @@ const RANKING_FILES = [
   // VNX-2702a (EPIC 27): the public request board's queries; one order, published_at DESC then public_id DESC. Later tasks add the files they create:
   // domain/request-board.ts (2702b), routes/request-board.tsx (2705a), routes/ops-request-board.tsx (2704a), views/requests/* (2705a).
   "../src/db/request-board.ts",
+  "../src/domain/request-board.ts",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds

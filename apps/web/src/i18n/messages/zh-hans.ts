@@ -849,6 +849,7 @@ export const zhHans: Messages = {
   "flags.desc.oauth_google": "使用 Google 登录和关联账号。关闭后隐藏按钮，回调返回 404。",
   "flags.desc.oauth_github": "使用 GitHub 登录和关联账号。关闭后隐藏按钮，回调返回 404。",
   "flags.desc.oauth_linkedin": "使用 LinkedIn 登录和关联账号。关闭后隐藏按钮，回调返回 404。",
+  "flags.desc.request_board": "公开需求板（/requests）：需求表单上的公开选项、需求列表和页脚链接。仅在 REQUEST_BOARD_GO_LIVE 当天及之后且此开关开启时生效。关闭后全部隐藏（页面返回 404）；客户仍可撤回，运营仍可拒绝或下架。",
   "admin.nav.merchants": "商家",
   "partner.saved": "已保存。",
   "partner.status.active": "启用",

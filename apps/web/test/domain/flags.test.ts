@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { FLAG_CACHE_TTL_MS, FLAG_KEYS, isFlagKey } from "../../src/domain/flags.ts";
 
 describe("feature flag keys (addendum §3.1)", () => {
-  it("are the seven keys of the addendum, then one per OAuth provider (ADR-012), in order", () => {
+  it("are the seven keys of the addendum, one per OAuth provider (ADR-012), then request_board (EPIC 27), in order", () => {
     expect([...FLAG_KEYS]).toEqual([
+      "affiliate", "partner_referral", "sponsored_listings", "ads", "lead_generation", "ai_content", "content_indexing",
+      "oauth_google", "oauth_github", "oauth_linkedin", "request_board",
+    ]);
+    expect(FLAG_KEYS).toHaveLength(11);
+    expect(FLAG_KEYS.slice(0, 10)).toEqual([
       "affiliate", "partner_referral", "sponsored_listings", "ads", "lead_generation", "ai_content", "content_indexing",
       "oauth_google", "oauth_github", "oauth_linkedin",
     ]);

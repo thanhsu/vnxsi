@@ -16,6 +16,7 @@ const DESC: Record<FlagKey, MessageKey> = {
   oauth_google: "flags.desc.oauth_google",
   oauth_github: "flags.desc.oauth_github",
   oauth_linkedin: "flags.desc.oauth_linkedin",
+  request_board: "flags.desc.request_board",
 };
 
 export const FlagsPage: FC<{ locale: Locale; origin: string; flags: FlagState; done: boolean }> = (p) => {

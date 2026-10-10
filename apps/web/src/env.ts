@@ -26,6 +26,8 @@ export interface Bindings {
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
   PRIVACY_NOTICE_GO_LIVE?: string;
+  /** EPIC 27: the date (YYYY-MM-DD, UTC) from which the public request board may be on. Committed in wrangler.jsonc, never set by --var or the dashboard. Empty or malformed = off. */
+  REQUEST_BOARD_GO_LIVE?: string;
   /** Secret for the daily visitor hash (VNX-0707a). Unset: no views or clicks are counted and no visitor cookie is set. `wrangler secret put ANALYTICS_SALT`; `.dev.vars` locally; never in the repo. */
   ANALYTICS_SALT?: string;
 }
@@ -40,5 +42,7 @@ export type AppEnv = {
     builder: Builder;
     /** Only set after `requireOps` (auth/ops.ts): the role resolved for this request. */
     opsRole: OpsRole;
+    /** EPIC 27: the board gate for this request (date first, then the flag); set by a middleware right after the session. */
+    requestBoard: boolean;
   };
 };
