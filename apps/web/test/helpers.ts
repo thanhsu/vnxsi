@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { resetFlagCache } from "../src/db/flags.ts";
 import type { Bindings } from "../src/env.ts";
 
 export const testEnv = env as unknown as Bindings;
@@ -64,4 +65,47 @@ export function expectErrorSummary(html: string, ids: readonly string[], opts: {
   if (/\bundefined\b/.test(body)) throw new Error("summary contains the word undefined");
   if (/role="alert"/.test(html)) throw new Error('page still has role="alert"');
   return body;
+}
+
+/**
+ * VNX-2702a: counts the D1 queries a request makes. Returns a proxy of `env` (testEnv is not touched) to pass to `createApp().request`,
+ * and `queries()`. Each `first`/`all`/`run`/`raw` counts 1 and `batch([...n statements])` counts n. Resets the 60 s flag cache first so
+ * the first flag read of the request is counted like a cold isolate's. Only the `DB` binding is wrapped.
+ */
+export function countD1Queries(base: Bindings = testEnv): { env: Bindings; queries: () => number } {
+  resetFlagCache();
+  let n = 0;
+  // db.batch needs the real statement objects, so each counting proxy remembers its target.
+  const unwrap = new WeakMap<object, D1PreparedStatement>();
+  const countStatement = (stmt: D1PreparedStatement): D1PreparedStatement => {
+    const proxy: D1PreparedStatement = new Proxy(stmt, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target) as unknown;
+        if (prop === "bind" && typeof value === "function") return (...args: unknown[]) => countStatement((value as (...a: unknown[]) => D1PreparedStatement).apply(target, args));
+        if ((prop === "first" || prop === "all" || prop === "run" || prop === "raw") && typeof value === "function") {
+          return (...args: unknown[]) => {
+            n++;
+            return (value as (...a: unknown[]) => unknown).apply(target, args);
+          };
+        }
+        return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    unwrap.set(proxy, stmt);
+    return proxy;
+  };
+  const db = new Proxy(base.DB, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target) as unknown;
+      if (prop === "prepare" && typeof value === "function") return (sql: string) => countStatement((value as (q: string) => D1PreparedStatement).call(target, sql));
+      if (prop === "batch" && typeof value === "function") {
+        return (statements: D1PreparedStatement[]) => {
+          n += statements.length;
+          return (value as (s: D1PreparedStatement[]) => unknown).call(target, statements.map((s) => unwrap.get(s) ?? s));
+        };
+      }
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+  return { env: { ...base, DB: db as D1Database }, queries: () => n };
 }

@@ -52,6 +52,9 @@ const WRITERS: Record<string, string> = {
   ops_members: "../src/db/ops-members.ts",
   ops_member_invites: "../src/db/ops-members.ts",
   user_identities: "../src/db/identities.ts",
+  // EPIC 27 (public request board).
+  request_publications: "../src/db/request-board.ts",
+  request_interests: "../src/db/request-board.ts",
 };
 
 /** Table names behind a write: INSERT, INSERT OR IGNORE/REPLACE, REPLACE INTO, UPDATE, DELETE (VNX-0701b). */
@@ -135,6 +138,9 @@ const RANKING_FILES = [
   // VNX-0703b: Top builders and Top products.
   "../src/views/home/TopBuilders.tsx",
   "../src/views/home/TopProducts.tsx",
+  // VNX-2702a (EPIC 27): the public request board's queries; one order, published_at DESC then public_id DESC. Later tasks add the files they create:
+  // domain/request-board.ts (2702b), routes/request-board.tsx (2705a), routes/ops-request-board.tsx (2704a), views/requests/* (2705a).
+  "../src/db/request-board.ts",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds
@@ -269,6 +275,14 @@ describe("ranking never reads money (ADR-007 rule 2, ADR-004)", () => {
       for (const table of MONEY_TABLES) expect(touchesMoneyTable(sources[file] ?? "", table), `${file} reads ${table}`).toBe(false);
       expect(MONEY_ALLOWED.has(file), file).toBe(false);
     }
+  });
+
+  it("the request board query module is a ranking file, reads no money table and imports no money module (EPIC 27, ADR-004)", () => {
+    const file = "../src/db/request-board.ts";
+    expect(RANKING_FILES).toContain(file);
+    expect(MONEY_ALLOWED.has(file)).toBe(false);
+    for (const table of MONEY_TABLES) expect(touchesMoneyTable(sources[file] ?? "", table), `${file} reads ${table}`).toBe(false);
+    expect(sources[file] ?? "").not.toMatch(/sponsor|paid|affiliate|commission|merchant|offer|revenue|conversion|price|outbound_clicks|featured|boost/i);
   });
 
   it("has no partner name in src (ADR-007 rule 4)", () => {

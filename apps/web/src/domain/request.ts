@@ -46,6 +46,8 @@ export interface ClientRequest {
   languages: WorkLanguage[];
   status: RequestStatus;
   locale: string;
+  /** ISO 3166-1 alpha-2 chosen by the client (EPIC 27), or null. */
+  country: string | null;
   adminNote: string | null;
   selectedInviteId: string | null;
   submittedAt: string | null;

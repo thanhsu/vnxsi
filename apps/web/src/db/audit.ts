@@ -31,6 +31,10 @@ export type AuditFlagGuard = { flagKey: string; writeId: string };
  * (the id is a fresh ULID, so the row exists only if that INSERT went through). Unlink: before the batch's DELETE, since the row is gone after it.
  */
 export type AuditIdentityGuard = { identityId: string; userId: string };
+/** Written only when the batch's publication compare-and-set went through: the row exists with this status and updated_at (EPIC 27, see request-board.ts). */
+export type AuditPublicationGuard = { publicationRequestId: string; status: string; updatedAt: string };
+/** Written only when the batch's interest compare-and-set went through: the row exists with this status and updated_at (EPIC 27). */
+export type AuditInterestGuard = { interestId: string; status: string; updatedAt: string };
 /** Written only when that merchant / program / offer row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
 export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs" | "offers"; id: string; writeId: string };
 
@@ -39,18 +43,37 @@ export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
  * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id,
- * `partnerTable` + `id` on that merchant / program / offer row's last write id, `identityId` + `userId` on the identity row existing for that user.
+ * `partnerTable` + `id` on that merchant / program / offer row's last write id, `identityId` + `userId` on the identity row existing for that user,
+ * `publicationRequestId` on the publication's status and updated_at, `interestId` on the interest's (EPIC 27).
  */
 export function auditStatement(
   db: D1Database,
   input: AuditInput,
-  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard | AuditIdentityGuard,
+  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard | AuditIdentityGuard | AuditPublicationGuard | AuditInterestGuard,
 ): D1PreparedStatement {
   const id = ulid(Date.parse(input.now));
   const data = JSON.stringify(input.data ?? {});
   const values = [id, input.actorUserId, input.action, input.entity, input.entityId, data, input.now];
   if (!onlyIf) {
     return db.prepare("INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)").bind(...values);
+  }
+  if ("publicationRequestId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM request_publications WHERE request_id = ?8 AND status = ?9 AND updated_at = ?10)`,
+      )
+      .bind(...values, onlyIf.publicationRequestId, onlyIf.status, onlyIf.updatedAt);
+  }
+  if ("interestId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM request_interests WHERE id = ?8 AND status = ?9 AND updated_at = ?10)`,
+      )
+      .bind(...values, onlyIf.interestId, onlyIf.status, onlyIf.updatedAt);
   }
   if ("identityId" in onlyIf) {
     return db
