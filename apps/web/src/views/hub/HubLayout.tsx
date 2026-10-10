@@ -15,10 +15,10 @@ const NAV: { key: HubSection; path: string; label: MessageKey }[] = [
   { key: "invitations", path: "/hub/invitations", label: "hub.nav.invitations" },
 ];
 
-export const HubLayout: FC<PropsWithChildren<{ locale: Locale; origin: string; title: string; rest: string; active: HubSection }>> = (p) => {
+export const HubLayout: FC<PropsWithChildren<{ locale: Locale; origin: string; title: string; rest: string; active: HubSection; invalid?: boolean }>> = (p) => {
   const tr = translator(p.locale);
   return (
-    <Layout locale={p.locale} title={`${p.title} · ${tr("hub.title")}`} origin={p.origin} rest={p.rest} noindex signedIn>
+    <Layout locale={p.locale} title={`${p.title} · ${tr("hub.title")}`} origin={p.origin} rest={p.rest} noindex signedIn invalid={p.invalid}>
       <nav class="subnav" aria-label={tr("hub.nav.label")}>
         {NAV.map((item) => (
           <a href={localizedPath(p.locale, item.path)} aria-current={item.key === p.active ? "page" : undefined}>

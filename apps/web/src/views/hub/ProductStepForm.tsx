@@ -3,6 +3,7 @@ import { STEP_FIELDS, type FieldErrorCode, type FieldSpec, type ProductField, ty
 import type { Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator, type Translate } from "../../i18n/t.ts";
+import { FormErrorSummary, type FormErrorItem } from "../FormErrorSummary.tsx";
 import { CATEGORY_KEY, DELIVERY_KEY, LICENSE_KEY, PRODUCT_LANG_KEY } from "../labels.ts";
 
 export const PRODUCT_ERROR_KEY: Record<FieldErrorCode, MessageKey> = {
@@ -54,6 +55,13 @@ const OPTION_KEY: Partial<Record<ProductField, Record<string, MessageKey>>> = {
 
 function errorText(tr: Translate, spec: FieldSpec, code: FieldErrorCode): string {
   return tr(PRODUCT_ERROR_KEY[code], { max: spec.max, items: spec.maxItems ?? 0 });
+}
+
+/** Summary lines in field order (VNX-0807): "Label: error", linked to the control. Empty on a step that does not apply (license of a non-source product). */
+export function stepErrorItems(step: TextStep, errors: StepErrors, tr: Translate): FormErrorItem[] {
+  return STEP_FIELDS[step]
+    .filter((spec) => errors[spec.name])
+    .map((spec) => ({ href: `#pf-${spec.name}`, message: `${tr(LABEL[spec.name])}: ${errorText(tr, spec, errors[spec.name]!)}` }));
 }
 
 type Props = { locale: Locale; action: string; step: TextStep; values: StepValues; errors: StepErrors; slugLocked: boolean; licenseApplies: boolean };
@@ -122,11 +130,7 @@ export const ProductStepForm: FC<Props> = (p) => {
 
   return (
     <form method="post" action={p.action}>
-      {Object.keys(p.errors).length > 0 ? (
-        <p class="error-msg" role="alert">
-          {tr("builder.form.errorSummary")}
-        </p>
-      ) : null}
+      <FormErrorSummary tr={tr} items={stepErrorItems(p.step, p.errors, tr)} lead={tr("builder.form.errorSummary")} />
       {STEP_FIELDS[p.step].map(control)}
       <button class="btn" type="submit">
         {tr("editor.save")}

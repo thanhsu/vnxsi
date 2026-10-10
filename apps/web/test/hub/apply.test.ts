@@ -7,7 +7,7 @@ import { createInvite, findInvite } from "../../src/db/invites.ts";
 import type { AppEnv } from "../../src/env.ts";
 import { localeMiddleware } from "../../src/i18n/middleware.ts";
 import { ensureUser, makeBuilder, profileValues, signIn } from "../fixtures.ts";
-import { formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, setCookieValue, testEnv } from "../helpers.ts";
 
 async function newInvite(code: string, o: { maxUses?: number; expiresAt?: string } = {}) {
   const admin = await ensureUser("apply-admin@vnx.si");
@@ -78,6 +78,12 @@ describe("/hub/apply (spec §5.3)", () => {
     expect(html).toContain("Enter a full https:// address");
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;");
+    // VNX-0807: summary in field order with "Label: error" lines, the form's lead sentence, title prefix, per-field errors kept.
+    const body = expectErrorSummary(html, ["handle", "websiteUrl"]);
+    expect(body).toContain("Handle: This handle is reserved");
+    expect(body).toContain("Please fix the highlighted fields.");
+    expect(html).toContain('aria-describedby="handle-hint handle-error"');
+    expect(html).toContain('id="handle-error" class="error-msg"');
   });
 
   it("refuses a taken handle with 409 and leaves the invite unused", async () => {

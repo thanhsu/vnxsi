@@ -18,6 +18,8 @@ export type LayoutProps = {
   jsonLd?: unknown;
   /** Full-width <main> for pages that lay out their own bands (the landing page); others keep the centred container. */
   fullWidth?: boolean;
+  /** The page re-renders a form with errors (VNX-0807): its <title> starts with the error prefix so a screen reader announces it on load (WCAG 3.3.1). */
+  invalid?: boolean;
   /** Same-origin scripts, loaded with defer (VNX-0709: only the landing page has one). */
   scripts?: readonly string[];
 };
@@ -128,7 +130,7 @@ const Account: FC<{ locale: Locale; signedIn: boolean; tr: Translate }> = ({ loc
   );
 
 export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
-  const { locale, title, origin, rest, description, noindex, signedIn, ogImage, jsonLd, fullWidth, scripts, children } = props;
+  const { locale, title, origin, rest, description, noindex, signedIn, ogImage, jsonLd, fullWidth, scripts, invalid, children } = props;
   const tr = translator(locale);
   const canonical = origin + localizedPath(locale, rest);
   const nav = mainNav(locale, rest);
@@ -141,7 +143,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{title}</title>
+        <title>{invalid ? `${tr("form.error.titlePrefix")} ${title}` : title}</title>
         {description ? <meta name="description" content={description} /> : null}
         {noindex ? <meta name="robots" content="noindex" /> : null}
         {noindex ? null : <link rel="canonical" href={canonical} />}

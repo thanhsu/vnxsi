@@ -83,6 +83,8 @@ export const vi: Messages = {
   "builder.field.hourlyRate": "Giá theo giờ, USD (không bắt buộc)",
   "builder.form.choose": "Chọn…",
   "builder.form.errorSummary": "Vui lòng sửa các ô được đánh dấu.",
+  "form.error.titlePrefix": "Lỗi:",
+  "form.error.summaryTitle": "Có lỗi cần sửa",
   "builder.error.handle": "Dùng 3–30 ký tự chữ thường, số hoặc dấu gạch ngang; bắt đầu và kết thúc bằng chữ hoặc số.",
   "builder.error.handleReserved": "Handle này được giữ cho hệ thống. Hãy chọn handle khác.",
   "builder.error.handleTaken": "Handle này đã có người dùng.",

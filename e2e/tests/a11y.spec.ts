@@ -2,6 +2,7 @@
 // A violation fails the test unless e2e/support/a11y-known.ts defers it with a finding; a deferral that no longer matches fails too.
 import { DRAFT_PRODUCT, MAIN, PUBLISHED_PRODUCT, TOKENS } from "../seed/fixtures.mjs";
 import { scanA11y } from "../support/a11y";
+import { allowSameOriginFailure } from "../support/network";
 import { formatEn } from "../support/page";
 import { expect, test } from "../support/test";
 
@@ -76,4 +77,18 @@ test("en / with motion, after the numbers finished counting", async ({ page }) =
     await expect(counts.nth(i)).toHaveText(formatEn((await counts.nth(i).getAttribute("data-count"))!), { timeout: 3_000 });
   }
   await scanA11y(page, { page: "/", locale: "en", variant: "motion" });
+});
+
+// The homepage with its scripts blocked (R2(b) of VNX-0807). javaScriptEnabled:false would not do: axe needs scripts to run in the page.
+// Blocking the two script files gives the markup a user without JS gets, with axe still able to measure it.
+test.describe("axe, no JS (scripts blocked)", () => {
+  test.use({ reducedMotion: "reduce" });
+  for (const [path, locale] of [["/", "en"], ["/vi/", "vi"]] as const) {
+    test(`${locale} ${path} with landing.js and home.js blocked`, async ({ page }) => {
+      await page.route(/\/assets\/(landing|home)\.js$/, (route) => route.abort());
+      allowSameOriginFailure(page, /\/assets\/(landing|home)\.js$/);
+      await page.goto(path);
+      await scanA11y(page, { page: "/", locale, variant: "nojs" });
+    });
+  }
 });

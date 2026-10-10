@@ -3,7 +3,7 @@ import { createApp } from "../../src/app.ts";
 import { addMedia, listMedia } from "../../src/db/media.ts";
 import { findProductById, setProductStatus } from "../../src/db/products.ts";
 import { makeBuilder, makeDraft, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 9, 9]);
@@ -55,7 +55,11 @@ describe("product images (spec §8.5)", () => {
     const { cookie } = await signIn("md-bad@vnx.si");
     const html = await upload(product.id, cookie, new TextEncoder().encode("<svg onload=alert(1)>"));
     expect(html.status).toBe(400);
-    expect(await html.text()).toContain("Only JPEG, PNG or WebP images are accepted.");
+    const htmlText = await html.text();
+    expect(htmlText).toContain("Only JPEG, PNG or WebP images are accepted.");
+    // VNX-0807: the summary links to the file input, which points at the error.
+    expectErrorSummary(htmlText, ["media-file"]);
+    expect(htmlText).toContain('aria-describedby="media-hint media-error"');
     expect((await upload(product.id, cookie, new TextEncoder().encode("GIF89a...."), "image/gif")).status).toBe(400);
     const big = new Uint8Array(2 * 1024 * 1024 + 1);
     big.set(PNG);

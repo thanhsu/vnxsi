@@ -69,6 +69,19 @@ describe("/me (spec §5.4)", () => {
     expect((await post(`/me/inquiries/${mine.inquiry.id}/confirm`, {}, cookie)).status).toBe(404);
   });
 
+  it("re-renders an empty client reply with the shared error summary (VNX-0807)", async () => {
+    const { inquiry, client } = await makeInquiry({ tag: "me-rerr", status: "answered" });
+    const { cookie } = await signIn(client.email);
+    const res = await post(`/me/inquiries/${inquiry.id}/reply`, { body: " " }, cookie);
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    // The summary comes from the shared thread view. The page title prefix needs `invalid` on the Layout in routes/me.tsx, which is T6 (EPIC 26 touches that file).
+    expect(html).toMatch(/<section id="form-errors"[^>]*tabindex="-1"[^>]*autofocus/);
+    expect(html).toContain('<a href="#th-body">Reply: Write a message first.</a>');
+    expect(html).toContain('aria-describedby="th-body-error"');
+    expect(html).not.toContain('role="alert"');
+  });
+
   it("lets the client reply (status kept) and close; the builder is notified of the reply", async () => {
     const { inquiry, client } = await makeInquiry({ tag: "me-reply", status: "answered" });
     const { cookie } = await signIn(client.email);

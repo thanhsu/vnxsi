@@ -18,6 +18,18 @@ const deckOf = (html: string) => /<div class="deck"[^>]*>([\s\S]*?<div class="de
 const cardsOf = (deck: string) => [...deck.matchAll(/<article class="deck-card[^"]*"([^>]*)>([\s\S]*?)<\/article>/g)].map((m) => ({ attrs: m[1]!, body: m[2]! }));
 const attr = (attrs: string, name: string) => new RegExp(`\\s${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
 
+/** VNX-0807 R1: the front card is reachable; the cards behind it are inert and aria-hidden in the server HTML (no JS needed). */
+const expectBehind = (cards: { attrs: string }[], label: string) => {
+  expect(cards.length, label).toBe(3);
+  expect(cards[0]!.attrs, `${label} front`).not.toMatch(/\sinert(=|\s|$)/);
+  expect(cards[0]!.attrs, `${label} front`).not.toContain("aria-hidden");
+  for (const i of [1, 2]) {
+    expect(cards[i]!.attrs, `${label} slot ${i}`).toMatch(/\sinert=""/);
+    expect(cards[i]!.attrs, `${label} slot ${i}`).not.toContain('inert="false"');
+    expect(attr(cards[i]!.attrs, "aria-hidden"), `${label} slot ${i}`).toBe("true");
+  }
+};
+
 const neutralOrder = async () => (await searchProducts(testEnv.DB, parseCatalogQuery({}))).items;
 
 describe("landing deck (VNX-0709)", () => {
@@ -44,6 +56,7 @@ describe("landing deck (VNX-0709)", () => {
       }
       // Without JavaScript the first card is in front and the dot buttons stay hidden.
       expect(cards.map((c) => attr(c.attrs, "data-slot")), path).toEqual(["0", "1", "2"]);
+      expectBehind(cards, `${path} category cards`);
       expect(deck, path).toMatch(/<div class="deck-dots" hidden(="")?>/);
       expect(deck.match(/<button type="button"[^>]*aria-pressed=/g), path).toHaveLength(3);
     }
@@ -95,6 +108,7 @@ describe("landing deck (VNX-0709)", () => {
       const cards = cardsOf(deck);
       expect(cards.map((c) => attr(c.attrs, "data-kind")), path).toEqual(["product", "product", "product"]);
       expect(deck, path).not.toContain('data-kind="category"');
+      expectBehind(cards, `${path} product cards`);
       expect(textOf(deck), path).not.toContain(t(locale, "landing.deck.open"));
       for (const [i, item] of expected.entries()) {
         const card = cards[i]!;

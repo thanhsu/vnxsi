@@ -3,8 +3,9 @@ import { builderFacingName, DECLINE_REASON_MAX } from "../../domain/inquiry.ts";
 import { APPROACH_MAX, INVITE_TTL_MS, isTerminalRequest, PRICE_MODES, PRICE_NOTE_MAX, type Invitation, type InvitationListItem, type PriceMode, type ProposalErrors, type ProposalFieldError, type ProposalFormValues } from "../../domain/request.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
-import { translator } from "../../i18n/t.ts";
+import { translator, type Translate } from "../../i18n/t.ts";
 import { CATEGORY_KEY, INVITE_STATUS_KEY } from "../labels.ts";
+import { FormErrorSummary, type FormErrorItem } from "../FormErrorSummary.tsx";
 import { ProposalView } from "../ProposalView.tsx";
 import { RequestFacts } from "../RequestFacts.tsx";
 import { HubLayout } from "./HubLayout.tsx";
@@ -68,6 +69,27 @@ type PageProps = {
 
 const EMPTY: ProposalFormValues = { approach: "", priceMode: "fixed", price: "", priceMax: "", priceNote: "", timelineDays: "" };
 
+const FIELDS: [keyof ProposalFormValues, string, MessageKey][] = [
+  ["approach", "pp-approach", "proposal.approach"],
+  // The mode group links to its first radio.
+  ["priceMode", "pp-priceMode", "proposal.form.priceMode"],
+  ["price", "pp-price", "proposal.form.price"],
+  ["priceMax", "pp-priceMax", "proposal.form.priceMax"],
+  ["priceNote", "pp-priceNote", "proposal.note"],
+  ["timelineDays", "pp-timelineDays", "proposal.timeline"],
+];
+
+/** Summary lines of the proposal form and the decline form (VNX-0807), in page order; one summary for the page. */
+export function invitationErrorItems(p: { errors?: ProposalErrors; reasonError?: boolean }, tr: Translate): FormErrorItem[] {
+  const items: FormErrorItem[] = [];
+  for (const [field, id, label] of FIELDS) {
+    const code = p.errors?.[field];
+    if (code) items.push({ href: `#${id}`, message: `${tr(label)}: ${tr(ERROR_KEY[code])}` });
+  }
+  if (p.reasonError) items.push({ href: "#pp-reason", message: `${tr("proposal.form.declineReason")}: ${tr("inquiry.error.too_long")}` });
+  return items;
+}
+
 /** Spec §5.7 step 3: the builder reads the request (the client's typed name only, e-mail-like parts masked) and proposes or declines. */
 export const InvitationPage: FC<PageProps> = (p) => {
   const tr = translator(p.locale);
@@ -78,17 +100,18 @@ export const InvitationPage: FC<PageProps> = (p) => {
   const err = (field: keyof ProposalFormValues) => {
     const code = errors[field];
     return code ? (
-      <p id={`pp-${field}-error`} class="error-msg" role="alert">
+      <p id={`pp-${field}-error`} class="error-msg">
         {tr(ERROR_KEY[code])}
       </p>
     ) : null;
   };
   const aria = (field: keyof ProposalFormValues) => (errors[field] ? { "aria-invalid": "true", "aria-describedby": `pp-${field}-error` } : {});
   const answerable = p.approved && invite.status === "invited" && request.status === "matching";
+  const summary = answerable ? invitationErrorItems(p, tr) : [];
   const replyBy = new Date(Date.parse(invite.invitedAt) + INVITE_TTL_MS).toISOString().slice(0, 10);
   const title = tr("hub.invitations.from", { name: builderFacingName(request.clientName) });
   return (
-    <HubLayout locale={p.locale} origin={p.origin} title={title} rest={`/hub/invitations/${invite.id}`} active="invitations">
+    <HubLayout locale={p.locale} origin={p.origin} title={title} rest={`/hub/invitations/${invite.id}`} active="invitations" invalid={summary.length > 0}>
       <p>
         <a href={localizedPath(p.locale, "/hub/invitations")}>{tr("hub.invitations.title")}</a>
       </p>
@@ -118,6 +141,7 @@ export const InvitationPage: FC<PageProps> = (p) => {
 
       {answerable ? (
         <>
+          <FormErrorSummary tr={tr} items={summary} />
           <form method="post" action={`${base}/propose`} class="card wide">
             <h2>{tr("proposal.form.title")}</h2>
             <div class="field">
@@ -130,9 +154,9 @@ export const InvitationPage: FC<PageProps> = (p) => {
             </div>
             <fieldset class="field" {...aria("priceMode")}>
               <legend>{tr("proposal.form.priceMode")}</legend>
-              {PRICE_MODES.map((m) => (
+              {PRICE_MODES.map((m, i) => (
                 <label class="choice">
-                  <input type="radio" name="priceMode" value={m} checked={v.priceMode === m} required /> {tr(MODE_KEY[m])}
+                  <input type="radio" id={i === 0 ? "pp-priceMode" : undefined} name="priceMode" value={m} checked={v.priceMode === m} required /> {tr(MODE_KEY[m])}
                 </label>
               ))}
               {err("priceMode")}
@@ -165,11 +189,11 @@ export const InvitationPage: FC<PageProps> = (p) => {
           <form method="post" action={`${base}/decline`} class="card wide">
             <div class="field">
               <label for="pp-reason">{tr("proposal.form.declineReason")}</label>
-              <textarea id="pp-reason" name="reason" maxlength={DECLINE_REASON_MAX} aria-invalid={p.reasonError ? "true" : undefined}>
+              <textarea id="pp-reason" name="reason" maxlength={DECLINE_REASON_MAX} aria-invalid={p.reasonError ? "true" : undefined} aria-describedby={p.reasonError ? "pp-reason-error" : undefined}>
                 {p.reason ?? ""}
               </textarea>
               {p.reasonError ? (
-                <p class="error-msg" role="alert">
+                <p id="pp-reason-error" class="error-msg">
                   {tr("inquiry.error.too_long")}
                 </p>
               ) : null}

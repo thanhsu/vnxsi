@@ -2,7 +2,7 @@ import type { FC } from "hono/jsx";
 import { CONTACT_EMAIL, type FeedbackErrors, type FeedbackFormValues } from "../domain/feedback.ts";
 import type { Locale } from "../i18n/locales.ts";
 import { translator, type Translate } from "../i18n/t.ts";
-import { ContactForm } from "./contact/ContactForm.tsx";
+import { ContactForm, contactErrorItems } from "./contact/ContactForm.tsx";
 import { Layout } from "./Layout.tsx";
 
 type Props = {
@@ -39,8 +39,9 @@ const MailIcon: FC = () => (
 /** /contact (plan VNX-0710): questions, suggestions and partnership offers for the VNX.SI team. */
 export const ContactPage: FC<Props> = (p) => {
   const tr = translator(p.locale);
+  const invalid = !p.sent && contactErrorItems(p, tr).length > 0;
   return (
-    <Layout locale={p.locale} title={`${tr("contact.title")} · VNX.SI`} description={tr("contact.lead")} origin={p.origin} rest="/contact" signedIn={p.signedIn}>
+    <Layout locale={p.locale} title={`${tr("contact.title")} · VNX.SI`} description={tr("contact.lead")} origin={p.origin} rest="/contact" signedIn={p.signedIn} invalid={invalid}>
       <div class="contact-page">
         <header class="section-head contact-head">
           <p class="eyebrow">{tr("nav.contact")}</p>

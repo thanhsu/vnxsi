@@ -2,7 +2,8 @@ import type { FC } from "hono/jsx";
 import { MAX_PORTFOLIO_ITEMS, type PortfolioErrors, type PortfolioField, type PortfolioFormValues, type PortfolioItem } from "../../domain/portfolio.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
-import { translator } from "../../i18n/t.ts";
+import { translator, type Translate } from "../../i18n/t.ts";
+import { FormErrorSummary, type FormErrorItem } from "../FormErrorSummary.tsx";
 import { PlainText } from "../PlainText.tsx";
 import { HubLayout } from "./HubLayout.tsx";
 
@@ -12,6 +13,13 @@ const ERROR_KEY: Record<PortfolioField, MessageKey> = {
   url: "portfolio.error.url",
   description: "portfolio.error.description",
 };
+
+const LABEL: Record<PortfolioField, MessageKey> = { title: "portfolio.field.title", url: "portfolio.field.url", description: "portfolio.field.description" };
+
+/** Summary lines in field order (VNX-0807): "Label: error", linked to the control. */
+function portfolioErrorItems(errors: PortfolioErrors, tr: Translate): FormErrorItem[] {
+  return (["title", "url", "description"] as const).filter((f) => errors[f]).map((f) => ({ href: `#pf-${f}`, message: `${tr(LABEL[f])}: ${tr(ERROR_KEY[f])}` }));
+}
 
 const PortfolioForm: FC<{ locale: Locale; action: string; values: PortfolioFormValues; errors: PortfolioErrors; submitLabel: string }> = (p) => {
   const tr = translator(p.locale);
@@ -28,6 +36,7 @@ const PortfolioForm: FC<{ locale: Locale; action: string; values: PortfolioFormV
   );
   return (
     <form method="post" action={p.action}>
+      <FormErrorSummary tr={tr} items={portfolioErrorItems(p.errors, tr)} />
       {field("title", "portfolio.field.title", (aria) => (
         <input id="pf-title" name="title" value={p.values.title} required maxlength={80} {...aria} />
       ))}
@@ -60,7 +69,7 @@ export const PortfolioPage: FC<ListProps> = (p) => {
     </form>
   );
   return (
-    <HubLayout locale={p.locale} origin={p.origin} title={tr("portfolio.title")} rest="/hub/portfolio" active="portfolio">
+    <HubLayout locale={p.locale} origin={p.origin} title={tr("portfolio.title")} rest="/hub/portfolio" active="portfolio" invalid={p.editable && p.items.length < MAX_PORTFOLIO_ITEMS && portfolioErrorItems(p.errors, tr).length > 0}>
       <h1>{tr("portfolio.title")}</h1>
       <p>{tr("portfolio.intro", { max: MAX_PORTFOLIO_ITEMS })}</p>
       {p.items.length === 0 ? (
@@ -114,7 +123,7 @@ export const PortfolioEditPage: FC<EditProps> = (p) => {
   const tr = translator(p.locale);
   const base = localizedPath(p.locale, "/hub/portfolio");
   return (
-    <HubLayout locale={p.locale} origin={p.origin} title={tr("portfolio.editTitle")} rest={`/hub/portfolio/${p.item.id}`} active="portfolio">
+    <HubLayout locale={p.locale} origin={p.origin} title={tr("portfolio.editTitle")} rest={`/hub/portfolio/${p.item.id}`} active="portfolio" invalid={portfolioErrorItems(p.errors, tr).length > 0}>
       <section class="card wide">
         <h1>{tr("portfolio.editTitle")}</h1>
         <PortfolioForm locale={p.locale} action={`${base}/${p.item.id}`} values={p.values} errors={p.errors} submitLabel={tr("portfolio.save")} />

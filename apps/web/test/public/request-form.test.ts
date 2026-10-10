@@ -7,7 +7,7 @@ import type { Bindings } from "../../src/env.ts";
 import { FAKE_TURNSTILE_PASS, TURNSTILE_FIELD } from "../../src/http/turnstile.ts";
 import { createPendingRequestAndMail } from "../../src/routes/request-form.tsx";
 import { ensureUser, signIn } from "../fixtures.ts";
-import { followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, followMagicLink, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 let ipSeq = 0;
@@ -87,6 +87,15 @@ describe("/request form (spec §5.7 step 1)", () => {
     expect(html).toContain("Please write at least 40 characters.");
     expect(html).toContain(">short</textarea>");
     expect(html).toMatch(/name="languages" value="vi"[^>]*checked/);
+    // VNX-0807: shared error pattern; the title error is first in page order, descriptions follow, no role="alert".
+    const body = expectErrorSummary(html, ["rq-title", "rq-description"]);
+    expect(body).toContain("Please write at least 40 characters.");
+    expect(html).toContain('aria-describedby="rq-title-error"');
+    // The languages group error links to its first checkbox.
+    const noLang = await (await post("/request", signedOut("nl@request.example", { languages: [] }))).text();
+    expectErrorSummary(noLang, ["rq-languages"]);
+    expect(noLang).toMatch(/<input type="checkbox" id="rq-languages" name="languages"/);
+    expect(await (await post("/vi/request", signedOut("nl2@request.example", { title: "" }))).text()).toContain("Có lỗi cần sửa");
     expect(await findUserByEmail(testEnv.DB, "x@request.example")).toBeNull();
   });
 

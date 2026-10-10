@@ -5,6 +5,7 @@ import type { Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
 import { translator, type Translate } from "../../i18n/t.ts";
 import { countryOptions } from "../country.ts";
+import { FormErrorSummary, type FormErrorItem } from "../FormErrorSummary.tsx";
 import { AVAILABILITY_KEY, KIND_KEY, LANGUAGE_KEY } from "../labels.ts";
 
 const ERROR_KEY: Record<BuilderField, MessageKey> = {
@@ -28,6 +29,17 @@ function errorText(tr: Translate, field: BuilderField, errors: FieldErrors): str
   if (code === "reserved") return tr("builder.error.handleReserved");
   if (code === "taken") return tr("builder.error.handleTaken");
   return tr(ERROR_KEY[field]);
+}
+
+/** Fields in page order, with the id of the control a summary link points at (the first checkbox / radio for the two groups). */
+const FIELD_ORDER: BuilderField[] = ["handle", "name", "kind", "headline", "bio", "country", "websiteUrl", "skills", "aiTools", "workLanguages", "availability", "hourlyRate"];
+
+/** Summary lines for the form (VNX-0807): "Label: error", linked to the control. Empty when there are no errors. */
+export function builderErrorItems(errors: FieldErrors, tr: Translate): FormErrorItem[] {
+  return FIELD_ORDER.filter((field) => errors[field]).map((field) => ({
+    href: `#${field}`,
+    message: `${tr(`builder.field.${field}`)}: ${errorText(tr, field, errors)}`,
+  }));
 }
 
 export type BuilderFormProps = {
@@ -62,11 +74,7 @@ export const BuilderForm: FC<BuilderFormProps> = ({ locale, action, values, erro
 
   return (
     <form method="post" action={action}>
-      {Object.keys(errors).length > 0 ? (
-        <p class="error-msg" role="alert">
-          {tr("builder.form.errorSummary")}
-        </p>
-      ) : null}
+      <FormErrorSummary tr={tr} items={builderErrorItems(errors, tr)} lead={tr("builder.form.errorSummary")} />
 
       <div class="field">
         <label for="handle">{tr("builder.field.handle")}</label>
@@ -149,9 +157,9 @@ export const BuilderForm: FC<BuilderFormProps> = ({ locale, action, values, erro
 
       <fieldset class="field" aria-describedby={errors.workLanguages ? "workLanguages-error" : undefined}>
         <legend>{tr("builder.field.workLanguages")}</legend>
-        {WORK_LANGUAGES.map((l) => (
+        {WORK_LANGUAGES.map((l, i) => (
           <label class="choice">
-            <input type="checkbox" name="workLanguages" value={l} checked={values.workLanguages.includes(l)} /> {tr(LANGUAGE_KEY[l])}
+            <input type="checkbox" id={i === 0 ? "workLanguages" : undefined} name="workLanguages" value={l} checked={values.workLanguages.includes(l)} /> {tr(LANGUAGE_KEY[l])}
           </label>
         ))}
         {error("workLanguages")}
@@ -159,9 +167,9 @@ export const BuilderForm: FC<BuilderFormProps> = ({ locale, action, values, erro
 
       <fieldset class="field" aria-describedby={errors.availability ? "availability-error" : undefined}>
         <legend>{tr("builder.field.availability")}</legend>
-        {AVAILABILITIES.map((a) => (
+        {AVAILABILITIES.map((a, i) => (
           <label class="choice">
-            <input type="radio" name="availability" value={a} checked={values.availability === a} required /> {tr(AVAILABILITY_KEY[a])}
+            <input type="radio" id={i === 0 ? "availability" : undefined} name="availability" value={a} checked={values.availability === a} required /> {tr(AVAILABILITY_KEY[a])}
           </label>
         ))}
         {error("availability")}

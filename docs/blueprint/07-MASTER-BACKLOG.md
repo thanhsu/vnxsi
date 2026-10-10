@@ -119,7 +119,8 @@
 | VNX-0804 | Production: Resend domain, secrets, R2, migration remote | HUMAN, HIGH-RISK | ⏳ |
 | VNX-0805 | Runbook deploy/rollback, script smoke | AGENT | ⏳ |
 | VNX-0806 | Mời 20 builder sáng lập đầu tiên | HUMAN | ⏳ |
-| VNX-0807 | Mời đủ ~100 builder theo đợt, đo cổng ra Wave 1 | HUMAN | ⏳ |
+| VNX-0807 | a11y: homepage không JS (R1), mẫu lỗi chung cho form render phía server (F8), độ tin cậy E2E (R2/R3/R5); plan `.ai/plans/VNX-0807-plan.md`. T1–T5 xong trên `feat/vnx-0807-a11y`; T6 (login, hồ sơ hub, tiêu đề thread `/me`) chờ EPIC 26 merge | AGENT | 🔄 |
+| VNX-0808 | Mời đủ ~100 builder theo đợt, đo cổng ra Wave 1 (trước 2026-10-10 mang ID VNX-0807; đổi số vì trùng với task a11y ở trên, chờ Owner xác nhận) | HUMAN | ⏳ |
 
 ---
 

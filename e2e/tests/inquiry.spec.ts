@@ -41,8 +41,10 @@ test("an empty form is refused per field and keeps what was typed", async ({ pag
   const errorId = await message.getAttribute("aria-describedby");
   expect(errorId).toBe("iq-message-error");
   const error = page.locator(`#${errorId}`);
-  await expect(error).toHaveAttribute("role", "alert");
   await expect(error).not.toBeEmpty();
+  // VNX-0807: no live-region role on the field error (the focused summary announces it); the summary carries it instead.
+  await expect(error).not.toHaveAttribute("role", "alert");
+  await expect(page.locator("#form-errors")).toContainText("Message:");
   await expect(page.getByLabel("Your name")).toHaveValue("Ada Tester");
   await expect(page.getByLabel("Your e-mail")).toHaveValue("ada.client@example.test");
   await expect(page.getByRole("heading", { name: "Check your inbox" })).toHaveCount(0);
@@ -53,7 +55,11 @@ test("a form without the Turnstile token is refused and creates nothing", async 
   await fillValid(page);
   const [res] = await Promise.all([post(page), page.getByRole("button", { name: "Send inquiry" }).click()]);
   expect(res.status()).toBe(400);
-  await expect(page.getByRole("alert").filter({ hasText: "Please complete the check below" })).toBeVisible();
+  // A form-level error (it belongs to no field) is a line of the summary without a link.
+  const summary = page.locator("#form-errors");
+  await expect(summary.getByRole("listitem").filter({ hasText: "Please complete the check below" })).toBeVisible();
+  await expect(summary.getByRole("link")).toHaveCount(0);
+  await expect(page).toHaveTitle(/^Error: /);
   await expect(page.getByRole("heading", { name: "Check your inbox" })).toHaveCount(0);
   await expect(page.getByLabel("Message")).toHaveValue(MESSAGE);
 });
