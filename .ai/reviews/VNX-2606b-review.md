@@ -7,7 +7,7 @@
 
 ## Verdict
 
-APPROVE (code). **Còn mở:** chạy lại toàn bộ test khi máy hết thiếu socket.
+APPROVE
 
 ## Phát hiện
 
@@ -42,3 +42,7 @@ M1–M3 làm thành commit test riêng ở task kế tiếp.
 3. Xung đột văn bản dự kiến: `public/assets/app.css` (giữ `.verified-list`, `.verified`; kiểm `--success` ở cả ba theme), 4 file locale (giữ hai khóa sau `bprofile.website`, chạy parity).
 4. Sau rebase chạy lại `test/public/builder-badges.test.ts`, `test/hub/client-identity-privacy.test.ts`, `test/hub/badge-toggle.test.ts`.
 5. VNX-2608, kiểm tay với tài khoản thật: link GitHub đúng; login EMU (ghi lại link có 404 với khách không); tắt rồi bật cờ ẩn rồi hiện lại huy hiệu.
+
+## Chạy lại toàn bộ test (controller, 2026-10-10)
+
+Owner cho phép dừng `wrangler dev` cổng 8787 của phiên khác (worktree `vnxsi-deploy`, PID 22768 và workerd 13216) đang giữ hơn 9.000 socket. Sau khi dừng, số socket TCP giảm từ 10.148 xuống 930; `npm test -- --maxWorkers=2` 154 file / 1752 test xanh. **Verdict cuối: APPROVE.**
