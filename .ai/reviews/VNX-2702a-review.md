@@ -56,3 +56,25 @@
 - **2706a**: Hub dùng `closedAt` (M-2) để áp `requestVisibility`; giải `publicId` → request trong SQL (S-2).
 - **2702b**: test L1 nên khóa cả phía SQL (S-1). Thêm `domain/request-board.ts` vào `RANKING_FILES`.
 - **Reviewer:** ghi vào `CURRENT-STATUS.md`: số migration cuối `0018`; L-3 là sai khác được chấp nhận; cách "mục plan = handoff" (L-6); `deleteGhostUsers` không cần sửa (người Ops có `reviewed_by`/`decided_by` luôn có dòng `audit_log` cùng batch và đã đăng nhập, nên không là ghost; `builder_id` được bảo vệ bởi `NOT EXISTS builders`).
+
+## Re-review (vòng sửa 1, `aecdc93`)
+
+- **Ngày:** 2026-10-10. **Đã đọc:** diff `77ea002..aecdc93` (5 file: `src/db/request-board.ts`, `test/helpers.ts`, `test/db/request-board.test.ts`, `test/db/count-d1-queries.test.ts`, phần "Vòng sửa 1" của báo cáo).
+- **Lệnh đã chạy lại:** `npm run typecheck -w apps/web`: exit 0; bộ 2702a (6 file như trên): **6 file, 119 test xanh**. Không chạy lại toàn bộ: lượt sửa chỉ chạm `db/request-board.ts` (chưa có nơi gọi trong `src/`) và tiện ích test chỉ `count-d1-queries.test.ts` dùng; Implementer báo 191 file / 2335 test. `grep` không còn `findPublicationByPublicId` hay `approvedBuilder:` trong `src/` và `test/`.
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| M-1 | ✓ Đóng | `ViewerRelation.builder: "none" \| "approved" \| "not_approved"` bằng một `CASE` trong cùng truy vấn (`NOT EXISTS builders` → `none`; hằng L9 → `approved`; còn lại → `not_approved`). Test mới: người không là builder → `none`; builder hợp lệ → `approved`; `pending`, `rejected`, `suspended` và builder `approved` có user `suspended` → `not_approved`; vẫn một `prepare().first()`, người lạ không nhận `request_id`. |
+| M-2 | ✓ Đóng | `BuilderInterestItem.closedAt` thêm; `public_title` chỉ trả khi `p.status = 'published' AND r.status <> 'removed'` (CASE trong SQL). Test: request đóng có `closedAt` và còn tiêu đề (cửa sổ 30 ngày do `requestVisibility` quyết ở tầng trên), client gỡ → `publicTitle` null, request `removed` → null. |
+| L-1 | ✓ Đóng | `findPublicationByPublicId` bị bỏ; test đọc công khai dùng `findPublicListing` (ca `pending_review` → null còn nguyên). |
+| L-2 | ✓ Đóng | `clientUserId` bắt buộc (kiểu) ở `optInStatement`, `reOptInStatement`, `withdrawStatement`; SQL bỏ nhánh `?N IS NULL OR`; ca chủ lạ vẫn 0 dòng. |
+| L-4 | ✓ Đóng, chấp nhận điểm lệch | Reset cache cờ ở lần **đầu đọc `env.DB`** thay vì "lần đếm đầu tiên" như review gợi ý. Lý do của Implementer đúng: khi cache còn ấm thì `isFlagEnabled` không tạo truy vấn nào, nên reset ở truy vấn đầu là quá muộn và vẫn đếm thiếu; reset ở lần chạm binding đầu tiên là thời điểm sớm nhất mà vẫn sau phần dựng dữ liệu qua `testEnv`. Test mới mồi cache qua `testEnv` sau khi tạo bộ đếm rồi khẳng định lượt đọc cờ vẫn đếm đúng 1. Giới hạn còn lại (đã ghi trong JSDoc): test chạm `env.DB` của bộ đếm trước request đo thì reset xảy ra sớm; không chặn. Hàm `bump` thừa, vô hại. |
+| L-5 | ✓ Đóng | Ca riêng với request mới: 1 pending sẵn, `cap: 1` → null, `cap: 2` → tạo được; chỉ trần quyết định kết quả. |
+| L-3, L-6 | Reviewer | Ghi vào `CURRENT-STATUS.md` (sai khác được chấp nhận, quy ước handoff). |
+| S-1, S-2 | Chuyển | Nghĩa vụ của 2702b và 2706a (đã ghi ở `CURRENT-STATUS.md`). |
+
+Không có phát hiện mới.
+
+### Verdict cuối
+
+**APPROVE.** VNX-2702a xong ở `d6ab34d` + `aecdc93` (báo cáo `13b3798`, review `77ea002`).
