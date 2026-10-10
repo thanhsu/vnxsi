@@ -29,6 +29,7 @@
 - **(2026-10-08) Task 8:** mục `/me` "Đăng nhập & tài khoản liên kết" chỉ hiện khi có ít nhất một provider khả dụng (cờ bật và đã cấu hình) hoặc user có ít nhất một identity; hàng đã liên kết vẫn hiện khi cờ của nó tắt (để còn hủy liên kết), lệch ADR-012 §4 "cho mọi user"; câu chữ `/me`, trang trung gian, thông báo (kể cả `taken` nói "đã liên kết với tài khoản VNX.SI khác" kèm contact@vnx.si) và câu `oauth.notLinked.body` mới Owner duyệt nguyên văn 4 locale.
 - **(2026-10-07) Email báo liên kết/hủy liên kết** gồm: tên provider, `label`, thời điểm (UTC), và câu "Không phải bạn? Đăng nhập bằng link qua email, hủy liên kết ở `/me` và viết cho contact@vnx.si". Email chỉ gửi tới `users.email` của chính chủ.
 - **(2026-10-10) Task 9:** câu chữ nút hủy liên kết, hai thông báo, hai email (gồm dòng link `/me` trơn) duyệt nguyên văn 4 locale; câu "Không phải bạn?" của email hủy liên kết là "kiểm tra các tài khoản liên kết ở /me"; mục `/me` chỉ-thông-báo chỉ cho `unlinked`/`notLinked`; thêm task VNX-2605c (kết thúc session `oauth_<provider>` khi hủy liên kết), bắt buộc trước VNX-2608.
+- **(2026-10-10) Task 10-11:** (E1) cờ của một provider **tắt thì huy hiệu công khai của provider đó biến mất khỏi `/b/:handle` và công tắc của nó biến mất khỏi `/hub/profile`**; route truyền danh sách provider khả dụng (cờ bật VÀ đã cấu hình, quy tắc `availableProviders`) vào `listPublicBadges` và view hub; `show_on_profile` đã lưu KHÔNG bị đổi bởi cờ, bật lại cờ thì huy hiệu hiện lại. (E2) tài khoản EMU: giữ link như ADR-012 §5; xem lại bằng tài khoản thật ở VNX-2608. (E3) câu chữ hai task duyệt nguyên văn 4 locale. Link GitHub đi thẳng, không qua `/go/` (xem "Ghi nhận" của Task 11).
 
 ## Quyết định thiết kế của Reviewer (Opus đã duyệt có chỉnh, 2026-10-07)
 
@@ -5838,3 +5839,1091 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **Ghi nhận:** lỗi gửi mail chỉ có một dòng log, không có hàng đợi gửi lại (như M6: "không có cột retry"); nếu Owner muốn bảo đảm giao, đó là task riêng.
 
 #### Kết quả review Task 9 (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa MEDIUM-1, MEDIUM-2, LOW-1..3, S1, S2; câu chữ và các quyết định do Owner duyệt 2026-10-10
+
+---
+
+### Task 10: VNX-2606a — Công tắc `show_on_profile` ở `/hub/profile`
+
+**Phụ thuộc:** Task 1 (cột `user_identities.show_on_profile`, `listIdentitiesForUser`, `IDENTITY_AUDIT`, `AuditIdentityGuard`), Task 8-9 (hàng đã liên kết có thật). **Review Focus:** 8 (một nửa: bật/tắt; nửa còn lại là Task 11), 6 (audit `{provider}`), 11.
+
+**Mục tiêu.** Builder tự bật hoặc tắt việc hiện tài khoản GitHub hoặc LinkedIn **đã liên kết** của mình trên trang công khai. Task này chỉ ghi cờ; **không có gì hiện công khai** (huy hiệu là Task 11). Công tắc hiện với mọi builder có identity GitHub hoặc LinkedIn, kể cả chưa `approved` (header, câu hỏi mở đã chốt (b)): lúc đó có dòng nói "chưa hiện công khai cho tới khi hồ sơ được duyệt". Không có công tắc cho Google. Hủy liên kết xóa hàng nên công tắc biến mất cùng nó (không cần code, có test).
+
+**Quyết định kỹ thuật** (từ code thật; Reviewer kiểm):
+1. **POST riêng, không dùng `POST /hub/profile`:** `POST /hub/identities/:provider/badge`, thân `show=1|0`, mỗi provider một form nhỏ. Lý do: `POST /hub/profile` bị `canEditProfile(status)` chặn (builder `suspended` nhận 409) và validate cả form hồ sơ; công tắc không liên quan cả hai, và một form một provider tránh "lưu cả hồ sơ" khi chỉ muốn đổi huy hiệu. Không dùng JS: mỗi form là một nút gửi (CSP không script nội tuyến).
+2. **Cổng:** `requireBuilder` (có session, có hàng `builders`, mọi `status`), `originCheck` toàn cục (403 khi Origin sai hoặc thiếu) và `requestBodyLimit` 64 KB toàn cục (`app.ts`); không thêm middleware. `:provider` phải là `github` hoặc `linkedin` (`isBadgeProvider`); `google` và tên lạ → 404 (Google không bao giờ có công tắc, kể cả khi ai đó POST thẳng). `show` ngoài `"1"`/`"0"` → 409 `conflict` (`ErrorKind` không có `badRequest`; không đoán giá trị).
+3. **Chỉ ghi hàng của chính builder:** `setShowOnProfile(db, { userId, provider, show, now })` lọc `user_id` và `provider`; `userId` luôn là `c.get("builder").userId`, không bao giờ từ thân hay URL (URL không có id hàng nên không có IDOR). Hàm nằm trong `db/identities.ts`, nơi duy nhất ghi `user_identities`.
+4. **Audit: CÓ, chỉ `{ provider }`.** Lý do: đây là quyết định làm lộ dữ liệu ra công khai (GitHub login, hay sự thật "có LinkedIn"), cùng loại với link/unlink đã audit, và giúp trả lời "huy hiệu này bật từ khi nào" khi có khiếu nại. Hai action `auth.identity.badge_show` và `auth.identity.badge_hide` (thêm vào `IDENTITY_AUDIT`), `entity = "user"`, `entityId = userId`, cùng `db.batch` với UPDATE, guard `AuditIdentityGuard` đã có (audit chỉ ghi khi hàng còn tồn tại cho user đó). Không ghi `label`, không ghi giá trị cũ (action đã nói giá trị mới). Đặt lại đúng giá trị hiện có (`unchanged`) **không ghi gì**: đọc trước, trả về mà không chạm DB. Hai request song song đúng cùng lúc có thể ghi hai dòng audit cho một thay đổi (UPDATE thứ hai không khớp hàng nhưng guard "hàng tồn tại" vẫn đúng); chấp nhận, dữ liệu không sai.
+5. **Không email báo** (khác link/unlink: không đổi quyền đăng nhập; chính builder bấm nút). Không đổi `/me`.
+6. **Hiển thị:** `ProfilePage` nhận `badges: BadgeRow[]` (`Pick<UserIdentity, "provider" | "label" | "showOnProfile">`, chỉ github/linkedin, đã lọc ở route) và `badgeNotice`. Mục `<section id="badges">` nằm dưới form hồ sơ, hiện kể cả khi `canEditProfile` sai (builder `suspended` vẫn thấy và chỉnh được; không có tác dụng công khai vì `findPublicBuilderByHandle` lọc `approved`). Không có hàng nào → không có mục. GitHub: nói khách sẽ thấy `@{label}` kèm link; LinkedIn: khách chỉ thấy nhãn đã xác minh, không tên, không email, không link (`label` LinkedIn thường là email nên KHÔNG in ra ở đây).
+7. **`GET /hub/profile?badge=shown|hidden|notLinked`** là thông báo sau POST (tập đóng `BADGE_NOTICES`, giá trị lạ bị bỏ qua), cùng kiểu `?link=` của `/me`; `Location` kết thúc bằng `#badges` để trình duyệt cuộn tới mục (S1). 303 luôn về cùng site, `Location` không chứa `label`. Trang `/hub/*` đã `no-store` (`noStorePrivate`).
+8. **Cờ provider tắt thì công tắc biến mất (Owner E1, 2026-10-10).** `profilePage` lấy `availableProviders(c)` (`routes/oauth.tsx`: cờ bật VÀ đã cấu hình, cùng quy tắc `/me` và `/login`) và chỉ đưa vào view các hàng có provider trong danh sách đó. Cờ không đụng tới `show_on_profile` đã lưu; bật lại cờ thì công tắc (và huy hiệu, Task 11) trở lại. `POST …/badge` **không** kiểm cờ: đó là cài đặt đồng ý của chính builder, bật hay tắt đều vô hại, và cho phép tắt huy hiệu khi cờ đang tắt.
+9. **Builder `suspended` được bật/tắt cả hai chiều (Reviewer đã phán, L2).** Route cố ý không gọi `canEditProfile`: đây là cài đặt đồng ý chứ không phải sửa hồ sơ; không có tác dụng công khai khi chưa `approved`.
+10. **Cỡ:** ≈ 120 dòng mã, ≈ 330 dòng test: dưới 600, không tách.
+
+**Câu hỏi mở cho Owner:** không còn. Câu chữ ở bảng i18n đã được Owner duyệt nguyên văn 2026-10-10.
+
+**Files:**
+- Create: `apps/web/test/hub/badge-toggle.test.ts`.
+- Modify: `apps/web/src/domain/identity.ts` (`BADGE_PROVIDERS`, `isBadgeProvider`, hai action audit), `apps/web/src/db/identities.ts` (`setShowOnProfile`), `apps/web/src/routes/hub.tsx` (nạp danh sách, route POST), `apps/web/src/views/hub/ProfilePage.tsx` (mục `#badges`), 4 file `apps/web/src/i18n/messages/*.ts`.
+- Test (sửa): `apps/web/test/domain/identity.test.ts` (dòng ≈ 40 ghim `IDENTITY_AUDIT` là `{link, unlink}`: sửa thành bốn action; thêm test `BADGE_PROVIDERS`/`isBadgeProvider`), `apps/web/test/db/identities.test.ts` (khối `setShowOnProfile`), `apps/web/test/architecture.test.ts` (allowlist thêm `routes/hub.tsx`).
+
+**Interfaces:**
+- Consumes: `availableProviders` (`routes/oauth.tsx`); `listIdentitiesForUser`, `UserIdentity` (`db/identities.ts`, `domain/identity.ts`); `auditStatement`, `AuditIdentityGuard` (`db/audit.ts`); `requireBuilder`; `onLocalized`; `errorResponse`; `localizedPath`; `translator`; `HubLayout`; `PROVIDER_NAME`; test: `makeBuilder`, `signIn` (`test/fixtures.ts`), `linkedUser` (`test/oauth-flow.ts`), `formPost`, `getReq`, `testEnv`.
+- Produces: `BADGE_PROVIDERS = ["github", "linkedin"] as const`, `BadgeProvider`, `isBadgeProvider(v): v is BadgeProvider` (`domain/identity.ts`); `IDENTITY_AUDIT.show = "auth.identity.badge_show"` và `.hide = "auth.identity.badge_hide"`; `type BadgeResult = "changed" | "unchanged" | "not_linked"` và `setShowOnProfile(db, { userId, provider: BadgeProvider, show: boolean, now }): Promise<BadgeResult>` (`db/identities.ts`); `BADGE_NOTICES = ["shown", "hidden", "notLinked"] as const` (`views/hub/ProfilePage.tsx`, một nguồn cho route và view); route `POST /hub/identities/:provider/badge` (4 tiền tố locale).
+
+**Khóa i18n mới (Owner duyệt nguyên văn 2026-10-10; thêm sau `profile.saved` của từng file). GitHub, LinkedIn, Google không dịch. `{provider}`, `{label}` là tham số.**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `hub.badges.title` | Verified accounts on your public profile | Tài khoản đã xác minh trên hồ sơ công khai | 公开资料上的已验证账号 | 公開資料上的已驗證帳號 |
+| `hub.badges.intro` | Choose whether visitors can see that you own a linked GitHub or LinkedIn account. Each one stays off until you turn it on. Google accounts are never shown. | Chọn có cho khách thấy bạn sở hữu tài khoản GitHub hoặc LinkedIn đã liên kết hay không. Mỗi tài khoản đều tắt cho tới khi bạn tự bật. Tài khoản Google không bao giờ được hiện. | 选择是否让访客看到你拥有已关联的 GitHub 或 LinkedIn 账号。每个账号在你开启之前都保持关闭。Google 账号永远不会公开显示。 | 選擇是否讓訪客看到你擁有已連結的 GitHub 或 LinkedIn 帳號。每個帳號在你開啟之前都保持關閉。Google 帳號永遠不會公開顯示。 |
+| `hub.badges.notApproved` | Visitors see nothing while your profile is not public. | Khi hồ sơ của bạn chưa công khai, khách sẽ không thấy gì. | 你的资料未公开期间，访客看不到任何内容。 | 你的資料未公開期間，訪客看不到任何內容。 |
+| `hub.badges.detail.github` | Visitors see @{label}, linked to your GitHub profile, with “verified via GitHub”. | Khách sẽ thấy @{label}, có link tới trang GitHub của bạn, kèm dòng “đã xác minh qua GitHub”. | 访客会看到 @{label}（链接到你的 GitHub 主页）以及“已通过 GitHub 验证”。 | 訪客會看到 @{label}（連結到你的 GitHub 主頁）以及「已透過 GitHub 驗證」。 |
+| `hub.badges.detail.linkedin` | Visitors see only “verified via LinkedIn”: no name, no email, no link. | Khách chỉ thấy dòng “đã xác minh qua LinkedIn”: không tên, không email, không link. | 访客只会看到“已通过 LinkedIn 验证”：没有姓名、邮箱或链接。 | 訪客只會看到「已透過 LinkedIn 驗證」：沒有姓名、電子郵件或連結。 |
+| `hub.badges.on` | On | Đang bật | 已开启 | 已開啟 |
+| `hub.badges.off` | Off | Đang tắt | 已关闭 | 已關閉 |
+| `hub.badges.show` | Show {provider} on my public profile | Hiện {provider} trên hồ sơ công khai của tôi | 在我的公开资料中显示 {provider} | 在我的公開資料中顯示 {provider} |
+| `hub.badges.hide` | Hide {provider} from my public profile | Ẩn {provider} khỏi hồ sơ công khai của tôi | 从我的公开资料中隐藏 {provider} | 從我的公開資料中隱藏 {provider} |
+| `hub.badges.notice.shown` | Badge turned on. | Đã bật huy hiệu. | 已开启徽章。 | 已開啟徽章。 |
+| `hub.badges.notice.hidden` | Badge turned off. | Đã tắt huy hiệu. | 已关闭徽章。 | 已關閉徽章。 |
+| `hub.badges.notice.notLinked` | That account isn't linked, so nothing changed. | Tài khoản đó chưa được liên kết nên không có gì thay đổi. | 该账号并未关联，未作任何更改。 | 該帳號並未連結，未作任何更改。 |
+
+- [ ] **Step 1: Test miền và db (đỏ).** (a) Trong `apps/web/test/domain/identity.test.ts`: sửa test "identity audit actions" (dòng ≈ 40) thành `expect(IDENTITY_AUDIT).toEqual({ link: "auth.identity.link", unlink: "auth.identity.unlink", show: "auth.identity.badge_show", hide: "auth.identity.badge_hide" })` và thêm (import `BADGE_PROVIDERS`, `isBadgeProvider` từ `../../src/domain/identity.ts`):
+
+```ts
+describe("badge providers (VNX-2606a)", () => {
+  it("are exactly github and linkedin: google never", () => {
+    expect([...BADGE_PROVIDERS]).toEqual(["github", "linkedin"]);
+    expect(isBadgeProvider("github")).toBe(true);
+    expect(isBadgeProvider("linkedin")).toBe(true);
+    for (const v of ["google", "GitHub", "", null, 3]) expect(isBadgeProvider(v)).toBe(false);
+  });
+});
+```
+
+  (b) Trong `apps/web/test/db/identities.test.ts` KHÔNG có `tag` và `linkedUser`: thêm `import { linkedUser } from "../oauth-flow.ts";` và `setShowOnProfile` vào import từ `../../src/db/identities.ts`; email duy nhất tạo như `newUser()` đã làm, bằng bộ đếm `seq` của file (``ident-bt-${++seq}@vnx.si``; subject ``s-${++seq}``). Dùng `audits`, `ensureUser` có sẵn. Lưu ý `beforeEach` của file xóa mọi hàng `user_identities`, nên đặt khối mới trong cùng `describe` hoặc tự cô lập theo `user_id` như dưới:
+
+```ts
+describe("setShowOnProfile (VNX-2606a)", () => {
+  it("turns the flag on and off, audits {provider} only, and writes nothing when the value is unchanged", async () => {
+    const { user } = await linkedUser(`ident-bt-${++seq}@vnx.si`, "github", { subject: `s-${++seq}`, label: "mona-cat_octo" });
+    const flag = async () => (await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE user_id = ?1 AND provider = 'github'").bind(user.id).first<{ v: number }>())?.v;
+    expect(await flag()).toBe(0); // positive precondition: linking never opts in
+    expect(await setShowOnProfile(testEnv.DB, { userId: user.id, provider: "github", show: true, now: new Date().toISOString() })).toBe("changed");
+    expect(await flag()).toBe(1);
+    expect(await audits(user.id, "auth.identity.badge_show")).toEqual(['{"provider":"github"}']);
+    expect(await setShowOnProfile(testEnv.DB, { userId: user.id, provider: "github", show: true, now: new Date().toISOString() })).toBe("unchanged");
+    expect(await audits(user.id, "auth.identity.badge_show")).toHaveLength(1); // no second row
+    expect(await setShowOnProfile(testEnv.DB, { userId: user.id, provider: "github", show: false, now: new Date().toISOString() })).toBe("changed");
+    expect(await flag()).toBe(0);
+    expect(await audits(user.id, "auth.identity.badge_hide")).toEqual(['{"provider":"github"}']);
+  });
+
+  it("not_linked when the user has no such identity, and it never touches another user's row", async () => {
+    const a = await linkedUser(`ident-bt-${++seq}@vnx.si`, "linkedin", { subject: `s-${++seq}`, label: "a@example.com" });
+    const b = await newUser();
+    expect(await setShowOnProfile(testEnv.DB, { userId: b.id, provider: "linkedin", show: true, now: new Date().toISOString() })).toBe("not_linked");
+    const row = await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE id = ?1").bind(a.identity.id).first<{ v: number }>();
+    expect(row?.v).toBe(0);
+    expect(await audits(b.id, "auth.identity.badge_show")).toEqual([]);
+  });
+});
+```
+  Chạy `npm test -w apps/web -- test/domain/identity.test.ts test/db/identities.test.ts`. Mong đợi: FAIL, `BADGE_PROVIDERS` và `setShowOnProfile` chưa có.
+
+- [ ] **Step 2: Miền và db.** Trong `src/domain/identity.ts`, sau `OAUTH_PROVIDERS`:
+
+```ts
+/** The providers whose account a builder may show on the public profile (ADR-012 §5). Google never has a switch. */
+export const BADGE_PROVIDERS = ["github", "linkedin"] as const;
+export type BadgeProvider = (typeof BADGE_PROVIDERS)[number];
+export function isBadgeProvider(value: unknown): value is BadgeProvider {
+  return typeof value === "string" && (BADGE_PROVIDERS as readonly string[]).includes(value);
+}
+```
+  và đổi dòng `IDENTITY_AUDIT` thành:
+
+```ts
+export const IDENTITY_AUDIT = { link: "auth.identity.link", unlink: "auth.identity.unlink", show: "auth.identity.badge_show", hide: "auth.identity.badge_hide" } as const;
+```
+  Trong `src/db/identities.ts` (thêm `BadgeProvider` vào import từ `../domain/identity.ts`):
+
+```ts
+export type BadgeResult = "changed" | "unchanged" | "not_linked";
+
+/**
+ * The builder's opt-in for the public badge (ADR-012 §5): turns `show_on_profile` on or off for that user's own account of that provider and audits
+ * it ({ provider } only) in the same batch. The write is filtered by `user_id`, so another user's row is never reached. Nothing is written
+ * (and nothing audited) when the value already is what was asked. The flag has no public effect by itself: the badge query also needs an approved builder (Task 11).
+ */
+export async function setShowOnProfile(db: D1Database, input: { userId: string; provider: BadgeProvider; show: boolean; now: string }): Promise<BadgeResult> {
+  const existing = await db.prepare("SELECT * FROM user_identities WHERE user_id = ?1 AND provider = ?2").bind(input.userId, input.provider).first<Row>();
+  if (!existing) return "not_linked";
+  const next = input.show ? 1 : 0;
+  if (existing.show_on_profile === next) return "unchanged";
+  const [update] = await db.batch<{ id: string }>([
+    db.prepare("UPDATE user_identities SET show_on_profile = ?3, updated_at = ?4 WHERE id = ?1 AND user_id = ?2 AND show_on_profile != ?3 RETURNING id").bind(existing.id, input.userId, next, input.now),
+    auditStatement(
+      db,
+      { actorUserId: input.userId, action: input.show ? IDENTITY_AUDIT.show : IDENTITY_AUDIT.hide, entity: "user", entityId: input.userId, data: { provider: input.provider }, now: input.now },
+      { identityId: existing.id, userId: input.userId },
+    ),
+  ]);
+  return update?.results.length ? "changed" : "unchanged";
+}
+```
+  Chạy lại `npm test -w apps/web -- test/domain/identity.test.ts test/db/identities.test.ts`: PASS.
+
+- [ ] **Step 3: Test route (đỏ).** Tạo `apps/web/test/hub/badge-toggle.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { linkIdentity, listIdentitiesForUser } from "../../src/db/identities.ts";
+import type { BuilderStatus } from "../../src/domain/builder.ts";
+import { PROVIDER_FLAG, type OAuthProvider } from "../../src/domain/identity.ts";
+import { ensureUser, makeBuilder, signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+import { linkedUser } from "../oauth-flow.ts";
+
+let counter = 0;
+const tag = () => `${++counter}${Math.random().toString(36).slice(2, 6)}`;
+/** A provider flag on or off (the badge switch follows the flag: Owner E1). The cache is reset so the change is seen at once. */
+const setProvider = async (provider: OAuthProvider, enabled: boolean) => {
+  const admin = await ensureUser("oauth-flags@example.com");
+  await setFlag(testEnv.DB, { key: PROVIDER_FLAG[provider], enabled, actorUserId: admin.id, now: new Date().toISOString() });
+  resetFlagCache();
+};
+beforeEach(async () => {
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+  await setProvider("github", true);
+  await setProvider("linkedin", true);
+});
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
+/** A builder with a session; each test its own e-mail and handle (no shared rows, no global counts). */
+async function builderOf(status: BuilderStatus = "approved") {
+  const t = tag();
+  const email = `bt-${t}@vnx.si`;
+  const builder = await makeBuilder(email, `bt-${t}`, status);
+  const { cookie } = await signIn(email);
+  return { builder, cookie, email };
+}
+const link = (userId: string, provider: OAuthProvider, label: string) =>
+  linkIdentity(testEnv.DB, { userId, provider, subject: `s-${tag()}`, label, now: new Date().toISOString() });
+const flagOf = async (userId: string, provider: string) =>
+  (await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE user_id = ?1 AND provider = ?2").bind(userId, provider).first<{ v: number }>())?.v;
+const badgeAudits = async (userId: string) =>
+  (await testEnv.DB.prepare("SELECT action, data FROM audit_log WHERE actor_user_id = ?1 AND action LIKE 'auth.identity.badge_%' ORDER BY action").bind(userId).all<{ action: string; data: string }>()).results;
+const profileHtml = async (cookie: string, path = "/hub/profile") => decode(await (await createApp().request(getReq(path, cookie), undefined, testEnv)).text());
+const sectionOf = (html: string) => html.match(/<section class="card wide" id="badges">.*?<\/section>/s)?.[0] ?? "";
+const post = (provider: string, fields: Record<string, string>, cookie: string, headers: Record<string, string> = {}, path = `/hub/identities/${provider}/badge`) =>
+  createApp().request(formPost(path, fields, { cookie, ...headers }), undefined, testEnv);
+
+describe("/hub/profile: public badge switch (VNX-2606a)", () => {
+  it("shows a switch for each linked GitHub and LinkedIn account, off by default, and never one for Google", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "mona-cat_octo");
+    await link(builder.userId, "linkedin", `li-${tag()}@example.com`);
+    const googleLabel = `g-${tag()}@example.com`;
+    await link(builder.userId, "google", googleLabel);
+    const section = sectionOf(await profileHtml(cookie));
+    expect(section).toContain("Verified accounts on your public profile");
+    expect(section).toContain("Show GitHub on my public profile");
+    expect(section).toContain("Show LinkedIn on my public profile");
+    expect(section).toContain("@mona-cat_octo");
+    expect(section).toContain("</strong> · Off");
+    expect(section).not.toContain("Show Google"); // the intro says "Google accounts are never shown": the word alone is allowed
+    expect(section).not.toContain("Hide Google");
+    expect(section).not.toContain(googleLabel);
+    expect(section).not.toMatch(/@example\.com/); // the LinkedIn and Google labels (e-mails) are not printed here
+    expect(section).toContain('action="/hub/identities/github/badge"');
+    expect(section).not.toContain("/hub/identities/google/");
+    expect(section).not.toMatch(/style=|<script/);
+  });
+
+  it("has no badge section when the builder has no GitHub or LinkedIn account (Google alone does not count)", async () => {
+    const { builder, cookie } = await builderOf();
+    expect(await profileHtml(cookie)).not.toContain('id="badges"');
+    await link(builder.userId, "google", `g-${tag()}@example.com`);
+    const html = await profileHtml(cookie);
+    expect(html).toContain("Edit profile"); // positive: the page renders
+    expect(html).not.toContain('id="badges"');
+  });
+
+  it("turns the badge on and off: 303 to /hub/profile with a notice, one audit row of {provider} each, flag flips", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octocat");
+    expect(await flagOf(builder.userId, "github")).toBe(0);
+    const on = await post("github", { show: "1" }, cookie);
+    expect(on.status).toBe(303);
+    expect(on.headers.get("location")).toBe("/hub/profile?badge=shown#badges");
+    expect(await flagOf(builder.userId, "github")).toBe(1);
+    const html = await profileHtml(cookie, "/hub/profile?badge=shown");
+    expect(sectionOf(html)).toContain("</strong> · On");
+    expect(sectionOf(html)).toContain("Hide GitHub from my public profile");
+    expect(html).toContain("Badge turned on.");
+    const off = await post("github", { show: "0" }, cookie, {}, "/vi/hub/identities/github/badge");
+    expect(off.headers.get("location")).toBe("/vi/hub/profile?badge=hidden#badges"); // the redirect follows the request locale
+    expect(await flagOf(builder.userId, "github")).toBe(0);
+    expect(await badgeAudits(builder.userId)).toEqual([
+      { action: "auth.identity.badge_hide", data: '{"provider":"github"}' }, // ORDER BY action: ULIDs of one millisecond have no reliable order
+      { action: "auth.identity.badge_show", data: '{"provider":"github"}' },
+    ]);
+  });
+
+  it("the same value twice writes one audit row; the second still answers 'shown'", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "linkedin", "x@example.com");
+    await post("linkedin", { show: "1" }, cookie);
+    const again = await post("linkedin", { show: "1" }, cookie);
+    expect(again.headers.get("location")).toBe("/hub/profile?badge=shown#badges");
+    expect(await badgeAudits(builder.userId)).toHaveLength(1);
+  });
+
+  it.each(["pending", "rejected", "suspended"] as const)("a %s builder sees and can use the switch; it has no public effect yet", async (status) => {
+    const { builder, cookie } = await builderOf(status);
+    await link(builder.userId, "github", "octo-pending");
+    const section = sectionOf(await profileHtml(cookie));
+    expect(section).toContain("Show GitHub on my public profile");
+    expect(section).toContain("Visitors see nothing while your profile is not public.");
+    expect((await post("github", { show: "1" }, cookie)).status).toBe(303);
+    expect(await flagOf(builder.userId, "github")).toBe(1);
+    expect((await post("github", { show: "0" }, cookie)).status).toBe(303); // a consent setting, not a profile edit: both ways, even suspended
+    expect(await flagOf(builder.userId, "github")).toBe(0);
+  });
+
+  it("an approved builder does not get the 'until approved' line", async () => {
+    const { builder, cookie } = await builderOf("approved");
+    await link(builder.userId, "github", "octo-ok");
+    const section = sectionOf(await profileHtml(cookie));
+    expect(section).toContain("Show GitHub on my public profile");
+    expect(section).not.toContain("while your profile is not public");
+  });
+
+  it("a provider whose flag is off has no switch; the other provider is unaffected; the stored value is kept and returns with the flag (Owner E1)", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octo-flag");
+    await link(builder.userId, "linkedin", `li-${tag()}@example.com`);
+    await post("github", { show: "1" }, cookie);
+    expect(sectionOf(await profileHtml(cookie))).toContain("Hide GitHub from my public profile"); // positive precondition: flag on
+    await setProvider("github", false);
+    const off = sectionOf(await profileHtml(cookie));
+    expect(off).not.toContain("GitHub");
+    expect(off).not.toContain("/hub/identities/github/");
+    expect(off).toContain("Show LinkedIn on my public profile"); // linkedin is independent
+    expect(await flagOf(builder.userId, "github")).toBe(1); // the flag does not change the stored choice
+    await setProvider("github", true);
+    expect(sectionOf(await profileHtml(cookie))).toContain("Hide GitHub from my public profile");
+    await setProvider("github", false);
+    await setProvider("linkedin", false);
+    expect(await profileHtml(cookie)).not.toContain('id="badges"'); // both off: no section
+  });
+
+  it("google is 404 even when posted by hand (its flag stays 0); an unknown provider is 404", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "google", `g-${tag()}@example.com`);
+    expect((await post("google", { show: "1" }, cookie)).status).toBe(404);
+    expect((await post("myspace", { show: "1" }, cookie)).status).toBe(404);
+    expect(await flagOf(builder.userId, "google")).toBe(0);
+  });
+
+  it("a provider the builder has not linked: notLinked, no audit, no row created", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "linkedin", "y@example.com"); // positive: has an identity, just not this one
+    const res = await post("github", { show: "1" }, cookie);
+    expect(res.headers.get("location")).toBe("/hub/profile?badge=notLinked#badges");
+    expect(await flagOf(builder.userId, "github")).toBeUndefined();
+    expect(await badgeAudits(builder.userId)).toEqual([]);
+  });
+
+  it("never reaches another builder's row: B posting for a provider only A has linked changes nothing of A's", async () => {
+    const a = await builderOf();
+    const b = await builderOf();
+    await link(a.builder.userId, "github", "octo-a");
+    await link(b.builder.userId, "linkedin", "b@example.com");
+    const res = await post("github", { show: "1" }, b.cookie);
+    expect(res.headers.get("location")).toBe("/hub/profile?badge=notLinked#badges");
+    expect(await flagOf(a.builder.userId, "github")).toBe(0);
+    expect((await listIdentitiesForUser(testEnv.DB, a.builder.userId))[0]?.showOnProfile).toBe(false);
+    expect(await badgeAudits(a.builder.userId)).toEqual([]);
+  });
+
+  it("a body that is not exactly show=1 or show=0 is refused (409) and changes nothing", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octo-bad");
+    for (const fields of [{}, { show: "" }, { show: "true" }, { show: "2" }]) expect((await post("github", fields, cookie)).status).toBe(409);
+    expect(await flagOf(builder.userId, "github")).toBe(0);
+  });
+
+  it("refuses a missing or foreign Origin (403) and changes nothing", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octo-origin");
+    expect((await post("github", { show: "1" }, cookie, { origin: "https://evil.example" })).status).toBe(403);
+    const noOrigin = new Request("https://vnx.si/hub/identities/github/badge", { method: "POST", headers: { cookie, "content-type": "application/x-www-form-urlencoded" }, body: "show=1" });
+    expect((await createApp().request(noOrigin, undefined, testEnv)).status).toBe(403);
+    expect(await flagOf(builder.userId, "github")).toBe(0);
+  });
+
+  it("signed out goes to /login, a signed-in non-builder goes to /hub/apply; neither writes", async () => {
+    const out = await createApp().request(formPost("/hub/identities/github/badge", { show: "1" }), undefined, testEnv);
+    expect(out.status).toBe(303);
+    expect(out.headers.get("location")).toMatch(/^\/login/);
+    const { cookie, user } = await signIn(`bt-nb-${tag()}@vnx.si`);
+    await linkedUser(`bt-nb2-${tag()}@vnx.si`, "github", { subject: `s-${tag()}`, label: "octo-nb" });
+    const res = await post("github", { show: "1" }, cookie);
+    expect(res.headers.get("location")).toBe("/hub/apply");
+    expect(await flagOf(user.id, "github")).toBeUndefined();
+  });
+
+  it("the body limit is 64 KB", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octo-big");
+    expect((await post("github", { show: "1", pad: "x".repeat(70 * 1024) }, cookie)).status).toBe(413);
+    expect(await flagOf(builder.userId, "github")).toBe(0);
+  });
+
+  it("unlinking removes the switch and the row (so no badge can remain)", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octo-gone");
+    await post("github", { show: "1" }, cookie);
+    expect(sectionOf(await profileHtml(cookie))).toContain("Hide GitHub from my public profile"); // positive precondition
+    const res = await createApp().request(formPost("/me/identities/github/unlink", {}, { cookie }), undefined, testEnv);
+    expect(res.status).toBe(303);
+    expect(await flagOf(builder.userId, "github")).toBeUndefined();
+    expect(await profileHtml(cookie)).not.toContain('id="badges"');
+  });
+
+  it("renders in vi, zh-Hans and zh-Hant", async () => {
+    const { builder, cookie } = await builderOf();
+    await link(builder.userId, "github", "octo-i18n");
+    expect(sectionOf(await profileHtml(cookie, "/vi/hub/profile"))).toContain("Hiện GitHub trên hồ sơ công khai của tôi");
+    expect(sectionOf(await profileHtml(cookie, "/zh-hans/hub/profile"))).toContain("在我的公开资料中显示 GitHub");
+    expect(sectionOf(await profileHtml(cookie, "/zh-hant/hub/profile"))).toContain("在我的公開資料中顯示 GitHub");
+  });
+});
+```
+  Ghi chú cho Implementer: `sectionOf` khớp đúng chuỗi mở thẻ của view ở Step 5 (`<section class="card wide" id="badges">`), nếu JSX in thuộc tính khác thứ tự thì đổi regex thành `/<section[^>]*id="badges".*?<\/section>/s`. Chạy `npm test -w apps/web -- test/hub/badge-toggle.test.ts`. Mong đợi: FAIL (route 404, mục `#badges` chưa có).
+
+- [ ] **Step 4: Route.** Trong `src/routes/hub.tsx`: thêm import `availableProviders` (`./oauth.tsx`, như `me.tsx`), `listIdentitiesForUser, setShowOnProfile` (`../db/identities.ts`), `isBadgeProvider` (`../domain/identity.ts`), `BADGE_NOTICES` (`../views/hub/ProfilePage.tsx`). Đổi `profilePage` thành async và nạp danh sách (ba nơi gọi hiện đều `return profilePage(...)`, nên không cần sửa; handler `GET /hub/profile` là `(c) => profilePage(...)` nay trả Promise, Hono chấp nhận):
+
+```tsx
+async function profilePage(c: Context<AppEnv>, values: BuilderFormValues, errors: FieldErrors, status: 200 | 400 | 409 = 200, saved = false) {
+  const builder = c.get("builder");
+  // Owner E1: a provider whose flag is off (or that is not configured) has no switch; the stored choice is untouched.
+  const available = await availableProviders(c);
+  const badges = (await listIdentitiesForUser(c.env.DB, builder.userId)).filter((i) => isBadgeProvider(i.provider) && available.includes(i.provider));
+  const raw = c.req.query("badge");
+  const badgeNotice = BADGE_NOTICES.find((n) => n === raw) ?? null;
+  return page(c, <ProfilePage locale={c.get("locale")} origin={requestOrigin(c)} builder={builder} values={values} errors={errors} saved={saved} badges={badges} badgeNotice={badgeNotice} />, status);
+}
+```
+  Thêm route sau `POST /hub/profile`:
+
+```tsx
+  // VNX-2606a. The builder's opt-in for the public badge (ADR-012 §5). Deliberately NO canEditProfile and NO provider-flag check: a consent setting, not a profile edit;
+  // any builder status may switch it both ways (Reviewer ruling), and it has no public effect until `approved`.
+  // `google` is 404 (it never has a switch). Only the caller's own row is touched; the answer is a 303 to the same site and never carries the label.
+  onLocalized(app, "post", "/hub/identities/:provider/badge", requireBuilder, async (c) => {
+    const provider = c.req.param("provider");
+    if (!isBadgeProvider(provider)) return errorResponse(c, "notFound", 404);
+    const show = (await c.req.parseBody())["show"];
+    if (show !== "1" && show !== "0") return errorResponse(c, "conflict", 409);
+    const result = await setShowOnProfile(c.env.DB, { userId: c.get("builder").userId, provider, show: show === "1", now: new Date().toISOString() });
+    const notice = result === "not_linked" ? "notLinked" : show === "1" ? "shown" : "hidden";
+    return c.redirect(`${localizedPath(c.get("locale"), "/hub/profile")}?badge=${notice}#badges`, 303);
+  });
+```
+  Trong `test/architecture.test.ts` thêm `"../src/routes/hub.tsx"` vào `IDENTITY_ALLOWED` và nối vào chú thích "2606a: routes/hub.tsx (the builder's own switch)". `RANKING_FILES` không đổi.
+
+- [ ] **Step 5: View và i18n.** `src/views/hub/ProfilePage.tsx`: thêm `import { PROVIDER_NAME } from "../../domain/identity.ts"`, `import type { UserIdentity } ...`, `export const BADGE_NOTICES = ["shown", "hidden", "notLinked"] as const; export type BadgeNotice = (typeof BADGE_NOTICES)[number];`, `type BadgeRow = Pick<UserIdentity, "provider" | "label" | "showOnProfile">`, hai prop `badges: BadgeRow[]` và `badgeNotice: BadgeNotice | null`, `const NOTICE_KEY = { shown: "hub.badges.notice.shown", hidden: "hub.badges.notice.hidden", notLinked: "hub.badges.notice.notLinked" } as const;` và, ngay sau `</section>` của form hồ sơ (trong `HubLayout`):
+
+```tsx
+      {p.badges.length > 0 ? (
+        <section class="card wide" id="badges">
+          <h2>{tr("hub.badges.title")}</h2>
+          <p>{tr("hub.badges.intro")}</p>
+          {p.badgeNotice ? (
+            <p class={p.badgeNotice === "notLinked" ? "notice" : "notice good"} role="status">
+              {tr(NOTICE_KEY[p.badgeNotice])}
+            </p>
+          ) : null}
+          {p.builder.status !== "approved" ? <p class="notice">{tr("hub.badges.notApproved")}</p> : null}
+          <ul>
+            {p.badges.map((b) => {
+              const name = PROVIDER_NAME[b.provider];
+              return (
+                <li>
+                  <strong>{name}</strong> · {tr(b.showOnProfile ? "hub.badges.on" : "hub.badges.off")}
+                  <p class="muted">{b.provider === "github" ? tr("hub.badges.detail.github", { label: b.label }) : tr("hub.badges.detail.linkedin")}</p>
+                  <form method="post" action={localizedPath(p.locale, `/hub/identities/${b.provider}/badge`)}>
+                    <input type="hidden" name="show" value={b.showOnProfile ? "0" : "1"} />
+                    <button type="submit" class="btn">
+                      {tr(b.showOnProfile ? "hub.badges.hide" : "hub.badges.show", { provider: name })}
+                    </button>
+                  </form>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+```
+  (Dùng đúng tên class có thật trong `public/assets/app.css`, `grep -n "\.btn\|\.muted" public/assets/app.css`; task này KHÔNG thêm CSS.) Thêm 12 khóa vào 4 file `src/i18n/messages/*.ts` theo bảng (en là nguồn của kiểu `MessageKey`). Chạy `npm test -w apps/web -- test/hub/badge-toggle.test.ts test/i18n/parity.test.ts test/architecture.test.ts test/db/identities.test.ts`. Mong đợi: PASS.
+
+- [ ] **Step 6: Hồi quy.** `npm test -w apps/web -- test/hub test/me test/http`: các test hub hiện có phải vẫn xanh (trang hồ sơ nay thêm một truy vấn `user_identities`).
+
+- [ ] **Step 7: Kiểm toàn bộ và commit.**
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/domain/identity.ts apps/web/src/db/identities.ts apps/web/src/routes/hub.tsx apps/web/src/views/hub/ProfilePage.tsx \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/hub/badge-toggle.test.ts apps/web/test/domain/identity.test.ts apps/web/test/db/identities.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): builder opt-in switch for the public GitHub and LinkedIn badge at /hub/profile (VNX-2606a)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Kích cỡ ước tính:** mã ≈ 120 dòng (domain 8, db 25, route 18, view 45, hub.tsx imports 6, test kiến trúc 2), test ≈ 300 dòng (route 190, db 55, kiến trúc 2), locale 12 khóa × 4 file. Dưới 600 không tính locale: không tách.
+
+**Nghĩa vụ cho task sau:**
+- **Task 11 (VNX-2606b):** truy vấn huy hiệu lọc `approved` và `show_on_profile = 1`; cờ do task này ghi là đầu vào duy nhất.
+- **Task 12 (VNX-2607):** câu Privacy "A builder can choose to show their GitHub username, or the fact that their LinkedIn account is verified" đúng với code (mặc định tắt, builder tự bật từng provider, có audit).
+- **Ghi nhận:** không có "bật mặc định khi duyệt" hay "bật cả hai một lần": mỗi provider một cú bấm, theo ADR-012 §5 ("builder tự bật").
+
+---
+
+### Task 11: VNX-2606b — Huy hiệu xác minh trên `/b/:handle`
+
+**Phụ thuộc:** Task 10 (cờ `show_on_profile` có người ghi, `BadgeProvider`), Task 4 (regex `login` GitHub), Task 8-9 (hủy liên kết xóa hàng). **Review Focus:** 8 (đủ: chỉ `approved` + `show_on_profile = 1`, Google không bao giờ, client không lộ, thứ tự không đổi), 11, và nghĩa vụ riêng tư của header (identity client không tới builder hay công khai).
+
+**Mục tiêu.** Trang công khai `/b/:handle` của builder `approved` hiện huy hiệu cho từng identity GitHub hoặc LinkedIn có `show_on_profile = 1`: GitHub là `@login` link tới `https://github.com/<login>` kèm "verified via GitHub"; LinkedIn chỉ là nhãn "verified via LinkedIn" (không link, không email, không tên). Google không bao giờ. Huy hiệu **không vào xếp hạng** (ADR-004): không file xếp hạng, catalogue hay danh bạ nào đọc `user_identities` hay `show_on_profile`, có test nguồn.
+
+**Quyết định kỹ thuật** (từ code thật; Reviewer kiểm):
+1. **Link GitHub đi THẲNG, không qua `/go/` (phán quyết theo ADR-007 §7).** Lý do: (a) `/go/` là cơ chế **offer**: `/go/:merchantSlug` và `/go/o/:offerId` tra đích theo id trong `offers` của DB, kiểm host đã đăng ký, đếm click vào `outbound_clicks`, và chỉ dùng cho link kiếm tiền (`rel="sponsored"`); một link tới hồ sơ GitHub của builder không phải offer, không có merchant, không kiếm tiền, nên ép qua `/go/` buộc phải bịa một merchant "github.com" và ghi click vào bảng tiền; (b) code hiện hành đã làm đúng như vậy cho mọi link ngoài do builder cung cấp: `websiteUrl` và `item.url` của portfolio trong chính `BuilderProfilePage` là `<a href rel="nofollow ugc noopener" target="_blank">` trực tiếp (test `builder-profile.test.ts` ghim điều đó); (c) đếm click vào danh tính builder là dữ liệu cá nhân thừa (ADR-007 §11, "Click không lưu IP hay email"; ở đây còn kèm danh tính). Câu "Mọi link ra ngoài đi qua /go/" được đọc là mọi link **kiếm tiền hoặc theo dõi**. Không cần Owner quyết (xem "Ghi nhận" cuối task: chữ của ADR-007 §7 rộng hơn cách nó được áp dụng). Giá trị `rel`: `nofollow noopener noreferrer` (hằng `BADGE_REL`; không `ugc` vì `login` do GitHub cấp chứ không phải nội dung người dùng gõ; thêm `noreferrer` để GitHub không thấy trang VNX.SI nào dẫn tới), cùng `target="_blank"` như các link ngoài khác của trang.
+2. **URL dựng an toàn, fail closed.** Regex `login` hiện là hằng riêng trong `auth/oauth/github.ts` (Task 4). Chuyển nó sang `domain/identity.ts` thành `GITHUB_LOGIN_RE` (một nguồn; `github.ts` import lại, hành vi không đổi, test `github` hiện có giữ nguyên) và thêm `githubProfileUrl(login): string | null` = `https://github.com/${login}` chỉ khi `GITHUB_LOGIN_RE.test(login)`, ngược lại `null`. `label` trong DB đã qua regex này lúc lưu (adapter) nhưng cột chỉ có CHECK 1-254 ký tự, nên ở chỗ vẽ **kiểm lại**: `login` không hợp lệ (dữ liệu cũ, chèn thô) thì **bỏ cả huy hiệu GitHub đó**, không vẽ nửa vời. Chữ `@login` do JSX escape; `href` là chuỗi do hàm trên dựng, không bao giờ nối từ `label` ngoài hàm.
+3. **LinkedIn không bao giờ ra khỏi tầng db kèm `label`.** `label` của LinkedIn thường là email. `listPublicBadges` chỉ chọn `label` khi `provider = 'github'` (`CASE WHEN`), nên view và route không có cách nào vô tình in email LinkedIn. Kiểu trả về `PublicBadge = { provider: "github"; login: string; url: string } | { provider: "linkedin" }`.
+4. **Điều kiện công khai nằm trong SQL, không dựa vào route:** `listPublicBadges(db, builderUserId, providers)` join `builders` (`status = 'approved'`) và `users` (`status = 'active'`), lọc `show_on_profile = 1` và `provider IN (<providers>)` với `providers` là danh sách provider khả dụng do route truyền vào (quyết định 9; danh sách rỗng thì trả `[]` không chạm DB). Route `findPublicBuilderByHandle` đã lọc cùng điều kiện, nhưng hàm này tự đứng vững (phòng ngừa chiều sâu, đúng câu hỏi mở (c): builder rời `approved` giữ nguyên hàng và cờ, huy hiệu biến mất; khi được `approved` lại thì hiện lại, có test).
+5. **Cache: `/b/:handle` không có `Cache-Control` do ứng dụng đặt.** Đã đọc `src`: `Cache-Control` chỉ có ở `/media/*` (immutable), `robots.txt`, `sitemap` (`public, max-age=3600`), `no-store` ở vùng riêng và mọi HTML cho người đã đăng nhập (`noStorePrivate`). `/b/:handle` cho khách ẩn danh trả HTML không header cache: Workers không tự cache phản hồi động, trình duyệt không có validator nên không dùng bản cũ không hỏi lại; vậy tắt huy hiệu hoặc hủy liên kết có hiệu lực **ngay ở lần tải kế tiếp**, không có độ trễ do cache. Task này **không** thêm `Cache-Control` cho `/b/:handle`, và thêm test ghim hành vi (khách: không `public`/`max-age`/`s-maxage`; đã đăng nhập: `no-store`; bật/tắt/hủy liên kết thấy ngay). Phản hồi của Worker hiện không bị cache ở edge. Nghĩa vụ: nếu sau này code thêm Cache API hoặc `Cache-Control: public`/`s-maxage` cho `/b/*`, TTL phải ngắn và cache phải được xóa khi tắt huy hiệu, hủy liên kết và đổi trạng thái builder; ghi ở VNX-2608.
+6. **Chỉ vẽ trong khối đầu trang, không đưa vào chỗ khác:** không vào JSON-LD (`sameAs`), meta description, OG, sitemap, `BuilderCard`, danh bạ hay catalogue (test: JSON-LD của trang không chứa `github.com` khi huy hiệu bật). Lý do: huy hiệu là tín hiệu tin cậy trên trang chi tiết, không phải dữ liệu xếp hạng hay có cấu trúc cho máy.
+7. **Không thêm kiểm "link có sống không".** Hồ sơ GitHub của tài khoản Enterprise Managed Users (login dạng `name_SHORTCODE`) không công khai, nên link có thể 404 với khách (nghĩa vụ của review VNX-2603c). Không có cách hợp lệ để biết từ phía ta (gọi GitHub từ trang công khai là chặn request và rò dữ liệu). Task này chỉ bảo đảm login dạng EMU (`mona-cat_octo`) được vẽ và link đúng; Owner đã quyết giữ link như ADR-012 §5 (E2), xem lại bằng tài khoản thật ở VNX-2608.
+8. **CSS:** một quy tắc nhỏ `.verified-list` / `.verified` cạnh `.chips` trong `public/assets/app.css` (không `style=` nội tuyến; test ghim).
+9. **Cờ provider tắt thì huy hiệu của provider đó biến mất (Owner E1, 2026-10-10).** `routes/builder-profile.tsx` gọi `availableProviders(c)` (`routes/oauth.tsx`: cờ bật VÀ đã cấu hình), lọc bằng `isBadgeProvider` và truyền vào `listPublicBadges`. Cờ không đổi `show_on_profile` đã lưu: bật lại cờ thì huy hiệu hiện lại. Hai provider độc lập. Thêm một lần đọc cờ (đã cache) cho mỗi lần tải `/b/:handle`.
+10. **Thứ tự không đổi, cả catalogue và danh bạ (ADR-012 "Được bảo đảm bởi", H1).** Test dựng sản phẩm/builder thật, bật huy hiệu, và so thứ tự `searchProducts` và `searchBuilders` trước và sau; cộng thêm assertion nguồn. **Top builders (`topBuilders`, `loadBuilderTallies`) chỉ có sau khi rebase lên `main` (M7 đã ở `main`, `38bf414`)**: xem nghĩa vụ BẮT BUỘC cuối task.
+11. **Cỡ:** ≈ 130 dòng mã, ≈ 450 dòng test, ≈ 50 dòng test kiến trúc: dưới 600 không tính locale, không tách.
+
+**Câu hỏi mở cho Owner:** không còn. Owner đã quyết 2026-10-10: (E1) cờ tắt thì huy hiệu ẩn; (E2) giữ link cho login EMU; (E3) câu chữ i18n duyệt nguyên văn.
+
+**Files:**
+- Create: `apps/web/test/public/builder-badges.test.ts`, `apps/web/test/hub/client-identity-privacy.test.ts`.
+- Modify: `apps/web/src/domain/identity.ts` (`GITHUB_LOGIN_RE`, `githubProfileUrl`, `PublicBadge`), `apps/web/src/auth/oauth/github.ts` (dùng `GITHUB_LOGIN_RE`, xóa hằng `LOGIN` cục bộ), `apps/web/src/db/identities.ts` (`listPublicBadges`), `apps/web/src/routes/builder-profile.tsx`, `apps/web/src/views/BuilderProfilePage.tsx`, `apps/web/public/assets/app.css`, 4 file `apps/web/src/i18n/messages/*.ts`.
+- Test (sửa): `apps/web/test/architecture.test.ts` (allowlist, khối ADR-004 và client), `apps/web/test/db/identities.test.ts` hoặc test `github` hiện có chỉ khi `GITHUB_LOGIN_RE` cần kiểm lại (xem Step 1).
+
+**Interfaces:**
+- Consumes: `availableProviders` (`routes/oauth.tsx`); `isBadgeProvider`, `BadgeProvider` (Task 10); `findPublicBuilderByHandle` (`db/builders.ts`); `listPortfolio`, `listPublicProductsByBuilder`; `setShowOnProfile`, `linkIdentity`, `unlinkIdentity` (`db/identities.ts`); `PROVIDER_NAME`; `BuilderProfilePage` (`views/BuilderProfilePage.tsx`, hằng `EXTERNAL` hiện có); `translator`; `searchBuilders` (`db/directory.ts`), `searchProducts` (`db/catalog.ts`), `parseCatalogQuery` (`domain/catalog.ts`) cho test thứ tự; test: `makeBuilder`, `addLiveProduct`, `makeInquiry`, `makeRequest`, `inviteBuilders`, `signIn` (`test/fixtures.ts`), `linkedUser` (`test/oauth-flow.ts`), `setBuilderStatus` (`db/builders.ts`).
+- Produces: `GITHUB_LOGIN_RE`, `githubProfileUrl(login: string): string | null`, `type PublicBadge = { provider: "github"; login: string; url: string } | { provider: "linkedin" }` (`domain/identity.ts`); `listPublicBadges(db: D1Database, builderUserId: string, providers: readonly BadgeProvider[]): Promise<PublicBadge[]>` (`db/identities.ts`, thứ tự `github` rồi `linkedin`); prop `badges: PublicBadge[]` của `BuilderProfilePage`; hằng `BADGE_REL = "nofollow noopener noreferrer"` (trong `BuilderProfilePage.tsx`).
+
+**Khóa i18n mới (Owner duyệt nguyên văn 2026-10-10; thêm sau `bprofile.website` của từng file; brand không dịch):**
+
+| Khóa | en | vi | zh-Hans | zh-Hant |
+|---|---|---|---|---|
+| `bprofile.verifiedVia` | verified via {provider} | đã xác minh qua {provider} | 已通过 {provider} 验证 | 已透過 {provider} 驗證 |
+| `bprofile.verified.heading` | Verified accounts | Tài khoản đã xác minh | 已验证账号 | 已驗證帳號 |
+
+- [ ] **Step 1: Test miền (đỏ).** Thêm vào `apps/web/test/db/identities.test.ts` (hoặc file test miền của `identity` nếu đã có):
+
+```ts
+import { GITHUB_LOGIN_RE, githubProfileUrl } from "../../src/domain/identity.ts";
+
+describe("githubProfileUrl (VNX-2606b)", () => {
+  it("builds https://github.com/<login> for a valid login, EMU underscore included", () => {
+    expect(githubProfileUrl("octocat")).toBe("https://github.com/octocat");
+    expect(githubProfileUrl("mona-cat_octo")).toBe("https://github.com/mona-cat_octo");
+    expect(githubProfileUrl("a".repeat(39))).toBe(`https://github.com/${"a".repeat(39)}`);
+  });
+  it("is null for anything that could change the URL", () => {
+    for (const bad of ["", "-octo", "_octo", "octo/cat", "octo%2Fcat", "octo.cat", "octo cat", "octo?x=1", "octo#x", "<script>", "a".repeat(40), "octo\n"]) {
+      expect(githubProfileUrl(bad), bad).toBeNull();
+    }
+    expect(GITHUB_LOGIN_RE.test("octo\n")).toBe(false); // no multiline match slipping a newline through
+  });
+});
+```
+  Chạy `npm test -w apps/web -- test/db/identities.test.ts`. Mong đợi: FAIL (chưa có export). Lưu ý: `$` không có cờ `m` trong JS khớp trước một `\n` cuối? Không: JS `$` không cờ `m` chỉ khớp cuối chuỗi, nên `"octo\n"` bị từ chối; test ghim điều đó.
+
+- [ ] **Step 2: Miền.** `src/domain/identity.ts`:
+
+```ts
+/** A GitHub login: letters, digits, hyphens and (Enterprise Managed Users, `name_SHORTCODE`) underscores, at most 39 characters. Stricter than the label CHECK, so it can never put `/`, `?` or `#` in a profile link. The one source: the GitHub adapter and the public badge both use it. */
+export const GITHUB_LOGIN_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,38}$/;
+
+/** The public profile link of a GitHub login, or null when the login is not a plain login (then no link and no badge is drawn). */
+export function githubProfileUrl(login: string): string | null {
+  return GITHUB_LOGIN_RE.test(login) ? `https://github.com/${login}` : null;
+}
+
+/** What the public profile may show of a linked account (ADR-012 §5). LinkedIn carries no label: it is often an e-mail. */
+export type PublicBadge = { provider: "github"; login: string; url: string } | { provider: "linkedin" };
+```
+  Trong `src/auth/oauth/github.ts`: xóa hằng `LOGIN` và dòng chú thích của nó, `import { GITHUB_LOGIN_RE } from "../../domain/identity.ts"`, và đổi `LOGIN.test(login)` thành `GITHUB_LOGIN_RE.test(login)` (một chỗ, dòng ≈ 83). Chạy `npm test -w apps/web -- test/db/identities.test.ts test/auth/oauth-github.test.ts` (tên file thật: `grep -rln "github" apps/web/test/auth`). Mong đợi: PASS, test GitHub hiện có không đổi.
+
+- [ ] **Step 3: Test db và trang (đỏ).** Tạo `apps/web/test/public/builder-badges.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { setBuilderStatus } from "../../src/db/builders.ts";
+import { searchProducts } from "../../src/db/catalog.ts";
+import { searchBuilders } from "../../src/db/directory.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { linkIdentity, listPublicBadges, setShowOnProfile } from "../../src/db/identities.ts";
+import type { BuilderStatus } from "../../src/domain/builder.ts";
+import { parseCatalogQuery } from "../../src/domain/catalog.ts";
+import { PROVIDER_FLAG, type OAuthProvider } from "../../src/domain/identity.ts";
+import type { Bindings } from "../../src/env.ts";
+import { addLiveProduct, ensureUser, makeBuilder, signIn } from "../fixtures.ts";
+import { formPost, getReq, testEnv } from "../helpers.ts";
+
+let counter = 0;
+const tag = () => `${++counter}${Math.random().toString(36).slice(2, 6)}`;
+const ALL = ["github", "linkedin"] as const;
+/** A provider flag on or off (Owner E1: a badge follows its provider's flag). The cache is reset so the change is seen at once. */
+const setProvider = async (provider: OAuthProvider, enabled: boolean) => {
+  const admin = await ensureUser("oauth-flags@example.com");
+  await setFlag(testEnv.DB, { key: PROVIDER_FLAG[provider], enabled, actorUserId: admin.id, now: new Date().toISOString() });
+  resetFlagCache();
+};
+beforeEach(async () => {
+  await testEnv.DB.prepare("DELETE FROM feature_flags WHERE key LIKE 'oauth_%'").run();
+  resetFlagCache();
+  await setProvider("github", true);
+  await setProvider("linkedin", true);
+});
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const get = (path: string, cookie?: string) => createApp().request(getReq(path, cookie), undefined, testEnv);
+const pageOf = async (handle: string, path = "/b/") => decode(await (await get(`${path}${handle}`)).text());
+const blockOf = (html: string) => html.match(/<ul class="verified-list"[^>]*>.*?<\/ul>/s)?.[0] ?? "";
+
+/** An approved (default) builder; every test its own e-mail and handle. */
+async function builderOf(status: BuilderStatus = "approved") {
+  const t = tag();
+  const builder = await makeBuilder(`bb-${t}@vnx.si`, `bb-${t}`, status);
+  return { builder, handle: builder.handle, email: `bb-${t}@vnx.si` };
+}
+const link = async (userId: string, provider: OAuthProvider, label: string) => {
+  const r = await linkIdentity(testEnv.DB, { userId, provider, subject: `s-${tag()}`, label, now: new Date().toISOString() });
+  if (!r.ok) throw new Error(r.reason);
+  return r.identity;
+};
+/** Straight into the row, the way a legacy or hostile row could look: bypasses every route and every type. */
+const rawFlag = (userId: string, provider: string, value = 1) =>
+  testEnv.DB.prepare("UPDATE user_identities SET show_on_profile = ?3 WHERE user_id = ?1 AND provider = ?2").bind(userId, provider, value).run();
+const rawIdentity = (userId: string, provider: string, label: string) =>
+  testEnv.DB.prepare("INSERT INTO user_identities (id, user_id, provider, provider_subject, label, show_on_profile, linked_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)")
+    .bind(`id-${tag()}`, userId, provider, `s-${tag()}`, label, new Date().toISOString()).run();
+const optIn = (userId: string, provider: "github" | "linkedin") => setShowOnProfile(testEnv.DB, { userId, provider, show: true, now: new Date().toISOString() });
+
+describe("/b/:handle verified badge (VNX-2606b)", () => {
+  it("GitHub: @login linked to github.com, 'verified via GitHub', safe rel and target", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octocat");
+    await optIn(builder.userId, "github");
+    const html = await pageOf(handle);
+    expect(html).toContain("Lan Nguyen"); // positive: the profile renders
+    expect(blockOf(html)).toContain('<a href="https://github.com/octocat" rel="nofollow noopener noreferrer" target="_blank">@octocat</a>');
+    expect(blockOf(html)).toContain("verified via GitHub");
+    expect(blockOf(html)).toContain('aria-label="Verified accounts"');
+  });
+
+  it("an Enterprise Managed Users login (underscore) renders and links correctly", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "mona-cat_octo");
+    await optIn(builder.userId, "github");
+    expect(blockOf(await pageOf(handle))).toContain('<a href="https://github.com/mona-cat_octo" rel="nofollow noopener noreferrer" target="_blank">@mona-cat_octo</a>');
+  });
+
+  it("LinkedIn: only the label, no link, no e-mail, no name", async () => {
+    const { builder, handle } = await builderOf();
+    const email = `li-${tag()}@example.com`;
+    await link(builder.userId, "linkedin", email);
+    await optIn(builder.userId, "linkedin");
+    const html = await pageOf(handle);
+    expect(blockOf(html)).toContain("verified via LinkedIn");
+    expect(blockOf(html)).not.toMatch(/<a |href=/);
+    expect(html).not.toContain(email);
+    expect(html).not.toContain("linkedin.com");
+  });
+
+  it("both badges: GitHub first, then LinkedIn", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "linkedin", `li-${tag()}@example.com`);
+    await link(builder.userId, "github", "octo-both");
+    await optIn(builder.userId, "linkedin");
+    await optIn(builder.userId, "github");
+    const block = blockOf(await pageOf(handle));
+    expect(block.indexOf("GitHub")).toBeGreaterThan(-1);
+    expect(block.indexOf("GitHub")).toBeLessThan(block.indexOf("LinkedIn"));
+  });
+
+  it("Google is never shown, even when its row somehow has show_on_profile = 1", async () => {
+    const { builder, handle } = await builderOf();
+    const email = `g-${tag()}@example.com`;
+    await link(builder.userId, "google", email);
+    await link(builder.userId, "github", "octo-plus-google");
+    await optIn(builder.userId, "github"); // positive: a badge block exists
+    await rawFlag(builder.userId, "google", 1);
+    const html = await pageOf(handle);
+    expect(blockOf(html)).toContain("verified via GitHub");
+    expect(html).not.toContain("Google");
+    expect(html).not.toContain(email);
+    expect(await listPublicBadges(testEnv.DB, builder.userId, ALL)).toEqual([{ provider: "github", login: "octo-plus-google", url: "https://github.com/octo-plus-google" }]);
+  });
+
+  it("linked but not opted in: nothing is shown", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octo-quiet");
+    await link(builder.userId, "linkedin", `li-${tag()}@example.com`);
+    const html = await pageOf(handle);
+    expect(html).toContain("Lan Nguyen"); // positive
+    expect(html).not.toContain("verified via");
+    expect(html).not.toContain('class="verified-list"');
+    expect(await listPublicBadges(testEnv.DB, builder.userId, ALL)).toEqual([]);
+  });
+
+  it("a provider whose flag is off (or not configured) shows no badge; the other is independent; the stored choice is kept and the badge returns with the flag (Owner E1)", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octo-flag");
+    await link(builder.userId, "linkedin", `li-${tag()}@example.com`);
+    await optIn(builder.userId, "github");
+    await optIn(builder.userId, "linkedin");
+    expect(blockOf(await pageOf(handle))).toContain("verified via GitHub"); // positive precondition: both flags on
+    expect(blockOf(await pageOf(handle))).toContain("verified via LinkedIn");
+    await setProvider("github", false);
+    const off = await pageOf(handle);
+    expect(off).not.toContain("octo-flag");
+    expect(off).not.toContain("verified via GitHub");
+    expect(blockOf(off)).toContain("verified via LinkedIn");
+    const kept = await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE user_id = ?1 AND provider = 'github'").bind(builder.userId).first<{ v: number }>();
+    expect(kept?.v).toBe(1); // the flag never rewrites the stored choice
+    await setProvider("linkedin", false);
+    expect(await pageOf(handle)).not.toContain('class="verified-list"');
+    expect(await listPublicBadges(testEnv.DB, builder.userId, [])).toEqual([]);
+    await setProvider("github", true);
+    expect(blockOf(await pageOf(handle))).toContain("verified via GitHub");
+    const unconfigured = await createApp().request(getReq(`/b/${handle}`), undefined, { ...testEnv, OAUTH_DRIVER: undefined } as Bindings); // flag on, no credentials
+    expect(await unconfigured.text()).not.toContain("verified via GitHub");
+  });
+
+  it("toggle on, off and unlink take effect on the very next anonymous load (no cache)", async () => {
+    const { builder, handle, email } = await builderOf();
+    await link(builder.userId, "github", "octo-live");
+    const { cookie } = await signIn(email);
+    const toggle = (show: "0" | "1") => createApp().request(formPost("/hub/identities/github/badge", { show }, { cookie }), undefined, testEnv);
+    expect(await pageOf(handle)).not.toContain("verified via");
+    await toggle("1");
+    expect(await pageOf(handle)).toContain("verified via GitHub");
+    await toggle("0");
+    expect(await pageOf(handle)).not.toContain("verified via");
+    await toggle("1");
+    expect(await pageOf(handle)).toContain("verified via GitHub"); // positive precondition for the unlink step
+    const unlinked = await createApp().request(formPost("/me/identities/github/unlink", {}, { cookie }), undefined, testEnv);
+    expect(unlinked.status).toBe(303);
+    expect(await pageOf(handle)).not.toContain("verified via");
+    expect(await pageOf(handle)).not.toContain("octo-live");
+  });
+
+  it.each(["pending", "rejected", "suspended"] as const)("a %s builder: the page is 404, the query is empty, the row and flag stay; approved again, the badge returns", async (status) => {
+    const { builder, handle } = await builderOf("approved");
+    await link(builder.userId, "github", `octo-${status}`);
+    await optIn(builder.userId, "github");
+    expect(await listPublicBadges(testEnv.DB, builder.userId, ALL)).toHaveLength(1); // positive precondition
+    const now = new Date().toISOString();
+    expect(await setBuilderStatus(testEnv.DB, { userId: builder.userId, from: "approved", to: status === "suspended" ? "suspended" : "pending", reviewNote: null, now })).not.toBeNull();
+    if (status === "rejected") await setBuilderStatus(testEnv.DB, { userId: builder.userId, from: "pending", to: "rejected", reviewNote: "x", now });
+    expect((await get(`/b/${handle}`)).status).toBe(404);
+    expect(await listPublicBadges(testEnv.DB, builder.userId, ALL)).toEqual([]);
+    const row = await testEnv.DB.prepare("SELECT show_on_profile AS v FROM user_identities WHERE user_id = ?1").bind(builder.userId).first<{ v: number }>();
+    expect(row?.v).toBe(1); // kept (ADR-012 §5, decision (c))
+    expect(await setBuilderStatus(testEnv.DB, { userId: builder.userId, from: status, to: "approved", reviewNote: null, now })).not.toBeNull();
+    expect(await pageOf(handle)).toContain(`octo-${status}`);
+  });
+
+  it("a suspended account hides the badge too", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octo-acct");
+    await optIn(builder.userId, "github");
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(builder.userId).run();
+    expect((await get(`/b/${handle}`)).status).toBe(404);
+    expect(await listPublicBadges(testEnv.DB, builder.userId, ALL)).toEqual([]);
+  });
+
+  it("another builder's opt-in never shows on this profile", async () => {
+    const a = await builderOf();
+    const b = await builderOf();
+    await link(a.builder.userId, "github", "octo-of-a");
+    await optIn(a.builder.userId, "github");
+    expect(await pageOf(a.handle)).toContain("octo-of-a"); // positive
+    const html = await pageOf(b.handle);
+    expect(html).not.toContain("octo-of-a");
+    expect(html).not.toContain("verified via");
+  });
+
+  it.each(["<script>alert(1)</script>", "octo/cat", "octo%2Fcat", "octo cat", "octo.cat", "_octo", "-octo", "a".repeat(40), "octo?x=1", "octo#x"])(
+    "a stored GitHub label that is not a plain login (%s) draws no badge and no link",
+    async (label) => {
+      const { builder, handle } = await builderOf();
+      await rawIdentity(builder.userId, "github", label);
+      const html = await pageOf(handle);
+      expect(html).toContain("Lan Nguyen"); // positive: the page renders, the row is opted in
+      expect(await testEnv.DB.prepare("SELECT 1 AS n FROM user_identities WHERE user_id = ?1 AND show_on_profile = 1").bind(builder.userId).first()).not.toBeNull();
+      expect(html).not.toContain("verified via");
+      expect(html).not.toContain("github.com/octo");
+      expect(html).not.toContain("<script>alert(1)");
+      expect(await listPublicBadges(testEnv.DB, builder.userId, ALL)).toEqual([]);
+    },
+  );
+
+  it("the badge markup has no inline style, script or handler, and no external resource", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octo-csp");
+    await link(builder.userId, "linkedin", `li-${tag()}@example.com`);
+    await optIn(builder.userId, "github");
+    await optIn(builder.userId, "linkedin");
+    const block = blockOf(await pageOf(handle));
+    expect(block).toContain("verified via LinkedIn"); // positive: both are drawn
+    expect(block).not.toMatch(/style=|<script|\son\w+=|<img|<iframe|src=/i);
+    expect((block.match(/href=/g) ?? []).length).toBe(1); // only the GitHub link
+  });
+
+  it("the badge is not in JSON-LD, the meta description or the sitemap", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octo-meta");
+    await optIn(builder.userId, "github");
+    const html = await pageOf(handle);
+    expect(blockOf(html)).toContain("octo-meta"); // positive
+    for (const m of html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)) expect(m[1]).not.toContain("github.com");
+    expect(html.match(/<meta name="description" content="[^"]*"/)?.[0] ?? "").not.toContain("octo-meta");
+    const sitemap = await (await get("/sitemap.xml")).text();
+    expect(sitemap).not.toContain("octo-meta");
+  });
+
+  it("renders its label in vi, zh-Hans and zh-Hant; the brand is not translated", async () => {
+    const { builder, handle } = await builderOf();
+    await link(builder.userId, "github", "octo-i18n");
+    await optIn(builder.userId, "github");
+    expect(blockOf(await pageOf(handle, "/vi/b/"))).toContain("đã xác minh qua GitHub");
+    expect(blockOf(await pageOf(handle, "/zh-hans/b/"))).toContain("已通过 GitHub 验证");
+    expect(blockOf(await pageOf(handle, "/zh-hant/b/"))).toContain("已透過 GitHub 驗證");
+  });
+
+  it("cache: an anonymous load sets no public caching header; a signed-in one is no-store", async () => {
+    const { builder, handle, email } = await builderOf();
+    await link(builder.userId, "github", "octo-cache");
+    await optIn(builder.userId, "github");
+    const anon = await get(`/b/${handle}`);
+    expect(anon.status).toBe(200);
+    expect(anon.headers.get("cache-control") ?? "").not.toMatch(/public|max-age|s-maxage|immutable/i);
+    const { cookie } = await signIn(email);
+    expect((await get(`/b/${handle}`, cookie)).headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("the badge never changes the order of builders (ADR-004)", () => {
+  it("the catalogue order (searchProducts) is identical before and after badges are opted in for the builders of live products", async () => {
+    const t = tag();
+    const word = `zq${t}`;
+    const owners = [];
+    for (const n of ["one", "two", "three"]) {
+      const b = await makeBuilder(`oc-${n}-${t}@vnx.si`, `oc-${n}-${t}`, "approved");
+      await addLiveProduct(b, `${word} ${n}`);
+      owners.push(b);
+    }
+    const order = async () => (await searchProducts(testEnv.DB, parseCatalogQuery({ q: word }))).items.map((i) => i.name);
+    const before = await order();
+    expect(before).toHaveLength(3); // positive: a real order to protect
+    for (const b of owners.slice(1)) { // the lower-ranked ones, to catch any lift
+      await link(b.userId, "github", `oc-${b.handle}`);
+      await optIn(b.userId, "github");
+    }
+    expect(await order()).toEqual(before);
+    await link(owners[0]!.userId, "linkedin", `oc-${t}@example.com`);
+    await optIn(owners[0]!.userId, "linkedin");
+    expect(await order()).toEqual(before);
+  });
+
+  it("the directory order is identical with no badges, with badges on the others, and with all badges on", async () => {
+    const t = tag();
+    const word = `Zq${t}`;
+    const a = await makeBuilder(`or-a-${t}@vnx.si`, `or-a-${t}`, "approved", { name: `${word} Alpha` });
+    const b = await makeBuilder(`or-b-${t}@vnx.si`, `or-b-${t}`, "approved", { name: `${word} Beta` });
+    const c = await makeBuilder(`or-c-${t}@vnx.si`, `or-c-${t}`, "approved", { name: `${word} Gamma` });
+    await addLiveProduct(a, `or-product-${t}`); // a ranks first on published products: a non-trivial order
+    const query = { q: word, category: null, lang: null, country: null, availability: null, page: 1 } as const;
+    const order = async () => (await searchBuilders(testEnv.DB, query)).items.map((e) => e.handle);
+    const before = await order();
+    expect(before).toHaveLength(3);
+    expect(before[0]).toBe(a.handle);
+    for (const x of [b, c]) {
+      await link(x.userId, "github", `or-${x.handle}`);
+      await optIn(x.userId, "github");
+    }
+    expect(await order()).toEqual(before); // badges on the two lower ones: no lift
+    await link(a.userId, "linkedin", `or-${t}@example.com`);
+    await optIn(a.userId, "linkedin");
+    expect(await order()).toEqual(before);
+    expect(await (await get(`/builders?q=${word}`)).text()).not.toContain("verified via"); // not on the directory card either
+  });
+});
+```
+  Sự kiện đã kiểm trong code (không còn là phỏng đoán): `setBuilderStatus` (`db/builders.ts:163-177`) là compare-and-set theo `from`, không có quy tắc chuyển trạng thái, nên mọi bước chuyển trong test (`approved → pending/suspended → rejected`, rồi `status → approved`) đều chạy được. `searchBuilders` khớp tên bằng `LIKE … ESCAPE` (không phân biệt hoa thường với ASCII) và không gọi `normalizeQuery`, nên `Zq<tag>` khớp `b.name`. `searchProducts` dùng FTS5 trigram cho từ ≥ 3 ký tự: từ `zq<tag>` đủ dài. Chạy `npm test -w apps/web -- test/public/builder-badges.test.ts`. Mong đợi: FAIL (`listPublicBadges` chưa có, trang chưa vẽ khối).
+
+- [ ] **Step 4: Truy vấn.** `src/db/identities.ts`, thêm `githubProfileUrl`, `BadgeProvider` và `PublicBadge` vào import từ `../domain/identity.ts`:
+
+```ts
+/**
+ * What `/b/:handle` may show (ADR-012 §5): the builder's GitHub and LinkedIn accounts that the builder opted into, only while the builder is
+ * approved on an active account. Google never. The conditions live here, not in the route, so the query stands on its own: a builder who leaves
+ * `approved` keeps the rows and the flag, and the badge simply stops being returned. `providers` are the ones whose flag is on and that are configured (Owner E1): another provider's row is not returned. LinkedIn's label (often an e-mail) is never selected;
+ * a GitHub label that is not a plain login yields no badge (no half-drawn link). Not read by ranking, catalogue or directory code (ADR-004).
+ */
+export async function listPublicBadges(db: D1Database, builderUserId: string, providers: readonly BadgeProvider[]): Promise<PublicBadge[]> {
+  if (providers.length === 0) return [];
+  const marks = providers.map((_, i) => `?${i + 2}`).join(", "); // placeholders only: the values are bound, never interpolated
+  const { results } = await db
+    .prepare(
+      `SELECT i.provider AS provider, CASE WHEN i.provider = 'github' THEN i.label END AS login
+       FROM user_identities i
+       JOIN builders b ON b.user_id = i.user_id
+       JOIN users u ON u.id = i.user_id
+       WHERE i.user_id = ?1 AND i.show_on_profile = 1 AND i.provider IN (${marks})
+         AND b.status = 'approved' AND u.status = 'active'
+       ORDER BY i.provider`,
+    )
+    .bind(builderUserId, ...providers)
+    .all<{ provider: "github" | "linkedin"; login: string | null }>();
+  const badges: PublicBadge[] = [];
+  for (const r of results) {
+    if (r.provider === "linkedin") badges.push({ provider: "linkedin" });
+    else {
+      const url = r.login === null ? null : githubProfileUrl(r.login);
+      if (r.login !== null && url !== null) badges.push({ provider: "github", login: r.login, url });
+    }
+  }
+  return badges;
+}
+```
+  (`i.provider` thứ tự chữ cái: `github` < `linkedin`.) Chạy `npm test -w apps/web -- test/public/builder-badges.test.ts -t "Google|not opted|hostile|stored GitHub label"` hoặc cả file: các test dựa vào truy vấn (không cần view) phải xanh; test render còn đỏ.
+
+- [ ] **Step 5: Route, view, CSS, i18n.** `src/routes/builder-profile.tsx`: import `listPublicBadges` (`../db/identities.ts`), `isBadgeProvider` (`../domain/identity.ts`), `availableProviders` (`./oauth.tsx`) và đổi:
+
+```tsx
+    const providers = (await availableProviders(c)).filter(isBadgeProvider); // Owner E1: flag off (or unconfigured) hides that provider's badge
+    const [portfolio, products, badges] = await Promise.all([
+      listPortfolio(c.env.DB, builder.userId),
+      listPublicProductsByBuilder(c.env.DB, builder.userId),
+      listPublicBadges(c.env.DB, builder.userId, providers),
+    ]);
+    return page(c, <BuilderProfilePage locale={c.get("locale")} origin={siteOrigin(c)} builder={builder} portfolio={portfolio} products={products} badges={badges} signedIn={c.get("user") !== null} />);
+```
+  `src/views/BuilderProfilePage.tsx`: import `type PublicBadge` và `PROVIDER_NAME` từ `../domain/identity.ts`; thêm `const BADGE_REL = "nofollow noopener noreferrer";`, prop `badges: PublicBadge[]` (bắt buộc; `grep -rn "BuilderProfilePage" apps/web/src apps/web/test` để sửa mọi nơi gọi khác), và trong `<header>`, ngay sau `<p class="muted">@{handle} · …</p>`:
+
+```tsx
+          {badges.length > 0 ? (
+            <ul class="verified-list" aria-label={tr("bprofile.verified.heading")}>
+              {badges.map((b) =>
+                b.provider === "github" ? (
+                  <li class="verified">
+                    <a href={b.url} rel={BADGE_REL} target="_blank">
+                      @{b.login}
+                    </a>{" "}
+                    <span>{tr("bprofile.verifiedVia", { provider: PROVIDER_NAME.github })}</span>
+                  </li>
+                ) : (
+                  <li class="verified">
+                    <span>{tr("bprofile.verifiedVia", { provider: PROVIDER_NAME.linkedin })}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+          ) : null}
+```
+  `public/assets/app.css`, ngay sau dòng `.chips li { … }`:
+
+```css
+.verified-list { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 8px 0; }
+.verified { padding: 2px 10px; border: 1px solid var(--success); border-radius: 999px; font-size: 14px; }
+```
+  (kiểm `--success` là token có thật trong `:root`; nếu không, dùng `--border`.) Thêm 2 khóa vào 4 file `src/i18n/messages/*.ts` theo bảng. Chạy `npm test -w apps/web -- test/public test/i18n/parity.test.ts`. Mong đợi: PASS (kể cả `test/public/builder-profile.test.ts` cũ: không builder nào có cờ, nên không có khối mới).
+
+- [ ] **Step 6: Test riêng tư: identity client không tới builder hay công khai (đỏ rồi xanh).** Tạo `apps/web/test/hub/client-identity-privacy.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { PROVIDER_FLAG, type OAuthProvider } from "../../src/domain/identity.ts";
+import { ensureUser, inviteBuilders, makeBuilder, makeInquiry, makeRequest, signIn } from "../fixtures.ts";
+import { getReq, testEnv } from "../helpers.ts";
+
+let counter = 0;
+const tag = () => `${++counter}${Math.random().toString(36).slice(2, 6)}`;
+/** Both badge providers ON, so a leak would show (the strictest setting). Same helper as builder-badges.test.ts. */
+beforeEach(async () => {
+  const admin = await ensureUser("oauth-flags@example.com");
+  for (const provider of ["github", "linkedin"] as OAuthProvider[]) await setFlag(testEnv.DB, { key: PROVIDER_FLAG[provider], enabled: true, actorUserId: admin.id, now: new Date().toISOString() });
+  resetFlagCache();
+});
+const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const get = async (path: string, cookie?: string) => decode(await (await createApp().request(getReq(path, cookie), undefined, testEnv)).text());
+/** A linked account of a CLIENT, straight into the table with show_on_profile = 1: the worst case the pages must still hide. */
+const rawIdentity = (userId: string, provider: string, label: string) =>
+  testEnv.DB.prepare("INSERT INTO user_identities (id, user_id, provider, provider_subject, label, show_on_profile, linked_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)")
+    .bind(`id-${tag()}`, userId, provider, `s-${tag()}`, label, new Date().toISOString()).run();
+
+/** Nothing of the client's linked accounts: no label, no 'verified via', no GitHub link, no linked-account section. */
+function expectNoIdentity(html: string, labels: string[]) {
+  for (const label of labels) expect(html, label).not.toContain(label);
+  expect(html).not.toContain("verified via");
+  expect(html).not.toContain("github.com/");
+  expect(html).not.toContain('class="verified-list"');
+  expect(html).not.toContain("/identities/");
+}
+
+describe("a client's linked accounts never reach a builder or the public (ADR-012 §5; VNX-2606b)", () => {
+  it("builder-facing inquiry pages (overview, inbox, thread) show the client's name but none of their linked accounts", async () => {
+    const t = tag();
+    const { client, inquiry, builder } = await makeInquiry({ tag: `pv${t}`, status: "open" });
+    const gh = `client-gh-${t}`;
+    const li = `client-li-${t}@example.com`;
+    await rawIdentity(client.id, "github", gh);
+    await rawIdentity(client.id, "linkedin", li);
+    await rawIdentity(client.id, "google", `client-g-${t}@example.com`);
+    const { cookie } = await signIn(`pv${t}-b@vnx.si`);
+    for (const path of ["/hub/inquiries", `/hub/inquiries/${inquiry.id}`]) {
+      const html = await get(path, cookie);
+      expect(html, path).toContain("Minh Tran"); // positive: the page shows the client
+      expectNoIdentity(html, [gh, li, `client-g-${t}@example.com`]);
+    }
+    expectNoIdentity(await get("/hub", cookie), [gh, li]);
+    expect(builder.handle).toBeTruthy();
+  });
+
+  it("builder-facing invitation pages (list, detail) show the request but none of the client's linked accounts", async () => {
+    const t = tag();
+    const { client, request } = await makeRequest({ tag: `pw${t}` });
+    const builder = await makeBuilder(`pw${t}-b@vnx.si`, `pw${t}-b`, "approved");
+    const [invite] = await inviteBuilders(request, [builder]);
+    const gh = `client-gh-${t}`;
+    await rawIdentity(client.id, "github", gh);
+    await rawIdentity(client.id, "linkedin", `client-li-${t}@example.com`);
+    const { cookie } = await signIn(`pw${t}-b@vnx.si`);
+    for (const path of ["/hub/invitations", `/hub/invitations/${invite!.id}`]) {
+      const html = await get(path, cookie);
+      expect(html, path).toContain(`pw${t} booking app`); // positive: the request is shown
+      expectNoIdentity(html, [gh, `client-li-${t}@example.com`]);
+    }
+  });
+
+  it("the public pages of the builder who got the inquiry show nothing of the client's accounts", async () => {
+    const t = tag();
+    const { client, builder } = await makeInquiry({ tag: `px${t}`, status: "open" });
+    await rawIdentity(client.id, "github", `client-gh-${t}`);
+    for (const [path, shown] of [[`/b/${builder.handle}`, `px${t} builder`], [`/builders?q=px${t}`, `px${t} builder`]] as const) {
+      const html = await get(path);
+      expect(html, path).toContain(shown); // positive: the real builder name (makeInquiry names it "<tag> builder")
+      expectNoIdentity(html, [`client-gh-${t}`]);
+    }
+  });
+
+  it("a pending builder with an opted-in GitHub row: their /b/ page is 404 and the directory shows nothing of it", async () => {
+    const t = tag();
+    const b = await makeBuilder(`py${t}@vnx.si`, `py${t}`, "pending");
+    await rawIdentity(b.userId, "github", `pending-gh-${t}`);
+    expect((await createApp().request(getReq(`/b/py${t}`), undefined, testEnv)).status).toBe(404);
+    expectNoIdentity(await get("/builders"), [`pending-gh-${t}`]);
+  });
+});
+```
+
+
+- [ ] **Step 7: Test kiến trúc (đỏ rồi xanh).** Trong `apps/web/test/architecture.test.ts`: (1) thêm `"../src/routes/builder-profile.tsx"` vào `IDENTITY_ALLOWED` (cùng `routes/hub.tsx` của Task 10) và sửa chú thích dòng trên; (2) thêm khối sau ngay dưới khối `describe("linked identities stay in their module …")`:
+
+```ts
+// VNX-2606b (ADR-004, ADR-012 §5): the identity badge is never an input to ranking, and a client's linked accounts never reach builder-facing or public code.
+const SHOW_FLAG_FILES = new Set(["../src/domain/identity.ts", "../src/db/identities.ts", "../src/views/hub/ProfilePage.tsx"]);
+const IDENTITY_WORDS = /user_identities|show_on_profile|showOnProfile|listPublicBadges|PublicBadge|githubProfileUrl|domain\/identity|db\/identities/;
+
+describe("the identity badge stays out of ranking and builder-facing code (ADR-004, ADR-012 §5)", () => {
+  it("the identities allowlist is exactly the files that read or write the table", () => {
+    expect([...IDENTITY_ALLOWED].sort()).toEqual(["../src/db/audit.ts", "../src/db/identities.ts", "../src/routes/builder-profile.tsx", "../src/routes/hub.tsx", "../src/routes/me.tsx", "../src/routes/oauth.tsx"]);
+  });
+
+  it("no ranking, catalogue, directory or suggestion file mentions identities, the badge flag or the badge query", () => {
+    for (const file of RANKING_FILES) expect(sources[file], `${file} touches identities`).not.toMatch(IDENTITY_WORDS);
+  });
+
+  it("only the identity module and the builder's own switch view mention show_on_profile", () => {
+    for (const [file, src] of Object.entries(sources)) {
+      if (SHOW_FLAG_FILES.has(file)) continue;
+      expect(src, `${file} reads the badge flag`).not.toMatch(/show_on_profile|showOnProfile/);
+    }
+  });
+
+  it("builder-facing client code (inbox, thread, invitations, notices) does not touch identities", () => {
+    for (const file of [...BUILDER_FACING_FILES, "../src/routes/hub-invitations.tsx", "../src/views/ProposalView.tsx"]) {
+      expect(sources[file], file).toBeDefined();
+      expect(sources[file], `${file} touches identities`).not.toMatch(IDENTITY_WORDS);
+    }
+  });
+
+  it("the public profile route reads identities only through listPublicBadges, and the hub only its own builder's rows", () => {
+    const profile = sources["../src/routes/builder-profile.tsx"] ?? "";
+    const calls = (src: string, name: string) => (src.match(new RegExp(`${name}\\(`, "g")) ?? []).length;
+    const exact = (src: string, re: RegExp) => (src.match(re) ?? []).length;
+    expect(calls(profile, "listPublicBadges")).toBeGreaterThan(0);
+    expect(calls(profile, "listPublicBadges")).toBe(exact(profile, /listPublicBadges\(c\.env\.DB, builder\.userId, providers\)/g)); // every call is for the builder shown
+    for (const name of ["listIdentitiesForUser", "findIdentityByProviderSubject", "linkIdentity", "unlinkIdentity", "setShowOnProfile"]) expect(profile, name).not.toContain(name);
+    const hub = sources["../src/routes/hub.tsx"] ?? "";
+    expect(calls(hub, "listIdentitiesForUser")).toBeGreaterThan(0);
+    expect(calls(hub, "listIdentitiesForUser")).toBe(exact(hub, /listIdentitiesForUser\(c\.env\.DB, builder\.userId\)/g)); // every call is for the signed-in builder
+    expect(calls(hub, "setShowOnProfile")).toBeGreaterThan(0);
+    expect(calls(hub, "setShowOnProfile")).toBe(exact(hub, /setShowOnProfile\(c\.env\.DB, \{ userId: c\.get\("builder"\)\.userId,/g));
+    for (const name of ["findIdentityByProviderSubject", "linkIdentity", "unlinkIdentity", "listPublicBadges"]) expect(hub, name).not.toContain(name);
+  });
+
+  it("views import no db module (the badge reaches the page as a plain prop)", () => {
+    for (const file of ["../src/views/BuilderProfilePage.tsx", "../src/views/hub/ProfilePage.tsx", "../src/views/BuilderCard.tsx"]) {
+      expect(sources[file], file).toBeDefined();
+      expect(sources[file], `${file} imports db`).not.toMatch(/from\s+["'][^"']*\/db\//);
+    }
+  });
+});
+```
+  Kiểm tay trước khi chạy: (a) `BUILDER_FACING_FILES` đứng ở dòng ≈ 70 và đã khai báo trước khối này (khối mới nằm sau, nên dùng được); (b) `grep -rn "ORDER BY" apps/web/src/db` và nếu có file nào khác xếp hạng builder hay product (ví dụ landing, Trending, Top) chưa có trong `RANKING_FILES`, thêm nó vào danh sách đó (một dòng) và ghi vào báo cáo; (c) `views/BuilderCard.tsx` có thật; (d) `views/hub/ProfilePage.tsx` mention `showOnProfile` là hợp lệ (đã có trong `SHOW_FLAG_FILES`), và `src/domain/identity.ts` không bị `IDENTITY_WORDS` quét vì nó không nằm trong `RANKING_FILES` hay `BUILDER_FACING_FILES`. Chạy `npm test -w apps/web -- test/architecture.test.ts`. Mong đợi: PASS. Làm một lần thử "có răng": thêm tạm `import "../db/identities.ts"` vào `src/db/directory.ts`, xác nhận hai test đỏ, rồi bỏ.
+
+- [ ] **Step 8: Kiểm toàn bộ và commit.**
+```bash
+npm run typecheck -w apps/web
+npm test
+git add apps/web/src/domain/identity.ts apps/web/src/auth/oauth/github.ts apps/web/src/db/identities.ts apps/web/src/routes/builder-profile.tsx apps/web/src/views/BuilderProfilePage.tsx apps/web/public/assets/app.css \
+  apps/web/src/i18n/messages/en.ts apps/web/src/i18n/messages/vi.ts apps/web/src/i18n/messages/zh-hans.ts apps/web/src/i18n/messages/zh-hant.ts \
+  apps/web/test/public/builder-badges.test.ts apps/web/test/hub/client-identity-privacy.test.ts apps/web/test/db/identities.test.ts apps/web/test/architecture.test.ts
+git commit -m "feat(web): verified GitHub and LinkedIn badge on the public builder profile (VNX-2606b)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+  (nếu Step 7 thêm file vào `RANKING_FILES` thì không có file src nào khác cần `git add`; nếu `BuilderProfilePage` có nơi gọi khác phải sửa, thêm file đó vào lệnh `git add`.)
+
+**Kích cỡ ước tính:** mã ≈ 130 dòng (domain 14, github.ts -3 +2, db 35, route 8, view 25, css 2, locale ngoài), test ≈ 450 dòng (badges 320, privacy 90, domain 25, db/ordering 15), kiến trúc ≈ 50 dòng. Dưới 600 không tính locale: không tách.
+
+**Nghĩa vụ cho task sau:**
+- **BẮT BUỘC khi rebase lên `main` (M7 đã ở `main`, `38bf414`; H1, Owner 2026-10-10):** (1) mở rộng test thứ tự thêm `topBuilders(loadBuilderTallies(db, now))`: dựng builder có tally, bật huy hiệu cho các builder xếp thấp, thứ tự không đổi; (2) khi giải xung đột `test/architecture.test.ts`, GIỮ 7 mục `RANKING_FILES` mà `main` thêm (`domain/public-stats.ts`, `db/public-stats.ts`, `jobs/hourly.ts`, `routes/home.tsx`, `views/home/Trending.tsx`, `views/home/TopBuilders.tsx`, `views/home/TopProducts.tsx`) cùng các mục của nhánh này; (3) xác nhận các assertion identity (không import `db/identities`, không có SQL/từ khóa `IDENTITY_WORDS`) chạy trên danh sách đã gộp và xanh. Task chưa xong cho tới khi (1)-(3) làm xong; ghi vào báo cáo rebase.
+- **Task 12 (VNX-2607):** chép câu Privacy "A builder can choose to show their GitHub username, or the fact that their LinkedIn account is verified … Google accounts are never shown, and builders never see a client's linked accounts"; nay đúng với code và có test (`builder-badges`, `client-identity-privacy`, kiến trúc). Câu lưu giữ "until you unlink them or your account is deleted" khớp quyết định 4 (rời `approved` giữ hàng và cờ).
+- **VNX-2608 (HUMAN):** thử bằng tài khoản thật: (a) tài khoản GitHub thường: link mở đúng hồ sơ; (b) tài khoản EMU (nếu có): ghi lại link có 404 với khách không, để Owner xem lại quyết định E2 (giữ link) bằng dữ liệu thật; (c) tắt cờ một provider thì huy hiệu của nó biến mất khỏi `/b/` và công tắc khỏi `/hub/profile`, bật lại thì trở lại; (d) nếu code đã thêm Cache API hoặc `Cache-Control: public`/`s-maxage` cho `/b/*` thì TTL phải ngắn và cache được xóa khi tắt huy hiệu, hủy liên kết và đổi trạng thái builder (quyết định 5).
+- **Ghi nhận (link `/go/`, L6):** link GitHub của badge đi thẳng, như link website và portfolio của builder (ADR-007 addendum, và test `builder-profile.test.ts`); không cần Owner quyết. Chữ của ADR-007 §7 ("Mọi link ra ngoài đi qua /go/") rộng hơn cách nó được áp dụng: `/go/` chỉ phục vụ offer/affiliate. Nếu Owner muốn câu chữ khớp thực tế, sửa ADR-007 §7 là việc riêng.
+- **Ghi nhận:** `login` GitHub đổi tên thì `label` chỉ được làm mới ở lần đăng nhập kế (ADR-012 §5, `touchIdentityLogin`); trước đó huy hiệu link tới login cũ (có thể 404 hoặc sang người khác). Chấp nhận theo ADR; nếu Owner thấy là rủi ro mạo danh, đó là quyết định mới (làm mới định kỳ cần gọi GitHub, cần ADR).
+
+#### Kết quả review Task 10–11 (Opus, 2026-10-10): APPROVE_WITH_CHANGES, đã sửa M1–M5, L1–L6, S1–S3, H1; câu chữ và E1/E2 do Owner duyệt 2026-10-10
