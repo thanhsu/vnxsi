@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { countPublicationReviewQueue, findPublicationByRequestId, findPublicListing, optInStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
+import { countPublicationReviewQueue, findPublicationByRequestId, findPublicListing, optInStatement, rejectStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
 import type { GrantableRole, OpsRole } from "../../src/domain/ops.ts";
-import { PUBLIC_DESCRIPTION_MAX } from "../../src/domain/request-board.ts";
+import { opsBoardActions, PUBLIC_DESCRIPTION_MAX } from "../../src/domain/request-board.ts";
 import type { Bindings } from "../../src/env.ts";
 import { setUserStatusStatement } from "../../src/db/users.ts";
 import { ensureUser, makeRequest, signIn } from "../fixtures.ts";
@@ -531,5 +531,125 @@ describe("body", () => {
     expect((await post(url(f.requestId, "publish"), cookie, formFor(f, { public_title: "t", public_description: "x".repeat(4001) }))).status).toBe(400);
     expect((await post(url(f.requestId, "publish"), cookie, formFor(f, { public_title: "t".repeat(121), public_description: `${DESC}` }))).status).toBe(400);
     expect((await pubOf(f.requestId)).status).toBe("pending_review");
+  });
+});
+
+describe("VNX-2704a review fixes (round 1)", () => {
+  it("M-1: a 409 shows the CURRENT wording and a fresh token, not what was typed, so a second click cannot overwrite the other change", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing({ state: "published" });
+    const other = new Date(Date.now() + 100).toISOString();
+    await testEnv.DB.prepare("UPDATE request_publications SET public_title = 'E2E board CURRENT-TITLE', public_description = ?2, updated_at = ?3 WHERE request_id = ?1").bind(f.requestId, `CURRENT-WORDING ${DESC}`, other).run();
+    const r = await post(url(f.requestId, "edit"), cookie, formFor(f, { public_title: "E2E board TYPED-TITLE", public_description: `TYPED-WORDING ${DESC}` }));
+    const html = await r.text();
+    expect(r.status).toBe(409);
+    expect(html).toContain("CURRENT-TITLE");
+    expect(html).toContain("CURRENT-WORDING");
+    expect(html).not.toContain("TYPED-TITLE");
+    expect(html).not.toContain("TYPED-WORDING");
+    expect(html).toContain(`name="updated_at" value="${other}"`);
+  });
+
+  it("M-1: Reject losing to Publish shows the published state, with the Unpublish box closed and empty", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing();
+    await testEnv.DB.prepare("UPDATE request_publications SET status = 'published', public_title = 'E2E board won', public_description = ?2, published_at = ?3, updated_at = ?3 WHERE request_id = ?1").bind(f.requestId, `Won ${DESC}`, new Date(Date.now() + 100).toISOString()).run();
+    const r = await post(url(f.requestId, "reject"), cookie, formFor(f, { review_note: "TYPED-NOTE" }));
+    const html = await r.text();
+    expect(r.status).toBe(409);
+    expect(html).not.toContain("TYPED-NOTE");
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
+    expect(html).toMatch(/<textarea[^>]*id="pl-review-note"[^>]*>\s*<\/textarea>/);
+    expect(mainOf(html)).toContain(`action="${url(f.requestId, "unpublish")}"`);
+  });
+
+  it("M-2: the checklist has the four bullets of addendum 3.2, and shows whenever the block has an action (Reject only too)", async () => {
+    const { cookie } = await asRole("owner");
+    const closed = await listing({ requestStatus: "builder_selected" });
+    for (const f of [await listing(), await listing({ state: "published" }), closed]) {
+      const main = mainOf((await get(`${BASE}/${f.requestId}`, cookie)).html);
+      expect(main).toContain("pl-checklist");
+      for (const word of ["postal addresses", "tax or registration numbers", "customers", "marked confidential", "identify the business", "Terms §7", "remove the whole request"]) expect(main, word).toContain(word);
+    }
+    const waiting = await listing({ requestStatus: "pending_verification" });
+    expect(mainOf((await get(`${BASE}/${waiting.requestId}`, cookie)).html)).not.toContain("pl-checklist");
+  });
+
+  it("L-1: the intro does not claim the original is never shown", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing();
+    const main = mainOf((await get(`${BASE}/${f.requestId}`, cookie)).html);
+    expect(main).not.toContain("never shown");
+    expect(main).toContain("The public sees only the wording you publish here");
+  });
+
+  it("L-2: rejectStatement itself refuses a pending_verification request, and route and view share one rule", async () => {
+    const f = await listing({ requestStatus: "pending_verification" });
+    const ops = await ensureUser(`ops-bd-l2-${tag()}@vnx.si`);
+    const [res] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { requestId: f.requestId, expectedUpdatedAt: f.publication.updatedAt, reviewNote: "nope", reviewedBy: ops.id, now: new Date().toISOString() })]);
+    expect(returnedPublication(res)).toBeNull();
+    expect((await pubOf(f.requestId)).status).toBe("pending_review");
+    const g = await listing();
+    const [ok] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { requestId: g.requestId, expectedUpdatedAt: g.publication.updatedAt, reviewNote: "fine", reviewedBy: ops.id, now: new Date().toISOString() })]);
+    expect(returnedPublication(ok)?.status).toBe("rejected");
+    expect(opsBoardActions("pending_review", "pending_verification")).toEqual([]);
+    expect(opsBoardActions("pending_review", "submitted")).toEqual(["publish", "reject"]);
+    expect(opsBoardActions("pending_review", "builder_selected")).toEqual(["reject"]);
+    expect(opsBoardActions("published", "removed")).toEqual(["edit", "unpublish"]);
+    expect(opsBoardActions("rejected", "submitted")).toEqual([]);
+  });
+
+  it("L-4a: a wrong-state action with an invalid text is a 409, not a 400 (state is checked first)", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing();
+    expect((await post(url(f.requestId, "edit"), cookie, formFor(f, { public_title: "t", public_description: "x".repeat(39) }))).status).toBe(409);
+    const g = await listing({ state: "published" });
+    expect((await post(url(g.requestId, "reject"), cookie, formFor(g, { review_note: "" }))).status).toBe(409);
+  });
+
+  it("L-4b: the exact audit data of edit, reject and unpublish, with nothing of the CLIENT in it", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing({ state: "published" });
+    await post(url(f.requestId, "edit"), cookie, formFor(f, { public_title: "E2E board EDIT-IDENT", public_description: `EDIT-IDENT ${DESC}` }));
+    const p = await pubOf(f.requestId);
+    await post(url(f.requestId, "unpublish"), cookie, formFor(f, { review_note: "UNPUB-IDENT" }, p.updatedAt));
+    const g = await listing();
+    await post(url(g.requestId, "reject"), cookie, formFor(g, { review_note: "REJ-IDENT" }));
+    const client = await testEnv.DB.prepare("SELECT email FROM users WHERE id = ?1").bind(f.clientId).first<{ email: string }>();
+    const rows = [...(await auditRows(f.requestId)), ...(await auditRows(g.requestId))];
+    expect(rows.map((a) => [a.action, JSON.parse(a.data)])).toEqual([
+      ["request_publication.edit", { requestId: f.requestId, from: "published", to: "published" }],
+      ["request_publication.unpublish", { requestId: f.requestId, from: "published", to: "unpublished" }],
+      ["request_publication.reject", { requestId: g.requestId, from: "pending_review", to: "rejected" }],
+    ]);
+    for (const a of rows) {
+      expect(a.data).not.toContain("IDENT");
+      expect(a.data).not.toContain(client!.email);
+      expect(a.data).not.toContain("Minh Tran");
+    }
+  });
+
+  it("L-4c and S-1: the merged History is newest first across both entities and holds at most 50 rows", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing();
+    const base = Date.parse("2026-03-01T00:00:00.000Z");
+    const run = tag().toUpperCase().replace(/[^0-9A-Z]/g, "0");
+    const statements: D1PreparedStatement[] = [];
+    for (let n = 0; n < 60; n++) {
+      const even = n % 2 === 0;
+      statements.push(
+        testEnv.DB
+          .prepare("INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at) VALUES (?1, NULL, ?2, ?3, ?4, '{}', ?5)")
+          .bind(`01HIST${run}${String(n).padStart(12, "0")}`.slice(0, 26), even ? "request.note" : "request_publication.edit", even ? "request" : "request_publication", f.requestId, new Date(base + n * 1000).toISOString()),
+      );
+    }
+    await testEnv.DB.batch(statements);
+    const html = (await get(`${BASE}/${f.requestId}`, cookie)).html;
+    const section = /<section[^>]*ops-history[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+    const times = [...section.matchAll(/datetime="([^"]+)"/g)].map((m) => m[1]!);
+    expect(times).toHaveLength(50);
+    expect([...times].sort().reverse()).toEqual(times);
+    const actions = [...section.matchAll(/<span class="ops-mono">([a-z_.]+)<\/span>/g)].map((m) => m[1]);
+    expect(actions.slice(0, 2)).toEqual(["request_publication.edit", "request.note"]);
   });
 });

@@ -2,9 +2,8 @@ import type { Context, Hono } from "hono";
 import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { auditStatement } from "../db/audit.ts";
 import { findAdminRequest } from "../db/requests.ts";
-import { editPublicStatement, findPublicationByRequestId, publicationAuditGuard, publishStatement, rejectStatement, returnedPublication, unpublishStatement, type Publication } from "../db/request-board.ts";
-import type { AdminRequest } from "../domain/request.ts";
-import { canEditPublication, parsePublicListing, parseReviewNote, publicationTransition, type PublicationStatus } from "../domain/request-board.ts";
+import { editPublicStatement, findPublicationByRequestId, publicationAuditGuard, publishStatement, rejectStatement, returnedPublication, unpublishStatement } from "../db/request-board.ts";
+import { opsBoardActions, parsePublicListing, parseReviewNote, type PublicationStatus } from "../domain/request-board.ts";
 import type { AppEnv } from "../env.ts";
 import type { BoardAction, BoardFormState } from "../views/ops/PublicListingBlock.tsx";
 import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
@@ -19,7 +18,7 @@ import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
 
 export type RequestDetailRender = (
   c: Context<AppEnv>,
-  item: AdminRequest,
+  item: NonNullable<Awaited<ReturnType<typeof findAdminRequest>>>,
   notice: null,
   status: 400 | 409,
   errors: { board: BoardFormState },
@@ -27,23 +26,8 @@ export type RequestDetailRender = (
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
-/** Where each action goes: its target state. The state machine (domain) decides whether the move is allowed. */
+/** Where each action goes: its target state. */
 const TARGET: Record<BoardAction, PublicationStatus> = { publish: "published", edit: "published", reject: "rejected", unpublish: "unpublished" };
-
-/** Addendum §7.1 for Ops. `reject` is also refused while the request waits for the client's e-mail confirmation: that listing is not in the review queue. */
-function allowed(action: BoardAction, publication: Publication, item: AdminRequest): boolean {
-  const status = item.request.status;
-  switch (action) {
-    case "publish":
-      return publicationTransition(publication.status, "publish", "ops", status).ok;
-    case "edit":
-      return canEditPublication(publication.status);
-    case "reject":
-      return publicationTransition(publication.status, "reject", "ops", status).ok && status !== "pending_verification";
-    case "unpublish":
-      return publicationTransition(publication.status, "unpublish", "ops", status).ok;
-  }
-}
 
 export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: RequestDetailRender) {
   /** The current page with a refused form on it. Nothing was written: the page is the state as it is now. */
@@ -58,9 +42,10 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     if (!item || !publication) return opsNotFound(c);
     const body = await c.req.parseBody();
     const values = { title: text(body.public_title), description: text(body.public_description), note: text(body.review_note) };
-    const conflict: BoardFormState = { action, errors: {}, conflict: true, values };
-    // The page is not a lost race when the move is not allowed in the state it is in now: 409, nothing written.
-    if (!allowed(action, publication, item)) return refused(c, id, 409, conflict);
+    // A 409 shows the current state (fresh values, fresh token), never what was typed: typed text would invite overwriting the other change (M-1).
+    const conflict: BoardFormState = { action, errors: {}, conflict: true, values: {} };
+    // The move is not allowed in the state it is in now: 409, nothing written.
+    if (!opsBoardActions(publication.status, item.request.status).includes(action)) return refused(c, id, 409, conflict);
 
     const user = c.get("user")!;
     const now = new Date().toISOString();

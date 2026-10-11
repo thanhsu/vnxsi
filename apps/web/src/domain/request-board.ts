@@ -65,6 +65,22 @@ export function publicationTransition(status: PublicationStatus | null, action: 
   }
 }
 
+export type OpsBoardAction = "publish" | "edit" | "reject" | "unpublish";
+
+/**
+ * The one rule for which moderation actions Ops has on a listing: the route refuses any other and the block shows only these.
+ * Publish needs an open request (7.1); edit only a published listing; reject and unpublish follow 7.1, and a listing whose request still
+ * waits for the client's e-mail confirmation cannot be rejected (it is not in the review queue, and no e-mail may go to an unconfirmed address).
+ */
+export function opsBoardActions(status: PublicationStatus | null, requestStatus: RequestStatus): OpsBoardAction[] {
+  const out: OpsBoardAction[] = [];
+  if (publicationTransition(status, "publish", "ops", requestStatus).ok) out.push("publish");
+  if (canEditPublication(status)) out.push("edit");
+  if (requestStatus !== "pending_verification" && publicationTransition(status, "reject", "ops", requestStatus).ok) out.push("reject");
+  if (publicationTransition(status, "unpublish", "ops", requestStatus).ok) out.push("unpublish");
+  return out;
+}
+
 /** Ops edits the public wording of a published listing only (no state change). */
 export function canEditPublication(status: PublicationStatus | null): boolean {
   return status === "published";

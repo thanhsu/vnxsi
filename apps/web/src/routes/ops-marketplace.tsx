@@ -154,18 +154,19 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
   async function requestDetail(c: Context<AppEnv>, item: AdminRequest, notice: OpsNotice, status: 200 | 400 | 409 = 200, errors: RequestErrors = {}) {
     const canAct = can(c.get("opsRole"), "marketplace.act");
     const { board: form, ...rest } = errors;
-    const [shell, requestHistory, matching, publication] = await Promise.all([
+    const [shell, requestHistory, matching, publication, publicationHistory] = await Promise.all([
       opsShell(c, isRegistered, REQUESTS_PATH),
       historyOf(c, "request", item.request.id),
       requestMatching(c.env.DB, item),
       canAct ? findPublicationByRequestId(c.env.DB, item.request.id) : Promise.resolve(null),
+      canAct ? historyOf(c, "request_publication", item.request.id) : Promise.resolve(null),
     ]);
     let history = requestHistory;
-    if (publication) {
-      const publicationHistory = await historyOf(c, "request_publication", item.request.id);
+    if (publication && publicationHistory) {
+      // One History: both entities, newest first, cut to the limit each has alone, so old rows of one side never pass for the full record.
       history =
         requestHistory.state === "ok" && publicationHistory.state === "ok"
-          ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)) }
+          ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)).slice(0, HISTORY_LIMIT) }
           : { state: "error" };
     }
     return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form } : undefined} {...rest} />, status);

@@ -33,3 +33,27 @@ Task: Ops, khối "Public listing" (sửa, publish, reject, unpublish). Nhánh `
 6. **E2E**: bước kiểm bản đã sửa trong context không đăng nhập đã chuyển sang 2705a theo delta (ghi trong chú thích spec). Không quét axe cho `/ops` (ghi ở README). Lần chạy `npm run e2e` đầu có một lỗi lẻ ở `a11y.spec.ts` (`vi /vi/login`, do fixture `csp`), chạy lại riêng và toàn bộ đều xanh; không liên quan code mới nhưng ghi lại.
 7. Test 28 viết cùng lúc với code (không có lần chạy đỏ riêng); các nhánh quan trọng (race giả lập bằng proxy `batch`, audit vắng khi thua CAS) có assert riêng.
 8. Không cần copy mới ngoài Ops; không đụng plan, review, `CURRENT-STATUS.md`.
+
+## Vòng sửa 1 (review `5fba240`: APPROVE_AFTER_FIXES)
+
+Test mới được thêm và chạy **trước** khi sửa code (L-3). Lần chạy đỏ (`npm test -w apps/web -- test/ops/marketplace-request-board.test.ts`): `Tests 6 failed | 30 passed (36)`:
+
+| Fix | Dòng đỏ trước khi sửa |
+|---|---|
+| M-1 (a) | `AssertionError: expected '<!DOCTYPE html>…' to contain 'CURRENT-TITLE'` |
+| M-1 (b) | `AssertionError: expected '<!DOCTYPE html>…' not to contain 'TYPED-NOTE'` |
+| M-2 | `AssertionError: postal addresses: expected '<a class="ops-back" …' to contain 'postal addresses'` |
+| L-1 | `AssertionError: expected '<a class="ops-back" …' not to contain 'never shown'` |
+| L-2 | `AssertionError: expected { …(14) } to be null` (`rejectStatement` trên request `pending_verification`) |
+| S-1 / L-4c | `AssertionError: expected [ '2026-03-01T00:00:59.000Z', …(59) ] to have a length of 50 but got 60` |
+
+Các test ghim L-4a (409 trước 400) và L-4b (`data` chính xác của edit/reject/unpublish, không có email/tên client) đã xanh ngay (hành vi vốn đúng, chỉ thiếu ghim); L-4c nằm trong ca S-1.
+
+Đã sửa:
+- **M-1:** 409 render trạng thái hiện tại (giá trị và token mới từ DB), không mang `values`; `Confirm` không mở, ô lý do rỗng. 400 giữ nguyên.
+- **M-2:** danh mục kiểm duyệt viết lại theo bốn gạch của §3.2 (`ops.board.check.remove|confidential|combination|terms`, EN, **Reviewer duyệt câu khi re-review**); hiện mỗi khi khối có hành động (cả khi chỉ có Reject), không hiện khi không có hành động.
+- **L-1:** câu mở đầu: "The public sees only the wording you publish here, never the client's name or e-mail. It starts as the client's own wording: edit it before you publish."
+- **L-2:** `rejectStatement` có `NOT EXISTS (… status = 'pending_verification')`; một hàm `opsBoardActions(publicationStatus, requestStatus)` trong `domain/request-board.ts` dùng chung cho route và view.
+- **S-1:** History gộp cắt còn `HISTORY_LIMIT` (50); truy vấn History của publication chạy song song trong cùng `Promise.all`.
+
+Kết quả: typecheck sạch; `test/ops`, `test/architecture.test.ts`, `test/db` xanh; toàn bộ 194 file, 2446 passed + 2 skipped; `npm run e2e` 63/63; `e2e:typecheck` sạch; `test:scripts` 52/52.

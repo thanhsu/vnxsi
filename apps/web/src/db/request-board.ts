@@ -183,12 +183,13 @@ export function editPublicStatement(db: D1Database, input: { requestId: string; 
     .bind(input.requestId, input.expectedUpdatedAt, input.title, input.description, input.reviewedBy, input.now);
 }
 
-/** Ops rejects: pending_review -> rejected (final). A review note is required. */
+/** Ops rejects: pending_review -> rejected (final). A review note is required. Not while the request still waits for the client's e-mail confirmation (VNX-2704a L-2). */
 export function rejectStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; reviewNote: string; reviewedBy: string; now: string }): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE request_publications SET status = 'rejected', review_note = ?3, reviewed_by = ?4, reviewed_at = ?5, ended_at = ?5, updated_at = ?5
        WHERE request_id = ?1 AND status = 'pending_review' AND updated_at = ?2 AND length(trim(?3)) > 0
+         AND NOT EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status = 'pending_verification')
        RETURNING *`,
     )
     .bind(input.requestId, input.expectedUpdatedAt, input.reviewNote, input.reviewedBy, input.now);

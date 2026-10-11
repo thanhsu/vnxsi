@@ -1,6 +1,6 @@
 import type { FC } from "hono/jsx";
 import type { ClientRequest } from "../../domain/request.ts";
-import { canEditPublication, publicationTransition, type PublicationStatus, type TextError } from "../../domain/request-board.ts";
+import { opsBoardActions, type PublicationStatus, type TextError } from "../../domain/request-board.ts";
 import { translator } from "../../i18n/t.ts";
 import { FormErrorSummary, type FormErrorItem } from "../FormErrorSummary.tsx";
 import { BUDGET_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "../labels.ts";
@@ -110,13 +110,16 @@ type Props = {
 };
 
 export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, actionBase, form }) => {
-  const publishable = publicationTransition(p.status, "publish", "ops", r.status).ok;
+  const actions = opsBoardActions(p.status, r.status);
+  const publishable = actions.includes("publish");
   const waiting = p.status === "pending_review" && r.status === "pending_verification";
-  const rejectable = publicationTransition(p.status, "reject", "ops", r.status).ok && r.status !== "pending_verification";
-  const editable = canEditPublication(p.status);
-  const unpublishable = publicationTransition(p.status, "unpublish", "ops", r.status).ok;
-  const wordingState = form && (form.action === "publish" || form.action === "edit") ? form : undefined;
-  const noteState = form && (form.action === "reject" || form.action === "unpublish") ? form : undefined;
+  const rejectable = actions.includes("reject");
+  const editable = actions.includes("edit");
+  const unpublishable = actions.includes("unpublish");
+  // A lost race (conflict) shows the current state: nothing typed comes back and no reason box is opened (M-1). Parse errors (400) keep what was typed.
+  const typed = form && !form.conflict ? form : undefined;
+  const wordingState = typed && (typed.action === "publish" || typed.action === "edit") ? typed : undefined;
+  const noteState = typed && (typed.action === "reject" || typed.action === "unpublish") ? typed : undefined;
   const title = wordingState?.values.title ?? p.publicTitle ?? r.title;
   const description = wordingState?.values.description ?? p.publicDescription ?? r.description;
   const wordingErrors = wordingState?.errors ?? {};
@@ -188,15 +191,20 @@ export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, acti
 
       {waiting ? <p class="ops-note">{tr("ops.board.waitingConfirm")}</p> : null}
 
-      {publishable || editable ? (
+      {actions.length > 0 ? (
         <>
-          <p class="ops-note">{tr("ops.board.checklist")}:</p>
+          <p class="ops-note">{tr("ops.board.checklist")}</p>
           <ul class="ops-note pl-checklist">
-            <li>{tr("ops.board.check.names")}</li>
-            <li>{tr("ops.board.check.contact")}</li>
+            <li>{tr("ops.board.check.remove")}</li>
             <li>{tr("ops.board.check.confidential")}</li>
             <li>{tr("ops.board.check.combination")}</li>
+            <li>{tr("ops.board.check.terms")}</li>
           </ul>
+        </>
+      ) : null}
+
+      {publishable || editable ? (
+        <>
           <form method="post" action={`${actionBase}/${publishable ? "publish" : "edit"}`}>
             {token}
             <Wording title={title} description={description} errors={wordingErrors} />
