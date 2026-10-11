@@ -11,6 +11,8 @@ import {
   findInterestFor,
   findPublicationByRequestId,
   findPublicListing,
+  interestAuditGuard,
+  publicationAuditGuard,
   findViewerRelation,
   listBuilderInterests,
   listInterestsForRequest,
@@ -54,7 +56,7 @@ async function run1<T>(stmt: D1PreparedStatement, read: (r: D1Result | undefined
 }
 
 async function optIn(requestId: string, now = T0, extra: { publicId?: string; clientUserId?: string } = {}): Promise<Publication | null> {
-  return run1(optInStatement(db(), { requestId, consentVersion: CV, now, clientUserId: await ownerOf(requestId), ...extra }), returnedPublication);
+  return run1(optInStatement(db(), { writeId: ulid(), requestId, consentVersion: CV, now, clientUserId: await ownerOf(requestId), ...extra }), returnedPublication);
 }
 
 /** A request with a published listing. Returns the pieces tests need. */
@@ -64,7 +66,7 @@ async function published(tag: string, opts: { now?: string; publicId?: string } 
   const pub = await optIn(made.request.id, now, { publicId: opts.publicId });
   if (!pub) throw new Error("opt-in failed");
   const reviewer = await ops(tag);
-  const done = await run1(publishStatement(db(), { requestId: made.request.id, expectedUpdatedAt: pub.updatedAt, title: `${tag} public title`, description: `${tag} ${DESC}`, reviewedBy: reviewer, now }), returnedPublication);
+  const done = await run1(publishStatement(db(), { writeId: ulid(), requestId: made.request.id, expectedUpdatedAt: pub.updatedAt, title: `${tag} public title`, description: `${tag} ${DESC}`, reviewedBy: reviewer, now }), returnedPublication);
   if (!done) throw new Error("publish failed");
   return { ...made, publication: done, reviewer };
 }
@@ -74,7 +76,7 @@ async function approvedBuilder(tag: string) {
 }
 
 async function express(requestId: string, builderId: string, o: { note?: string | null; productId?: string | null; cap?: number; now?: string } = {}) {
-  return run1(createInterestStatement(db(), { requestId, builderId, note: o.note ?? null, productId: o.productId ?? null, now: o.now ?? T0, pendingCap: o.cap ?? 30 }), returnedInterest);
+  return run1(createInterestStatement(db(), { id: ulid(), writeId: ulid(), requestId, builderId, note: o.note ?? null, productId: o.productId ?? null, now: o.now ?? T0, pendingCap: o.cap ?? 30 }), returnedInterest);
 }
 
 describe("db/request-board: publication writes (VNX-2702a)", () => {
@@ -102,7 +104,7 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
   it("takes a request that is still pending verification, in the same batch as the request insert", async () => {
     const client = await ensureUser("rb-optin-batch-c@vnx.si");
     const made = createRequestStatements(db(), { clientUserId: client.id, clientName: "Minh Tran", title: "t", description: DESC, category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "pending_verification", locale: "en", country: "VN", now: T0 });
-    const [reqRes, pubRes] = await db().batch([...made.statements, optInStatement(db(), { requestId: made.id, consentVersion: CV, now: T0, clientUserId: client.id })]);
+    const [reqRes, pubRes] = await db().batch([...made.statements, optInStatement(db(), { writeId: ulid(), requestId: made.id, consentVersion: CV, now: T0, clientUserId: client.id })]);
     expect((reqRes?.results[0] as { country: string }).country).toBe("VN");
     expect(returnedPublication(pubRes)?.requestId).toBe(made.id);
   });
@@ -119,22 +121,22 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
     const pub = (await optIn(request.id))!;
     const reviewer = await ops("rb-pub");
     const input = { requestId: request.id, title: "Booking app", description: DESC, reviewedBy: reviewer, now: at(1000) };
-    expect(await run1(publishStatement(db(), { ...input, expectedUpdatedAt: at(-5) }), returnedPublication)).toBeNull(); // stale
+    expect(await run1(publishStatement(db(), { writeId: ulid(), ...input, expectedUpdatedAt: at(-5) }), returnedPublication)).toBeNull(); // stale
     await db().prepare("UPDATE requests SET status = 'removed' WHERE id = ?1").bind(request.id).run();
-    expect(await run1(publishStatement(db(), { ...input, expectedUpdatedAt: pub.updatedAt }), returnedPublication)).toBeNull(); // request not open
+    expect(await run1(publishStatement(db(), { writeId: ulid(), ...input, expectedUpdatedAt: pub.updatedAt }), returnedPublication)).toBeNull(); // request not open
     await db().prepare("UPDATE requests SET status = 'matching' WHERE id = ?1").bind(request.id).run();
-    const done = await run1(publishStatement(db(), { ...input, expectedUpdatedAt: pub.updatedAt }), returnedPublication);
+    const done = await run1(publishStatement(db(), { writeId: ulid(), ...input, expectedUpdatedAt: pub.updatedAt }), returnedPublication);
     expect(done).toMatchObject({ status: "published", publicTitle: "Booking app", publicDescription: DESC, publishedAt: at(1000), reviewedBy: reviewer, reviewedAt: at(1000) });
-    expect(await run1(publishStatement(db(), { ...input, expectedUpdatedAt: done!.updatedAt }), returnedPublication)).toBeNull(); // not pending_review any more
+    expect(await run1(publishStatement(db(), { writeId: ulid(), ...input, expectedUpdatedAt: done!.updatedAt }), returnedPublication)).toBeNull(); // not pending_review any more
   });
 
   it("edits a published listing without changing its status, and not a pending one", async () => {
     const { request } = await makeRequest({ tag: "rb-edit" });
     const pub = (await optIn(request.id))!;
     const reviewer = await ops("rb-edit");
-    const edit = (updatedAt: string, now: string) => run1(editPublicStatement(db(), { requestId: request.id, expectedUpdatedAt: updatedAt, title: "Edited", description: `${DESC} More.`, reviewedBy: reviewer, now }), returnedPublication);
+    const edit = (updatedAt: string, now: string) => run1(editPublicStatement(db(), { writeId: ulid(), requestId: request.id, expectedUpdatedAt: updatedAt, title: "Edited", description: `${DESC} More.`, reviewedBy: reviewer, now }), returnedPublication);
     expect(await edit(pub.updatedAt, at(500))).toBeNull();
-    const live = await run1(publishStatement(db(), { requestId: request.id, expectedUpdatedAt: pub.updatedAt, title: "T", description: DESC, reviewedBy: reviewer, now: at(1000) }), returnedPublication);
+    const live = await run1(publishStatement(db(), { writeId: ulid(), requestId: request.id, expectedUpdatedAt: pub.updatedAt, title: "T", description: DESC, reviewedBy: reviewer, now: at(1000) }), returnedPublication);
     expect(await edit(at(7), at(1500))).toBeNull(); // stale
     expect(await edit(live!.updatedAt, at(1500))).toMatchObject({ status: "published", publicTitle: "Edited", publishedAt: at(1000), updatedAt: at(1500) });
   });
@@ -143,45 +145,45 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
     const { request } = await makeRequest({ tag: "rb-rej" });
     const pub = (await optIn(request.id))!;
     const reviewer = await ops("rb-rej");
-    const reject = (updatedAt: string, note: string, now: string) => run1(rejectStatement(db(), { requestId: request.id, expectedUpdatedAt: updatedAt, reviewNote: note, reviewedBy: reviewer, now }), returnedPublication);
+    const reject = (updatedAt: string, note: string, now: string) => run1(rejectStatement(db(), { writeId: ulid(), requestId: request.id, expectedUpdatedAt: updatedAt, reviewNote: note, reviewedBy: reviewer, now }), returnedPublication);
     expect(await reject(pub.updatedAt, "", at(500))).toBeNull();
     expect(await reject(pub.updatedAt, "   ", at(500))).toBeNull();
     const rejected = await reject(pub.updatedAt, "Contains a phone number", at(1000));
     expect(rejected).toMatchObject({ status: "rejected", reviewNote: "Contains a phone number", reviewedBy: reviewer, endedAt: at(1000) });
-    const back = await run1(reOptInStatement(db(), { clientUserId: await ownerOf(request.id), requestId: request.id, expectedUpdatedAt: rejected!.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication);
+    const back = await run1(reOptInStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(request.id), requestId: request.id, expectedUpdatedAt: rejected!.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication);
     expect(back).toBeNull();
   });
 
   it("unpublishes only a published listing and needs a note; opt-in again is refused", async () => {
     const live = await published("rb-unpub");
-    const unpublish = (note: string, now: string, updatedAt = live.publication.updatedAt) => run1(unpublishStatement(db(), { requestId: live.request.id, expectedUpdatedAt: updatedAt, reviewNote: note, reviewedBy: live.reviewer, now }), returnedPublication);
+    const unpublish = (note: string, now: string, updatedAt = live.publication.updatedAt) => run1(unpublishStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: updatedAt, reviewNote: note, reviewedBy: live.reviewer, now }), returnedPublication);
     expect(await unpublish("", at(500))).toBeNull();
     const done = await unpublish("Not a real brief", at(1000));
     expect(done).toMatchObject({ status: "unpublished", reviewNote: "Not a real brief", endedAt: at(1000), publishedAt: T0 });
     expect(await unpublish("again", at(2000), done!.updatedAt)).toBeNull();
-    expect(await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: done!.updatedAt, consentVersion: CV, now: at(3000) }), returnedPublication)).toBeNull();
+    expect(await run1(reOptInStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: done!.updatedAt, consentVersion: CV, now: at(3000) }), returnedPublication)).toBeNull();
     const pendingOne = await makeRequest({ tag: "rb-unpub-pending" });
     const pub = (await optIn(pendingOne.request.id))!;
-    expect(await run1(unpublishStatement(db(), { requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, reviewNote: "x", reviewedBy: live.reviewer, now: at(1000) }), returnedPublication)).toBeNull();
+    expect(await run1(unpublishStatement(db(), { writeId: ulid(), requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, reviewNote: "x", reviewedBy: live.reviewer, now: at(1000) }), returnedPublication)).toBeNull();
   });
 
   it("lets the client withdraw from pending_review and from published, even when the request is closed", async () => {
     const pendingOne = await makeRequest({ tag: "rb-wd-p" });
     const pub = (await optIn(pendingOne.request.id))!;
-    expect(await run1(withdrawStatement(db(), { clientUserId: await ownerOf(pendingOne.request.id), requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, now: at(1000) }), returnedPublication)).toMatchObject({ status: "withdrawn", endedAt: at(1000) });
+    expect(await run1(withdrawStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(pendingOne.request.id), requestId: pendingOne.request.id, expectedUpdatedAt: pub.updatedAt, now: at(1000) }), returnedPublication)).toMatchObject({ status: "withdrawn", endedAt: at(1000) });
 
     const live = await published("rb-wd-live");
     await db().prepare("UPDATE requests SET status = 'closed', closed_at = ?2 WHERE id = ?1").bind(live.request.id, at(10)).run();
     const stranger = await ensureUser("rb-wd-x@vnx.si");
-    expect(await run1(withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000), clientUserId: stranger.id }), returnedPublication)).toBeNull();
-    expect(await run1(withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000), clientUserId: live.client.id }), returnedPublication)).toMatchObject({ status: "withdrawn" });
+    expect(await run1(withdrawStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000), clientUserId: stranger.id }), returnedPublication)).toBeNull();
+    expect(await run1(withdrawStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000), clientUserId: live.client.id }), returnedPublication)).toMatchObject({ status: "withdrawn" });
   });
 
   it("M4: opt-in again after a withdrawal resets exactly the consent columns and keeps the rest", async () => {
     const live = await published("rb-reopt");
-    const wd = (await run1(withdrawStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
-    expect(await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: at(3), consentVersion: "2027-01-01", now: at(2000) }), returnedPublication)).toBeNull(); // stale
-    const back = (await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: "2027-01-01", now: at(2000) }), returnedPublication))!;
+    const wd = (await run1(withdrawStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
+    expect(await run1(reOptInStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: at(3), consentVersion: "2027-01-01", now: at(2000) }), returnedPublication)).toBeNull(); // stale
+    const back = (await run1(reOptInStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: "2027-01-01", now: at(2000) }), returnedPublication))!;
     expect(back).toEqual({
       ...live.publication, // public_id, public_title, public_description, published_at, reviewed_by, reviewed_at, review_note, created_at all kept
       status: "pending_review",
@@ -192,27 +194,27 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
     });
     expect(back.publishedAt).toBe(T0);
     // Publishing again does not move it to the top: published_at stays the first publication's.
-    const again = await run1(publishStatement(db(), { requestId: live.request.id, expectedUpdatedAt: back.updatedAt, title: "T2", description: `${DESC} v2`, reviewedBy: live.reviewer, now: at(5000) }), returnedPublication);
+    const again = await run1(publishStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: back.updatedAt, title: "T2", description: `${DESC} v2`, reviewedBy: live.reviewer, now: at(5000) }), returnedPublication);
     expect(again).toMatchObject({ status: "published", publishedAt: T0, publicTitle: "T2", reviewedAt: at(5000) });
   });
 
   it("opt-in again needs an open request and the right owner", async () => {
     const live = await published("rb-reopt-closed");
-    const wd = (await run1(withdrawStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
+    const wd = (await run1(withdrawStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000) }), returnedPublication))!;
     const stranger = await ensureUser("rb-reopt-x@vnx.si");
-    expect(await run1(reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000), clientUserId: stranger.id }), returnedPublication)).toBeNull();
+    expect(await run1(reOptInStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000), clientUserId: stranger.id }), returnedPublication)).toBeNull();
     await db().prepare("UPDATE requests SET status = 'closed' WHERE id = ?1").bind(live.request.id).run();
-    expect(await run1(reOptInStatement(db(), { clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication)).toBeNull();
+    expect(await run1(reOptInStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(live.request.id), requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000) }), returnedPublication)).toBeNull();
   });
 
   it("guards audit rows on the publication compare-and-set (a lost compare-and-set writes none)", async () => {
     const { request } = await makeRequest({ tag: "rb-audit-pub" });
     const pub = (await optIn(request.id))!;
     const reviewer = await ops("rb-audit-pub");
-    const batch = (expected: string, now: string) =>
+    const batch = (expected: string, now: string, writeId = ulid()) =>
       db().batch([
-        rejectStatement(db(), { requestId: request.id, expectedUpdatedAt: expected, reviewNote: "n", reviewedBy: reviewer, now }),
-        auditStatement(db(), { actorUserId: reviewer, action: "request_publication.reject", entity: "request_publication", entityId: request.id, now }, { publicationRequestId: request.id, status: "rejected", updatedAt: now }),
+        rejectStatement(db(), { writeId, requestId: request.id, expectedUpdatedAt: expected, reviewNote: "n", reviewedBy: reviewer, now }),
+        auditStatement(db(), { actorUserId: reviewer, action: "request_publication.reject", entity: "request_publication", entityId: request.id, now }, publicationAuditGuard({ requestId: request.id, writeId })),
       ]);
     const lost = await batch(at(-9), at(1000));
     expect(lost[0]?.results).toHaveLength(0);
@@ -296,7 +298,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     for (let i = 0; i < 31; i++) {
       const made = createRequestStatements(db(), { clientUserId: client.id, clientName: "Minh Tran", title: `cap ${i}`, description: DESC, category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "submitted", locale: "en", now: T0 });
       ids.push(made.id);
-      statements.push(...made.statements, optInStatement(db(), { requestId: made.id, consentVersion: CV, now: T0, clientUserId: client.id }), publishStatement(db(), { requestId: made.id, expectedUpdatedAt: T0, title: `cap ${i}`, description: DESC, reviewedBy: reviewer, now: T0 }));
+      statements.push(...made.statements, optInStatement(db(), { writeId: ulid(), requestId: made.id, consentVersion: CV, now: T0, clientUserId: client.id }), publishStatement(db(), { writeId: ulid(), requestId: made.id, expectedUpdatedAt: T0, title: `cap ${i}`, description: DESC, reviewedBy: reviewer, now: T0 }));
     }
     await db().batch(statements);
     for (let i = 0; i < 30; i++) expect(await express(ids[i]!, builder.userId, { now: at(i) }), `interest ${i}`).not.toBeNull();
@@ -306,7 +308,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     await db().prepare("UPDATE request_publications SET status = 'withdrawn' WHERE request_id = ?1").bind(ids[1]).run();
     expect(await express(ids[30]!, builder.userId, { now: at(300) })).not.toBeNull();
     const freed = await createRequestStatements(db(), { clientUserId: client.id, clientName: "M", title: "x", description: DESC, category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "submitted", locale: "en", now: T0 });
-    await db().batch([...freed.statements, optInStatement(db(), { requestId: freed.id, consentVersion: CV, now: T0, clientUserId: client.id }), publishStatement(db(), { requestId: freed.id, expectedUpdatedAt: T0, title: "x", description: DESC, reviewedBy: reviewer, now: T0 })]);
+    await db().batch([...freed.statements, optInStatement(db(), { writeId: ulid(), requestId: freed.id, consentVersion: CV, now: T0, clientUserId: client.id }), publishStatement(db(), { writeId: ulid(), requestId: freed.id, expectedUpdatedAt: T0, title: "x", description: DESC, reviewedBy: reviewer, now: T0 })]);
     expect(await express(freed.id, builder.userId, { now: at(400) })).not.toBeNull(); // 30 open again: 28 + 1 + 1
   });
 
@@ -324,7 +326,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     const builder = await approvedBuilder("rb-wdi-b");
     const other = await approvedBuilder("rb-wdi-o");
     const interest = (await express(live.request.id, builder.userId))!;
-    const withdraw = (by: string, expected: string, now: string) => run1(withdrawInterestStatement(db(), { interestId: interest.id, builderId: by, expectedUpdatedAt: expected, now }), returnedInterest);
+    const withdraw = (by: string, expected: string, now: string) => run1(withdrawInterestStatement(db(), { writeId: ulid(), interestId: interest.id, builderId: by, expectedUpdatedAt: expected, now }), returnedInterest);
     expect(await withdraw(other.userId, interest.updatedAt, at(1000))).toBeNull();
     expect(await withdraw(builder.userId, at(7), at(1000))).toBeNull();
     expect(await withdraw(builder.userId, interest.updatedAt, at(1000))).toMatchObject({ status: "withdrawn", updatedAt: at(1000) });
@@ -335,7 +337,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     const live = await published("rb-dis");
     const builder = await approvedBuilder("rb-dis-b");
     const interest = (await express(live.request.id, builder.userId))!;
-    const dismiss = (expected: string, now: string) => run1(dismissInterestStatement(db(), { interestId: interest.id, expectedUpdatedAt: expected, decidedBy: live.reviewer, now }), returnedInterest);
+    const dismiss = (expected: string, now: string) => run1(dismissInterestStatement(db(), { writeId: ulid(), interestId: interest.id, expectedUpdatedAt: expected, decidedBy: live.reviewer, now }), returnedInterest);
     expect(await dismiss(at(5), at(1000))).toBeNull();
     expect(await dismiss(interest.updatedAt, at(1000))).toMatchObject({ status: "dismissed", decidedBy: live.reviewer, decidedAt: at(1000) });
     expect(await dismiss(at(1000), at(2000))).toBeNull();
@@ -348,7 +350,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     const admin = await ensureUser("owner@vnx.si");
     await db().prepare("UPDATE request_interests SET status = 'dismissed' WHERE request_id = ?1 AND builder_id = ?2").bind(live.request.id, c!.userId).run();
     const invite = inviteBuildersBatch(db(), { requestId: live.request.id, builderIds: [a!.userId, c!.userId], invitedBy: admin.id, now: at(1000) });
-    const mark = markInterestsInvitedStatements(db(), { requestId: live.request.id, builderIds: [a!.userId, c!.userId], inviteIds: invite.inviteIds, decidedBy: admin.id, now: at(1000) });
+    const mark = markInterestsInvitedStatements(db(), { requestId: live.request.id, builderIds: [a!.userId, c!.userId], inviteIds: invite.inviteIds, decidedBy: admin.id, now: at(1000), writeId: ulid() });
     const results = await db().batch([...invite.statements, ...mark]);
     const marked = results.slice(invite.statements.length).map((r) => r.results.length);
     expect(marked).toEqual([1, 0]); // a: pending -> invited; c: was dismissed, stays
@@ -363,7 +365,7 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     for (const x of six) await express(live.request.id, x.userId);
     const admin = await ensureUser("owner@vnx.si");
     const invite = inviteBuildersBatch(db(), { requestId: live.request.id, builderIds: six.map((x) => x.userId), invitedBy: admin.id, now: at(1000) });
-    const mark = markInterestsInvitedStatements(db(), { requestId: live.request.id, builderIds: six.map((x) => x.userId), inviteIds: invite.inviteIds, decidedBy: admin.id, now: at(1000) });
+    const mark = markInterestsInvitedStatements(db(), { requestId: live.request.id, builderIds: six.map((x) => x.userId), inviteIds: invite.inviteIds, decidedBy: admin.id, now: at(1000), writeId: ulid() });
     await db().batch([...invite.statements, ...mark]);
     expect((await findInterestFor(db(), live.request.id, six[5]!.userId))?.status).toBe("pending");
     expect((await findInterestFor(db(), live.request.id, six[0]!.userId))?.status).toBe("invited");
@@ -373,10 +375,10 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     const live = await published("rb-audit-int");
     const builder = await approvedBuilder("rb-audit-int-b");
     const interest = (await express(live.request.id, builder.userId))!;
-    const batch = (expected: string, now: string) =>
+    const batch = (expected: string, now: string, writeId = ulid()) =>
       db().batch([
-        dismissInterestStatement(db(), { interestId: interest.id, expectedUpdatedAt: expected, decidedBy: live.reviewer, now }),
-        auditStatement(db(), { actorUserId: live.reviewer, action: "request_interest.dismiss", entity: "request_interest", entityId: interest.id, now }, { interestId: interest.id, status: "dismissed", updatedAt: now }),
+        dismissInterestStatement(db(), { writeId, interestId: interest.id, expectedUpdatedAt: expected, decidedBy: live.reviewer, now }),
+        auditStatement(db(), { actorUserId: live.reviewer, action: "request_interest.dismiss", entity: "request_interest", entityId: interest.id, now }, interestAuditGuard({ interestId: interest.id, writeId })),
       ]);
     await batch(at(-1), at(1000));
     expect(await auditCount("request_interest.dismiss", interest.id)).toBe(0);
@@ -396,7 +398,7 @@ describe("db/request-board: public reads (VNX-2702a)", () => {
     const closed = await published("rb-read-closed");
     await db().prepare("UPDATE requests SET status = 'closed', closed_at = ?2 WHERE id = ?1").bind(closed.request.id, T0).run();
     const wd = await published("rb-read-wd");
-    await run1(withdrawStatement(db(), { clientUserId: await ownerOf(wd.request.id), requestId: wd.request.id, expectedUpdatedAt: wd.publication.updatedAt, now: at(5) }), returnedPublication);
+    await run1(withdrawStatement(db(), { writeId: ulid(), clientUserId: await ownerOf(wd.request.id), requestId: wd.request.id, expectedUpdatedAt: wd.publication.updatedAt, now: at(5) }), returnedPublication);
     const rows = await listOpenPublications(db(), {}, 500, 0);
     const ids = rows.map((r) => r.publicId);
     expect(ids).toContain(live.publication.publicId);
@@ -551,7 +553,7 @@ describe("db/request-board: Ops and Hub reads (VNX-2702a)", () => {
     await db().prepare("UPDATE requests SET status = 'closed', closed_at = ?2 WHERE id = ?1").bind(live.request.id, at(50)).run();
     let item = (await listBuilderInterests(db(), builder.userId))[0]!;
     expect(item).toMatchObject({ closedAt: at(50), publicTitle: "rb-hub2 public title", requestStatus: "closed" });
-    await run1(withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(100), clientUserId: live.client.id }), returnedPublication);
+    await run1(withdrawStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(100), clientUserId: live.client.id }), returnedPublication);
     item = (await listBuilderInterests(db(), builder.userId))[0]!;
     expect(item.publicTitle).toBeNull(); // the client withdrew: the wording never leaves the db layer
     expect(item.publicationStatus).toBe("withdrawn");
@@ -569,5 +571,139 @@ describe("db/request-board: Ops and Hub reads (VNX-2702a)", () => {
     expect([...map.keys()]).toEqual([a.request.id]);
     expect(map.get(a.request.id)).toEqual({ status: "published", updatedAt: a.publication.updatedAt });
     expect((await listPublicationsForOps(db(), [])).size).toBe(0);
+  });
+});
+
+// VNX-2702c: the audit guard matches the write's own id. Two writes in the same millisecond that reach the same target status
+// (workerd's Date.now only advances after I/O, so this is realistic) must leave an audit row for the winner only.
+describe("db/request-board: audit guards match a per-write id (VNX-2702c)", () => {
+  type Racer = { actor: string; writeId: string };
+  const racers = async (tag: string): Promise<{ winner: Racer; loser: Racer }> => ({
+    winner: { actor: await ops(`${tag}-w`), writeId: ulid() },
+    loser: { actor: await ops(`${tag}-l`), writeId: ulid() },
+  });
+  const auditedBy = async (actor: string, action: string) =>
+    (await db().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE actor_user_id = ?1 AND action = ?2").bind(actor, action).first<{ n: number }>())!.n;
+
+  /** Runs the winner's batch, then the loser's, both at the same `now`; the loser's write must lose (0 rows) and leave no audit row. */
+  async function raceOnPublication(tag: string, action: string, entityId: string, now: string, write: (r: Racer) => D1PreparedStatement) {
+    const { winner, loser } = await racers(tag);
+    const batch = (r: Racer) =>
+      db().batch([
+        write(r),
+        auditStatement(db(), { actorUserId: r.actor, action, entity: "request_publication", entityId, now }, publicationAuditGuard({ requestId: entityId, writeId: r.writeId })),
+      ]);
+    const won = await batch(winner);
+    const lost = await batch(loser);
+    expect(won[0]?.results, "the winner writes").toHaveLength(1);
+    expect(lost[0]?.results, "the loser's write lost its compare-and-set").toHaveLength(0);
+    expect(await auditedBy(winner.actor, action)).toBe(1);
+    expect(await auditedBy(loser.actor, action), "no audit row for an action that did not happen").toBe(0);
+    expect((await findPublicationByRequestId(db(), entityId))?.updatedAt).toBe(now);
+  }
+
+  it("opt-in", async () => {
+    const { request } = await makeRequest({ tag: "wid-optin" });
+    const clientUserId = await ownerOf(request.id);
+    await raceOnPublication("wid-optin", "request_publication.opt_in", request.id, T0, (r) => optInStatement(db(), { requestId: request.id, consentVersion: CV, now: T0, clientUserId, writeId: r.writeId }));
+  });
+
+  it("re-opt-in", async () => {
+    const live = await published("wid-reopt");
+    const clientUserId = await ownerOf(live.request.id);
+    const wd = (await run1(withdrawStatement(db(), { writeId: ulid(), requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000), clientUserId }), returnedPublication))!;
+    await raceOnPublication("wid-reopt", "request_publication.re_opt_in", live.request.id, at(2000), (r) =>
+      reOptInStatement(db(), { requestId: live.request.id, expectedUpdatedAt: wd.updatedAt, consentVersion: CV, now: at(2000), clientUserId, writeId: r.writeId }),
+    );
+  });
+
+  it("withdraw", async () => {
+    const live = await published("wid-wd");
+    const clientUserId = await ownerOf(live.request.id);
+    await raceOnPublication("wid-wd", "request_publication.withdraw", live.request.id, at(1000), (r) =>
+      withdrawStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, now: at(1000), clientUserId, writeId: r.writeId }),
+    );
+  });
+
+  it("publish", async () => {
+    const made = await makeRequest({ tag: "wid-pub" });
+    const pub = (await optIn(made.request.id))!;
+    await raceOnPublication("wid-pub", "request_publication.publish", made.request.id, at(1000), (r) =>
+      publishStatement(db(), { requestId: made.request.id, expectedUpdatedAt: pub.updatedAt, title: "T", description: DESC, reviewedBy: r.actor, now: at(1000), writeId: r.writeId }),
+    );
+  });
+
+  it("edit (published stays published: the case status + updated_at could never tell apart)", async () => {
+    const live = await published("wid-edit");
+    await raceOnPublication("wid-edit", "request_publication.edit", live.request.id, at(1000), (r) =>
+      editPublicStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, title: "E", description: `${DESC} More.`, reviewedBy: r.actor, now: at(1000), writeId: r.writeId }),
+    );
+  });
+
+  it("reject", async () => {
+    const made = await makeRequest({ tag: "wid-rej" });
+    const pub = (await optIn(made.request.id))!;
+    await raceOnPublication("wid-rej", "request_publication.reject", made.request.id, at(1000), (r) =>
+      rejectStatement(db(), { requestId: made.request.id, expectedUpdatedAt: pub.updatedAt, reviewNote: "no", reviewedBy: r.actor, now: at(1000), writeId: r.writeId }),
+    );
+  });
+
+  it("unpublish", async () => {
+    const live = await published("wid-unpub");
+    await raceOnPublication("wid-unpub", "request_publication.unpublish", live.request.id, at(1000), (r) =>
+      unpublishStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, reviewNote: "no", reviewedBy: r.actor, now: at(1000), writeId: r.writeId }),
+    );
+  });
+
+  async function raceOnInterest(tag: string, action: string, interestId: string, now: string, write: (r: Racer) => D1PreparedStatement) {
+    const { winner, loser } = await racers(tag);
+    const batch = (r: Racer) =>
+      db().batch([
+        write(r),
+        auditStatement(db(), { actorUserId: r.actor, action, entity: "request_interest", entityId: interestId, now }, interestAuditGuard({ interestId, writeId: r.writeId })),
+      ]);
+    const won = await batch(winner);
+    const lost = await batch(loser);
+    expect(won[0]?.results, "the winner writes").toHaveLength(1);
+    expect(lost[0]?.results, "the loser's write lost").toHaveLength(0);
+    expect(await auditedBy(winner.actor, action)).toBe(1);
+    expect(await auditedBy(loser.actor, action), "no audit row for an action that did not happen").toBe(0);
+  }
+
+  it("interest create (the same interest id written twice in one millisecond)", async () => {
+    const live = await published("wid-icr");
+    const builder = await approvedBuilder("wid-icr-b");
+    const interestId = ulid();
+    await raceOnInterest("wid-icr", "request_interest.create", interestId, at(1000), (r) =>
+      createInterestStatement(db(), { id: interestId, writeId: r.writeId, requestId: live.request.id, builderId: builder.userId, note: null, productId: null, now: at(1000), pendingCap: 30 }),
+    );
+  });
+
+  it("interest withdraw", async () => {
+    const live = await published("wid-iwd");
+    const builder = await approvedBuilder("wid-iwd-b");
+    const interest = (await express(live.request.id, builder.userId))!;
+    await raceOnInterest("wid-iwd", "request_interest.withdraw", interest.id, at(1000), (r) =>
+      withdrawInterestStatement(db(), { interestId: interest.id, builderId: builder.userId, expectedUpdatedAt: interest.updatedAt, now: at(1000), writeId: r.writeId }),
+    );
+  });
+
+  it("interest dismiss", async () => {
+    const live = await published("wid-idm");
+    const builder = await approvedBuilder("wid-idm-b");
+    const interest = (await express(live.request.id, builder.userId))!;
+    await raceOnInterest("wid-idm", "request_interest.dismiss", interest.id, at(1000), (r) =>
+      dismissInterestStatement(db(), { interestId: interest.id, expectedUpdatedAt: interest.updatedAt, decidedBy: r.actor, now: at(1000), writeId: r.writeId }),
+    );
+  });
+
+  it("a write leaves its own write_id on the row, and a different one each time", async () => {
+    const live = await published("wid-own");
+    const read = async () => (await db().prepare("SELECT write_id FROM request_publications WHERE request_id = ?1").bind(live.request.id).first<{ write_id: string }>())!.write_id;
+    const first = await read();
+    const id = ulid();
+    await run1(editPublicStatement(db(), { requestId: live.request.id, expectedUpdatedAt: live.publication.updatedAt, title: "E", description: `${DESC} More.`, reviewedBy: live.reviewer, now: at(1000), writeId: id }), returnedPublication);
+    expect(await read()).toBe(id);
+    expect(id).not.toBe(first);
   });
 });

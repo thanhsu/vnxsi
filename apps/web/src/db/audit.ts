@@ -32,9 +32,9 @@ export type AuditFlagGuard = { flagKey: string; writeId: string };
  */
 export type AuditIdentityGuard = { identityId: string; userId: string };
 /** Written only when the batch's publication compare-and-set went through: the row exists with this status and updated_at (EPIC 27, see request-board.ts). */
-export type AuditPublicationGuard = { publicationRequestId: string; status: string; updatedAt: string };
+export type AuditPublicationGuard = { publicationRequestId: string; writeId: string };
 /** Written only when the batch's interest compare-and-set went through: the row exists with this status and updated_at (EPIC 27). */
-export type AuditInterestGuard = { interestId: string; status: string; updatedAt: string };
+export type AuditInterestGuard = { interestId: string; writeId: string };
 /** Written only when that merchant / program / offer row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
 export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs" | "offers"; id: string; writeId: string };
 
@@ -44,7 +44,7 @@ export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
  * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id,
  * `partnerTable` + `id` on that merchant / program / offer row's last write id, `identityId` + `userId` on the identity row existing for that user,
- * `publicationRequestId` on the publication's status and updated_at, `interestId` on the interest's (EPIC 27).
+ * `publicationRequestId` on the publication's `write_id`, `interestId` on the interest's (EPIC 27, VNX-2702c).
  */
 export function auditStatement(
   db: D1Database,
@@ -62,18 +62,18 @@ export function auditStatement(
       .prepare(
         `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
          SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-         WHERE EXISTS (SELECT 1 FROM request_publications WHERE request_id = ?8 AND status = ?9 AND updated_at = ?10)`,
+         WHERE EXISTS (SELECT 1 FROM request_publications WHERE request_id = ?8 AND write_id = ?9)`,
       )
-      .bind(...values, onlyIf.publicationRequestId, onlyIf.status, onlyIf.updatedAt);
+      .bind(...values, onlyIf.publicationRequestId, onlyIf.writeId);
   }
   if ("interestId" in onlyIf) {
     return db
       .prepare(
         `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
          SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-         WHERE EXISTS (SELECT 1 FROM request_interests WHERE id = ?8 AND status = ?9 AND updated_at = ?10)`,
+         WHERE EXISTS (SELECT 1 FROM request_interests WHERE id = ?8 AND write_id = ?9)`,
       )
-      .bind(...values, onlyIf.interestId, onlyIf.status, onlyIf.updatedAt);
+      .bind(...values, onlyIf.interestId, onlyIf.writeId);
   }
   if ("identityId" in onlyIf) {
     return db

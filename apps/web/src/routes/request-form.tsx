@@ -1,3 +1,4 @@
+import { ulid } from "../lib/ulid.ts";
 import type { Context, Hono } from "hono";
 import { sha256Hex } from "../auth/crypto.ts";
 import { createLoginToken } from "../auth/tokens.ts";
@@ -54,11 +55,12 @@ async function createRequestWithOptIn(db: D1Database, args: { request: NewReques
   const { request, publish } = args;
   const { id, statements } = createRequestStatements(db, request);
   const now = request.now;
+  const writeId = ulid();
   const results = await db.batch([
     ...statements,
-    optInStatement(db, { requestId: id, consentVersion: publish.consentVersion, now, clientUserId: request.clientUserId }),
+    optInStatement(db, { requestId: id, consentVersion: publish.consentVersion, now, clientUserId: request.clientUserId, writeId }),
     auditStatement(db, { actorUserId: args.auditActor, action: args.auditAction, entity: "request", entityId: id, data: args.auditData, now }, { requestId: id, status: request.status, updatedAt: now }),
-    auditStatement(db, { actorUserId: request.clientUserId, action: "request_publication.opt_in", entity: "request_publication", entityId: id, data: { consentVersion: publish.consentVersion }, now }, publicationAuditGuard({ requestId: id, status: "pending_review", updatedAt: now })),
+    auditStatement(db, { actorUserId: request.clientUserId, action: "request_publication.opt_in", entity: "request_publication", entityId: id, data: { consentVersion: publish.consentVersion }, now }, publicationAuditGuard({ requestId: id, writeId })),
   ]);
   if (!returnedPublication(results[statements.length])) {
     console.error(JSON.stringify({ event: "request.opt_in_not_inserted", requestId: id }));

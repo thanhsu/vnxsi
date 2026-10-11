@@ -1,3 +1,4 @@
+import { ulid } from "../lib/ulid.ts";
 import type { Context, Hono } from "hono";
 import { requireUser } from "../auth/middleware.ts";
 import { auditStatement } from "../db/audit.ts";
@@ -79,16 +80,17 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
     if (!action) return boardConflict(c);
     const now = new Date().toISOString();
     const consentVersion = c.env.REQUEST_BOARD_GO_LIVE ?? "";
+    const writeId = ulid();
     const change =
       action === "opt_in"
-        ? optInStatement(c.env.DB, { requestId: request.id, consentVersion, now, clientUserId: user.id })
-        : reOptInStatement(c.env.DB, { requestId: request.id, expectedUpdatedAt: publication!.updatedAt, consentVersion, now, clientUserId: user.id });
+        ? optInStatement(c.env.DB, { requestId: request.id, consentVersion, now, clientUserId: user.id, writeId })
+        : reOptInStatement(c.env.DB, { requestId: request.id, expectedUpdatedAt: publication!.updatedAt, consentVersion, now, clientUserId: user.id, writeId });
     const results = await c.env.DB.batch([
       change,
       auditStatement(
         c.env.DB,
         { actorUserId: user.id, action: action === "opt_in" ? "request_publication.opt_in" : "request_publication.re_opt_in", entity: "request_publication", entityId: request.id, data: { consentVersion }, now },
-        publicationAuditGuard({ requestId: request.id, status: "pending_review", updatedAt: now }),
+        publicationAuditGuard({ requestId: request.id, writeId }),
       ),
     ]);
     // 0 rows: the request or the publication changed since the page was read. Nothing was written, not even the audit row.
@@ -108,12 +110,13 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
     const publication = await findPublicationByRequestId(c.env.DB, request.id);
     if (!publication || !clientBoardActions(publication.status, request.status, c.get("requestBoard")).includes("withdraw")) return boardConflict(c);
     const now = new Date().toISOString();
+    const writeId = ulid();
     const results = await c.env.DB.batch([
-      withdrawStatement(c.env.DB, { requestId: request.id, expectedUpdatedAt: publication.updatedAt, now, clientUserId: user.id }),
+      withdrawStatement(c.env.DB, { requestId: request.id, expectedUpdatedAt: publication.updatedAt, now, clientUserId: user.id, writeId }),
       auditStatement(
         c.env.DB,
         { actorUserId: user.id, action: "request_publication.withdraw", entity: "request_publication", entityId: request.id, data: { from: publication.status }, now },
-        publicationAuditGuard({ requestId: request.id, status: "withdrawn", updatedAt: now }),
+        publicationAuditGuard({ requestId: request.id, writeId }),
       ),
     ]);
     if (!returnedPublication(results[0])) return boardConflict(c);

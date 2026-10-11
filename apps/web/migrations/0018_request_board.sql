@@ -1,4 +1,6 @@
 -- EPIC 27 public request board (addendum §6). Additive only; no INSERT, so nothing is made public retroactively.
+-- `write_id` is the random id (ULID) of the last write; the audit row of that write is guarded on it (AuditPublicationGuard, AuditInterestGuard; same idea as AuditPartnerGuard).
+-- NOT NULL without a default: both tables are new and nothing is inserted here, so every row comes from a statement that sets it.
 -- Module `matching` (src/db/request-board.ts) owns request_publications and request_interests.
 ALTER TABLE requests ADD COLUMN country TEXT CHECK (country IS NULL OR length(country) = 2);
 
@@ -17,6 +19,7 @@ CREATE TABLE request_publications (
   ended_at           TEXT,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
+  write_id           TEXT NOT NULL,
   CHECK (status <> 'published' OR (public_title IS NOT NULL AND public_description IS NOT NULL AND published_at IS NOT NULL))
 );
 CREATE INDEX idx_request_publications_status ON request_publications (status, published_at);
@@ -32,6 +35,7 @@ CREATE TABLE request_interests (
   decided_at  TEXT,
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL,
+  write_id    TEXT NOT NULL,
   UNIQUE (request_id, builder_id)
 );
 CREATE INDEX idx_request_interests_request ON request_interests (request_id, status);

@@ -1,3 +1,4 @@
+import { ulid } from "../../src/lib/ulid.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
@@ -63,7 +64,7 @@ async function mine(opts: { status?: "submitted" | "pending_verification"; opt?:
   const made = await makeRequest({ tag: `mrb-${t}`, status: opts.status, title: `ZQX-ORIGINAL-TITLE ${t}`, description: `ZQX-ORIGINAL-DESCRIPTION ${t}, details only the client and Ops may read.` });
   const { cookie } = await signIn(made.client.email, { method: opts.method });
   if (opts.opt) {
-    const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { requestId: made.request.id, consentVersion: "2026-01-01", now: new Date().toISOString(), clientUserId: made.client.id })]);
+    const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { writeId: ulid(), requestId: made.request.id, consentVersion: "2026-01-01", now: new Date().toISOString(), clientUserId: made.client.id })]);
     if (!returnedPublication(res)) throw new Error("opt-in failed");
   }
   return { requestId: made.request.id, clientId: made.client.id, email: made.client.email, cookie };
@@ -402,7 +403,7 @@ describe("a lost race writes nothing: 0 rows from the batch are detected (409, n
   it("opt-in where the publication was inserted first", async () => {
     const m = await mine();
     const bindings = racing(async () => {
-      const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { requestId: m.requestId, consentVersion: "2026-01-01", now: new Date(Date.now() + 1000).toISOString(), clientUserId: m.clientId })]);
+      const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { writeId: ulid(), requestId: m.requestId, consentVersion: "2026-01-01", now: new Date(Date.now() + 1000).toISOString(), clientUserId: m.clientId })]);
       if (!returnedPublication(res)) throw new Error("race setup failed");
     });
     const res = await post(OPT_PATH(m.requestId), m.cookie, bindings);

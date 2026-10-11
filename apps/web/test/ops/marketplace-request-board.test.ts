@@ -1,3 +1,4 @@
+import { ulid } from "../../src/lib/ulid.ts";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { countPublicationReviewQueue, findPublicationByRequestId, findPublicListing, optInStatement, rejectStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
@@ -62,7 +63,7 @@ async function listing(opts: { state?: "pending_review" | "published"; requestSt
   const text = tag();
   const made = await makeRequest({ tag: `ops-bd-${text}`, title: opts.title ?? `${ORIGINAL} ${text}`, description: opts.description ?? ORIGINAL_DESC });
   const now = new Date().toISOString();
-  const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { requestId: made.request.id, consentVersion: "2026-01-01", now, clientUserId: made.client.id })]);
+  const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { writeId: ulid(), requestId: made.request.id, consentVersion: "2026-01-01", now, clientUserId: made.client.id })]);
   const publication = returnedPublication(res);
   if (!publication) throw new Error("opt-in failed");
   if (opts.requestStatus && opts.requestStatus !== "submitted") await testEnv.DB.prepare("UPDATE requests SET status = ?2 WHERE id = ?1").bind(made.request.id, opts.requestStatus).run();
@@ -586,11 +587,11 @@ describe("VNX-2704a review fixes (round 1)", () => {
   it("L-2: rejectStatement itself refuses a pending_verification request, and route and view share one rule", async () => {
     const f = await listing({ requestStatus: "pending_verification" });
     const ops = await ensureUser(`ops-bd-l2-${tag()}@vnx.si`);
-    const [res] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { requestId: f.requestId, expectedUpdatedAt: f.publication.updatedAt, reviewNote: "nope", reviewedBy: ops.id, now: new Date().toISOString() })]);
+    const [res] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { writeId: ulid(), requestId: f.requestId, expectedUpdatedAt: f.publication.updatedAt, reviewNote: "nope", reviewedBy: ops.id, now: new Date().toISOString() })]);
     expect(returnedPublication(res)).toBeNull();
     expect((await pubOf(f.requestId)).status).toBe("pending_review");
     const g = await listing();
-    const [ok] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { requestId: g.requestId, expectedUpdatedAt: g.publication.updatedAt, reviewNote: "fine", reviewedBy: ops.id, now: new Date().toISOString() })]);
+    const [ok] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { writeId: ulid(), requestId: g.requestId, expectedUpdatedAt: g.publication.updatedAt, reviewNote: "fine", reviewedBy: ops.id, now: new Date().toISOString() })]);
     expect(returnedPublication(ok)?.status).toBe("rejected");
     expect(opsBoardActions("pending_review", "pending_verification")).toEqual([]);
     expect(opsBoardActions("pending_review", "submitted")).toEqual(["publish", "reject"]);

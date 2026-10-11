@@ -140,7 +140,7 @@ export function buildSeed(now = new Date()) {
       id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client with details only Ops may read.`, category: "booking",
       budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when,
     });
-    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "pending_review", opted_in_at: when, consent_version: "2026-01-01", created_at: when, updated_at: when });
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "pending_review", opted_in_at: when, consent_version: "2026-01-01", created_at: when, updated_at: when, write_id: id("W", n) });
   }
 
   // EPIC 27: the request board flag is on in this database (the date half of the gate is REQUEST_BOARD_GO_LIVE in e2e/scripts/serve.mjs).

@@ -20,7 +20,7 @@ async function columns(table: string): Promise<string[]> {
 
 type Cols = Record<string, string | number | null>;
 async function insertPublication(requestId: string, cols: Cols = {}): Promise<void> {
-  const all: Cols = { request_id: requestId, public_id: ulid(), status: "pending_review", opted_in_at: NOW, consent_version: "2026-12-01", created_at: NOW, updated_at: NOW, ...cols };
+  const all: Cols = { request_id: requestId, public_id: ulid(), status: "pending_review", opted_in_at: NOW, consent_version: "2026-12-01", created_at: NOW, updated_at: NOW, write_id: ulid(), ...cols };
   const keys = Object.keys(all);
   await db()
     .prepare(`INSERT INTO request_publications (${keys.join(", ")}) VALUES (${keys.map((_, i) => `?${i + 1}`).join(", ")})`)
@@ -28,7 +28,7 @@ async function insertPublication(requestId: string, cols: Cols = {}): Promise<vo
     .run();
 }
 async function insertInterest(requestId: string, builderId: string, cols: Cols = {}): Promise<void> {
-  const all: Cols = { id: ulid(), request_id: requestId, builder_id: builderId, status: "pending", created_at: NOW, updated_at: NOW, ...cols };
+  const all: Cols = { id: ulid(), request_id: requestId, builder_id: builderId, status: "pending", created_at: NOW, updated_at: NOW, write_id: ulid(), ...cols };
   const keys = Object.keys(all);
   await db()
     .prepare(`INSERT INTO request_interests (${keys.join(", ")}) VALUES (${keys.map((_, i) => `?${i + 1}`).join(", ")})`)
@@ -46,9 +46,9 @@ describe("0018_request_board (addendum §6)", () => {
   it("creates the columns and indexes of the addendum", async () => {
     expect(await columns("requests")).toContain("country");
     expect(await columns("request_publications")).toEqual([
-      "request_id", "public_id", "status", "public_title", "public_description", "opted_in_at", "consent_version", "reviewed_by", "reviewed_at", "review_note", "published_at", "ended_at", "created_at", "updated_at",
+      "request_id", "public_id", "status", "public_title", "public_description", "opted_in_at", "consent_version", "reviewed_by", "reviewed_at", "review_note", "published_at", "ended_at", "created_at", "updated_at", "write_id",
     ]);
-    expect(await columns("request_interests")).toEqual(["id", "request_id", "builder_id", "note", "product_id", "status", "decided_by", "decided_at", "created_at", "updated_at"]);
+    expect(await columns("request_interests")).toEqual(["id", "request_id", "builder_id", "note", "product_id", "status", "decided_by", "decided_at", "created_at", "updated_at", "write_id"]);
     const { results } = await db().prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_request_%'").all<{ name: string }>();
     expect(results.map((r) => r.name)).toEqual(expect.arrayContaining(["idx_request_publications_status", "idx_request_interests_request", "idx_request_interests_builder"]));
   });
@@ -87,6 +87,13 @@ describe("0018_request_board (addendum §6)", () => {
     await expect(insertInterest(request.id, builder.userId, { status: "open" })).rejects.toThrow();
     await insertInterest(request.id, builder.userId, { note: "n".repeat(500) });
     await expect(insertInterest(request.id, builder.userId)).rejects.toThrow();
+  });
+
+  it("requires write_id on both tables (VNX-2702c): every write names itself", async () => {
+    const { request } = await makeRequest({ tag: "rbm-wid" });
+    const builder = await makeBuilder("rbm-wid-b@vnx.si", "rbm-wid-b", "approved");
+    await expect(insertPublication(request.id, { write_id: null })).rejects.toThrow();
+    await expect(insertInterest(request.id, builder.userId, { write_id: null })).rejects.toThrow();
   });
 
   it("checks requests.country: two letters or null", async () => {

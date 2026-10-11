@@ -7,7 +7,9 @@ import { jsonList } from "./builders.ts";
 
 // EPIC 27 (public request board, addendum §6). This module is the only writer of request_publications and request_interests
 // (test/architecture.test.ts WRITERS). Every write is a statement for the route's db.batch, next to its guarded audit row (ADR-010):
-// a compare-and-set on status + updated_at that reads its result with RETURNING, never meta.changes. It is also a ranking file
+// a compare-and-set on updated_at (the token) that reads its result with RETURNING, never meta.changes. Every write also sets `write_id`, a fresh ULID the
+// caller makes once and passes to both the statement and its audit guard: the audit row is guarded on the write's own id, not on the resulting status (two writes
+// in the same millisecond can reach the same status; only the winner's write_id is on the row). It is also a ranking file
 // (ADR-004): one order only, published_at DESC then public_id DESC; no money table, no priority column.
 
 export type PublicationStatus = "pending_review" | "published" | "rejected" | "withdrawn" | "unpublished";
@@ -108,13 +110,17 @@ export function toInterest(r: InterestRow): Interest {
   };
 }
 
-/** "This batch's compare-and-set on the publication went through": the audit row (AuditPublicationGuard) checks it. */
-export type PublicationGuard = { requestId: string; status: PublicationStatus; updatedAt: string };
+/** "This batch's write on the publication went through": the audit row (AuditPublicationGuard) checks that the row carries this write's id. */
+export type PublicationGuard = { requestId: string; writeId: string };
 /** Same for an interest (AuditInterestGuard). */
-export type InterestGuard = { interestId: string; status: InterestStatus; updatedAt: string };
+export type InterestGuard = { interestId: string; writeId: string };
 
-export function publicationAuditGuard(g: PublicationGuard): { publicationRequestId: string; status: string; updatedAt: string } {
-  return { publicationRequestId: g.requestId, status: g.status, updatedAt: g.updatedAt };
+export function publicationAuditGuard(g: PublicationGuard): { publicationRequestId: string; writeId: string } {
+  return { publicationRequestId: g.requestId, writeId: g.writeId };
+}
+
+export function interestAuditGuard(g: InterestGuard): { interestId: string; writeId: string } {
+  return { interestId: g.interestId, writeId: g.writeId };
 }
 
 /** A request is open for the board while it is submitted or matching (spec §7.5). */
@@ -130,17 +136,17 @@ const BUILDER_APPROVED_ACTIVE = "b.status = 'approved' AND u.status = 'active'";
  * `clientUserId` (required, enforced in the SQL). 0 rows when any of that fails (a second opt-in does not insert a second row).
  * On the creation path it follows the request INSERT in the same db.batch, so the request is visible to its EXISTS.
  */
-export function optInStatement(db: D1Database, input: { requestId: string; publicId?: string; consentVersion: string; now: string; clientUserId: string }): D1PreparedStatement {
+export function optInStatement(db: D1Database, input: { requestId: string; publicId?: string; consentVersion: string; now: string; clientUserId: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO request_publications (request_id, public_id, status, opted_in_at, consent_version, created_at, updated_at)
-       SELECT ?1, ?2, 'pending_review', ?4, ?3, ?4, ?4
+      `INSERT INTO request_publications (request_id, public_id, status, opted_in_at, consent_version, created_at, updated_at, write_id)
+       SELECT ?1, ?2, 'pending_review', ?4, ?3, ?4, ?4, ?6
        WHERE EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status IN ('submitted', 'matching', 'pending_verification')
                        AND r.client_user_id = ?5)
          AND NOT EXISTS (SELECT 1 FROM request_publications x WHERE x.request_id = ?1)
        RETURNING *`,
     )
-    .bind(input.requestId, input.publicId ?? ulid(Date.parse(input.now)), input.consentVersion, input.now, input.clientUserId);
+    .bind(input.requestId, input.publicId ?? ulid(Date.parse(input.now)), input.consentVersion, input.now, input.clientUserId, input.writeId);
 }
 
 /**
@@ -148,77 +154,77 @@ export function optInStatement(db: D1Database, input: { requestId: string; publi
  * Keeps public_id, published_at and the last public text (an earlier first publication keeps its place in the order);
  * resets opted_in_at, consent_version and ended_at. A rejected or unpublished publication cannot come back (0 rows).
  */
-export function reOptInStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; consentVersion: string; now: string; clientUserId: string }): D1PreparedStatement {
+export function reOptInStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; consentVersion: string; now: string; clientUserId: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_publications SET status = 'pending_review', opted_in_at = ?4, consent_version = ?3, ended_at = NULL, updated_at = ?4
+      `UPDATE request_publications SET status = 'pending_review', opted_in_at = ?4, consent_version = ?3, ended_at = NULL, updated_at = ?4, write_id = ?6
        WHERE request_id = ?1 AND status = 'withdrawn' AND updated_at = ?2
          AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status IN ${OPEN_REQUEST} AND r.client_user_id = ?5)
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.consentVersion, input.now, input.clientUserId);
+    .bind(input.requestId, input.expectedUpdatedAt, input.consentVersion, input.now, input.clientUserId, input.writeId);
 }
 
 /** Ops publishes: pending_review -> published with the (possibly edited) public text. published_at is set the first time only. Needs an open request. */
-export function publishStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; title: string; description: string; reviewedBy: string; now: string }): D1PreparedStatement {
+export function publishStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; title: string; description: string; reviewedBy: string; now: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE request_publications SET status = 'published', public_title = ?3, public_description = ?4, published_at = COALESCE(published_at, ?6),
-         reviewed_by = ?5, reviewed_at = ?6, ended_at = NULL, updated_at = ?6
+         reviewed_by = ?5, reviewed_at = ?6, ended_at = NULL, updated_at = ?6, write_id = ?7
        WHERE request_id = ?1 AND status = 'pending_review' AND updated_at = ?2
          AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status IN ${OPEN_REQUEST})
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.title, input.description, input.reviewedBy, input.now);
+    .bind(input.requestId, input.expectedUpdatedAt, input.title, input.description, input.reviewedBy, input.now, input.writeId);
 }
 
 /** Ops edits the public text of a published listing; the status stays published. */
-export function editPublicStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; title: string; description: string; reviewedBy: string; now: string }): D1PreparedStatement {
+export function editPublicStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; title: string; description: string; reviewedBy: string; now: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_publications SET public_title = ?3, public_description = ?4, reviewed_by = ?5, reviewed_at = ?6, updated_at = ?6
+      `UPDATE request_publications SET public_title = ?3, public_description = ?4, reviewed_by = ?5, reviewed_at = ?6, updated_at = ?6, write_id = ?7
        WHERE request_id = ?1 AND status = 'published' AND updated_at = ?2
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.title, input.description, input.reviewedBy, input.now);
+    .bind(input.requestId, input.expectedUpdatedAt, input.title, input.description, input.reviewedBy, input.now, input.writeId);
 }
 
 /** Ops rejects: pending_review -> rejected (final). A review note is required. Not while the request still waits for the client's e-mail confirmation (VNX-2704a L-2). */
-export function rejectStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; reviewNote: string; reviewedBy: string; now: string }): D1PreparedStatement {
+export function rejectStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; reviewNote: string; reviewedBy: string; now: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_publications SET status = 'rejected', review_note = ?3, reviewed_by = ?4, reviewed_at = ?5, ended_at = ?5, updated_at = ?5
+      `UPDATE request_publications SET status = 'rejected', review_note = ?3, reviewed_by = ?4, reviewed_at = ?5, ended_at = ?5, updated_at = ?5, write_id = ?6
        WHERE request_id = ?1 AND status = 'pending_review' AND updated_at = ?2 AND length(trim(?3)) > 0
          AND NOT EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.status = 'pending_verification')
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.reviewNote, input.reviewedBy, input.now);
+    .bind(input.requestId, input.expectedUpdatedAt, input.reviewNote, input.reviewedBy, input.now, input.writeId);
 }
 
 /** Ops unpublishes: published -> unpublished (final). A review note is required. */
-export function unpublishStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; reviewNote: string; reviewedBy: string; now: string }): D1PreparedStatement {
+export function unpublishStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; reviewNote: string; reviewedBy: string; now: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_publications SET status = 'unpublished', review_note = ?3, reviewed_by = ?4, reviewed_at = ?5, ended_at = ?5, updated_at = ?5
+      `UPDATE request_publications SET status = 'unpublished', review_note = ?3, reviewed_by = ?4, reviewed_at = ?5, ended_at = ?5, updated_at = ?5, write_id = ?6
        WHERE request_id = ?1 AND status = 'published' AND updated_at = ?2 AND length(trim(?3)) > 0
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.reviewNote, input.reviewedBy, input.now);
+    .bind(input.requestId, input.expectedUpdatedAt, input.reviewNote, input.reviewedBy, input.now, input.writeId);
 }
 
 /**
  * The client withdraws consent: pending_review or published -> withdrawn. Never conditioned on the request's status and never
  * read through a flag (withdrawing consent must always work). `clientUserId` must own the request (required, enforced in the SQL).
  */
-export function withdrawStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; now: string; clientUserId: string }): D1PreparedStatement {
+export function withdrawStatement(db: D1Database, input: { requestId: string; expectedUpdatedAt: string; now: string; clientUserId: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_publications SET status = 'withdrawn', ended_at = ?3, updated_at = ?3
+      `UPDATE request_publications SET status = 'withdrawn', ended_at = ?3, updated_at = ?3, write_id = ?5
        WHERE request_id = ?1 AND status IN ('pending_review', 'published') AND updated_at = ?2
          AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ?1 AND r.client_user_id = ?4)
        RETURNING *`,
     )
-    .bind(input.requestId, input.expectedUpdatedAt, input.now, input.clientUserId);
+    .bind(input.requestId, input.expectedUpdatedAt, input.now, input.clientUserId, input.writeId);
 }
 
 /** The publication a batched compare-and-set returned, or null when it lost. */
@@ -238,12 +244,12 @@ export function returnedPublication(result: D1Result | undefined): Publication |
  */
 export function createInterestStatement(
   db: D1Database,
-  input: { requestId: string; builderId: string; note: string | null; productId: string | null; now: string; pendingCap: number },
+  input: { id: string; requestId: string; builderId: string; note: string | null; productId: string | null; now: string; pendingCap: number; writeId: string },
 ): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO request_interests (id, request_id, builder_id, note, product_id, status, created_at, updated_at)
-       SELECT ?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6
+      `INSERT INTO request_interests (id, request_id, builder_id, note, product_id, status, created_at, updated_at, write_id)
+       SELECT ?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6, ?8
        WHERE EXISTS (SELECT 1 FROM requests r JOIN request_publications p ON p.request_id = r.id
                      WHERE r.id = ?2 AND r.status IN ${OPEN_REQUEST} AND p.status = 'published' AND r.client_user_id != ?3)
          AND EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?3 AND ${BUILDER_APPROVED_ACTIVE})
@@ -256,29 +262,29 @@ export function createInterestStatement(
          AND (?5 IS NULL OR EXISTS (SELECT 1 FROM products pr WHERE pr.id = ?5 AND pr.builder_id = ?3 AND pr.status = 'published'))
        RETURNING *`,
     )
-    .bind(ulid(Date.parse(input.now)), input.requestId, input.builderId, input.note, input.productId, input.now, input.pendingCap);
+    .bind(input.id, input.requestId, input.builderId, input.note, input.productId, input.now, input.pendingCap, input.writeId);
 }
 
 /** The builder takes the interest back: pending -> withdrawn, only their own. */
-export function withdrawInterestStatement(db: D1Database, input: { interestId: string; builderId: string; expectedUpdatedAt: string; now: string }): D1PreparedStatement {
+export function withdrawInterestStatement(db: D1Database, input: { interestId: string; builderId: string; expectedUpdatedAt: string; now: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_interests SET status = 'withdrawn', updated_at = ?4
+      `UPDATE request_interests SET status = 'withdrawn', updated_at = ?4, write_id = ?5
        WHERE id = ?1 AND builder_id = ?2 AND status = 'pending' AND updated_at = ?3
        RETURNING *`,
     )
-    .bind(input.interestId, input.builderId, input.expectedUpdatedAt, input.now);
+    .bind(input.interestId, input.builderId, input.expectedUpdatedAt, input.now, input.writeId);
 }
 
 /** Ops dismisses: pending -> dismissed. */
-export function dismissInterestStatement(db: D1Database, input: { interestId: string; expectedUpdatedAt: string; decidedBy: string; now: string }): D1PreparedStatement {
+export function dismissInterestStatement(db: D1Database, input: { interestId: string; expectedUpdatedAt: string; decidedBy: string; now: string; writeId: string }): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE request_interests SET status = 'dismissed', decided_by = ?3, decided_at = ?4, updated_at = ?4
+      `UPDATE request_interests SET status = 'dismissed', decided_by = ?3, decided_at = ?4, updated_at = ?4, write_id = ?5
        WHERE id = ?1 AND status = 'pending' AND updated_at = ?2
        RETURNING *`,
     )
-    .bind(input.interestId, input.expectedUpdatedAt, input.decidedBy, input.now);
+    .bind(input.interestId, input.expectedUpdatedAt, input.decidedBy, input.now, input.writeId);
 }
 
 /**
@@ -286,17 +292,17 @@ export function dismissInterestStatement(db: D1Database, input: { interestId: st
  * the invitation inserts. Each moves the interest only when this batch really inserted an invitation for that builder
  * (its id is in `inviteIds`), so an invite that lost the cap leaves the interest pending. RETURNING id.
  */
-export function markInterestsInvitedStatements(db: D1Database, input: { requestId: string; builderIds: string[]; inviteIds: string[]; decidedBy: string; now: string }): D1PreparedStatement[] {
+export function markInterestsInvitedStatements(db: D1Database, input: { requestId: string; builderIds: string[]; inviteIds: string[]; decidedBy: string; now: string; writeId: string }): D1PreparedStatement[] {
   const ids = JSON.stringify(input.inviteIds);
   return input.builderIds.map((builderId) =>
     db
       .prepare(
-        `UPDATE request_interests SET status = 'invited', decided_by = ?3, decided_at = ?4, updated_at = ?4
+        `UPDATE request_interests SET status = 'invited', decided_by = ?3, decided_at = ?4, updated_at = ?4, write_id = ?6
          WHERE request_id = ?1 AND builder_id = ?2 AND status = 'pending'
            AND EXISTS (SELECT 1 FROM request_invites x WHERE x.request_id = ?1 AND x.builder_id = ?2 AND x.id IN (SELECT value FROM json_each(?5)))
          RETURNING id`,
       )
-      .bind(input.requestId, builderId, input.decidedBy, input.now, ids),
+      .bind(input.requestId, builderId, input.decidedBy, input.now, ids, input.writeId),
   );
 }
 

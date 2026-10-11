@@ -1,3 +1,4 @@
+import { ulid } from "../lib/ulid.ts";
 import type { Context, Hono } from "hono";
 import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { auditStatement } from "../db/audit.ts";
@@ -50,7 +51,8 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     const user = c.get("user")!;
     const now = new Date().toISOString();
     const token = text(body.updated_at);
-    const move = { requestId: id, expectedUpdatedAt: token, reviewedBy: user.id, now };
+    const writeId = ulid();
+    const move = { requestId: id, expectedUpdatedAt: token, reviewedBy: user.id, now, writeId };
     let change: D1PreparedStatement;
     if (action === "publish" || action === "edit") {
       const parsed = parsePublicListing({ title: values.title, description: values.description });
@@ -70,7 +72,7 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
       auditStatement(
         c.env.DB,
         { actorUserId: user.id, action: `request_publication.${action}`, entity: "request_publication", entityId: id, data: { requestId: id, from: publication.status, to }, now },
-        publicationAuditGuard({ requestId: id, status: to, updatedAt: now }),
+        publicationAuditGuard({ requestId: id, writeId }),
       ),
     ]);
     // The compare-and-set lost (an old form, or someone else acted first): nothing was written, not even the audit row.
