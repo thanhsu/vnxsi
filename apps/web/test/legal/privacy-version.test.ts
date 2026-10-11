@@ -59,7 +59,7 @@ describe("/privacy version (Owner 2026-10-06 (i); Review Focus 8)", { timeout: 3
   it("Terms and Disclosure keep LEGAL_UPDATED_AT while the new Privacy shows", async () => {
     freeze("2026-10-20T00:00:00.000Z");
     for (const path of ["/terms", "/disclosure", "/vi/terms"]) expect(await text(path), path).toContain(LEGAL_UPDATED_AT);
-    expect(LEGAL_UPDATED_AT).toBe("2026-10-05");
+    expect(LEGAL_UPDATED_AT).toBe("2026-10-11");
   });
 
   it("docs/legal/privacy.md is the live text and still has the old sentence; privacy-m7.md has the new one and not the old", () => {

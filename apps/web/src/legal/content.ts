@@ -7,7 +7,7 @@
  */
 
 /** Shown as "Last updated" on Terms and Privacy; the `{date}` of the source files. Shared: a change to either moves both. */
-export const LEGAL_UPDATED_AT = "2026-10-05";
+export const LEGAL_UPDATED_AT = "2026-10-11";
 
 /** Text that may hold `code` and **bold**; contact@vnx.si becomes a mailto link. No other markup. */
 export type Inline = string;
