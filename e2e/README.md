@@ -22,7 +22,7 @@ Trình duyệt nằm ở `%LOCALAPPDATA%\ms-playwright` (Linux: `~/.cache/ms-pla
 
 | Việc | Lệnh |
 |---|---|
-| Toàn bộ (khoảng 1,5 phút, 59 test) | `npm run e2e` |
+| Toàn bộ (khoảng 2,5 phút, 63 test) | `npm run e2e` |
 | Một spec | `npm run e2e -- tests/login.spec.ts` |
 | Một test theo tên | `npm run e2e -- -g "count-up"` |
 | Có cửa sổ trình duyệt | `npm run e2e:headed` |
@@ -89,12 +89,13 @@ Biến `--var` (chỉ có hiệu lực trong tiến trình `wrangler dev` cục 
 | `inquiry.spec.ts` | Form `/b/e2e-builder/hire` khi chưa đăng nhập: label đủ, widget Turnstile, gửi rỗng (400, lỗi theo field có `aria-describedby` và không `role="alert"`, khối tóm tắt, giữ dữ liệu), thiếu token Turnstile (mục tóm tắt không liên kết, tiền tố `Error:` ở `<title>`), gửi thành công, hồi quy `Referrer-Policy: no-referrer` (POST mang `Origin` thật). |
 | `form-errors.spec.ts` | Mẫu lỗi chung (VNX-0807) trên form Inquiry (EN + VI, kèm quét axe trang 400), request (EN), contact (EN + VI) và waitlist của landing (EN + VI, `/` và `/vi/`): `<title>` bắt đầu bằng `Error:`/`Lỗi:`, `#form-errors` có heading đúng locale và nhận focus khi tải (thuộc tính `autofocus`, không JS), số liên kết bằng số lỗi theo field và mỗi liên kết trỏ tới một control có thật, không còn `role="alert"`, bấm liên kết đầu đưa focus vào đúng field, giá trị đã nhập còn nguyên. Waitlist còn kiểm URL trang 400 không có fragment (fragment trỏ tới phần tử có thật làm trình duyệt bỏ `autofocus`, review VNX-0807 F1). |
 | `request-board-forms.spec.ts` | EPIC 27, phần `/request` (VNX-2703a): `<select name="country">` có option rỗng đầu tiên, ô `publish` không chọn kèm câu mô tả; gửi form thiếu trường khi đã chọn `publish` và `country=VN` → 400 (EN và VI) với mẫu lỗi chung, ô `publish` còn chọn, `country` còn `VN`, URL không fragment. |
+| `request-board-forms.spec.ts` (tiếp, VNX-2704a) | Phần Ops, người dùng staff `e2e-admin@example.test` (fixture `opsPage`, root Owner qua `ADMIN_EMAILS`): `/ops/marketplace/requests/<R 2008 + retry>` hiện khối "Public listing" với bản gốc của client, ô `public_title`/`public_description` điền sẵn từ bản gốc; Publish với mô tả quá ngắn → 400 (`<title>` bắt đầu `Error:`, `#form-errors` nhận focus, liên kết đưa focus vào `#pl-public-description`, giá trị còn nguyên, `action` không có `#`, không `role="alert"`); sửa lại rồi Publish → `?done=1` và khối ở trạng thái Published (có form edit, không còn form publish). Console `/ops` không quét axe (nội bộ, ngoài phạm vi a11y công khai của VNX-0802). Kiểm bản đã sửa trong context không đăng nhập ở `/requests/<publicId>` thuộc VNX-2705a. |
 | `login.spec.ts` | `/login` (email sai và đúng), `/auth/verify` (GET không tiêu token, chỉ nút mới đăng nhập, cookie `__Host-vnx_session` có `HttpOnly`/`Secure`/`SameSite=Lax`, token dùng một lần), `next` cục bộ và `next` ra ngoài, link hết hạn, đăng xuất, `/hub` khi chưa đăng nhập. Lỗi email sai vẫn là mẫu cũ (`role="alert"`) cho tới VNX-0807 T6 (sau khi EPIC 26 merge). |
 | `editor.spec.ts` | Danh sách product, tạo draft và điền từng bước tới khi chỉ còn thiếu ảnh, lỗi kiểm tra đầu vào (slug sai, slug trùng, URL demo không https; khối tóm tắt và tiền tố `Error:`), chưa đăng nhập, builder khác không mở được product. |
 | `a11y.spec.ts` | axe với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa` trên 12 trang công khai `en`, 3 trang builder đã đăng nhập, 4 trang `vi`, `/` và form Inquiry ở 360 px, `/` có chuyển động sau khi count-up và mọi animation hữu hạn xong, và `/`, `/vi/` khi `landing.js` + `home.js` bị chặn (biến thể `nojs`, mục dưới). |
 | `meta.spec.ts` | Chứng minh công cụ không "xanh rỗng": axe bắt `image-alt` và `color-contrast`, bộ nghe CSP bắt script inline bị chặn và `console.error`, cơ chế `KNOWN_A11Y` vừa che được vi phạm vừa làm đỏ mục thừa, `settle()` dừng với `E2E infrastructure` khi một asset cùng origin nạp lỗi và cho qua khi test đã khai báo request đó. |
 
-Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, request board (trừ form `/request` ở trên; phần còn lại thêm theo từng task EPIC 27), trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
+Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, request board (trừ form `/request` và khối Ops "Public listing" ở trên; phần còn lại thêm theo từng task EPIC 27), trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
 Từ VNX-0807, chỉ có Vitest (chưa có E2E): mẫu lỗi chung trên các form hub (apply, portfolio, products, pricing, media, invitations), thread inquiry (`/hub/inquiries/:id`, `/me/inquiries/:id`); deck homepage ở chế độ thẻ product khi không JS (seed E2E chưa có đủ 3 product công khai, nên lượt `nojs` chỉ phủ chế độ thẻ danh mục).
 
 ### Biến thể `nojs` và chờ animation
@@ -107,6 +108,7 @@ Từ VNX-0807, chỉ có Vitest (chưa có E2E): mẫu lỗi chung trên các fo
 Mailer giả giữ outbox trong bộ nhớ của worker, Playwright không đọc được. Thay vào đó seed ghi thẳng vào D1 cục bộ:
 
 - một dòng `sessions` cho builder chính (fixture `builderPage` đặt cookie `__Host-vnx_session` tương ứng);
+- một dòng `sessions` cho người dùng staff `e2e-admin@example.test` (`OPS`, `SESSION_RAW_OPS`, fixture `opsPage`; phương thức `magic_link` mặc định, thứ duy nhất `/ops` chấp nhận), và ba request `R 2008..2010` đã opt-in vào bảng công khai (publication `pending_review`, `Q 2008..2010`, cũ hơn 30 ngày nên không đổi số của homepage);
 - các dòng `login_tokens`: mỗi token dùng một lần (`OK_1`, `OK_2`, `OK_NEXT`, `OK_NEXT_EVIL`) có một bản cho mỗi lần thử (`OK_1`, `OK_1_R1`, `OK_1_R2`; chọn bằng `tokenFor(key, test.info().retry)`), cộng `OK_A11Y` (chỉ GET, không tiêu) và `EXPIRED`. Mỗi test tiêu token riêng, nên retry vẫn có token mới.
 
 DB chỉ lưu sha256 của token và session, giống app. Token thô nằm trong `seed/fixtures.mjs` và chỉ có nghĩa với DB trong `e2e/.state/`; production không có dòng nào khớp. Không có route, cờ hay biến nào được thêm vào `apps/web`: bước xác minh vẫn đi qua `GET /auth/verify?t=` rồi `POST /auth/verify` do trình duyệt thật gửi, với `Origin` thật. Đây cũng là cách test Vitest đăng nhập (`signIn` trong `apps/web/test/fixtures.ts`).
@@ -124,6 +126,7 @@ DB chỉ lưu sha256 của token và session, giống app. Token thô nằm tron
   | `POST /b/:handle/hire` (chưa đăng nhập) | 10 / giờ / IP, 5 / giờ / email | 2 lần đếm theo IP, 1 theo email |
   | `POST /login` | 20 / giờ / IP, 5 / giờ / email | 1 |
   | `POST /auth/verify` | không có | 4 |
+  | `POST /ops/marketplace/requests/:id/publication/*` | không có | 2 (một bị từ chối 400, một Publish thật; theo `R 2008 + retry`) |
   | `POST /request`, `POST /contact`, `POST /waitlist` | có (theo IP) | 0: `form-errors.spec.ts` và `request-board-forms.spec.ts` chỉ gửi form sai, bị từ chối trước bước đếm |
 
   Thêm spec có POST thì cập nhật bảng này. Với `E2E_RETRIES` lớn, một test lỗi nhiều lần có thể chạm hạn mức (429).

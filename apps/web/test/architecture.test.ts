@@ -142,6 +142,7 @@ const RANKING_FILES = [
   // domain/request-board.ts (2702b), routes/request-board.tsx (2705a), routes/ops-request-board.tsx (2704a), views/requests/* (2705a).
   "../src/db/request-board.ts",
   "../src/domain/request-board.ts",
+  "../src/routes/ops-request-board.tsx",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds

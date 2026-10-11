@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CLIENT, COUNTRIES, DRAFT_PRODUCT, id, MAIN, MARKET_BUILDERS, OTHER, OTHER_PRODUCT, PUBLISHED_PRODUCT, SESSION_RAW, TOKENS } from "./fixtures.mjs";
+import { CLIENT, COUNTRIES, DRAFT_PRODUCT, id, MAIN, MARKET_BUILDERS, OPS, OTHER, OTHER_PRODUCT, PUBLISHED_PRODUCT, SESSION_RAW, SESSION_RAW_OPS, TOKENS } from "./fixtures.mjs";
 
 // Deterministic SQL for the E2E database (same `now`, same text). It writes SOURCE tables only (users, builders, products,
 // requests, audit_log ...), never `public_stats`: the hourly cron runs for real and computes the homepage blocks from them.
@@ -34,8 +34,8 @@ export function buildSeed(now = new Date()) {
   const add = (table, row) => rows.push(insert(table, row));
   const stamp = at(now, 0);
 
-  const user = (u, locale = "en") =>
-    add("users", { id: u.userId, email: u.email, display_name: u.name, locale, is_admin: 0, status: "active", created_at: at(now, -60 * DAY), updated_at: stamp });
+  const user = (u, locale = "en", isAdmin = 0) =>
+    add("users", { id: u.userId, email: u.email, display_name: u.name, locale, is_admin: isAdmin, status: "active", created_at: at(now, -60 * DAY), updated_at: stamp });
   const builder = (u, extra) =>
     add("builders", {
       user_id: u.userId, handle: u.handle, name: u.name, kind: "individual", headline: `${u.name} builds small business tools`, bio: `${u.name} is sample data for the E2E suite.`,
@@ -53,6 +53,7 @@ export function buildSeed(now = new Date()) {
   user(MAIN);
   user(OTHER);
   user(CLIENT);
+  user(OPS, "en", 1);
   builder(MAIN, { approved_at: at(now, -45 * DAY) });
   builder(OTHER, { approved_at: at(now, -44 * DAY) });
 
@@ -120,11 +121,25 @@ export function buildSeed(now = new Date()) {
     add("audit_log", { id: id("A", 30 + n), actor_user_id: null, action: "request.submit", entity: "request", entity_id: id("R", n), data: JSON.stringify({ category: requestCategory(n), languages: ["en"] }), created_at: at(now, -(n + 18) * HOUR) });
   }
 
+  // EPIC 27 (VNX-2704a): three submitted requests whose client opted in to the public board, each with a publication waiting for review. The Ops spec
+  // (request-board-forms.spec.ts) moderates one per attempt (R 2008 + retry). Older than 30 days so no homepage number moves; the client's original title
+  // starts with "E2E private original" and the public wording Ops writes starts with "E2E board", so a leak of the original is detectable.
+  for (let n = 2008; n <= 2010; n++) {
+    const when = at(now, -40 * DAY);
+    add("requests", {
+      id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client with details only Ops may read.`, category: "booking",
+      budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when,
+    });
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "pending_review", opted_in_at: when, consent_version: "2026-01-01", created_at: when, updated_at: when });
+  }
+
   // EPIC 27: the request board flag is on in this database (the date half of the gate is REQUEST_BOARD_GO_LIVE in e2e/scripts/serve.mjs).
   add("feature_flags", { key: "request_board", enabled: 1, updated_by: null, updated_at: stamp, write_id: null });
 
   // Session of the main builder (no mail needed) and the one-use login links.
   add("sessions", { id_hash: sha256(SESSION_RAW), user_id: MAIN.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
+  // The staff user's session (method defaults to magic_link, the only one /ops accepts).
+  add("sessions", { id_hash: sha256(SESSION_RAW_OPS), user_id: OPS.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
   for (const [name, raw] of Object.entries(TOKENS)) {
     add("login_tokens", {
       token_hash: sha256(raw), email: MAIN.email, purpose: "login", locale: "en", inquiry_id: null, request_id: null, invite_code_hash: null,

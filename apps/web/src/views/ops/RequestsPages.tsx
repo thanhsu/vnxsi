@@ -7,6 +7,7 @@ import { PlainText } from "../PlainText.tsx";
 import { proposalPrice } from "../proposal.ts";
 import { BUILDERS_PATH } from "./BuildersPages.tsx";
 import { OpsLayout, type OpsShell } from "./OpsLayout.tsx";
+import { PublicListingBlock, type BoardFormState, type PublicationView } from "./PublicListingBlock.tsx";
 import { Confirm, History, Notice, Pill, qs, ReasonField, SearchForm, Tabs, tr, utc, type HistoryView, type OpsNotice, type PillTone } from "./parts.tsx";
 
 /**
@@ -156,6 +157,8 @@ type DetailProps = {
   noteError?: boolean;
   values?: { note?: string; handle?: string };
   history: HistoryView;
+  /** EPIC 27: the Public listing block, present only for a role that may act and a request that has a publication. `form` is a refused form coming back. */
+  board?: { publication: PublicationView; form?: BoardFormState };
 };
 
 /** The suggestions with their reasons; with `canAct` a checkbox per builder, inside the invite form. */
@@ -198,14 +201,14 @@ const Suggestions: FC<{ suggestions: Suggestion[]; canAct: boolean }> = ({ sugge
   );
 
 export const RequestDetailPage: FC<DetailProps> = (props) => {
-  const { shell, item, invites, suggestions, filter, canAct, notice, inviteError, noteError, values, history } = props;
+  const { shell, item, invites, suggestions, filter, canAct, notice, inviteError, noteError, values, history, board } = props;
   const r = item.request;
   const action = (name: string) => `${REQUESTS_PATH}/${r.id}/${name}${qs(filter)}`;
   const invitable = requestTransition(r.status, "invite", "admin").ok;
   const canReject = r.status === "submitted";
   const canRemove = r.status !== "removed";
   return (
-    <OpsLayout {...shell} page={r.title} trail={[tr("ops.group.marketplace"), tr("ops.nav.requests")]}>
+    <OpsLayout {...shell} page={r.title} trail={[tr("ops.group.marketplace"), tr("ops.nav.requests")]} invalid={board?.form !== undefined}>
       <a class="ops-back" href={REQUESTS_PATH + qs(filter)}>
         <span aria-hidden="true">←</span>
         {tr("ops.nav.requests")}
@@ -252,6 +255,7 @@ export const RequestDetailPage: FC<DetailProps> = (props) => {
               </>
             ) : null}
           </section>
+          {board ? <PublicListingBlock request={r} publication={board.publication} actionBase={`${REQUESTS_PATH}/${r.id}/publication`} form={board.form} /> : null}
           <section class="ops-card ops-sec" aria-labelledby="ops-invites-h">
             <h2 id="ops-invites-h">{tr("admin.requests.invites")}</h2>
             <p class="ops-muted">{invitesLine(item)}</p>

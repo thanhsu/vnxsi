@@ -4,6 +4,7 @@ import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { listEntityAudit } from "../db/audit.ts";
 import { countBuildersByStatus, findBuilderAccount, searchBuilders } from "../db/builders.ts";
 import { listMedia } from "../db/media.ts";
+import { findPublicationByRequestId } from "../db/request-board.ts";
 import { listTiers } from "../db/pricing.ts";
 import { countProductsByStatus, findProductWithBuilder, searchProducts } from "../db/products.ts";
 import { countRequestsByStatus, findAdminRequest, searchRequestsForAdmin } from "../db/requests.ts";
@@ -15,6 +16,7 @@ import { can } from "../domain/ops.ts";
 import type { AppEnv } from "../env.ts";
 import type { IsRegistered } from "../ops/menu.ts";
 import { BUILDERS_PATH, BuilderDetailPage, BuildersListPage, type BuilderFilter } from "../views/ops/BuildersPages.tsx";
+import type { BoardFormState } from "../views/ops/PublicListingBlock.tsx";
 import { qs, type HistoryView, type OpsNotice } from "../views/ops/parts.tsx";
 import { PRODUCTS_PATH, ProductDetailPage, ProductsListPage, type ProductFilter } from "../views/ops/ProductsPages.tsx";
 import { RequestDetailPage, REQUESTS_PATH, RequestsListPage, type RequestFilter } from "../views/ops/RequestsPages.tsx";
@@ -143,12 +145,30 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
     return productDone(c, r.productId, true);
   }
 
-  type RequestErrors = { inviteError?: InviteError; noteError?: boolean; values?: { note?: string; handle?: string } };
+  type RequestErrors = { inviteError?: InviteError; noteError?: boolean; values?: { note?: string; handle?: string }; board?: BoardFormState };
 
+  /**
+   * The request's detail page. For a role that may act, and a request with a publication, it carries the "Public listing" block (VNX-2704a)
+   * and merges the publication's History into the request's. Shared with routes/ops-request-board.tsx, which re-renders it with a refused form.
+   */
   async function requestDetail(c: Context<AppEnv>, item: AdminRequest, notice: OpsNotice, status: 200 | 400 | 409 = 200, errors: RequestErrors = {}) {
-    const [shell, history, matching] = await Promise.all([opsShell(c, isRegistered, REQUESTS_PATH), historyOf(c, "request", item.request.id), requestMatching(c.env.DB, item)]);
     const canAct = can(c.get("opsRole"), "marketplace.act");
-    return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} {...errors} />, status);
+    const { board: form, ...rest } = errors;
+    const [shell, requestHistory, matching, publication] = await Promise.all([
+      opsShell(c, isRegistered, REQUESTS_PATH),
+      historyOf(c, "request", item.request.id),
+      requestMatching(c.env.DB, item),
+      canAct ? findPublicationByRequestId(c.env.DB, item.request.id) : Promise.resolve(null),
+    ]);
+    let history = requestHistory;
+    if (publication) {
+      const publicationHistory = await historyOf(c, "request_publication", item.request.id);
+      history =
+        requestHistory.state === "ok" && publicationHistory.state === "ok"
+          ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)) }
+          : { state: "error" };
+    }
+    return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form } : undefined} {...rest} />, status);
   }
 
   /** Ops's answer to each outcome of the shared request functions; `doneTo` is where a success goes. */
@@ -246,4 +266,6 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
   app.post(`${REQUESTS_PATH}/:id/remove`, requireOps("marketplace.act"), async (c) =>
     requestAnswer(c, await removeRequest(c), (r) => REQUESTS_PATH + qs({ ...requestFilter(c), done: r.mailed ? "1" : "mail_failed" })),
   );
+
+  return { requestDetail };
 }

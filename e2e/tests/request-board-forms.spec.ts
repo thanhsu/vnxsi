@@ -2,6 +2,7 @@
 // REQUEST_BOARD_GO_LIVE and the flag is on in the seed (e2e/scripts/serve.mjs, seed/build-seed.mjs), so the gate is open.
 // POST budget: only invalid forms are sent, rejected before any rate limit counts them. A valid one is covered by Vitest.
 import type { Page } from "@playwright/test";
+import { id } from "../seed/fixtures.mjs";
 import { expect, test } from "../support/test";
 
 test.use({ reducedMotion: "reduce" });
@@ -59,3 +60,47 @@ for (const l of [EN, VI]) {
     expect(await page.locator("form[method=post]").getAttribute("action")).not.toContain("#");
   });
 }
+
+// Part 2, Ops "Public listing" (VNX-2704a). One seeded request per attempt (R 2008 + retry, a publication waiting for review), as the staff user.
+// POST budget: the Ops actions have no rate limit, and this test sends two of them. The public page does not exist yet (VNX-2705a adds the signed-out check of the edited text to this test).
+test("Ops moderates a public listing: the block, a refused Publish with the error pattern, then Publish", async ({ opsPage: page }) => {
+  const attempt = 2008 + test.info().retry;
+  const requestId = id("R", attempt);
+  const path = `/ops/marketplace/requests/${requestId}`;
+  await page.goto(path);
+
+  const block = page.locator("#pl-block");
+  await expect(block.getByRole("heading", { level: 2, name: "Public listing" })).toBeVisible();
+  // The client's private original is shown to Ops, and the editable wording starts from it.
+  await expect(block).toContainText(`E2E private original ${attempt}`);
+  await expect(block.locator("#pl-public-title")).toHaveValue(`E2E private original ${attempt}`);
+  await expect(block.locator("#pl-public-description")).not.toHaveValue("");
+  await expect(block.getByRole("button", { name: "Publish" })).toBeVisible();
+  await expect(block.getByText("Reject…")).toBeVisible();
+
+  // A description that is too short: 400, the shared error pattern (VNX-0807).
+  await block.locator("#pl-public-title").fill(`E2E board ${attempt}`);
+  await block.locator("#pl-public-description").fill("Too short.");
+  const refused = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === `${path}/publication/publish`),
+    block.getByRole("button", { name: "Publish" }).click(),
+  ]).then(([res]) => res);
+  expect(refused.status()).toBe(400);
+  await expect(page).toHaveTitle(/^Error: /);
+  const summary = page.locator("#form-errors");
+  await expect(summary).toBeFocused();
+  expect(new URL(page.url()).hash).toBe("");
+  await expect(page.locator("[role=alert]")).toHaveCount(0);
+  await expect(page.locator("#pl-public-description")).toHaveValue("Too short.");
+  await expect(page.locator("#pl-public-description")).toHaveAttribute("aria-invalid", "true");
+  await summary.getByRole("link").first().click();
+  await expect(page.locator("#pl-public-description")).toBeFocused();
+  for (const action of await page.locator("#pl-block form").evaluateAll((forms) => forms.map((f) => f.getAttribute("action")!))) expect(action).not.toContain("#");
+
+  // A long enough description: Publish. The page comes back as "done" with the listing published.
+  await page.locator("#pl-public-description").fill(`E2E board wording ${attempt}: a booking app for three small salons, reminders by SMS and a simple online calendar.`);
+  await Promise.all([page.waitForURL((u) => u.pathname === path && u.search === "?done=1"), page.locator("#pl-block").getByRole("button", { name: "Publish" }).click()]);
+  await expect(page.locator("#pl-block")).toContainText("Published");
+  await expect(page.locator("#pl-block form[action$='/publication/edit']")).toHaveCount(1);
+  await expect(page.locator("#pl-block form[action$='/publication/publish']")).toHaveCount(0);
+});
