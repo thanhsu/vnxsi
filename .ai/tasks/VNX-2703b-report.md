@@ -83,3 +83,36 @@ Ghi chú copy: `me.board.error.conflict` là câu plan đã nêu (EN). Không c�
 - Kiểm 409 render trạng thái hiện tại (test "twice" và "ended request" khẳng định nút/đường dẫn của trạng thái mới).
 - Ghi nhận: opt-in lại không giới hạn (OP-1), đã ghi trong plan; chưa thêm gì vào `CURRENT-STATUS.md` (không sửa theo luật).
 - 2705a: ca HTTP `GET /requests/:publicId` → 404 sau khi gỡ (xem Sai khác 4).
+
+---
+
+## Vòng sửa 1 (theo review `d4c540f`, APPROVE_AFTER_FIXES)
+
+### Đã làm
+
+- **M-1:** thêm helper `racing(before)` (proxy `env.DB.batch`: chạy một thay đổi "của người khác" ngay trước batch của route) và bốn test race: (a) opt-in khi dòng publication được chèn trước; (b) opt-in lại khi CAS thua (`updated_at` đổi sau khi đọc); (c) gỡ khi Ops vừa `rejected` / `unpublished` (hiện lý do, không nút gỡ, không nút opt-in); (d) request `removed` giữa chừng → 404. Mỗi ca khẳng định 409, 0 dòng audit, trạng thái mới trên trang. Test dòng 144 đổi tên: "a second opt-in is refused at the pre-check…".
+- **M-2:** nút opt-in mang đúng `request.board.optIn.label`, mô tả `request.board.optIn.hint` gắn bằng `aria-describedby="me-board-optin-hint"`, bỏ `<strong>`; khóa `me.board.optIn` bị xóa ở 4 locale (test khẳng định không còn). Nút opt-in lại dùng `me.board.reOptIn` (câu "…again" đã duyệt). Selector e2e và Vitest cập nhật.
+- **L-1:** 12 khóa `me.board.*` đặt đúng nguyên văn EN/VI Owner duyệt 2026-10-11; zh-Hans/zh-Hant dịch lại bằng AI từ bản EN (你, 公开需求板/公開需求板). Test so từng chuỗi EN và VI byte-exact.
+- **L-2:** `boardConflict(c)` tải lại bằng `load(c)`; `null` → 404 (test race (d)).
+- **L-3:** (a) 409 trên request đã đóng khẳng định không có khối và không có `/publication/`; (b) gỡ từ `rejected|unpublished` kiểm 0 dòng audit `.withdraw`; (c) lệch 5 được ghim (không publication: không khối; có publication: "Waiting for review" + nút gỡ, gỡ được); (d) cổng tắt: `withdrawn` và `rejected` chỉ đọc, không nút.
+
+### Red trước
+
+- Lần chạy đầu sau khi thêm test (chưa sửa code): 7 đỏ / 30. Một dòng mỗi hành vi: `expected 'Submit for review' to be 'Show this request on the public reque…'` (M-2 nút opt-in); `expected 'Submit for review again' to be 'Show this request on the public reque…'` (M-2 nút lại); `expected 'Public listing' to be 'Public request board'` (L-1 byte-exact EN/VI); `expected '<h2 id="form-errors-title">There is a…' to contain 'That did not go through: …'` (L-1 câu conflict); `expected 409 to be 404` (L-2 removed giữa chừng); `expected … to contain 'You removed this request from the pub…'` (L-1 `removed`, trong hai test gồm gate-off L-3d).
+- Các test race (a), (b), (c) và các assertion L-3 (a)(b)(c) **xanh ngay lần đầu** vì code vốn đúng (đúng như probe của Reviewer): chúng là test hồi quy cho nhánh `if (!returnedPublication(...))`, không phải red-first. Để chắc không rỗng, ca (a) ban đầu đỏ do chính test (xem dưới), cho thấy nhánh được chạm.
+- Lưu ý test (a): lần đầu đỏ (`audit` có 1 dòng) vì dòng publication của "người khác" dùng cùng mili-giây với `now` của route, và guard audit khớp theo `status + updated_at` nên đúng một dòng khớp. Test sửa để dòng race dùng `now + 1s`. Đây là điểm yếu lý thuyết của guard `status + updated_at` khi hai ghi trùng mili-giây (thiết kế 2702a, rất khó xảy ra), ghi nhận cho Reviewer, không sửa ở đây.
+
+### Kiểm tra
+
+Xem phần "Kết quả" bên dưới (điền sau khi chạy xong).
+
+### Kết quả (sau vòng sửa 1)
+
+| Lệnh | Kết quả |
+|---|---|
+| `npm run typecheck -w apps/web` | sạch |
+| `test/me/request-board.test.ts` | 30 / 30 |
+| `npm test -w apps/web -- --maxWorkers=2 --testTimeout=60000` | 196 file, 2479 passed, 2 skipped (như trước) |
+| `npm run test:scripts` | 52 / 52 |
+| `npm run e2e:typecheck` | sạch |
+| `npm run e2e` | 65 / 65, không retry |

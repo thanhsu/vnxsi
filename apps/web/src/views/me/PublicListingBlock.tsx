@@ -52,12 +52,12 @@ export const PublicListingBlock: FC<{ locale: Locale; base: string; listing: Lis
       ) : null}
       {canOptIn ? (
         <form method="post" action={`${base}/publication/opt-in`}>
-          <p>
-            <strong>{tr("request.board.optIn.label")}</strong>
+          <p class="hint" id="me-board-optin-hint">
+            {tr("request.board.optIn.hint")}
           </p>
-          <p class="hint">{tr("request.board.optIn.hint")}</p>
-          <button class="btn btn-primary" type="submit">
-            {tr(actions.includes("re_opt_in") ? "me.board.reOptIn" : "me.board.optIn")}
+          {/* The button is the act of consent, so it carries the approved sentence itself (addendum 12.4, 12.6); the hint is its description. */}
+          <button class="btn btn-primary" type="submit" aria-describedby="me-board-optin-hint">
+            {tr(actions.includes("re_opt_in") ? "me.board.reOptIn" : "request.board.optIn.label")}
           </button>
         </form>
       ) : null}

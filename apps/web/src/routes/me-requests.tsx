@@ -51,8 +51,10 @@ async function load(c: Context<AppEnv>): Promise<ClientRequest | null> {
 }
 
 /** A refused opt-in or withdrawal: nothing was written; the page is the state as it is now (never the click that lost). */
-async function boardConflict(c: Context<AppEnv>, request: ClientRequest) {
-  return requestPage(c, (await load(c)) ?? request, 409, true);
+async function boardConflict(c: Context<AppEnv>) {
+  // Reloaded: a request removed in the gap is a 404 like everywhere else on /me (findClientRequest hides it).
+  const current = await load(c);
+  return current ? requestPage(c, current, 409, true) : errorResponse(c, "notFound", 404);
 }
 
 export function registerMeRequestRoutes(app: Hono<AppEnv>) {
@@ -74,7 +76,7 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
     const user = c.get("user")!;
     const publication = await findPublicationByRequestId(c.env.DB, request.id);
     const action = clientBoardActions(publication?.status ?? null, request.status, true).find((a) => a === "opt_in" || a === "re_opt_in");
-    if (!action) return boardConflict(c, request);
+    if (!action) return boardConflict(c);
     const now = new Date().toISOString();
     const consentVersion = c.env.REQUEST_BOARD_GO_LIVE ?? "";
     const change =
@@ -90,7 +92,7 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
       ),
     ]);
     // 0 rows: the request or the publication changed since the page was read. Nothing was written, not even the audit row.
-    if (!returnedPublication(results[0])) return boardConflict(c, request);
+    if (!returnedPublication(results[0])) return boardConflict(c);
     return c.redirect(localizedPath(c.get("locale"), `/me/requests/${request.id}`), 303);
   });
 
@@ -104,7 +106,7 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
     if (!request) return errorResponse(c, "notFound", 404);
     const user = c.get("user")!;
     const publication = await findPublicationByRequestId(c.env.DB, request.id);
-    if (!publication || !clientBoardActions(publication.status, request.status, c.get("requestBoard")).includes("withdraw")) return boardConflict(c, request);
+    if (!publication || !clientBoardActions(publication.status, request.status, c.get("requestBoard")).includes("withdraw")) return boardConflict(c);
     const now = new Date().toISOString();
     const results = await c.env.DB.batch([
       withdrawStatement(c.env.DB, { requestId: request.id, expectedUpdatedAt: publication.updatedAt, now, clientUserId: user.id }),
@@ -114,7 +116,7 @@ export function registerMeRequestRoutes(app: Hono<AppEnv>) {
         publicationAuditGuard({ requestId: request.id, status: "withdrawn", updatedAt: now }),
       ),
     ]);
-    if (!returnedPublication(results[0])) return boardConflict(c, request);
+    if (!returnedPublication(results[0])) return boardConflict(c);
     return c.redirect(localizedPath(c.get("locale"), `/me/requests/${request.id}`), 303);
   });
 

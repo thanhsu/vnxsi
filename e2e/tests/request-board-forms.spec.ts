@@ -114,7 +114,7 @@ test("/me: the client opts in later and withdraws", async ({ clientPage: page })
   await page.goto(path);
 
   const block = page.locator("#me-board");
-  await expect(block.getByRole("heading", { level: 2, name: "Public listing" })).toBeVisible();
+  await expect(block.getByRole("heading", { level: 2, name: "Public request board" })).toBeVisible();
   // The approved opt-in label and hint (addendum 12.4), the same as on /request; no country field here.
   await expect(block.getByText("Show this request on the public request board", { exact: true })).toBeVisible();
   await expect(block).toContainText("Your name and email are never shown.");
@@ -122,14 +122,14 @@ test("/me: the client opts in later and withdraws", async ({ clientPage: page })
   await expect(block.locator("select[name=country]")).toHaveCount(0);
   await expect(block.getByRole("button", { name: "Remove from board" })).toHaveCount(0);
 
-  await Promise.all([page.waitForURL((u) => u.pathname === path && u.hash === ""), block.getByRole("button", { name: "Submit for review" }).click()]);
+  await Promise.all([page.waitForURL((u) => u.pathname === path && u.hash === ""), block.getByRole("button", { name: "Show this request on the public request board", exact: true }).click()]);
   await expect(page.locator("#me-board")).toContainText("Waiting for review");
   await expect(page.locator("#me-board").getByRole("button", { name: "Remove from board" })).toBeVisible();
-  await expect(page.locator("#me-board").getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  await expect(page.locator("#me-board").getByRole("button", { name: "Show this request on the public request board", exact: true })).toHaveCount(0);
   await expect(page.locator("#form-errors")).toHaveCount(0);
 
   await Promise.all([page.waitForURL((u) => u.pathname === path), page.locator("#me-board").getByRole("button", { name: "Remove from board" }).click()]);
-  await expect(page.locator("#me-board")).toContainText("You removed this request from the board");
-  await expect(page.locator("#me-board").getByRole("button", { name: "Submit for review again" })).toBeVisible();
+  await expect(page.locator("#me-board")).toContainText("You removed this request from the public request board");
+  await expect(page.locator("#me-board").getByRole("button", { name: "Show this request on the public request board again" })).toBeVisible();
   for (const action of await page.locator("#me-board form").evaluateAll((forms) => forms.map((f) => f.getAttribute("action")!))) expect(action).not.toContain("#");
 });

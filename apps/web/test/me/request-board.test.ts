@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
-import { findPublicationByRequestId, findPublicListing, optInStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
+import { findPublicationByRequestId, findPublicListing, optInStatement, reOptInStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
 import { requestVisibility } from "../../src/domain/request-board.ts";
 import type { Bindings } from "../../src/env.ts";
 import { ensureUser, makeRequest, signIn } from "../fixtures.ts";
+import { en } from "../../src/i18n/messages/en.ts";
+import { vi } from "../../src/i18n/messages/vi.ts";
 import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 /**
@@ -29,6 +31,29 @@ const mainOf = (html: string) => /<main[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] 
 const auditRows = (action: string, requestId: string) =>
   testEnv.DB.prepare("SELECT actor_user_id, data FROM audit_log WHERE action = ?1 AND entity_id = ?2").bind(action, requestId).all<{ actor_user_id: string; data: string }>().then((r) => r.results);
 const rowOf = async (requestId: string): Promise<Publication> => (await findPublicationByRequestId(testEnv.DB, requestId))!;
+/**
+ * A race: `before` runs once, just before the route's batch, as "someone else" acting in the gap between the route's read and its write
+ * (it uses the real DB, not the proxy). Everything else passes through.
+ */
+function racing(before: () => Promise<void>): Bindings {
+  let fired = false;
+  const db = new Proxy(testEnv.DB, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target) as unknown;
+      if (prop === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          if (!fired) {
+            fired = true;
+            await before();
+          }
+          return target.batch(statements);
+        };
+      }
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+  return { ...boardEnv, DB: db } as Bindings;
+}
 const OPT_PATH = (id: string) => `/me/requests/${id}/publication/opt-in`;
 const OUT_PATH = (id: string) => `/me/requests/${id}/publication/withdraw`;
 
@@ -132,7 +157,7 @@ describe("opt in later from /me (Q2)", () => {
     const m = await mine();
     const html = await htmlOf(await get(`/me/requests/${m.requestId}`, m.cookie));
     expect(mainOf(html)).not.toContain(OPT_PATH(m.requestId));
-    expect(mainOf(html)).not.toContain("Public listing");
+    expect(mainOf(html)).not.toContain("Public request board");
     expect((await post(OPT_PATH(m.requestId), m.cookie)).status).toBe(404);
     expect(await findPublicationByRequestId(testEnv.DB, m.requestId)).toBeNull();
     // The date half of the gate: flag on, date empty.
@@ -141,7 +166,7 @@ describe("opt in later from /me (Q2)", () => {
     expect(await findPublicationByRequestId(testEnv.DB, m.requestId)).toBeNull();
   });
 
-  it("a second opt-in finds the publication already there: 409, one row, no audit row (0 rows from the INSERT are detected)", async () => {
+  it("a second opt-in is refused at the pre-check (the publication is already there): 409, one row, no audit row", async () => {
     const m = await mine({ opt: true });
     const before = await rowOf(m.requestId);
     const res = await post(OPT_PATH(m.requestId), m.cookie);
@@ -223,6 +248,7 @@ describe("withdraw (Q5): always works, takes effect at once", () => {
       await endBy(m.requestId, end, "Contains a phone number.");
       expect((await post(OUT_PATH(m.requestId), m.cookie)).status, end).toBe(409);
       expect((await rowOf(m.requestId)).status).toBe(end);
+      expect(await auditRows("request_publication.withdraw", m.requestId), end).toHaveLength(0);
     }
   });
 });
@@ -255,7 +281,7 @@ describe("opt in again after a self-withdrawal (Q6, OP-1: no cap)", () => {
     await setRequest(m.requestId, "closed");
     const main = mainOf(await htmlOf(await get(`/me/requests/${m.requestId}`, m.cookie)));
     expect(main).not.toContain(OPT_PATH(m.requestId));
-    expect(main).toContain("You removed this request from the board");
+    expect(main).toContain("You removed this request from the public request board");
     expect((await post(OPT_PATH(m.requestId), m.cookie)).status).toBe(409);
     expect((await rowOf(m.requestId)).status).toBe("withdrawn");
   });
@@ -348,7 +374,7 @@ describe("error pattern (VNX-0807) on a refused POST", () => {
     expect(res.headers.get("cache-control")).toContain("no-store");
     const html = await htmlOf(res);
     const body = expectErrorSummary(html, [], { formLevel: 1 });
-    expect(body).toContain("This request&#39;s public listing has changed. Review the status below.");
+    expect(body).toContain("That did not go through: this request or its status on the public request board changed in the meantime. The page below shows the current status.");
     // It is the current state: withdrawn, with the opt-in again offered, not the withdrawal that just failed.
     const main = mainOf(html);
     expect(main).toContain(OPT_PATH(m.requestId));
@@ -361,9 +387,159 @@ describe("error pattern (VNX-0807) on a refused POST", () => {
     await setRequest(m.requestId, "closed");
     const res = await post(OPT_PATH(m.requestId), m.cookie);
     expect(res.status).toBe(409);
-    expectErrorSummary(await htmlOf(res), [], { formLevel: 1 });
+    const html = await htmlOf(res);
+    expectErrorSummary(html, [], { formLevel: 1 });
+    // The new state: a closed request with no publication has no block at all, so no button of any kind.
+    expect(mainOf(html)).not.toContain("me-board");
+    expect(mainOf(html)).not.toContain("/publication/");
     const ok = await htmlOf(await get(`/me/requests/${m.requestId}`, m.cookie));
     expect(ok).not.toContain("form-errors");
     expect(ok).not.toMatch(/<title>Error:/);
+  });
+});
+
+describe("a lost race writes nothing: 0 rows from the batch are detected (409, no audit row, the new state shown)", () => {
+  it("opt-in where the publication was inserted first", async () => {
+    const m = await mine();
+    const bindings = racing(async () => {
+      const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { requestId: m.requestId, consentVersion: "2026-01-01", now: new Date(Date.now() + 1000).toISOString(), clientUserId: m.clientId })]);
+      if (!returnedPublication(res)) throw new Error("race setup failed");
+    });
+    const res = await post(OPT_PATH(m.requestId), m.cookie, bindings);
+    expect(res.status).toBe(409);
+    expect(await auditRows("request_publication.opt_in", m.requestId)).toHaveLength(0);
+    const html = await htmlOf(res);
+    expectErrorSummary(html, [], { formLevel: 1 });
+    // The state as it now is: waiting for review, with the withdrawal and without an opt-in.
+    expect(mainOf(html)).toContain("Waiting for review");
+    expect(mainOf(html)).toContain(OUT_PATH(m.requestId));
+    expect(mainOf(html)).not.toContain(OPT_PATH(m.requestId));
+  });
+
+  it("opt-in again where the compare-and-set loses (the publication changed after it was read)", async () => {
+    const m = await mine({ opt: true });
+    expect((await post(OUT_PATH(m.requestId), m.cookie)).status).toBe(303);
+    const moved = new Date(Date.now() + 60_000).toISOString();
+    const bindings = racing(async () => {
+      await testEnv.DB.prepare("UPDATE request_publications SET updated_at = ?2 WHERE request_id = ?1").bind(m.requestId, moved).run();
+    });
+    const res = await post(OPT_PATH(m.requestId), m.cookie, bindings);
+    expect(res.status).toBe(409);
+    expect(await rowOf(m.requestId)).toMatchObject({ status: "withdrawn", updatedAt: moved });
+    expect(await auditRows("request_publication.re_opt_in", m.requestId)).toHaveLength(0);
+    expectErrorSummary(await htmlOf(res), [], { formLevel: 1 });
+  });
+
+  it("withdraw where Ops rejected or unpublished first: the reason is shown, no remove button, no opt-in button", async () => {
+    for (const end of ["rejected", "unpublished"] as const) {
+      const m = await mine({ opt: true });
+      if (end === "unpublished") await publish(m.requestId, "race");
+      const reason = `RACE-REASON-${end}-${tag()}`;
+      const bindings = racing(() => endBy(m.requestId, end, reason));
+      const res = await post(OUT_PATH(m.requestId), m.cookie, bindings);
+      expect(res.status, end).toBe(409);
+      expect((await rowOf(m.requestId)).status).toBe(end);
+      expect(await auditRows("request_publication.withdraw", m.requestId), end).toHaveLength(0);
+      const html = await htmlOf(res);
+      expectErrorSummary(html, [], { formLevel: 1 });
+      expect(mainOf(html), end).toContain(reason);
+      expect(mainOf(html), end).not.toContain(OUT_PATH(m.requestId));
+      expect(mainOf(html), end).not.toContain(OPT_PATH(m.requestId));
+    }
+  });
+
+  it("the request was removed in the gap: 404, as everywhere else on /me, and nothing is written", async () => {
+    const m = await mine();
+    const bindings = racing(() => setRequest(m.requestId, "removed"));
+    const res = await post(OPT_PATH(m.requestId), m.cookie, bindings);
+    expect(res.status).toBe(404);
+    expect(await findPublicationByRequestId(testEnv.DB, m.requestId)).toBeNull();
+    expect(await auditRows("request_publication.opt_in", m.requestId)).toHaveLength(0);
+  });
+});
+
+describe("pinned states (review L-3)", () => {
+  it("pending_verification: no opt-in; an existing publication shows pending with the withdrawal, and it works", async () => {
+    const none = await mine({ status: "pending_verification" });
+    const noneMain = mainOf(await htmlOf(await get(`/me/requests/${none.requestId}`, none.cookie)));
+    expect(noneMain).not.toContain("me-board");
+    expect(noneMain).not.toContain("/publication/");
+    const has = await mine({ status: "pending_verification", opt: true });
+    const main = mainOf(await htmlOf(await get(`/me/requests/${has.requestId}`, has.cookie)));
+    expect(main).toContain("Waiting for review");
+    expect(main).toContain(OUT_PATH(has.requestId));
+    expect(main).not.toContain(OPT_PATH(has.requestId));
+    expect((await post(OUT_PATH(has.requestId), has.cookie)).status).toBe(303);
+    expect((await rowOf(has.requestId)).status).toBe("withdrawn");
+  });
+
+  it("gate off: withdrawn, rejected and unpublished show their status read-only, with no button", async () => {
+    const w = await mine({ opt: true });
+    await post(OUT_PATH(w.requestId), w.cookie);
+    const r = await mine({ opt: true });
+    await endBy(r.requestId, "rejected", `GATE-OFF-REASON-${tag()}`);
+    await boardFlag(false);
+    const wMain = mainOf(await htmlOf(await get(`/me/requests/${w.requestId}`, w.cookie)));
+    expect(wMain).toContain("You removed this request from the public request board");
+    expect(wMain).not.toContain("/publication/");
+    const rMain = mainOf(await htmlOf(await get(`/me/requests/${r.requestId}`, r.cookie)));
+    expect(rMain).toContain("GATE-OFF-REASON-");
+    expect(rMain).not.toContain("/publication/");
+  });
+});
+
+describe("the opt-in button says what is agreed to (review M-2) and the approved copy is byte-exact (review L-1)", () => {
+  it("the button is the approved label, described by the hint; no separate bold copy of it", async () => {
+    const m = await mine();
+    const html = mainOf(await htmlOf(await get(`/me/requests/${m.requestId}`, m.cookie)));
+    const form = /<form[^>]*opt-in[^>]*>([\s\S]*?)<\/form>/.exec(html)?.[1] ?? "";
+    const button = /<button([^>]*)>([^<]*)<\/button>/.exec(form);
+    expect(button?.[2]?.trim()).toBe(en["request.board.optIn.label"]);
+    const describedBy = /aria-describedby="([^"]+)"/.exec(button?.[1] ?? "")?.[1] ?? "";
+    expect(describedBy).not.toBe("");
+    expect(form).toContain(`id="${describedBy}"`);
+    expect(form.replace(/&#39;/g, "'")).toContain(en["request.board.optIn.hint"]);
+    expect(form).not.toContain("<strong>");
+    expect("me.board.optIn" in en).toBe(false);
+  });
+
+  it("opt in again: the button is the approved \"again\" sentence", async () => {
+    const m = await mine({ opt: true });
+    await post(OUT_PATH(m.requestId), m.cookie);
+    const html = mainOf(await htmlOf(await get(`/me/requests/${m.requestId}`, m.cookie)));
+    expect(/<button[^>]*>([^<]*)<\/button>/.exec(/<form[^>]*opt-in[^>]*>([\s\S]*?)<\/form>/.exec(html)?.[1] ?? "")?.[1]?.trim()).toBe("Show this request on the public request board again");
+  });
+
+  it("EN and VI are exactly the Owner-approved sentences", () => {
+    const EN = {
+      title: "Public request board",
+      reOptIn: "Show this request on the public request board again",
+      pending: "Waiting for review. It is shown publicly only after our team approves it.",
+      live: "Published. This is the public version, which our team may have edited:",
+      viewPublic: "View the public page",
+      remove: "Remove from board",
+      removeHint: "This takes effect straight away. Your request itself is not affected.",
+      removed: "Not shown. You removed this request from the public request board.",
+      rejectedReason: "Our team decided not to show this request on the public request board. Reason:",
+      unpublishedReason: "Our team removed this request from the public request board. Reason:",
+      finalNote: "It cannot be shown on the board again. Your request itself is not affected.",
+      "error.conflict": "That did not go through: this request or its status on the public request board changed in the meantime. The page below shows the current status.",
+    };
+    const VI = {
+      title: "Bảng nhu cầu công khai",
+      reOptIn: "Hiện lại nhu cầu này trên bảng nhu cầu công khai",
+      pending: "Đang chờ xem xét. Nhu cầu chỉ được hiện công khai sau khi đội ngũ của chúng tôi duyệt.",
+      live: "Đã công khai. Đây là bản công khai, có thể đã được đội ngũ của chúng tôi chỉnh sửa:",
+      viewPublic: "Xem trang công khai",
+      remove: "Gỡ khỏi bảng",
+      removeHint: "Việc gỡ có hiệu lực ngay. Bản thân nhu cầu của bạn không bị ảnh hưởng.",
+      removed: "Không hiển thị. Bạn đã gỡ nhu cầu này khỏi bảng nhu cầu công khai.",
+      rejectedReason: "Đội ngũ của chúng tôi quyết định không hiện nhu cầu này trên bảng nhu cầu công khai. Lý do:",
+      unpublishedReason: "Đội ngũ của chúng tôi đã gỡ nhu cầu này khỏi bảng nhu cầu công khai. Lý do:",
+      finalNote: "Không thể hiện lại nhu cầu này trên bảng. Bản thân nhu cầu của bạn không bị ảnh hưởng.",
+      "error.conflict": "Thao tác không thực hiện được vì nhu cầu này hoặc trạng thái của nó trên bảng nhu cầu công khai vừa thay đổi. Trang dưới đây hiện trạng thái mới nhất.",
+    };
+    for (const [key, text] of Object.entries(EN)) expect((en as Record<string, string>)[`me.board.${key}`], key).toBe(text);
+    for (const [key, text] of Object.entries(VI)) expect((vi as Record<string, string>)[`me.board.${key}`], key).toBe(text);
   });
 });
