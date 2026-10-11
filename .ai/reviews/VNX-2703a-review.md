@@ -94,3 +94,42 @@ Nhãn và mô tả ô opt-in (§12.4/§12.6) **đã duyệt**, chép đúng từ
 - **VNX-2704a / 2704b:** test theo id rằng publication của request `pending_verification` không vào danh sách hàng chờ và bộ lọc `public=pending` (phần plan 2703a để lại).
 - **VNX-2705a:** ca 404 thật cho request không có publication (qua `public_id` hợp lệ của một publication khác trạng thái, hoặc `public_id` không tồn tại), thay vế HTTP vô nghĩa của L-2.
 - **Reviewer (Ghi nhận / CURRENT-STATUS):** chuỗi zh của 2703a (nhãn, mô tả opt-in, 4 chuỗi country) vào danh sách người bản xứ đọc lại (VNX-0801); S-3 (dấu thời gian chung của `public_id` và `request.id`); quyết định M-1 của Owner.
+
+## Re-review (vòng sửa 1, `925efb4`)
+
+- **Ngày:** 2026-10-11
+- **Quyết định Owner 2026-10-11:** M-1 chọn (a): `country` chỉ render, chỉ được nhận và chỉ được lưu khi cổng bảng bật. Duyệt nguyên văn nhãn EN "Where is your business based?" / VI "Doanh nghiệp của bạn ở quốc gia nào?" và gợi ý (chỉ khi cổng bật) EN "Optional. If you choose to show this request on the public request board, the country is shown there too." / VI "Không bắt buộc. Nếu bạn chọn hiện nhu cầu này trên bảng nhu cầu công khai, quốc gia cũng được hiện ở đó."; giữ "Not specified" / "Không nêu" và câu lỗi; zh do AI dịch, dùng 你.
+- **Đã đọc:** diff `5a5cb49..925efb4` (9 file, +90/−34), phần "Vòng sửa 1" của báo cáo.
+- **Lệnh đã chạy lại:**
+  - `npm run typecheck -w apps/web`: exit 0.
+  - Bộ 2703a (5 file, `--maxWorkers=2 --testTimeout=60000`): **83/83 xanh**.
+  - `npm run e2e` (một lần): **62 passed** (1.3 phút, không retry); không còn tiến trình `wrangler`/`workerd`.
+  - So byte (script Node): 8 chuỗi country EN/VI **giống hệt** câu Owner duyệt (EN 29/105/13/31 byte, VI 47/139/11/46 byte, NFC); nhãn và mô tả opt-in vẫn giống hệt phụ lục §12.4/§12.6; không còn "您" trong các khóa zh mới.
+  - Toàn bộ bộ test: không chạy lại (vòng sửa chỉ đổi một view, một dòng route, chuỗi và một file test; Implementer báo 193 file / 2410 + 2 skipped).
+
+### Đối chiếu từng phát hiện
+
+| # | Trạng thái | Bằng chứng |
+|---|---|---|
+| H-1 | ✓ Đóng | Khối country nằm trong `p.board ? … : null` (`RequestFormPage.tsx`), nên gợi ý chỉ có khi cổng bật; câu Owner duyệt, so byte và test so chuỗi chính xác (EN, VI) |
+| M-1 (a) | ✓ Đóng | `submitForm` đặt `values.country = ""` khi `!c.get("requestBoard")`, trước honeypot và `parseRequestForm`, nên giá trị gửi lên (kể cả `XX`) bị bỏ, không lỗi, lưu NULL; 3 ca cổng tắt (cờ tắt + ngày tới; cờ bật + ngày rỗng; cờ bật + `2999-01-01`) kiểm HTML không có `country`/`publish` và hai POST (`VN`, `XX`) → 303, `country` NULL, không publication, không audit opt-in. Cổng bật ⇒ hôm nay ≥ `REQUEST_BOARD_GO_LIVE` ⇒ phiên bản Privacy `board` (có "the country you choose") đang hiện từ D−14, nên khoảng hở công bố đóng hẳn |
+| M-2 | ✓ Đóng | nhãn theo nghĩa Q1, câu Owner duyệt |
+| L-1 | ✓ Đóng | zh dùng 你 ở mọi khóa mới (cả mô tả opt-in); test HTML zh không có "您". Vẫn cần người bản xứ đọc lại (VNX-0801) |
+| L-2 | ✓ Đóng | bỏ vế HTTP vô nghĩa; "no retroactive" khẳng định không dòng, `findPublicationByRequestId` null, `requestVisibility` = `hidden`, ngoài hàng chờ theo id; ca chưa đăng nhập khẳng định `hidden` và ngoài hàng chờ trước xác nhận, trong hàng chờ sau khi bấm link |
+| L-3 | ✓ Đóng | xem M-1: hai ca dùng nửa ngày (rỗng, tương lai) với cờ bật |
+| L-4 | ✓ Đóng | đếm audit theo `actor_user_id` của user test, khẳng định 0 trước/sau |
+| S-1 | ✓ Đóng | `results[statements.length]` |
+| S-2 | ✓ Đóng | `aria-describedby="rq-country-hint"`, khi lỗi `"rq-country-hint rq-country-error"`; test cập nhật |
+| S-3 | Ghi nhận | không đổi ở task này (Reviewer ghi vào CURRENT-STATUS cho 2705a/Owner) |
+
+### Phát hiện mới
+
+| # | Mức | File:dòng | Vấn đề | Đề xuất | Ai |
+|---|---|---|---|---|---|
+| R1-S1 | SUGGESTION | `test/public/request-form.test.ts` (`inReviewQueue`) | Hàm test tự viết lại điều kiện hàng chờ (`pending_review` + request `submitted|matching`) thay vì dùng truy vấn thật của hàng chờ; nếu truy vấn hàng chờ của 2704a/2704b lệch điều kiện thì test này không bắt được. | Không sửa ở task này; nghĩa vụ 2704a/2704b chứng minh bằng **truy vấn hàng chờ thật**, theo id. | Implementer 2704a/2704b |
+
+E2E: locator nhãn opt-in thêm `exact: true` vì gợi ý country nay chứa cụm "public request board" (strict mode); hợp lý, không làm yếu kiểm.
+
+### Verdict cuối
+
+**APPROVE.** Mọi phát hiện HIGH/MEDIUM/LOW đã đóng đúng quyết định Owner; không có phát hiện mới cần sửa.
