@@ -98,3 +98,39 @@ zh-Hans/zh-Hant: Implementer dịch lại từ bản EN Owner duyệt (AI, dùng
 - **VNX-2704b:** email "bị gỡ"/"bị từ chối" dùng cùng thuật ngữ với câu chữ `/me` đã duyệt ("public request board" / "bảng nhu cầu công khai"), và kèm lý do giống khối `/me`.
 - **O2 / số liệu §9.6:** tỷ lệ opt-in đếm theo `request_publications` hoặc cả `request_publication.opt_in` lẫn `.re_opt_in` (lệch 3).
 - **Plan:** đoạn "Mẫu lỗi VNX-0807" của mục VNX-2703b ("hoặc cổng tắt khi opt-in" là 409) được thay bằng phán quyết lệch 1 (cổng tắt → 404).
+
+---
+
+## Re-review (vòng sửa 1, `30bdf40`)
+
+- **Ngày:** 2026-10-11. **Đã đọc:** diff `d4c540f..30bdf40` (10 file, +276/−69: route, view, 4 tệp locale, test, e2e spec + README, phần "Vòng sửa 1" của báo cáo).
+- **Owner:** duyệt nguyên văn bảng câu chữ của review này (2026-10-11); nút opt-in dùng khóa đã duyệt `request.board.optIn.label`.
+- **Lệnh đã chạy lại (HEAD `30bdf40`):** `npm run typecheck -w apps/web` exit 0; `npm test -w apps/web -- test/me/request-board.test.ts test/me/requests.test.ts test/i18n/parity.test.ts test/domain/request-board-client-actions.test.ts test/ops/marketplace-request-board.test.ts --maxWorkers=2 --testTimeout=60000`: **5 file, 85 test xanh** (`request-board.test.ts` 30/30); `npm run e2e` một lần: **65 passed, 1.3 phút, không retry**; sau khi chạy không còn tiến trình `workerd`/`node` nào của worktree. Bộ đầy đủ không chạy lại (Implementer: 196 file / 2479 + 2 skipped; Reviewer chạy 2470 + 2 skipped ở vòng trước, chênh +9 đúng bằng số test mới).
+- **Kiểm byte câu chữ:** script so từng ô EN/VI của bảng "Câu chữ cho Owner duyệt" với `en.ts`/`vi.ts`: **12/12 khóa khớp từng byte** ở cả EN và VI. `me.board.optIn` đã bị xóa ở 4 locale; nút dùng `request.board.optIn.label` (EN/VI trùng nguyên văn ô `me.board.optIn` của bảng). Test "EN and VI are exactly the Owner-approved sentences" ghim lại cả 24 chuỗi.
+
+### Đối chiếu phát hiện
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| M-1 | **Đóng** | `racing(before)` bọc `env.DB.batch`; bốn test race: opt-in (dòng được chèn trước), opt-in lại (CAS thua), gỡ khi Ops `rejected`/`unpublished` trước, request `removed` giữa chừng. Mỗi ca: 409 (hoặc 404), 0 dòng audit, dòng publication đúng như bên kia để lại, HTML là trạng thái mới (lý do hiện, không nút gỡ, không nút opt-in). Test dòng 144 đã đổi tên đúng điều nó kiểm. |
+| M-2 | **Đóng** | Nút opt-in = `request.board.optIn.label`, `aria-describedby="me-board-optin-hint"` trỏ tới đoạn mô tả đã duyệt, không còn `<strong>`; nút opt-in lại = `me.board.reOptIn`. Test so text nút với `en["request.board.optIn.label"]` và kiểm id của mô tả nằm trong form. E2E bấm nút theo đúng nhãn (`exact: true`). |
+| L-1 | **Đóng** | 12 khóa đúng từng byte (trên). zh-Hans/zh-Hant dịch lại từ EN đã duyệt (你, 公开需求板/公開需求板): VNX-0801 đọc lại. |
+| L-2 | **Đóng** | `boardConflict(c)` tải lại, `null` → 404; test race (d). |
+| L-3 | **Đóng** | (a) 409 trên request đã đóng: không `me-board`, không `/publication/`; (b) 0 dòng audit `.withdraw` khi gỡ từ `rejected|unpublished`; (c) `pending_verification` có và không có publication; (d) cổng tắt: `withdrawn`/`rejected` chỉ đọc, không nút. |
+| S-1 | Không làm (đúng review) | — |
+
+Nhỏ, không phải phát hiện: `reOptInStatement` được import nhưng không dùng trong `test/me/request-board.test.ts` (typecheck không bắt). Dọn khi chạm tệp lần sau.
+
+### Phán quyết: guard audit `status + updated_at` khi hai lần ghi trùng mili-giây
+
+**Có thật, mức LOW, sửa chung trước cổng ra EPIC 27 (VNX-2709), không sửa trong 2703b.**
+
+- **Cơ chế.** `AuditPublicationGuard` (và `AuditInterestGuard`) ghi dòng audit khi `EXISTS (… status = đích AND updated_at = now)`. Nếu CAS của batch này **thua** nhưng một lần ghi khác, cùng mili-giây, đã đưa dòng tới đúng trạng thái đích, guard vẫn đúng: có một dòng audit cho việc **không xảy ra**, trong khi route trả 409. Test (a) gặp đúng trường hợp này vì trong workerd `Date.now()` chỉ tiến sau I/O, nên trong cùng một sự kiện, `new Date()` của "người kia" trùng `now` của route.
+- **Phạm vi thực tế.** (1) Trạng thái đích `pending_review`/`withdrawn` chỉ client tạo ra, nên ở `/me`, trùng ms chỉ cho ra một dòng **trùng lặp của cùng người, cùng hành động** (bấm đúp hai tab trong cùng 1 ms). (2) Ở Ops (`published`, `rejected`, `unpublished`), hai Ops cùng bấm trong cùng 1 ms trên cùng một listing thì người thua có thể bị **gán nhầm** một hành động: đây là sai lệch về tính toàn vẹn audit (ADR-010 "audit atomic"), không phải sai dữ liệu. (3) Interest (2706a/b) cùng kiểu. Trong production, hai request khác nhau trùng mili-giây trên cùng một dòng là rất hiếm. Dữ liệu nghiệp vụ không bị ảnh hưởng: CAS vẫn chỉ cho một bên thắng, route trả đúng 409. Vì vậy xếp **LOW**, không phải BLOCKER/HIGH. Có điều nhật ký audit là bằng chứng (đồng ý, kiểm duyệt), nên không để tới sau go-live.
+- **Cách sửa (chọn):** guard theo **mã của chính lần ghi**, đúng mẫu đã có trong repo (`AuditFlagGuard`/`AuditPartnerGuard` dùng `write_id`). Thêm cột `write_id` (ULID sinh cho mỗi lần ghi) vào `request_publications` và `request_interests`; mọi câu ghi trong `db/request-board.ts` đặt `write_id = ?`; guard đổi thành `EXISTS (… WHERE request_id = ? AND write_id = ?)` (interest: `id` + `write_id`). Vì `0018_request_board.sql` **chưa merge và chưa chạy ở môi trường nào ngoài local/test**, sửa thẳng trong `0018` (không cần migration mới); nếu lúc làm mà `0018` đã vào `main` thì thêm migration chỉ-thêm.
+- **Không chọn `changes()`:** quyết định thiết kế 2 của plan đã bỏ `meta.changes`; ngữ nghĩa `changes()` giữa các câu trong một `db.batch` của D1 không được tài liệu bảo đảm, và guard kiểu này khó test đối chứng hơn `write_id`.
+- **Thời điểm:** một task sửa chung riêng (đề xuất **VNX-2702c**, Implementer, cổng là test race trùng ms cho opt-in, gỡ, publish, reject và interest), làm **trước VNX-2706a** để code interest mới dùng ngay guard đúng; muộn nhất trước VNX-2709. Không chặn việc đóng 2703b. Test (a) dùng `now + 1s` là đúng cho phạm vi 2703b (kiểm nhánh 0 dòng, không kiểm guard); khi làm 2702c, thêm lại một ca trùng ms để chứng minh guard mới.
+
+### Verdict cuối
+
+**APPROVE.** Mọi phát hiện MEDIUM/LOW đã đóng, câu chữ đúng nguyên văn Owner duyệt, lệnh kiểm xanh. Phán quyết các điểm lệch giữ như phần trên. Nghĩa vụ để lại và phán quyết guard audit được ghi vào `CURRENT-STATUS.md`.
