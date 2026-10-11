@@ -1216,7 +1216,7 @@ export const en = {
   "ops.board.check.remove": "Remove names of people, companies and the client's customers; e-mail addresses, phone numbers and postal addresses; links to the client's site; handles; tax or registration numbers.",
   "ops.board.check.confidential": "Remove anything the client marked confidential or internal.",
   "ops.board.check.combination": "If country, niche and budget together still identify the business, make the wording more general, or reject.",
-  "ops.board.check.terms": "Content against Terms §7 (spam, illegal, advertising): reject. If it is spam, remove the whole request (Remove as spam, the existing flow).",
+  "ops.board.check.terms": "Content against Terms §7 (spam, illegal, advertising): reject. If it is spam, remove the whole request (Remove as spam).",
   "ops.board.waitingConfirm": "The client has not confirmed their e-mail yet, so this listing is not in the review queue. It can be reviewed once they confirm.",
   "ops.board.publish": "Publish",
   "ops.board.publishHelp": "Publishes the wording above, as edited. The client is not asked again.",
