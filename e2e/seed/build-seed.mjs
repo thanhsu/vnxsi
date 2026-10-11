@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CLIENT, COUNTRIES, DRAFT_PRODUCT, id, MAIN, MARKET_BUILDERS, OPS, OTHER, OTHER_PRODUCT, PUBLISHED_PRODUCT, SESSION_RAW, SESSION_RAW_OPS, TOKENS } from "./fixtures.mjs";
+import { CLIENT, COUNTRIES, DRAFT_PRODUCT, id, MAIN, MARKET_BUILDERS, OPS, OTHER, OTHER_PRODUCT, PUBLISHED_PRODUCT, SESSION_RAW, SESSION_RAW_CLIENT, SESSION_RAW_OPS, TOKENS } from "./fixtures.mjs";
 
 // Deterministic SQL for the E2E database (same `now`, same text). It writes SOURCE tables only (users, builders, products,
 // requests, audit_log ...), never `public_stats`: the hourly cron runs for real and computes the homepage blocks from them.
@@ -121,6 +121,16 @@ export function buildSeed(now = new Date()) {
     add("audit_log", { id: id("A", 30 + n), actor_user_id: null, action: "request.submit", entity: "request", entity_id: id("R", n), data: JSON.stringify({ category: requestCategory(n), languages: ["en"] }), created_at: at(now, -(n + 18) * HOUR) });
   }
 
+  // EPIC 27 (VNX-2703b): three submitted requests with NO publication, for the client's opt-in from /me (request-board-forms.spec.ts takes one per attempt,
+  // R 2005 + retry). Older than 30 days so no homepage number moves; the original title starts with "E2E private original".
+  for (let n = 2005; n <= 2007; n++) {
+    const when = at(now, -40 * DAY);
+    add("requests", {
+      id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client before the board existed.`, category: "booking",
+      budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when,
+    });
+  }
+
   // EPIC 27 (VNX-2704a): three submitted requests whose client opted in to the public board, each with a publication waiting for review. The Ops spec
   // (request-board-forms.spec.ts) moderates one per attempt (R 2008 + retry). Older than 30 days so no homepage number moves; the client's original title
   // starts with "E2E private original" and the public wording Ops writes starts with "E2E board", so a leak of the original is detectable.
@@ -140,6 +150,8 @@ export function buildSeed(now = new Date()) {
   add("sessions", { id_hash: sha256(SESSION_RAW), user_id: MAIN.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
   // The staff user's session (method defaults to magic_link, the only one /ops accepts).
   add("sessions", { id_hash: sha256(SESSION_RAW_OPS), user_id: OPS.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
+  // The seeded client's session (VNX-2703b; method defaults to magic_link): the owner of every seeded request, for /me.
+  add("sessions", { id_hash: sha256(SESSION_RAW_CLIENT), user_id: CLIENT.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
   for (const [name, raw] of Object.entries(TOKENS)) {
     add("login_tokens", {
       token_hash: sha256(raw), email: MAIN.email, purpose: "login", locale: "en", inquiry_id: null, request_id: null, invite_code_hash: null,

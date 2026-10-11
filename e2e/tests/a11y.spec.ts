@@ -1,6 +1,6 @@
 // axe-core, WCAG 2.2 AA, on every public page and the signed-in builder pages (docs/blueprint/02-NFR.md, Accessibility).
 // A violation fails the test unless e2e/support/a11y-known.ts defers it with a finding; a deferral that no longer matches fails too.
-import { DRAFT_PRODUCT, MAIN, PUBLISHED_PRODUCT, TOKENS } from "../seed/fixtures.mjs";
+import { DRAFT_PRODUCT, id, MAIN, PUBLISHED_PRODUCT, TOKENS } from "../seed/fixtures.mjs";
 import { scanA11y } from "../support/a11y";
 import { allowSameOriginFailure } from "../support/network";
 import { formatEn } from "../support/page";
@@ -26,6 +26,9 @@ const PUBLIC_EN: Entry[] = [
 
 const SIGNED_IN: Entry[] = [{ path: "/hub" }, { path: "/hub/products" }, { path: `/hub/products/${DRAFT_PRODUCT.id}/edit/product` }];
 
+// The seeded client (clientPage): a request with no publication, so the "Public listing" block shows its opt-in (VNX-2703b). R 12 is never given a publication by any spec.
+const SIGNED_IN_CLIENT: Entry[] = [{ path: `/me/requests/${id("R", 12)}` }];
+
 const PUBLIC_VI: Entry[] = [{ path: "/vi/" }, { path: "/vi/login" }, { path: `/vi/b/${MAIN.handle}/hire` }, { path: "/vi/privacy" }];
 
 // Motion is off for the scans (colors measured in the middle of a fade or count-up would be false findings); the homepage is scanned with motion too, below.
@@ -45,6 +48,15 @@ test.describe("axe, motion reduced", () => {
       const res = await page.goto(entry.url ?? entry.path);
       expect(res!.status(), "the page exists").toBeLessThan(400);
       await scanA11y(page, { page: entry.path.replace(DRAFT_PRODUCT.id, ":id"), locale: "en" });
+    });
+  }
+
+  for (const entry of SIGNED_IN_CLIENT) {
+    test("en /me/requests/:id (signed in)", async ({ clientPage: page }) => {
+      const res = await page.goto(entry.path);
+      expect(res!.status(), "the page exists").toBe(200);
+      await expect(page.locator("#me-board")).toBeVisible();
+      await scanA11y(page, { page: "/me/requests/:id", locale: "en" });
     });
   }
 

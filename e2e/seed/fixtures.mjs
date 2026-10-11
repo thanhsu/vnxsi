@@ -21,6 +21,8 @@ export const OTHER_PRODUCT = { id: id("P", 1002), slug: "e2e-other-product", nam
 export const SESSION_RAW = token("session");
 /** Raw session cookie value of the staff user (magic-link method, the default: /ops refuses any other). */
 export const SESSION_RAW_OPS = token("session-ops");
+/** Raw session cookie value of the seeded client (VNX-2703b, fixture `clientPage`): owner of every seeded request, magic-link method. */
+export const SESSION_RAW_CLIENT = token("session-client");
 
 /** Retries a test may need: a spent token cannot be reused, so every one-use token exists once per attempt (see tokenFor). */
 export const ATTEMPTS = 3;

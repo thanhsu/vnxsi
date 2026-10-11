@@ -81,6 +81,23 @@ export function opsBoardActions(status: PublicationStatus | null, requestStatus:
   return out;
 }
 
+export type ClientBoardAction = "opt_in" | "re_opt_in" | "withdraw";
+
+/**
+ * The one rule for what a client may do with the board on /me/requests/:id (addendum 4.3, Q2, Q5, Q6); the route refuses any other
+ * and the block shows only these. Opt-in and opt-in again need the gate on and an open request (submitted or matching: a request
+ * still waiting for its e-mail confirmation is not offered it here). Withdraw is the client's withdrawal of consent: it needs neither the gate nor an open request.
+ */
+export function clientBoardActions(status: PublicationStatus | null, requestStatus: RequestStatus, gate: boolean): ClientBoardAction[] {
+  const out: ClientBoardAction[] = [];
+  if (gate && OPEN_REQUEST.includes(requestStatus)) {
+    if (publicationTransition(status, "opt_in", "client", requestStatus).ok) out.push("opt_in");
+    if (publicationTransition(status, "re_opt_in", "client", requestStatus).ok) out.push("re_opt_in");
+  }
+  if (publicationTransition(status, "withdraw", "client", requestStatus).ok) out.push("withdraw");
+  return out;
+}
+
 /** Ops edits the public wording of a published listing only (no state change). */
 export function canEditPublication(status: PublicationStatus | null): boolean {
   return status === "published";

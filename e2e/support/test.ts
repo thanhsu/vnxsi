@@ -1,12 +1,12 @@
 import { expect, test as base, type Page } from "@playwright/test";
-import { SESSION_RAW, SESSION_RAW_OPS } from "../seed/fixtures.mjs";
+import { SESSION_RAW, SESSION_RAW_CLIENT, SESSION_RAW_OPS } from "../seed/fixtures.mjs";
 import { watchCsp, type CspWatch } from "./csp";
 import { watchSameOriginFailures } from "./network";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
 /** The test API every spec uses (meta.spec.ts uses the plain Playwright one on purpose). */
-export const test = base.extend<{ csp: CspWatch; builderPage: Page; opsPage: Page }>({
+export const test = base.extend<{ csp: CspWatch; builderPage: Page; opsPage: Page; clientPage: Page }>({
   // No network beyond the local server: tests do not depend on the internet and never reach Cloudflare.
   context: async ({ context }, use) => {
     await context.route((url) => !LOCAL_HOSTS.has(url.hostname), (route) => route.abort());
@@ -36,6 +36,11 @@ export const test = base.extend<{ csp: CspWatch; builderPage: Page; opsPage: Pag
   // The same for the seeded staff user (root Owner through ADMIN_EMAILS), for /ops.
   opsPage: async ({ context, page, baseURL }, use) => {
     await context.addCookies([{ name: "__Host-vnx_session", value: SESSION_RAW_OPS, domain: new URL(baseURL!).hostname, path: "/", httpOnly: true, secure: true, sameSite: "Lax" }]);
+    await use(page);
+  },
+  // The same for the seeded client (owner of every seeded request), for /me.
+  clientPage: async ({ context, page, baseURL }, use) => {
+    await context.addCookies([{ name: "__Host-vnx_session", value: SESSION_RAW_CLIENT, domain: new URL(baseURL!).hostname, path: "/", httpOnly: true, secure: true, sameSite: "Lax" }]);
     await use(page);
   },
 });

@@ -104,3 +104,32 @@ test("Ops moderates a public listing: the block, a refused Publish with the erro
   await expect(page.locator("#pl-block form[action$='/publication/edit']")).toHaveCount(1);
   await expect(page.locator("#pl-block form[action$='/publication/publish']")).toHaveCount(0);
 });
+
+// Part 3, /me "Public listing" (VNX-2703b). One seeded request per attempt (R 2005 + retry, submitted, no publication), as the seeded client (clientPage:
+// the session is a seeded cookie, no /login). POST budget: opt-in and withdraw have no rate limit; this test sends two. The public page does not exist yet
+// (VNX-2705a), and "withdrawn -> 404 at once" is covered by Vitest.
+test("/me: the client opts in later and withdraws", async ({ clientPage: page }) => {
+  const attempt = 2005 + test.info().retry;
+  const path = `/me/requests/${id("R", attempt)}`;
+  await page.goto(path);
+
+  const block = page.locator("#me-board");
+  await expect(block.getByRole("heading", { level: 2, name: "Public listing" })).toBeVisible();
+  // The approved opt-in label and hint (addendum 12.4), the same as on /request; no country field here.
+  await expect(block.getByText("Show this request on the public request board", { exact: true })).toBeVisible();
+  await expect(block).toContainText("Your name and email are never shown.");
+  await expect(block).toContainText("Country, budget and a very specific niche together can sometimes identify a business.");
+  await expect(block.locator("select[name=country]")).toHaveCount(0);
+  await expect(block.getByRole("button", { name: "Remove from board" })).toHaveCount(0);
+
+  await Promise.all([page.waitForURL((u) => u.pathname === path && u.hash === ""), block.getByRole("button", { name: "Submit for review" }).click()]);
+  await expect(page.locator("#me-board")).toContainText("Waiting for review");
+  await expect(page.locator("#me-board").getByRole("button", { name: "Remove from board" })).toBeVisible();
+  await expect(page.locator("#me-board").getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  await expect(page.locator("#form-errors")).toHaveCount(0);
+
+  await Promise.all([page.waitForURL((u) => u.pathname === path), page.locator("#me-board").getByRole("button", { name: "Remove from board" }).click()]);
+  await expect(page.locator("#me-board")).toContainText("You removed this request from the board");
+  await expect(page.locator("#me-board").getByRole("button", { name: "Submit for review again" })).toBeVisible();
+  for (const action of await page.locator("#me-board form").evaluateAll((forms) => forms.map((f) => f.getAttribute("action")!))) expect(action).not.toContain("#");
+});
