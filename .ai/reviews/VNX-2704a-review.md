@@ -88,3 +88,31 @@ Hai điểm phải sửa trước khi đóng task: lúc render lại sau 409 (M-
 - **VNX-2706b:** khối "Interested builders" dùng cùng mẫu đã sửa ở M-1: 409 hiện trạng thái hiện tại, không điền sẵn hay mở form của hành động khác.
 - **VNX-2705a:** thêm bước kiểm "context không đăng nhập" vào ca Ops của `request-board-forms.spec.ts` (đã ghi trong plan); không khẳng định gì về `Q2008..2010`.
 - **Ghi nhận (Reviewer, CURRENT-STATUS):** lỗi lẻ `a11y.spec.ts` `vi /vi/login` (fixture `csp`) xuất hiện một lần ở Implementer và không tái hiện ở Reviewer. Nếu lặp lại, cần điều tra riêng (không thuộc EPIC 27).
+
+## Re-review (vòng sửa 1)
+
+- **Ngày:** 2026-10-11
+- **Đã đọc:** diff `5fba240..5b4f845` (8 file, +202/−47) và phần "Vòng sửa 1" của báo cáo `.ai/tasks/VNX-2704a-report.md`.
+- **Lệnh đã chạy lại (HEAD `be3056a` = `5b4f845` + sửa câu chữ của Reviewer):**
+  - `npm run typecheck -w apps/web`: exit 0.
+  - `npm test -w apps/web -- --maxWorkers=2 --testTimeout=60000 test/ops`: **8 file, 165 test xanh**.
+  - Cùng lệnh với `test/ops test/architecture.test.ts test/domain/request-board.test.ts test/db`: **34 file, 490 test xanh**. `test/i18n`: 2 file, 14 test xanh.
+  - `npm run e2e` (một lần): **63 passed, 1.5 phút, không retry**. Lỗi lẻ `vi /vi/login` không tái hiện. Sau khi chạy không còn tiến trình `wrangler`/`workerd` nào của worktree.
+  - Bộ đầy đủ: không chạy lại. Lần sửa chỉ chạm Ops, domain/db của bảng (đã chạy lại `test/db` và `test/domain/request-board.test.ts`) và một chuỗi EN. Số của Implementer: 194 file, 2446 + 2 skipped.
+
+| # | Trạng thái | Bằng chứng |
+|---|---|---|
+| M-1 | **Đã sửa** | `conflict` không còn mang `values` (`ops-request-board.tsx`). View chỉ dùng giá trị đã gõ khi `!form.conflict`: ô sửa lấy câu chữ hiện tại, `Confirm` không mở, ô lý do rỗng. 400 giữ giá trị như cũ. Hai test mới: edit thua CAS thì HTML có `CURRENT-*`, không có `TYPED-*`, token là `updated_at` mới; reject thua Publish thì không có `TYPED-NOTE`, không `<details open>`, ô lý do rỗng, form Unpublish hiện ra. |
+| M-2 | **Đã sửa** (Reviewer sửa câu một mục) | Bốn khóa `ops.board.check.remove|confidential|combination|terms` khớp bốn gạch §3.2: tên người, tên công ty, tên khách hàng của client; email, điện thoại, địa chỉ; link tới site của client; handle; mã số; mật/nội bộ; tổ hợp quốc gia + ngách + ngân sách thì viết chung hơn hoặc từ chối; Terms §7 thì từ chối, spam thì gỡ cả request. Danh mục hiện khi khối có bất kỳ hành động nào (cả khi chỉ có Reject), ẩn khi không có hành động (`pending_verification`). Có test. **Câu chữ: duyệt**, trừ mục Terms: "(Remove as spam, the existing flow)" là thuật ngữ nội bộ của plan. Reviewer đổi thành "(Remove as spam)", tức tên nút có sẵn `ops.requests.removeOpen`, bằng một **commit riêng chỉ sửa chuỗi** `be3056a` (một dòng trong `en.ts`; test M-2 vẫn xanh vì kiểm "Terms §7" và "remove the whole request"). |
+| L-1 | **Đã sửa** | Câu mở đầu mới nói đúng: bản công khai bắt đầu từ câu chữ của client và phải được sửa trước khi publish. Test kiểm không còn "never shown". |
+| L-2 | **Đã sửa** | `rejectStatement` có `AND NOT EXISTS (… r.status = 'pending_verification')`, có test SQL trực tiếp (`pending_verification` → null, `submitted` → `rejected`). `opsBoardActions` trong `domain/request-board.ts` là quy tắc duy nhất cho route và view. `publicationTransition` không đổi (test 2702b giữ nguyên). Test ghim bảng hành động: `pending_verification` → `[]`, `submitted` → `[publish, reject]`, request đóng → `[reject]`, `published` + `removed` → `[edit, unpublish]`, `rejected` → `[]`. |
+| L-3 | **Đã đạt** | Báo cáo dán lần chạy đỏ trước khi sửa: 6 failed / 30 passed, mỗi dòng đỏ tương ứng một phát hiện. L-4a/b xanh ngay vì hành vi vốn đúng, chỉ thiếu test ghim. |
+| L-4 | **Đã sửa** | (a) sai trạng thái kèm nội dung sai thì 409 (edit trên `pending_review`, reject trên `published` với lý do rỗng); (b) `toEqual` `data` của edit, unpublish, reject, và vắng email **của client** (đọc từ `users`), tên client, câu chữ; (c) 60 dòng audit xen kẽ hai entity: History có đúng 50 dòng, giảm dần, hai dòng đầu xen kẽ. |
+| S-1 | **Đã sửa** | Gộp rồi `slice(0, HISTORY_LIMIT)`. History của publication chạy trong cùng `Promise.all` khi `canAct`. |
+| S-2 | Để lại 2704b | Như đã quyết. |
+
+**Ghi chú nhỏ (không phải phát hiện):** (1) Với Owner/Operator, History của publication giờ được truy vấn cả khi request không có publication: thêm một lần đọc D1 song song, kết quả bị bỏ. Chấp nhận được vì đổi lại không có vòng nối tiếp. (2) `RequestDetailRender.item` đổi từ `AdminRequest` sang `NonNullable<Awaited<ReturnType<typeof findAdminRequest>>>`: cùng kiểu, chỉ khác cách viết.
+
+### Verdict cuối
+
+**APPROVE.** Mọi phát hiện được duyệt đã đóng; S-2 chuyển sang 2704b. Nghĩa vụ ở mục "Nghĩa vụ để lại cho task sau" vẫn giữ, trừ gạch L-2 của 2704b (đã sửa ở R1). Đã ghi vào `.ai/context/CURRENT-STATUS.md`.
