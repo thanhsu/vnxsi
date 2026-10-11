@@ -127,9 +127,10 @@ export const RequestFormPage: FC<Props> = (p) => {
               <input id="rq-deadline" name="deadline" type="date" value={p.values.deadline} {...aria("deadline")} />
               {err("deadline")}
             </div>
+            {p.board ? (
             <div class="field">
               <label for="rq-country">{tr("request.form.country")}</label>
-              <select id="rq-country" name="country" {...aria("country")}>
+              <select id="rq-country" name="country" {...(p.errors.country ? { "aria-invalid": "true", "aria-describedby": "rq-country-hint rq-country-error" } : { "aria-describedby": "rq-country-hint" })}>
                 <option value="">{tr("request.form.countryAny")}</option>
                 {countryOptions(p.locale).map((c) => (
                   <option value={c.code} selected={c.code === p.values.country}>
@@ -137,9 +138,10 @@ export const RequestFormPage: FC<Props> = (p) => {
                   </option>
                 ))}
               </select>
-              <p class="hint">{tr("request.form.countryHint")}</p>
+              <p class="hint" id="rq-country-hint">{tr("request.form.countryHint")}</p>
               {err("country")}
             </div>
+            ) : null}
             <fieldset class="field" {...aria("languages")}>
               <legend>{tr("request.form.languages")}</legend>
               {WORK_LANGUAGES.map((l, i) => (

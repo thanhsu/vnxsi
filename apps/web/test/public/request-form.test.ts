@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import { findPublicationByRequestId } from "../../src/db/request-board.ts";
+import { requestVisibility } from "../../src/domain/request-board.ts";
 import { findClientRequest, listClientRequests } from "../../src/db/requests.ts";
 import { findUserByEmail } from "../../src/db/users.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
@@ -197,6 +199,8 @@ async function boardFlag(enabled: boolean): Promise<void> {
 const publicationOf = (requestId: string) => testEnv.DB.prepare("SELECT * FROM request_publications WHERE request_id = ?1").bind(requestId).all<Record<string, unknown>>().then((r) => r.results);
 const auditRows = (action: string, entityId: string) =>
   testEnv.DB.prepare("SELECT actor_user_id, entity, data FROM audit_log WHERE action = ?1 AND entity_id = ?2").bind(action, entityId).all<{ actor_user_id: string | null; entity: string; data: string }>().then((r) => r.results);
+const inReviewQueue = (requestId: string) =>
+  testEnv.DB.prepare("SELECT 1 AS x FROM request_publications p JOIN requests r ON r.id = p.request_id WHERE p.request_id = ?1 AND p.status = 'pending_review' AND r.status IN ('submitted', 'matching')").bind(requestId).first().then((r) => r !== null);
 const countOf = (sql: string) => testEnv.DB.prepare(sql).first<{ n: number }>().then((r) => r!.n);
 const bound = (t: object, k: string | symbol) => {
   const v = (t as Record<string | symbol, unknown>)[k];
@@ -222,26 +226,55 @@ describe("/request form: country and the public-board opt-in (EPIC 27, VNX-2703a
     await boardFlag(false);
   });
 
-  it("always offers an optional country select (empty first option, not prefilled from the network)", async () => {
+  it("gate on: an optional country select (empty first option, not prefilled from the network) with the approved label and hint", async () => {
+    await boardFlag(true);
     const req = new Request("https://vnx.si/request", { headers: { "cf-ipcountry": "VN" } });
-    const html = await (await app().request(req, undefined, testEnv)).text();
-    expect(html).toMatch(/<select id="rq-country" name="country">\s*<option value="">Not specified<\/option>/);
+    const html = await (await app().request(req, undefined, boardEnv)).text();
+    expect(html).toMatch(/<select id="rq-country" name="country" aria-describedby="rq-country-hint">\s*<option value="">Not specified<\/option>/);
     expect(html).toContain('<option value="VN">Vietnam</option>');
     expect(html).not.toMatch(/<option value="[A-Z]{2}" selected/);
+    expect(html).toContain(">Where is your business based?</label>");
+    expect(html).toContain('<p class="hint" id="rq-country-hint">Optional. If you choose to show this request on the public request board, the country is shown there too.</p>');
+    const vi_ = await (await app().request(getReq("/vi/request"), undefined, boardEnv)).text();
+    expect(vi_).toContain(">Doanh nghiệp của bạn ở quốc gia nào?</label>");
+    expect(vi_).toContain('id="rq-country-hint">Không bắt buộc. Nếu bạn chọn hiện nhu cầu này trên bảng nhu cầu công khai, quốc gia cũng được hiện ở đó.</p>');
+    expect(vi_).toContain(">Không nêu</option>");
+    // zh strings use the informal pronoun like the rest of the form.
+    for (const l of ["zh-hans", "zh-hant"]) {
+      const zh = await (await app().request(getReq(`/${l}/request`), undefined, boardEnv)).text();
+      expect(zh).toContain('name="country"');
+      expect(zh).not.toContain("您");
+    }
   });
 
-  it("gate off: no opt-in box in the page, and a posted publish=1 is ignored (request created, no publication, no error)", async () => {
-    const html = await (await get("/request")).text();
-    expect(html).not.toContain('name="publish"');
-    expect(html).not.toContain("rq-publish");
-    const { user, cookie } = await signIn("rf-off@vnx.si");
-    const res = await post("/request", valid({ publish: "1", country: "VN" }), { cookie }, boardEnv); // date reached, flag off: still closed
-    expect(res.status).toBe(303);
-    const [request] = await listClientRequests(testEnv.DB, user.id);
-    expect(request?.country).toBe("VN"); // the country is saved whatever the gate says
-    expect(await publicationOf(request!.id)).toEqual([]);
-    expect(await auditRows("request_publication.opt_in", request!.id)).toEqual([]);
-  });
+  // Owner decision M-1: no country field (rendered or stored) while the gate is off, whichever half is closed.
+  const closedGates: [string, () => Promise<void>, Bindings][] = [
+    ["flag off, date reached", () => boardFlag(false), boardEnv],
+    ["flag on, empty date", () => boardFlag(true), { ...testEnv, REQUEST_BOARD_GO_LIVE: "" }],
+    ["flag on, future date", () => boardFlag(true), { ...testEnv, REQUEST_BOARD_GO_LIVE: "2999-01-01" }],
+  ];
+  for (const [name, setup, env] of closedGates) {
+    it(`gate off (${name}): no country select, no opt-in box; a posted publish=1 and country (even an invalid one) are ignored: request created, country NULL, no publication`, async () => {
+      await setup();
+      const html = await (await app().request(getReq("/request"), undefined, env)).text();
+      expect(html).not.toContain('name="country"');
+      expect(html).not.toContain("rq-country");
+      expect(html).not.toContain('name="publish"');
+      const tag = name.replace(/\W+/g, "-");
+      const { user, cookie } = await signIn(`rf-off-${tag}@vnx.si`);
+      for (const country of ["VN", "XX"]) {
+        const res = await post("/request", valid({ publish: "1", country }), { cookie }, env);
+        expect(res.status, country).toBe(303);
+      }
+      const requests = await listClientRequests(testEnv.DB, user.id);
+      expect(requests).toHaveLength(2);
+      for (const request of requests) {
+        expect(request.country).toBeNull();
+        expect(await publicationOf(request.id)).toEqual([]);
+        expect(await auditRows("request_publication.opt_in", request.id)).toEqual([]);
+      }
+    });
+  }
 
   it("gate on: the box is there, unchecked, with the approved EN and VI copy verbatim", async () => {
     await boardFlag(true);
@@ -308,12 +341,15 @@ describe("/request form: country and the public-board opt-in (EPIC 27, VNX-2703a
     expect((await publicationOf(pending!.id))[0]).toMatchObject({ status: "pending_review", consent_version: GO_LIVE });
     expect(await auditRows("request.create", pending!.id)).toHaveLength(1);
     expect(await auditRows("request_publication.opt_in", pending!.id)).toHaveLength(1);
+    expect(requestVisibility(pending!.status, "pending_review", null, new Date())).toBe("hidden");
+    expect(await inReviewQueue(pending!.id)).toBe(false);
     // Not yet confirmed: no staff e-mail, and the request is not submitted, so the publication is not for the moderation queue.
     expect(outbox.map((m) => m.to)).toEqual(["rf-so@request.example"]);
     const done = await followMagicLink(app(), linkFrom(outbox[0]!.text));
     expect(done.status).toBe(303);
     expect((await findClientRequest(testEnv.DB, client.id, pending!.id))?.status).toBe("submitted");
     expect((await publicationOf(pending!.id))[0]).toMatchObject({ status: "pending_review" });
+    expect(await inReviewQueue(pending!.id)).toBe(true); // only once the client confirmed the e-mail
   });
 
   it("signed out + box + the e-mail fails: request and publication are gone (by id); the audit rows stay and carry no personal data (L3)", async () => {
@@ -355,7 +391,7 @@ describe("/request form: country and the public-board opt-in (EPIC 27, VNX-2703a
     expect(res.status).toBe(400);
     const html = await res.text();
     expectErrorSummary(html, ["rq-country"]);
-    expect(html).toContain('aria-describedby="rq-country-error"');
+    expect(html).toContain('aria-describedby="rq-country-hint rq-country-error"');
     expect(html).toContain('id="rq-country-error"');
     expect(html).toContain("Choose a country from the list.");
     expect(html).toContain('value="Kept title"');
@@ -381,7 +417,8 @@ describe("/request form: country and the public-board opt-in (EPIC 27, VNX-2703a
   it("the batch loses (throws): no request, no publication, no audit row, a 500", async () => {
     await boardFlag(true);
     const { user, cookie } = await signIn("rf-lose@vnx.si");
-    const before = await countOf("SELECT COUNT(*) AS n FROM audit_log");
+    const mine = () => countOf(`SELECT COUNT(*) AS n FROM audit_log WHERE actor_user_id = '${user.id}'`);
+    const before = await mine();
     const flaky = new Proxy(testEnv.DB, {
       get: (t, k) =>
         k === "batch"
@@ -394,7 +431,8 @@ describe("/request form: country and the public-board opt-in (EPIC 27, VNX-2703a
     const res = await post("/request", valid({ publish: "1" }), { cookie }, { ...boardEnv, DB: flaky } as Bindings);
     expect(res.status).toBe(500);
     expect(await listClientRequests(testEnv.DB, user.id)).toEqual([]);
-    expect(await countOf("SELECT COUNT(*) AS n FROM audit_log")).toBe(before);
+    expect(await mine()).toBe(before);
+    expect(before).toBe(0);
   });
 
   it("a publication that did not insert on the create path is a 500 with a log, never silent (2702a obligation)", async () => {
@@ -413,10 +451,12 @@ describe("/request form: country and the public-board opt-in (EPIC 27, VNX-2703a
     expect(log.mock.calls.some((c) => String(c[0]).includes("request.opt_in_not_inserted"))).toBe(true);
   });
 
-  it("no retroactive publication: an older request has no row and no public page", async () => {
+  it("no retroactive publication: an older request has no row, is hidden by requestVisibility and is in no review queue (by id)", async () => {
     const { request } = await makeRequest({ tag: "rf-old" });
     expect(await publicationOf(request.id)).toEqual([]);
-    expect((await get(`/requests/${request.id}`)).status).toBe(404);
+    expect(await findPublicationByRequestId(testEnv.DB, request.id)).toBeNull();
+    expect(requestVisibility(request.status, null, request.closedAt, new Date())).toBe("hidden");
+    expect(await inReviewQueue(request.id)).toBe(false);
   });
 
   it("the body limit still holds with the publish field: 70 KB is a 413", async () => {

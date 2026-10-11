@@ -24,3 +24,13 @@ Implementer: Claude (Sonnet), branch `feat/epic27-request-board`, code commit `5
 5. The country field is shown regardless of the gate (plan: country per the plan; saved even when `publish` is ignored, asserted).
 6. L3: the orphan `request.create` + `request_publication.opt_in` audit rows after a signed-out mail failure are asserted to hold only ids, status and `consentVersion` (no e-mail, name, title, wording).
 7. Plan/code conflict: none found. Nothing in plan, reviews or CURRENT-STATUS edited. Not pushed.
+
+## Vòng sửa 1 (review `5a5cb49`, quyết định Owner 2026-10-11)
+- **M-1 (a):** `country` chỉ render và chỉ được nhận khi cổng `requestBoard` bật. Cổng tắt: không có `<select>`, `country` gửi lên bị bỏ (kể cả giá trị sai `XX`, không lỗi, lưu NULL), `publish` bị bỏ. Cổng bật: như trước. Ba ca cổng tắt (cờ tắt + ngày tới; cờ bật + ngày rỗng; cờ bật + ngày tương lai, L-3) kiểm HTML không có `country`/`publish` và hai POST (`VN`, `XX`) → 303, `country` NULL, không publication, không audit opt-in.
+- **H-1 + M-2:** nhãn và gợi ý country theo câu Owner duyệt (EN/VI nguyên văn, test so chuỗi chính xác); không còn biến thể cổng tắt. zh-Hans/zh-Hant dịch AI (nhãn, gợi ý) và dùng 你 thay 您 trong mọi chuỗi zh mới (cả mô tả opt-in, L-1; test khẳng định HTML zh không có 您). **Vẫn cần người bản xứ đọc lại.**
+- **S-2:** `<select>` có `aria-describedby="rq-country-hint"` (khi lỗi: `"rq-country-hint rq-country-error"`).
+- **S-1:** `results[statements.length]`.
+- **L-2:** bỏ `GET /requests/<request.id>`; ca "no retroactive" khẳng định không có dòng, `findPublicationByRequestId` null, `requestVisibility` = `hidden`, và không có trong hàng chờ review theo id (truy vấn theo `request_id`); ca chưa đăng nhập khẳng định `hidden` và ngoài hàng chờ trước khi xác nhận, vào hàng chờ sau khi bấm link.
+- **L-4:** đếm audit theo `actor_user_id` của user test (và khẳng định bằng 0 trước/sau).
+- **E2E:** spec cập nhật nhãn/gợi ý mới; locator nhãn opt-in dùng `exact: true` (gợi ý country nay chứa cụm "request board"; lần chạy đầu đỏ vì strict mode, đã sửa).
+- **Kết quả:** typecheck 0 lỗi; bộ 2703a 83 xanh; toàn bộ `npm test -w apps/web -- --maxWorkers=2 --testTimeout=60000`: 193 file, 2410 xanh, 2 skipped; `npm run e2e`: 62 xanh (1.6 phút, lần chạy cuối, không retry; lần đầu của vòng này đỏ 1 test do locator nói trên); `e2e:typecheck` sạch; `test:scripts` 52/52.

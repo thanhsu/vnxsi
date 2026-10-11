@@ -60,7 +60,7 @@ async function createRequestWithOptIn(db: D1Database, args: { request: NewReques
     auditStatement(db, { actorUserId: args.auditActor, action: args.auditAction, entity: "request", entityId: id, data: args.auditData, now }, { requestId: id, status: request.status, updatedAt: now }),
     auditStatement(db, { actorUserId: request.clientUserId, action: "request_publication.opt_in", entity: "request_publication", entityId: id, data: { consentVersion: publish.consentVersion }, now }, publicationAuditGuard({ requestId: id, status: "pending_review", updatedAt: now })),
   ]);
-  if (!returnedPublication(results[1])) {
+  if (!returnedPublication(results[statements.length])) {
     console.error(JSON.stringify({ event: "request.opt_in_not_inserted", requestId: id }));
     throw new Error("request opt-in: the publication row was not inserted");
   }
@@ -104,6 +104,8 @@ async function submitForm(c: Context<AppEnv>) {
   const user = c.get("user");
   const body = await c.req.parseBody({ all: true });
   const values = requestValuesFromBody(body);
+  // Owner decision M-1: the country exists only while the board gate is on. Gate off: a posted value is ignored (stored NULL, no error).
+  if (!c.get("requestBoard")) values.country = "";
   const sentPage = (email: string) => page(c, <RequestSentPage locale={locale} origin={siteOrigin(c)} email={email} />);
 
   // Honeypot: look like success, create nothing.

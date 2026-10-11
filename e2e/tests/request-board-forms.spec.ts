@@ -20,11 +20,13 @@ test("/request offers an optional country and an unchecked opt-in box with its w
   // The first option is the empty one, and nothing is preselected from the network.
   await expect(country.locator("option").first()).toHaveAttribute("value", "");
   await expect(country.locator("option").first()).toHaveText("Not specified");
+  await expect(page.getByLabel("Where is your business based?")).toHaveCount(1);
+  await expect(page.locator("#rq-country-hint")).toHaveText("Optional. If you choose to show this request on the public request board, the country is shown there too.");
   await expect(country).toHaveValue("");
   const publish = page.locator("input[name=publish]");
   await expect(publish).toHaveCount(1);
   await expect(publish).not.toBeChecked();
-  await expect(page.getByText("Show this request on the public request board")).toBeVisible();
+  await expect(page.getByText("Show this request on the public request board", { exact: true })).toBeVisible();
   await expect(page.locator("#rq-publish-hint")).toContainText("Your name and email are never shown.");
   await expect(page.locator("#rq-publish-hint")).toContainText("Country, budget and a very specific niche together can sometimes identify a business.");
 });
