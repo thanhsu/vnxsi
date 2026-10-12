@@ -177,6 +177,11 @@ export function parsePublicListing(values: { title: string; description: string 
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, input: { title, description } };
 }
 
+/** Whether Ops changed the client's own wording: same comparison as the parser's (line breaks, BOM, surrounding space). Decides the "edited" line of the publish e-mail. */
+export function wordingEdited(original: { title: string; description: string }, published: { title: string; description: string }): boolean {
+  return original.title.trim() !== published.title.trim() || cleanText(original.description) !== cleanText(published.description);
+}
+
 /** The reason Ops gives on reject or unpublish: required, at most 1000. */
 export function parseReviewNote(raw: string): { ok: true; note: string } | { ok: false; error: TextError } {
   const note = cleanText(raw);

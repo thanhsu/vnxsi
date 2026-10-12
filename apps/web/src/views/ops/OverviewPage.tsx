@@ -9,7 +9,7 @@ import { OpsLayout, type OpsShell } from "./OpsLayout.tsx";
  * decides what each role may see; this view renders only what it is given.
  */
 
-export const QUEUE_IDS = ["builders", "products", "feedback", "requests", "inquiries"] as const;
+export const QUEUE_IDS = ["builders", "products", "feedback", "requests", "publicRequests", "inquiries"] as const;
 export type QueueId = (typeof QUEUE_IDS)[number];
 
 export type QueueView =
@@ -55,6 +55,7 @@ const QUEUE_LABEL: Record<QueueId, OpsMessageKey> = {
   products: "ops.queue.products",
   feedback: "ops.queue.feedback",
   requests: "ops.queue.requests",
+  publicRequests: "ops.queue.publicRequests",
   inquiries: "ops.queue.inquiries",
 };
 const QUEUE_LINK: Record<QueueId, OpsMessageKey> = {
@@ -62,6 +63,7 @@ const QUEUE_LINK: Record<QueueId, OpsMessageKey> = {
   products: "ops.queue.open",
   feedback: "ops.queue.openInbox",
   requests: "ops.queue.open",
+  publicRequests: "ops.queue.open",
   inquiries: "ops.queue.viewInquiries",
 };
 

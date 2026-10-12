@@ -381,6 +381,14 @@ export async function searchRequestsForAdmin(db: D1Database, status: RequestStat
   return results.map(toAdmin);
 }
 
+/** The requests with these ids, in the order of `ids` (the Ops list filtered by something another module decides, e.g. the review queue). Admin only: carries the client's e-mail. */
+export async function listAdminRequestsByIds(db: D1Database, ids: readonly string[]): Promise<AdminRequest[]> {
+  if (ids.length === 0) return [];
+  const { results } = await db.prepare(`${ADMIN_SELECT} WHERE r.id IN (SELECT value FROM json_each(?1))`).bind(JSON.stringify(ids)).all<AdminRow>();
+  const byId = new Map(results.map((r) => [r.id, toAdmin(r)]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
 /** Ops Requests tabs (VNX-2504b): how many requests are in each status. Read only. */
 export async function countRequestsByStatus(db: D1Database): Promise<Partial<Record<RequestStatus, number>>> {
   const { results } = await db.prepare("SELECT status, COUNT(*) AS n FROM requests GROUP BY status").all<{ status: RequestStatus; n: number }>();

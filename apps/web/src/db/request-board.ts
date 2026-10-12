@@ -527,12 +527,34 @@ export async function findInterestById(db: D1Database, id: string): Promise<Inte
   return row ? toInterest(row) : null;
 }
 
+/**
+ * The review queue: publications waiting for review on a request that is open AND confirmed (`submitted|matching`; a `pending_verification`
+ * request is not in it until the client confirms their e-mail, a closed one never). One definition for the Overview card, the list filter and
+ * the block on the request page. `oldest`: since when the oldest has been waiting, which is the later of the opt-in and the request's own submission.
+ */
+const REVIEW_QUEUE = `FROM request_publications p JOIN requests r ON r.id = p.request_id WHERE p.status = 'pending_review' AND r.status IN ${OPEN_REQUEST}`;
+
+/** Ops Overview: how many listings wait for review and since when the oldest has. */
+export async function publicationReviewQueue(db: D1Database): Promise<{ count: number; oldest: string | null }> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n, MIN(max(p.opted_in_at, COALESCE(r.submitted_at, p.opted_in_at))) AS oldest ${REVIEW_QUEUE}`)
+    .first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("publication review queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
 /** Ops Overview: publications waiting for review on a request that is still open. */
 export async function countPublicationReviewQueue(db: D1Database): Promise<number> {
-  const row = await db
-    .prepare(`SELECT COUNT(*) AS n FROM request_publications p JOIN requests r ON r.id = p.request_id WHERE p.status = 'pending_review' AND r.status IN ${OPEN_REQUEST}`)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+  return (await publicationReviewQueue(db)).count;
+}
+
+/** The Requests list filter `public=pending`: the ids in the review queue, oldest first (as the submitted tab), narrowed to titles containing `q`. */
+export async function listReviewQueueRequestIds(db: D1Database, q: string | null, limit = 200): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT r.id ${REVIEW_QUEUE} AND (?1 IS NULL OR instr(lower(r.title), ?1) > 0) ORDER BY COALESCE(r.submitted_at, r.created_at), r.id LIMIT ?2`)
+    .bind(q === null ? null : q.toLowerCase(), limit)
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
 }
 
 /** Ops Overview: pending interests on an open, published request from a builder who is approved on an active account (L9). */

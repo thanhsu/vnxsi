@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { createFeedback, markFeedbackNotified } from "../../src/db/feedback.ts";
+import { optInStatement, publicationReviewQueue, returnedPublication } from "../../src/db/request-board.ts";
 import { setUserStatusStatement } from "../../src/db/users.ts";
 import type { GrantableRole, OpsRole } from "../../src/domain/ops.ts";
 import { REMIND_AFTER_MS } from "../../src/domain/inquiry.ts";
 import type { Bindings } from "../../src/env.ts";
+import { ulid } from "../../src/lib/ulid.ts";
 import { ensureUser, makeBuilder, makeDraft, makeInquiry, makeRequest, signIn } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
@@ -17,7 +19,7 @@ import { testEnv } from "../helpers.ts";
 const tag = () => crypto.randomUUID().slice(0, 8);
 const ROOT = "owner@vnx.si";
 const env = { ...testEnv, ADMIN_EMAILS: ROOT } as Bindings;
-const QUEUES = ["builders", "products", "feedback", "requests", "inquiries"] as const;
+const QUEUES = ["builders", "products", "feedback", "requests", "publicRequests", "inquiries"] as const;
 type Queue = (typeof QUEUES)[number];
 
 const HOUR = 60 * 60 * 1000;
@@ -75,7 +77,15 @@ async function resetQueues() {
     db.prepare("UPDATE feedback SET status = 'handled' WHERE status = 'new'"),
     db.prepare("UPDATE requests SET status = 'closed' WHERE status = 'submitted'"),
     db.prepare("UPDATE inquiries SET status = 'closed' WHERE status = 'open'"),
+    db.prepare("DELETE FROM request_publications WHERE status = 'pending_review'"),
   ]);
+}
+
+/** A listing waiting for review on `requestId` (opted in at `optedInAt`, now by default). */
+async function listingFor(requestId: string, optedInAt = new Date().toISOString()) {
+  const owner = await testEnv.DB.prepare("SELECT client_user_id FROM requests WHERE id = ?1").bind(requestId).first<{ client_user_id: string }>();
+  const [res] = await testEnv.DB.batch([optInStatement(testEnv.DB, { writeId: ulid(), requestId, consentVersion: "2026-01-01", now: optedInAt, clientUserId: owner!.client_user_id })]);
+  return returnedPublication(res)!;
 }
 
 async function newFeedback(createdAt: string, notified: boolean) {
@@ -177,6 +187,10 @@ describe("queues (AC4)", () => {
     const { request } = await makeRequest({ tag: `ov-r1-${t}` });
     await testEnv.DB.prepare("UPDATE requests SET submitted_at = ?2 WHERE id = ?1").bind(request.id, ago(4 * HOUR + 5 * 60 * 1000)).run();
     await makeRequest({ tag: `ov-r2-${t}`, status: "pending_verification" });
+    // Public requests to review: the submitted request above (opted in 6 hours ago, so waiting since it was submitted), plus one unconfirmed request that does not count.
+    await listingFor(request.id, ago(6 * HOUR));
+    const unconfirmed = await makeRequest({ tag: `ov-r3-${t}`, status: "pending_verification" });
+    await listingFor(unconfirmed.request.id);
     // Inquiries: open past REMIND_AFTER_MS counts; open but recent, or answered although old, do not.
     const overdue = await makeInquiry({ tag: `ov-i1-${t}`, status: "open" });
     await testEnv.DB.prepare("UPDATE inquiries SET opened_at = ?2 WHERE id = ?1").bind(overdue.inquiry.id, ago(REMIND_AFTER_MS + 2 * HOUR)).run();
@@ -200,6 +214,9 @@ describe("queues (AC4)", () => {
     expect(numberOf(main, "requests")).toBe("1");
     expect(card(main, "requests")).toContain("Requests to match");
     expect(card(main, "requests")).toContain("Oldest waiting 4 hours");
+    expect(numberOf(main, "publicRequests")).toBe("1");
+    expect(card(main, "publicRequests")).toContain("Public requests to review");
+    expect(card(main, "publicRequests")).toContain("Oldest waiting 4 hours");
     expect(numberOf(main, "inquiries")).toBe("1");
     expect(card(main, "inquiries")).toContain("Overdue inquiries");
     expect(card(main, "inquiries")).toContain("Oldest waiting 3 days");
@@ -248,7 +265,8 @@ describe("queues (AC4)", () => {
     for (const role of ["owner", "operator", "viewer"] as const) {
       const { cookie } = await asRole(role);
       const main = mainOf((await getOverview(cookie)).html);
-      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests"]);
+      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", "/ops/marketplace/requests?public=pending"]);
+      expect(card(main, "publicRequests"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/requests\?public=pending">Open queue/);
       expect(card(main, "builders"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/builders">Open queue/);
       expect(card(main, "products"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/products">Open queue/);
       expect(card(main, "requests"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/requests">Open queue/);
@@ -345,5 +363,55 @@ describe("recent activity (AC6, spec §4)", () => {
     const empty = mainOf((await getOverview(cookie)).html);
     expect(empty).toContain("No activity recorded yet.");
     expect(empty).not.toContain("<table");
+  });
+});
+
+describe("VNX-2704b: the Public requests to review card (spec 7.4, R1-S1)", () => {
+  it("counts by difference: a listing waiting on a confirmed open request adds exactly one; an unconfirmed or a closed request adds none until it is confirmed", async () => {
+    const { cookie } = await asRole("owner");
+    const base = Number(numberOf(mainOf((await getOverview(cookie)).html), "publicRequests") ?? "0");
+    const open = await makeRequest({ tag: `ov-pr-open-${tag()}` });
+    await listingFor(open.request.id);
+    expect(numberOf(mainOf((await getOverview(cookie)).html), "publicRequests")).toBe(String(base + 1));
+    const unconfirmed = await makeRequest({ tag: `ov-pr-unc-${tag()}`, status: "pending_verification" });
+    await listingFor(unconfirmed.request.id);
+    const closed = await makeRequest({ tag: `ov-pr-closed-${tag()}` });
+    await testEnv.DB.prepare("UPDATE requests SET status = 'builder_selected' WHERE id = ?1").bind(closed.request.id).run();
+    await listingFor(closed.request.id);
+    expect(numberOf(mainOf((await getOverview(cookie)).html), "publicRequests")).toBe(String(base + 1));
+    // The client confirms their e-mail: the listing enters the queue (by id, through the real count).
+    await testEnv.DB.prepare("UPDATE requests SET status = 'submitted' WHERE id = ?1").bind(unconfirmed.request.id).run();
+    expect(numberOf(mainOf((await getOverview(cookie)).html), "publicRequests")).toBe(String(base + 2));
+    expect((await publicationReviewQueue(testEnv.DB)).count).toBe(base + 2);
+  });
+
+  it("shows an error state, not 0, when the count cannot be read, and the other queues still show", async () => {
+    await resetQueues();
+    await makeBuilder(`ops-ov-pr-${tag()}@vnx.si`, `ov-pr-${tag()}`, "pending");
+    const { cookie } = await asRole("owner");
+    const broken = { ...env, DB: failingDb(/FROM request_publications\b/) } as Bindings;
+    const main = mainOf((await getOverview(cookie, broken)).html);
+    const cardHtml = card(main, "publicRequests");
+    expect(cardHtml).toContain('data-state="error"');
+    expect(cardHtml).toContain("Could not read this count");
+    expect(cardHtml).not.toMatch(/<span class="ops-queue-num">\d+<\/span>/);
+    expect(cardHtml).not.toContain("Nothing waiting");
+    expect(numberOf(main, "builders")).toBe("1");
+  });
+
+  it("shows Content the number and the label only, and gives the link to Viewer, Operator and Owner", async () => {
+    await resetQueues();
+    const open = await makeRequest({ tag: `ov-pr-role-${tag()}` });
+    await listingFor(open.request.id);
+    const content = await asRole("content");
+    const contentCard = card(mainOf((await getOverview(content.cookie)).html), "publicRequests");
+    expect(contentCard).toContain("Public requests to review");
+    expect(contentCard).toContain('<span class="ops-queue-num">1</span>');
+    expect(contentCard).not.toContain("href");
+    expect(contentCard).not.toContain("Oldest waiting");
+    for (const role of ["viewer", "operator", "owner"] as const) {
+      const { cookie } = await asRole(role);
+      expect(card(mainOf((await getOverview(cookie)).html), "publicRequests"), role).toContain('href="/ops/marketplace/requests?public=pending"');
+    }
   });
 });

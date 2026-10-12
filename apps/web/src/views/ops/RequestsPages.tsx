@@ -1,4 +1,5 @@
 import type { FC } from "hono/jsx";
+import type { PublicationStatus } from "../../domain/request-board.ts";
 import { MAX_ACTIVE_INVITES, REQUEST_STATUSES, requestTransition, type AdminRequest, type InviteWithBuilder, type RequestStatus, type Suggestion, type SuggestionReason } from "../../domain/request.ts";
 import type { MessageKey, OpsMessageKey } from "../../i18n/messages/en.ts";
 import type { InviteError } from "../admin/RequestDetailPage.tsx";
@@ -19,7 +20,7 @@ import { Confirm, History, Notice, Pill, qs, ReasonField, SearchForm, Tabs, tr, 
 export const REQUESTS_PATH = "/ops/marketplace/requests";
 
 /** The list filter, from the URL (allowlisted by the route): a status or "all", and a search. */
-export type RequestFilter = { status?: RequestStatus | "all"; q?: string };
+export type RequestFilter = { status?: RequestStatus | "all"; public?: "pending"; q?: string };
 
 const TONE: Record<RequestStatus, PillTone> = {
   pending_verification: "mute",
@@ -43,25 +44,41 @@ const STATUS_KEY: Record<RequestStatus, OpsMessageKey> = {
   removed: "ops.requests.status.removed",
 };
 const StatusPill: FC<{ status: RequestStatus }> = ({ status }) => <Pill tone={TONE[status]} label={tr(STATUS_KEY[status])} />;
+/** The "Public" column: the request's listing by its own state names. */
+const PUBLIC_KEY: Record<PublicationStatus, OpsMessageKey> = {
+  pending_review: "ops.requests.public.pending_review",
+  published: "ops.requests.public.published",
+  rejected: "ops.requests.public.rejected",
+  withdrawn: "ops.requests.public.withdrawn",
+  unpublished: "ops.requests.public.unpublished",
+};
+const PUBLIC_TONE: Record<PublicationStatus, PillTone> = { pending_review: "pending", published: "ok", rejected: "bad", withdrawn: "mute", unpublished: "bad" };
+const PublicPill: FC<{ status: PublicationStatus }> = ({ status }) => <Pill tone={PUBLIC_TONE[status]} label={tr(PUBLIC_KEY[status])} />;
 const invitesLine = (item: AdminRequest) => tr("admin.requests.count", { active: item.activeInvites, total: item.totalInvites });
 
 type ListProps = {
   shell: OpsShell;
-  /** The open tab: a status, or null for "All". */
+  /** The open tab: a status, or null for "All" (and for the review-queue filter, which has no tab). */
   status: RequestStatus | null;
+  /** `?public=pending`: the list is the review queue of public listings. */
+  publicPending: boolean;
   q: string | null;
   counts: Partial<Record<RequestStatus, number>>;
   items: AdminRequest[];
+  /** The "Public" column: the listing of each listed request, by request id (no entry: no listing). */
+  publications: ReadonlyMap<string, { status: PublicationStatus }>;
   notice: OpsNotice;
 };
 
-export const RequestsListPage: FC<ListProps> = ({ shell, status, q, counts, items, notice }) => {
+export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, q, counts, items, publications, notice }) => {
   const tab = status ?? "all";
+  /** What the list's links carry to the request page and back: the tab, or the review-queue filter, and the search. */
+  const carried = publicPending ? { public: "pending", q } : { status: tab, q };
   const all = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
   const total = status ? (counts[status] ?? 0) : all;
   const tabs = [
     ...REQUEST_STATUSES.map((s) => ({ href: REQUESTS_PATH + qs({ status: s, q }), label: tr(STATUS_KEY[s]), count: counts[s] ?? 0, current: s === status })),
-    { href: REQUESTS_PATH + qs({ status: "all", q }), label: tr("ops.requests.all"), count: all, current: status === null },
+    { href: REQUESTS_PATH + qs({ status: "all", q }), label: tr("ops.requests.all"), count: all, current: status === null && !publicPending },
   ];
   return (
     <OpsLayout {...shell} page={tr("ops.nav.requests")} trail={[tr("ops.group.marketplace")]}>
@@ -72,7 +89,12 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, q, counts, item
       <Notice notice={notice} />
       <section class="ops-card ops-queue-list" aria-label={tr("ops.requests.queue")}>
         <Tabs tabs={tabs} />
-        <SearchForm action={REQUESTS_PATH} q={q} keep={{ status: tab }} label={tr("ops.requests.search")} placeholder={tr("ops.requests.searchHint")} />
+        {publicPending ? (
+          <p class="ops-note">
+            {tr("ops.requests.publicFilter")} <a href={REQUESTS_PATH + qs({ q })}>{tr("ops.requests.publicFilterClear")}</a>
+          </p>
+        ) : null}
+        <SearchForm action={REQUESTS_PATH} q={q} keep={publicPending ? { public: "pending" } : { status: tab }} label={tr("ops.requests.search")} placeholder={tr("ops.requests.searchHint")} />
         {items.length === 0 ? (
           <p class="ops-state">{tr(q ? "ops.requests.noMatch" : "ops.requests.empty")}</p>
         ) : (
@@ -83,6 +105,7 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, q, counts, item
                   <tr>
                     <th scope="col">{tr("ops.requests.col.request")}</th>
                     <th scope="col">{tr("ops.list.status")}</th>
+                    <th scope="col">{tr("ops.requests.col.public")}</th>
                     <th scope="col">{tr("ops.requests.col.client")}</th>
                     <th scope="col">{tr("request.facts.category")}</th>
                     <th scope="col">{tr("admin.requests.invites")}</th>
@@ -94,13 +117,14 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, q, counts, item
                   {items.map((item) => (
                     <tr>
                       <td>
-                        <a class="ops-strong" href={`${REQUESTS_PATH}/${item.request.id}${qs({ status: tab, q })}`}>
+                        <a class="ops-strong" href={`${REQUESTS_PATH}/${item.request.id}${qs(carried)}`}>
                           {item.request.title}
                         </a>
                       </td>
                       <td>
                         <StatusPill status={item.request.status} />
                       </td>
+                      <td>{publications.has(item.request.id) ? <PublicPill status={publications.get(item.request.id)!.status} /> : "—"}</td>
                       <td>
                         {item.request.clientName}
                         <br />
@@ -255,7 +279,7 @@ export const RequestDetailPage: FC<DetailProps> = (props) => {
               </>
             ) : null}
           </section>
-          {board ? <PublicListingBlock request={r} publication={board.publication} actionBase={`${REQUESTS_PATH}/${r.id}/publication`} form={board.form} /> : null}
+          {board ? <PublicListingBlock request={r} publication={board.publication} actionBase={`${REQUESTS_PATH}/${r.id}/publication`} query={qs(filter)} form={board.form} /> : null}
           <section class="ops-card ops-sec" aria-labelledby="ops-invites-h">
             <h2 id="ops-invites-h">{tr("admin.requests.invites")}</h2>
             <p class="ops-muted">{invitesLine(item)}</p>

@@ -4,8 +4,12 @@ import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { auditStatement } from "../db/audit.ts";
 import { findAdminRequest } from "../db/requests.ts";
 import { editPublicStatement, findPublicationByRequestId, publicationAuditGuard, publishStatement, rejectStatement, returnedPublication, unpublishStatement } from "../db/request-board.ts";
-import { opsBoardActions, parsePublicListing, parseReviewNote, type PublicationStatus } from "../domain/request-board.ts";
+import { opsBoardActions, parsePublicListing, parseReviewNote, wordingEdited, type PublicationStatus } from "../domain/request-board.ts";
 import type { AppEnv } from "../env.ts";
+import { notifyPublicationPublished, notifyPublicationRejected, notifyPublicationUnpublished } from "../notify/request-board.ts";
+import type { NotifyOutcome } from "../notify/request.ts";
+import { qs } from "../views/ops/parts.tsx";
+import { requestFilter } from "./ops-marketplace.tsx";
 import type { BoardAction, BoardFormState } from "../views/ops/PublicListingBlock.tsx";
 import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
 
@@ -14,7 +18,9 @@ import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
  * public listing. Every route needs marketplace.act (Owner, Operator); anyone else, an OAuth session included, gets the sealed 404 of
  * requireOps, and there is no role or admin check here. Each write is ONE db.batch: the compare-and-set on status and updated_at
  * (db/request-board.ts) and its audit row, which is written only when that compare-and-set went through. The audit data holds the
- * request id and the two states, never the wording or the reason. Not an e-mail task: the client's e-mails come with VNX-2704b.
+ * request id and the two states, never the wording or the reason. After the batch (VNX-2704b) publish, reject and unpublish e-mail the
+ * client (notify/request-board.ts, never throws); a failed e-mail only turns the redirect's notice into mail_failed. The redirect keeps
+ * the Requests list filter (S-2), so Ops can go on down the queue.
  */
 
 export type RequestDetailRender = (
@@ -37,6 +43,14 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     return current ? render(c, current, null, status, { board: form }) : opsNotFound(c);
   }
 
+  /** The client's e-mail for a move: publish, reject and unpublish only (not edit; nothing for the client's own withdrawal or an interest). */
+  async function tellClient(c: Context<AppEnv>, action: BoardAction, requestId: string, edited: boolean): Promise<NotifyOutcome> {
+    if (action === "publish") return notifyPublicationPublished(c.env, requestId, { edited });
+    if (action === "reject") return notifyPublicationRejected(c.env, requestId);
+    if (action === "unpublish") return notifyPublicationUnpublished(c.env, requestId);
+    return "skipped";
+  }
+
   async function act(c: Context<AppEnv>, action: BoardAction) {
     const id = c.req.param("id") ?? "";
     const [item, publication] = await Promise.all([findAdminRequest(c.env.DB, id), findPublicationByRequestId(c.env.DB, id)]);
@@ -54,9 +68,12 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     const writeId = ulid();
     const move = { requestId: id, expectedUpdatedAt: token, reviewedBy: user.id, now, writeId };
     let change: D1PreparedStatement;
+    // Publish only: did Ops change the client's own wording? Decided from what is saved, so the e-mail says what the client will see.
+    let edited = false;
     if (action === "publish" || action === "edit") {
       const parsed = parsePublicListing({ title: values.title, description: values.description });
       if (!parsed.ok) return refused(c, id, 400, { action, errors: { title: parsed.errors.title, description: parsed.errors.description }, values });
+      edited = wordingEdited(item.request, parsed.input);
       const wording = { ...move, title: parsed.input.title, description: parsed.input.description };
       change = action === "publish" ? publishStatement(c.env.DB, wording) : editPublicStatement(c.env.DB, wording);
     } else {
@@ -77,7 +94,9 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     ]);
     // The compare-and-set lost (an old form, or someone else acted first): nothing was written, not even the audit row.
     if (!returnedPublication(results[0])) return refused(c, id, 409, conflict);
-    return c.redirect(`${REQUESTS_PATH}/${id}?done=1`, 303);
+    // The batch has committed. The client's e-mail follows and can only add the mail_failed notice: it never undoes the moderation.
+    const outcome = await tellClient(c, action, id, edited);
+    return c.redirect(`${REQUESTS_PATH}/${id}${qs({ ...requestFilter(c), done: outcome === "failed" ? "mail_failed" : "1" })}`, 303);
   }
 
   for (const action of ["publish", "edit", "reject", "unpublish"] as const) {

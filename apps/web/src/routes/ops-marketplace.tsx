@@ -4,10 +4,10 @@ import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { listEntityAudit } from "../db/audit.ts";
 import { countBuildersByStatus, findBuilderAccount, searchBuilders } from "../db/builders.ts";
 import { listMedia } from "../db/media.ts";
-import { findPublicationByRequestId } from "../db/request-board.ts";
+import { findPublicationByRequestId, listPublicationsForOps, listReviewQueueRequestIds } from "../db/request-board.ts";
 import { listTiers } from "../db/pricing.ts";
 import { countProductsByStatus, findProductWithBuilder, searchProducts } from "../db/products.ts";
-import { countRequestsByStatus, findAdminRequest, searchRequestsForAdmin } from "../db/requests.ts";
+import { countRequestsByStatus, findAdminRequest, listAdminRequestsByIds, searchRequestsForAdmin } from "../db/requests.ts";
 import { listActiveBadges } from "../db/verifications.ts";
 import { isBuilderStatus, type BuilderAccount, type BuilderAction } from "../domain/builder.ts";
 import { isProductStatus, RECENTLY_EDITED_DAYS, type BadgeKind, type ProductWithBuilder } from "../domain/product.ts";
@@ -64,10 +64,14 @@ function productFilter(c: Context<AppEnv>): ProductFilter {
 
 const isRequestStatus = (value: string | undefined): value is RequestStatus => (REQUEST_STATUSES as readonly string[]).includes(value ?? "");
 
-/** The request filter as given in the URL: a known status or "all", and a usable search, nothing else. */
-function requestFilter(c: Context<AppEnv>): RequestFilter {
+/**
+ * The request filter as given in the URL: a known status or "all", the one value of `public` there is ("pending": listings waiting for
+ * review; it replaces the status tab, L6, so a status is dropped with it), and a usable search, nothing else.
+ */
+export function requestFilter(c: Context<AppEnv>): RequestFilter {
   const status = c.req.query("status");
   const q = searchOf(c.req.query("q"));
+  if (c.req.query("public") === "pending") return { public: "pending", ...(q ? { q } : {}) };
   return { ...(status === "all" || isRequestStatus(status) ? { status } : {}), ...(q ? { q } : {}) };
 }
 
@@ -249,10 +253,14 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
 
   app.get(REQUESTS_PATH, requireOps("marketplace.view"), async (c) => {
     const given = c.req.query("status");
-    const status = given === "all" ? null : isRequestStatus(given) ? given : "submitted";
+    const publicPending = requestFilter(c).public === "pending";
+    const status = publicPending || given === "all" ? null : isRequestStatus(given) ? given : "submitted";
     const q = searchOf(c.req.query("q"));
-    const [shell, counts, items] = await Promise.all([opsShell(c, isRegistered, REQUESTS_PATH), countRequestsByStatus(c.env.DB), searchRequestsForAdmin(c.env.DB, status, q)]);
-    return page(c, <RequestsListPage shell={shell} status={status} q={q} counts={counts} items={items} notice={noticeOf(c.req.query("done"))} />);
+    // `public=pending` lists the review queue (open and confirmed requests with a listing waiting), whatever tab would have been open.
+    const found = publicPending ? listReviewQueueRequestIds(c.env.DB, q).then((ids) => listAdminRequestsByIds(c.env.DB, ids)) : searchRequestsForAdmin(c.env.DB, status, q);
+    const [shell, counts, items] = await Promise.all([opsShell(c, isRegistered, REQUESTS_PATH), countRequestsByStatus(c.env.DB), found]);
+    const publications = await listPublicationsForOps(c.env.DB, items.map((r) => r.request.id));
+    return page(c, <RequestsListPage shell={shell} status={status} publicPending={publicPending} q={q} counts={counts} items={items} publications={publications} notice={noticeOf(c.req.query("done"))} />);
   });
 
   app.get(`${REQUESTS_PATH}/:id`, requireOps("marketplace.view"), async (c) => {

@@ -106,10 +106,12 @@ type Props = {
   publication: PublicationView;
   /** The base of the form actions: ".../requests/<id>/publication". */
   actionBase: string;
+  /** The list filter as a query string ("" or "?public=pending&q=..."), added to every action so the filter survives the post (S-2). */
+  query?: string;
   form?: BoardFormState;
 };
 
-export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, actionBase, form }) => {
+export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, actionBase, query = "", form }) => {
   const actions = opsBoardActions(p.status, r.status);
   const publishable = actions.includes("publish");
   const waiting = p.status === "pending_review" && r.status === "pending_verification";
@@ -205,7 +207,7 @@ export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, acti
 
       {publishable || editable ? (
         <>
-          <form method="post" action={`${actionBase}/${publishable ? "publish" : "edit"}`}>
+          <form method="post" action={`${actionBase}/${publishable ? "publish" : "edit"}${query}`}>
             {token}
             <Wording title={title} description={description} errors={wordingErrors} />
             {publishable ? <p class="ops-note">{tr("ops.board.publishHelp")}</p> : null}
@@ -219,7 +221,7 @@ export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, acti
       {rejectable || unpublishable ? (
         <div class="ops-actions">
           <Confirm summary={tr(rejectable ? "ops.board.rejectOpen" : "ops.board.unpublishOpen")} open={noteState !== undefined}>
-            <form method="post" action={`${actionBase}/${rejectable ? "reject" : "unpublish"}`}>
+            <form method="post" action={`${actionBase}/${rejectable ? "reject" : "unpublish"}${query}`}>
               {token}
               <ReasonField id="pl-review-note" name="review_note" label={tr("ops.board.reason")} max={1000} required error={noteState?.errors.note ? tr(NOTE_ERROR[noteState.errors.note]) : null} value={noteState?.values.note} />
               <p class="ops-note">{tr(rejectable ? "ops.board.rejectHelp" : "ops.board.unpublishHelp")}</p>

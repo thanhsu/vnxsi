@@ -1,9 +1,10 @@
 import { ulid } from "../../src/lib/ulid.ts";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { createApp } from "../../src/app.ts";
 import { countPublicationReviewQueue, findPublicationByRequestId, findPublicListing, optInStatement, rejectStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
 import type { GrantableRole, OpsRole } from "../../src/domain/ops.ts";
-import { opsBoardActions, PUBLIC_DESCRIPTION_MAX } from "../../src/domain/request-board.ts";
+import { opsBoardActions, PUBLIC_DESCRIPTION_MAX, wordingEdited } from "../../src/domain/request-board.ts";
 import type { Bindings } from "../../src/env.ts";
 import { setUserStatusStatement } from "../../src/db/users.ts";
 import { ensureUser, makeRequest, signIn } from "../fixtures.ts";
@@ -652,5 +653,197 @@ describe("VNX-2704a review fixes (round 1)", () => {
     expect([...times].sort().reverse()).toEqual(times);
     const actions = [...section.matchAll(/<span class="ops-mono">([a-z_.]+)<\/span>/g)].map((m) => m[1]);
     expect(actions.slice(0, 2)).toEqual(["request_publication.edit", "request.note"]);
+  });
+});
+
+describe("VNX-2704b: the Public column and the public=pending filter of the Requests list", () => {
+  const listUrl = (query: string) => `${BASE}${query}`;
+  const rowOf = (html: string, id: string) => new RegExp(`<tr>(?:(?!</tr>)[\\s\\S])*?href="${BASE}/${id}[?"](?:(?!</tr>)[\\s\\S])*?</tr>`).exec(html)?.[0] ?? "";
+  const hasRow = (html: string, id: string) => rowOf(html, id) !== "";
+  const setStatus = (id: string, status: string) => testEnv.DB.prepare("UPDATE requests SET status = ?2 WHERE id = ?1").bind(id, status).run();
+
+  it("has a Public column: a dash without a listing, and the listing's status with one", async () => {
+    const { cookie } = await asRole("owner");
+    const none = await makeRequest({ tag: `ops-pc-none-${tag()}` });
+    const pending = await listing();
+    const published = await listing({ state: "published" });
+    const html = mainOf((await get(listUrl("?status=all"), cookie)).html);
+    expect(html).toMatch(/<th scope="col">Public<\/th>/);
+    expect(rowOf(html, none.request.id)).toMatch(/<td[^>]*>—<\/td>/);
+    expect(rowOf(html, pending.requestId)).toContain("Review");
+    expect(rowOf(html, published.requestId)).toContain("Published");
+    for (const [state, label] of [["rejected", "Rejected"], ["withdrawn", "Withdrawn"], ["unpublished", "Unpublished"]] as const) {
+      const f = await listing();
+      await testEnv.DB.prepare("UPDATE request_publications SET status = ?2, ended_at = '2026-01-01T00:00:00.000Z', review_note = 'n', published_at = NULL WHERE request_id = ?1").bind(f.requestId, state).run();
+      expect(rowOf(mainOf((await get(listUrl("?status=all"), cookie)).html), f.requestId), state).toContain(label);
+    }
+  });
+
+  it("?public=pending lists only requests that are open and have a listing waiting, whatever the default tab is (L6)", async () => {
+    const { cookie } = await asRole("owner");
+    const submitted = await listing();
+    const matching = await listing({ requestStatus: "matching" });
+    const published = await listing({ state: "published" });
+    const closed = await listing({ requestStatus: "builder_selected" });
+    const unconfirmed = await listing({ requestStatus: "pending_verification" });
+    const withoutListing = await makeRequest({ tag: `ops-pc-nl-${tag()}` });
+    const html = mainOf((await get(listUrl("?public=pending"), cookie)).html);
+    expect(hasRow(html, submitted.requestId)).toBe(true);
+    expect(hasRow(html, matching.requestId)).toBe(true);
+    for (const f of [published, closed, unconfirmed]) expect(hasRow(html, f.requestId), f.requestId).toBe(false);
+    expect(hasRow(html, withoutListing.request.id)).toBe(false);
+    // Without the filter the default tab is Submitted: the matching request is not there.
+    const plain = mainOf((await get(listUrl(""), cookie)).html);
+    expect(hasRow(plain, matching.requestId)).toBe(false);
+    expect(hasRow(plain, submitted.requestId)).toBe(true);
+    // A rejected listing leaves the filter.
+    await post(url(submitted.requestId, "reject"), cookie, formFor(submitted, { review_note: "Too vague." }));
+    expect(hasRow(mainOf((await get(listUrl("?public=pending"), cookie)).html), submitted.requestId)).toBe(false);
+  });
+
+  it("keeps the search with the filter, drops any other value of public, and adds no tab", async () => {
+    const { cookie } = await asRole("owner");
+    const a = await listing({ title: `Zeta needle ${tag()}` });
+    const b = await listing({ title: `Other thing ${tag()}` });
+    const tabsOf = (h: string) => /<nav class="ops-tabs"[^>]*>([\s\S]*?)<\/nav>/.exec(h)?.[1] ?? "";
+    const filtered = mainOf((await get(listUrl("?public=pending&q=zeta%20needle"), cookie)).html);
+    expect(hasRow(filtered, a.requestId)).toBe(true);
+    expect(hasRow(filtered, b.requestId)).toBe(false);
+    expect(rowOf(filtered, a.requestId)).toContain("public=pending");
+    expect(filtered).toMatch(/<input type="hidden" name="public" value="pending"/);
+    const hacked = mainOf((await get(listUrl("?public=hacked"), cookie)).html);
+    const plain = mainOf((await get(listUrl(""), cookie)).html);
+    expect(hasRow(hacked, a.requestId)).toBe(hasRow(plain, a.requestId));
+    expect(rowOf(hacked, a.requestId)).not.toContain("public=");
+    const tabs = (h: string) => [...tabsOf(h).matchAll(/<a class="ops-tab"/g)].length;
+    expect(tabs(filtered)).toBe(tabs(plain));
+    expect(tabsOf(filtered)).not.toContain("public=");
+  });
+
+  it("R1-S1, by id with the real list and filter: a pending_verification request is in neither, and enters both after the client confirms", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing({ requestStatus: "pending_verification" });
+    const filterBefore = mainOf((await get(listUrl("?public=pending"), cookie)).html);
+    const submittedBefore = mainOf((await get(listUrl("?status=submitted"), cookie)).html);
+    expect(hasRow(filterBefore, f.requestId)).toBe(false);
+    expect(hasRow(submittedBefore, f.requestId)).toBe(false);
+    // The tab of its own status shows it, with its listing marked as waiting.
+    expect(rowOf(mainOf((await get(listUrl("?status=pending_verification"), cookie)).html), f.requestId)).toContain("Review");
+    await setStatus(f.requestId, "submitted");
+    expect(hasRow(mainOf((await get(listUrl("?public=pending"), cookie)).html), f.requestId)).toBe(true);
+  });
+
+  it("S-2: the Public listing forms and the redirect keep the list filter, so Ops can go on down the queue", async () => {
+    const { cookie } = await asRole("operator");
+    const f = await listing();
+    const filter = "?public=pending&q=ONLYONE";
+    const main = mainOf((await get(`${BASE}/${f.requestId}${filter}`, cookie)).html);
+    const actions = [...main.matchAll(/<form\b[^>]*action="([^"]*)"/g)].map((m) => m[1]!.replaceAll("&amp;", "&")).filter((a) => a.includes("/publication/"));
+    expect(actions.length).toBeGreaterThan(0);
+    for (const a of actions) {
+      const query = new URL(a, "https://vnx.si").searchParams;
+      expect(query.get("public"), a).toBe("pending");
+      expect(query.get("q"), a).toBe("ONLYONE");
+      expect(a).not.toContain("#");
+    }
+    expect(main).toContain(`href="${BASE}?public=pending&amp;q=ONLYONE"`);
+    // The refused form (a 400) renders the page again with the filter still in its actions.
+    const bad = await post(`${url(f.requestId, "publish")}${filter}`, cookie, formFor(f, { public_title: "", public_description: "" }));
+    expect(bad.status).toBe(400);
+    expect(mainOf(await bad.text())).toContain("public=pending");
+    // A success goes back to the same page with the filter and the outcome.
+    const ok = await post(`${url(f.requestId, "publish")}${filter}`, cookie, formFor(f, wording(f.text)));
+    expect(ok.status).toBe(303);
+    const location = new URL(ok.headers.get("location")!, "https://vnx.si");
+    expect(location.pathname).toBe(`${BASE}/${f.requestId}`);
+    expect(Object.fromEntries(location.searchParams)).toEqual({ public: "pending", q: "ONLYONE", done: "1" });
+  });
+});
+
+describe("VNX-2704b: the e-mails to the client after Ops moderates", () => {
+  afterEach(() => clearOutbox());
+  const failing = { ...env, MAIL_DRIVER: undefined, RESEND_API_KEY: undefined } as Bindings;
+
+  async function fresh(opts: Parameters<typeof listing>[0] = {}, locale = "en") {
+    const f = await listing(opts);
+    await testEnv.DB.prepare("UPDATE users SET locale = ?2 WHERE id = ?1").bind(f.clientId, locale).run();
+    const client = (await testEnv.DB.prepare("SELECT email FROM users WHERE id = ?1").bind(f.clientId).first<{ email: string }>())!;
+    clearOutbox();
+    return { ...f, email: client.email };
+  }
+
+  it("publish: e-mails the client once, in their locale, with the public page; says 'edited' only when the wording changed", async () => {
+    const { cookie } = await asRole("operator");
+    const edited = await fresh({ title: `Quiet title ${tag()}`, description: ORIGINAL_DESC }, "vi");
+    expect((await post(url(edited.requestId, "publish"), cookie, formFor(edited, wording(edited.text)))).status).toBe(303);
+    expect(outbox).toHaveLength(1);
+    const publicId = (await pubOf(edited.requestId)).publicId;
+    expect(outbox[0]).toMatchObject({ to: edited.email });
+    expect(outbox[0]!.text).toContain(`https://vnx.si/vi/requests/${publicId}`);
+    expect(outbox[0]!.text).toContain(`https://vnx.si/vi/me/requests/${edited.requestId}`);
+    expect(outbox[0]!.text).toContain("chỉnh sửa câu chữ");
+    // Published exactly as the client wrote it: nothing to say about an edit.
+    const description = "A description that is exactly as the client wrote it, long enough to publish as it is.";
+    const same = await fresh({ title: `Same title ${tag()}`, description });
+    const row = await testEnv.DB.prepare("SELECT title FROM requests WHERE id = ?1").bind(same.requestId).first<{ title: string }>();
+    expect((await post(url(same.requestId, "publish"), cookie, formFor(same, { public_title: row!.title, public_description: description }))).status).toBe(303);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]!.text).not.toContain("edited");
+  });
+
+  it("reject and unpublish: e-mail the client the Ops reason, never the admin note", async () => {
+    const { cookie } = await asRole("owner");
+    const r = await fresh({}, "zh-Hant");
+    await testEnv.DB.prepare("UPDATE requests SET admin_note = 'ADMIN-ONLY' WHERE id = ?1").bind(r.requestId).run();
+    expect((await post(url(r.requestId, "reject"), cookie, formFor(r, { review_note: "Contains a company name." }))).status).toBe(303);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({ to: r.email });
+    expect(outbox[0]!.text).toContain("Contains a company name.");
+    expect(outbox[0]!.text).toContain("公開需求板");
+    expect(outbox[0]!.text + outbox[0]!.html).not.toContain("ADMIN-ONLY");
+    const u = await fresh({ state: "published" });
+    expect((await post(url(u.requestId, "unpublish"), cookie, formFor(u, { review_note: "No longer fits the board." }))).status).toBe(303);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({ to: u.email });
+    expect(outbox[0]!.text).toContain("No longer fits the board.");
+  });
+
+  it("sends nothing for edit, for a refused move (409), or for a bad form (400)", async () => {
+    const { cookie } = await asRole("owner");
+    const p = await fresh({ state: "published" });
+    expect((await post(url(p.requestId, "edit"), cookie, formFor(p, { public_title: "E2E board retitled", public_description: `Retitled wording. ${DESC}` }))).status).toBe(303);
+    expect((await post(url(p.requestId, "publish"), cookie, formFor(p, wording("x")))).status).toBe(409);
+    const g = await fresh();
+    expect((await post(url(g.requestId, "publish"), cookie, formFor(g, { public_title: "", public_description: "" }))).status).toBe(400);
+    expect((await post(url(g.requestId, "publish"), cookie, formFor(g, wording("x"), "2020-01-01T00:00:00.000Z"))).status).toBe(409);
+    expect(outbox).toHaveLength(0);
+  });
+
+  it("a mail failure does not undo the moderation: it is logged once without the address and Ops sees the mail_failed notice, with the filter kept", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await fresh();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await post(`${url(f.requestId, "reject")}?public=pending`, cookie, formFor(f, { review_note: "Too vague." }), failing);
+      expect(res.status).toBe(303);
+      const location = new URL(res.headers.get("location")!, "https://vnx.si");
+      expect(Object.fromEntries(location.searchParams)).toEqual({ public: "pending", done: "mail_failed" });
+      expect(await pubOf(f.requestId)).toMatchObject({ status: "rejected", reviewNote: "Too vague." });
+      expect(await auditCount(f.requestId)).toBe(1);
+      const lines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("request_board.notify_failed"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).not.toContain(f.email);
+      const shown = await get(`${location.pathname}${location.search}`, cookie);
+      expect(mainOf(shown.html)).toContain("couldn&#39;t be sent");
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("wordingEdited compares after normalising line endings and surrounding space", () => {
+    expect(wordingEdited({ title: "A", description: "x\r\ny" }, { title: "A", description: "x\ny" })).toBe(false);
+    expect(wordingEdited({ title: "A ", description: "x\ny" }, { title: "A", description: "x\ny\n" })).toBe(false);
+    expect(wordingEdited({ title: "A", description: "x\ny" }, { title: "B", description: "x\ny" })).toBe(true);
+    expect(wordingEdited({ title: "A", description: "x\ny" }, { title: "A", description: "x\nz" })).toBe(true);
   });
 });
