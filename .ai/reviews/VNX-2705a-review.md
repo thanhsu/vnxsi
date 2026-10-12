@@ -116,3 +116,22 @@ Ghi chú cho Owner:
 - `identityNote` EN giữ nguyên văn phụ lục §4.1. "Invites up to five builders" đúng sự thật: Ops mời qua luồng §5.7 có sẵn, cổng 5 lời mời nằm trong câu `INSERT` (§3.3 bước 6); interest không tạo lời mời.
 - `cta.signedOut`, `cta.pendingBuilder`, `cta.closed` là nhãn của bảng §4.2; chỉ thêm dấu chấm cho đồng nhất. "Available once…" hiện cả cho builder `rejected`/`suspended` theo §4.2; nếu Owner muốn câu riêng cho hai trạng thái đó thì là quyết định mới, không thuộc task này.
 - "Posted"/"Ngày đăng" là ngày listing lên bảng lần đầu (`published_at`), không phải ngày client gửi request; theo cách hiểu thông thường của một bảng tin, giữ nguyên.
+
+## Re-review (vòng sửa 1, `c3b7d88`)
+
+- **Ngày:** 2026-10-12. **Đã đọc:** diff `e59a510..c3b7d88` (9 file, +144/−32: 4 file locale, `Pagination.tsx`, `BoardPage.tsx`, `RequestCard.tsx`, test mới `test/views/request-board-copy.test.tsx`, mục "Vòng sửa 1" của báo cáo).
+- **Lệnh đã chạy lại (HEAD `c3b7d88`):** `npm run typecheck -w apps/web`: exit 0. Bộ 2705a + test mới (`test/views/request-board-copy.test.tsx`, `test/public/request-board-list.test.ts`, `test/public/request-board-detail.test.ts`, `test/architecture.test.ts`, `test/i18n/parity.test.ts`, `test/lib/ulid.test.ts`, `test/db/request-board.test.ts`, `test/me/request-board.test.ts`): **8 file, 169 test xanh**. `npm run e2e` (một lần): **76 passed**, exit 0; không còn tiến trình `workerd`/`node` của worktree. Toàn bộ vitest không chạy lại (Implementer: 201 file, 2562 + 2 skipped); thay đổi code ngoài `views/requests/*` chỉ là prop tùy chọn của `Pagination` với mặc định cũ (hành vi các trang khác không đổi; typecheck sạch, bộ đầy đủ của Implementer xanh).
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| L-1 | **Đóng.** Owner duyệt nguyên văn bảng 31 khóa (2026-10-12). Reviewer so **từng byte** 31 chuỗi EN và 31 chuỗi VI trong `en.ts`/`vi.ts` với bảng ở trên bằng script riêng: 0 khác biệt; mỗi catalogue có đúng 31 khóa `board.*`. Test mới ghim cùng bảng và cấm khóa `board.*` thừa. zh-Hans/zh-Hant: AI dịch lại các khóa đổi (`intro`, `identityNote`, `cta.notBuilder`, dấu chấm của `cta.pendingBuilder|ownRequest|closed`), dùng 你, người đăng = 发布者 / 發佈者 (khớp `request.facts.client`), giữ 公开需求板 / 公開需求板; nghĩa khớp EN đã duyệt, không chữ số. Khóa chỉ đổi VI (`empty.body`, `closedNote`) giữ bản zh cũ, đúng vì EN không đổi. | script so byte; `request-board-copy.test.tsx` |
+| L-2 | **Đóng.** Không có hạn chót → chỉ "No deadline"; có → `Deadline: <ngày>`; ngày đăng `Posted: <ngày>` cùng kiểu (VI `Ngày đăng: …`). | test "card dates (L-2)" |
+| S-2 | **Đóng.** `Pagination` có prop `pageSize` (mặc định `PAGE_SIZE` của catalogue, nên `/products`, `/builders` không đổi); `BoardPage` truyền `BOARD_PAGE_SIZE`; test ghim hai cỡ bằng nhau và pager theo cỡ của bảng. | 2 test S-2 |
+| S-3 | **Đóng.** Render thẳng `BoardPage` với `items=[]`: trạng thái rỗng, hai CTA, không thẻ, không pager. Ca HTTP giữ nguyên. | test S-3 |
+| S-1 | **Chuyển 2706a** như đã thống nhất (map tường minh sang `BoardItem`). | — |
+
+Không có thay đổi ngoài phạm vi các phát hiện đã duyệt. Không phát hiện mới.
+
+### Verdict cuối
+
+**APPROVE.**
