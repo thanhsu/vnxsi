@@ -28,7 +28,15 @@ const PUBLIC_EN: Entry[] = [
   { path: "/auth/verify", url: `/auth/verify?t=${TOKENS.OK_A11Y}` },
 ];
 
-const SIGNED_IN: Entry[] = [{ path: "/hub" }, { path: "/hub/products" }, { path: `/hub/products/${DRAFT_PRODUCT.id}/edit/product` }];
+// EPIC 27 (VNX-2706a): an approved builder (MAIN, no invitation or interest on Q1) sees the interest form on /requests/<Q1>; /hub/invitations has its interest section (this file runs before
+// request-board-interest.spec.ts, so it is empty here; the spec scans the section with a row in it).
+const SIGNED_IN: Entry[] = [
+  { path: "/hub" },
+  { path: "/hub/products" },
+  { path: `/hub/products/${DRAFT_PRODUCT.id}/edit/product` },
+  { path: `/requests/${id("Q", 1)}` },
+  { path: "/hub/invitations" },
+];
 
 // The seeded client (clientPage): a request with no publication, so the "Public listing" block shows its opt-in (VNX-2703b). R 12 is never given a publication by any spec.
 const SIGNED_IN_CLIENT: Entry[] = [{ path: `/me/requests/${id("R", 12)}` }];
@@ -51,6 +59,8 @@ test.describe("axe, motion reduced", () => {
     test(`en ${entry.path.replace(DRAFT_PRODUCT.id, ":id")} (signed in)`, async ({ builderPage: page }) => {
       const res = await page.goto(entry.url ?? entry.path);
       expect(res!.status(), "the page exists").toBeLessThan(400);
+      if (entry.path.startsWith("/requests/")) await expect(page.locator("#ib-note")).toBeVisible();
+      if (entry.path === "/hub/invitations") await expect(page.locator("#interests")).toBeVisible();
       await scanA11y(page, { page: entry.path.replace(DRAFT_PRODUCT.id, ":id"), locale: "en" });
     });
   }
@@ -82,6 +92,12 @@ test.describe("axe, motion reduced", () => {
         await scanA11y(page, { page: path, locale: "en", variant: "mobile" });
       });
     }
+    // The interest form for an approved builder, at phone width (VNX-2706a).
+    test(`en /requests/${id("Q", 1)} (signed in, interest form)`, async ({ builderPage: page }) => {
+      await page.goto(`/requests/${id("Q", 1)}`);
+      await expect(page.locator("#ib-note")).toBeVisible();
+      await scanA11y(page, { page: `/requests/${id("Q", 1)}`, locale: "en", variant: "mobile" });
+    });
   });
 });
 

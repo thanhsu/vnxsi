@@ -195,12 +195,12 @@ describe("call to action (addendum 4.2)", () => {
     }
   });
 
-  it("an approved builder gets no button yet (the interest form is VNX-2706a) and no wrong message", async () => {
+  it("an approved builder gets the interest form (VNX-2706a) and neither wrong message", async () => {
     const l = await listed();
     const html = await main(l, await builderSession("approved"));
     expect(html).not.toContain(en["board.cta.pendingBuilder"]);
     expect(html).not.toContain(en["board.cta.notBuilder"]);
-    expect(html).not.toContain("<button");
+    expect(html).toContain('id="ib-note"');
   });
 
   it("the client of the request sees the link to their own request page, and nobody else gets the id", async () => {

@@ -236,25 +236,26 @@ export function returnedPublication(result: D1Result | undefined): Publication |
 // ---------------------------------------------------------------- interest writes
 
 /**
- * A builder's "I'm interested". One INSERT ... SELECT holds every gate, so two concurrent requests cannot both pass: the request
- * is open and its publication published; the builder is approved on an active account and is not the client; the builder has
+ * A builder's "I'm interested". One INSERT ... SELECT holds every gate, so two concurrent requests cannot both pass: the listing is
+ * found by its PUBLIC id and the request id is resolved here, in SQL, so no request id ever reaches the route for a non-owner (S-2);
+ * the request is open and its publication published; the builder is approved on an active account and is not the client; the builder has
  * no invitation and no interest on this request; fewer than `pendingCap` pending interests on requests that are open now (H1: an
  * interest on a closed or hidden request does not take a place); a given product is the builder's own and published.
  * 0 rows when any gate fails.
  */
 export function createInterestStatement(
   db: D1Database,
-  input: { id: string; requestId: string; builderId: string; note: string | null; productId: string | null; now: string; pendingCap: number; writeId: string },
+  input: { id: string; publicId: string; builderId: string; note: string | null; productId: string | null; now: string; pendingCap: number; writeId: string },
 ): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO request_interests (id, request_id, builder_id, note, product_id, status, created_at, updated_at, write_id)
-       SELECT ?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6, ?8
-       WHERE EXISTS (SELECT 1 FROM requests r JOIN request_publications p ON p.request_id = r.id
-                     WHERE r.id = ?2 AND r.status IN ${OPEN_REQUEST} AND p.status = 'published' AND r.client_user_id != ?3)
+       SELECT ?1, p.request_id, ?3, ?4, ?5, 'pending', ?6, ?6, ?8
+       FROM request_publications p JOIN requests r ON r.id = p.request_id
+       WHERE p.public_id = ?2 AND r.status IN ${OPEN_REQUEST} AND p.status = 'published' AND r.client_user_id != ?3
          AND EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?3 AND ${BUILDER_APPROVED_ACTIVE})
-         AND NOT EXISTS (SELECT 1 FROM request_invites x WHERE x.request_id = ?2 AND x.builder_id = ?3)
-         AND NOT EXISTS (SELECT 1 FROM request_interests i WHERE i.request_id = ?2 AND i.builder_id = ?3)
+         AND NOT EXISTS (SELECT 1 FROM request_invites x WHERE x.request_id = p.request_id AND x.builder_id = ?3)
+         AND NOT EXISTS (SELECT 1 FROM request_interests i WHERE i.request_id = p.request_id AND i.builder_id = ?3)
          AND (SELECT COUNT(*) FROM request_interests i
                 JOIN requests ir ON ir.id = i.request_id
                 JOIN request_publications ip ON ip.request_id = i.request_id
@@ -262,7 +263,7 @@ export function createInterestStatement(
          AND (?5 IS NULL OR EXISTS (SELECT 1 FROM products pr WHERE pr.id = ?5 AND pr.builder_id = ?3 AND pr.status = 'published'))
        RETURNING *`,
     )
-    .bind(input.id, input.requestId, input.builderId, input.note, input.productId, input.now, input.pendingCap, input.writeId);
+    .bind(input.id, input.publicId, input.builderId, input.note, input.productId, input.now, input.pendingCap, input.writeId);
 }
 
 /** The builder takes the interest back: pending -> withdrawn, only their own. */
@@ -439,6 +440,8 @@ export interface ViewerRelation {
   ownRequestId: string | null;
   inviteId: string | null;
   interest: { id: string; status: InterestStatus } | null;
+  /** The viewer's own published products (the select of the interest form), by name; empty for anyone without any. Read in the same query. */
+  products: { id: string; name: string }[];
   /** The viewer as a builder: no builders row, approved on an active account (L9), or any other state. Feeds the call-to-action table without a second query. */
   builder: "none" | "approved" | "not_approved";
 }
@@ -450,6 +453,7 @@ export async function findViewerRelation(db: D1Database, publicId: string, userI
          (SELECT x.id FROM request_invites x WHERE x.request_id = r.id AND x.builder_id = ?2) AS invite_id,
          (SELECT i.id FROM request_interests i WHERE i.request_id = r.id AND i.builder_id = ?2) AS interest_id,
          (SELECT i.status FROM request_interests i WHERE i.request_id = r.id AND i.builder_id = ?2) AS interest_status,
+         (SELECT json_group_array(json_object('id', q.id, 'name', q.name)) FROM (SELECT pr.id, pr.name FROM products pr WHERE pr.builder_id = ?2 AND pr.status = 'published' ORDER BY pr.name, pr.id) q) AS products,
          CASE WHEN NOT EXISTS (SELECT 1 FROM builders nb WHERE nb.user_id = ?2) THEN 'none'
               WHEN EXISTS (SELECT 1 FROM builders b JOIN users u ON u.id = b.user_id WHERE b.user_id = ?2 AND ${BUILDER_APPROVED_ACTIVE}) THEN 'approved'
               ELSE 'not_approved' END AS builder_state
@@ -457,12 +461,13 @@ export async function findViewerRelation(db: D1Database, publicId: string, userI
        WHERE p.public_id = ?1`,
     )
     .bind(publicId, userId)
-    .first<{ own_request_id: string | null; invite_id: string | null; interest_id: string | null; interest_status: InterestStatus | null; builder_state: ViewerRelation["builder"] }>();
-  if (!row) return { ownRequestId: null, inviteId: null, interest: null, builder: "none" };
+    .first<{ own_request_id: string | null; invite_id: string | null; interest_id: string | null; interest_status: InterestStatus | null; products: string; builder_state: ViewerRelation["builder"] }>();
+  if (!row) return { ownRequestId: null, inviteId: null, interest: null, products: [], builder: "none" };
   return {
     ownRequestId: row.own_request_id,
     inviteId: row.invite_id,
     interest: row.interest_id && row.interest_status ? { id: row.interest_id, status: row.interest_status } : null,
+    products: JSON.parse(row.products) as { id: string; name: string }[],
     builder: row.builder_state,
   };
 }
@@ -489,7 +494,7 @@ export async function listInterestsForRequest(db: D1Database, requestId: string)
   return results.map((r) => ({ interest: toInterest(r), builderName: r.builder_name, builderHandle: r.builder_handle, builderPublic: r.builder_public === 1, productName: r.product_name }));
 }
 
-/** A builder's own interests for the Hub: the listing's public id and title, never the request id. Newest first. */
+/** A builder's own interests for the Hub (withdrawn ones are left out, L4): the listing's public id and title, never the request id. Newest first. */
 export interface BuilderInterestItem {
   id: string;
   status: InterestStatus;
@@ -501,6 +506,8 @@ export interface BuilderInterestItem {
   /** For requestVisibility (the 30-day window of a closed request). */
   closedAt: string | null;
   publicationStatus: PublicationStatus;
+  /** The builder's invitation to this request, once Ops invited them (the Hub links to it). */
+  inviteId: string | null;
 }
 
 export async function listBuilderInterests(db: D1Database, builderId: string, limit = 100): Promise<BuilderInterestItem[]> {
@@ -508,13 +515,30 @@ export async function listBuilderInterests(db: D1Database, builderId: string, li
     .prepare(
       `SELECT i.id, i.status, i.created_at, p.public_id,
          CASE WHEN p.status = 'published' AND r.status <> 'removed' THEN p.public_title END AS public_title,
-         p.status AS pub_status, r.status AS request_status, r.closed_at
+         p.status AS pub_status, r.status AS request_status, r.closed_at,
+         (SELECT x.id FROM request_invites x WHERE x.request_id = i.request_id AND x.builder_id = i.builder_id) AS invite_id
        FROM request_interests i JOIN request_publications p ON p.request_id = i.request_id JOIN requests r ON r.id = i.request_id
-       WHERE i.builder_id = ?1 ORDER BY i.created_at DESC, i.id DESC LIMIT ?2`,
+       WHERE i.builder_id = ?1 AND i.status <> 'withdrawn' ORDER BY i.created_at DESC, i.id DESC LIMIT ?2`,
     )
     .bind(builderId, limit)
-    .all<{ id: string; status: InterestStatus; created_at: string; public_id: string; public_title: string | null; pub_status: PublicationStatus; request_status: RequestStatus; closed_at: string | null }>();
-  return results.map((r) => ({ id: r.id, status: r.status, createdAt: r.created_at, publicId: r.public_id, publicTitle: r.public_title, requestStatus: r.request_status, closedAt: r.closed_at, publicationStatus: r.pub_status }));
+    .all<{ id: string; status: InterestStatus; created_at: string; public_id: string; public_title: string | null; pub_status: PublicationStatus; request_status: RequestStatus; closed_at: string | null; invite_id: string | null }>();
+  return results.map((r) => ({ id: r.id, status: r.status, createdAt: r.created_at, publicId: r.public_id, publicTitle: r.public_title, requestStatus: r.request_status, closedAt: r.closed_at, publicationStatus: r.pub_status, inviteId: r.invite_id }));
+}
+
+/**
+ * Why the INSERT wrote nothing, for the message only (the INSERT alone decides): the product is not the builder's own published one, or the
+ * builder already has `pendingCap` waiting interests on open requests. One read, run only after a refusal.
+ */
+export async function diagnoseInterestRefusal(db: D1Database, input: { builderId: string; productId: string | null; pendingCap: number }): Promise<{ badProduct: boolean; capped: boolean }> {
+  const row = await db
+    .prepare(
+      `SELECT (?2 IS NOT NULL AND NOT EXISTS (SELECT 1 FROM products pr WHERE pr.id = ?2 AND pr.builder_id = ?1 AND pr.status = 'published')) AS bad_product,
+              ((SELECT COUNT(*) FROM request_interests i JOIN requests ir ON ir.id = i.request_id JOIN request_publications ip ON ip.request_id = i.request_id
+                WHERE i.builder_id = ?1 AND i.status = 'pending' AND ir.status IN ${OPEN_REQUEST} AND ip.status = 'published') >= ?3) AS capped`,
+    )
+    .bind(input.builderId, input.productId, input.pendingCap)
+    .first<{ bad_product: number; capped: number }>();
+  return { badProduct: row?.bad_product === 1, capped: row?.capped === 1 };
 }
 
 export async function findInterestFor(db: D1Database, requestId: string, builderId: string): Promise<Interest | null> {

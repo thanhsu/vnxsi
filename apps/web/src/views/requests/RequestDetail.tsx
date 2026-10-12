@@ -6,21 +6,21 @@ import { countryName } from "../country.ts";
 import { BUDGET_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "../labels.ts";
 import { Layout } from "../Layout.tsx";
 import { PlainText } from "../PlainText.tsx";
-import { InterestBlock, type Cta } from "./InterestBlock.tsx";
+import { InterestBlock, type Cta, type InterestProblem } from "./InterestBlock.tsx";
 import type { BoardItem } from "./RequestCard.tsx";
 
-type Props = { locale: Locale; origin: string; item: BoardItem; closed: boolean; cta: Cta; signedIn: boolean };
+type Props = { locale: Locale; origin: string; item: BoardItem; closed: boolean; cta: Cta; signedIn: boolean; problems?: readonly InterestProblem[] };
 
 /**
  * /requests/:publicId (addendum §4.1, §4.2, §7.3). The public wording only, as plain text; a closed listing says "Closed" and nothing about how it
  * ended (no outcome, no counts). The page never carries the client, the original wording or any request id. A closed page stays out of the index.
  */
-export const RequestDetail: FC<Props> = ({ locale, origin, item, closed, cta, signedIn }) => {
+export const RequestDetail: FC<Props> = ({ locale, origin, item, closed, cta, signedIn, problems = [] }) => {
   const tr = translator(locale);
   const title = item.publicTitle ?? "";
   const description = item.publicDescription ?? "";
   return (
-    <Layout locale={locale} title={`${title} · VNX.SI`} description={publicMetaDescription(description)} origin={origin} rest={`/requests/${item.publicId}`} noindex={closed} signedIn={signedIn}>
+    <Layout locale={locale} title={`${title} · VNX.SI`} description={publicMetaDescription(description)} origin={origin} rest={`/requests/${item.publicId}`} noindex={closed} signedIn={signedIn} invalid={problems.length > 0}>
       <p>
         <a href={localizedPath(locale, "/requests")}>{tr("board.detail.back")}</a>
       </p>
@@ -55,7 +55,7 @@ export const RequestDetail: FC<Props> = ({ locale, origin, item, closed, cta, si
         <PlainText text={description} />
         <p class="muted">{tr("board.detail.identityNote")}</p>
       </section>
-      <InterestBlock locale={locale} cta={cta} />
+      <InterestBlock locale={locale} publicId={item.publicId} cta={cta} problems={problems} />
     </Layout>
   );
 };

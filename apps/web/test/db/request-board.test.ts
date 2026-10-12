@@ -31,6 +31,7 @@ import {
   withdrawStatement,
   type Publication,
 } from "../../src/db/request-board.ts";
+import { createProductDraft } from "../../src/db/products.ts";
 import { createRequestStatements, inviteBuildersBatch } from "../../src/db/requests.ts";
 import { ulid } from "../../src/lib/ulid.ts";
 import { addLiveProduct, ensureUser, makeBuilder, makeRequest } from "../fixtures.ts";
@@ -76,7 +77,9 @@ async function approvedBuilder(tag: string) {
 }
 
 async function express(requestId: string, builderId: string, o: { note?: string | null; productId?: string | null; cap?: number; now?: string } = {}) {
-  return run1(createInterestStatement(db(), { id: ulid(), writeId: ulid(), requestId, builderId, note: o.note ?? null, productId: o.productId ?? null, now: o.now ?? T0, pendingCap: o.cap ?? 30 }), returnedInterest);
+  // S-2: the statement takes the public id; a request without a publication gets one that matches nothing.
+  const publicId = (await db().prepare("SELECT public_id FROM request_publications WHERE request_id = ?1").bind(requestId).first<{ public_id: string }>())?.public_id ?? "NO-PUBLICATION";
+  return run1(createInterestStatement(db(), { id: ulid(), writeId: ulid(), publicId, builderId, note: o.note ?? null, productId: o.productId ?? null, now: o.now ?? T0, pendingCap: o.cap ?? 30 }), returnedInterest);
 }
 
 describe("db/request-board: publication writes (VNX-2702a)", () => {
@@ -490,12 +493,12 @@ describe("db/request-board: H2 findViewerRelation, one query, no foreign request
     const invite = inviteBuildersBatch(db(), { requestId: live.request.id, builderIds: [invited.userId], invitedBy: admin.id, now: at(1000) });
     await db().batch(invite.statements);
     const pid = live.publication.publicId;
-    expect(await findViewerRelation(db(), pid, live.client.id)).toEqual({ ownRequestId: live.request.id, inviteId: null, interest: null, builder: "none" });
-    expect(await findViewerRelation(db(), pid, interested.userId)).toEqual({ ownRequestId: null, inviteId: null, interest: { id: interest.id, status: "pending" }, builder: "approved" });
-    expect(await findViewerRelation(db(), pid, invited.userId)).toEqual({ ownRequestId: null, inviteId: invite.inviteIds[0], interest: null, builder: "approved" });
-    expect(await findViewerRelation(db(), pid, stranger.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, builder: "none" });
+    expect(await findViewerRelation(db(), pid, live.client.id)).toEqual({ ownRequestId: live.request.id, inviteId: null, interest: null, products: [], builder: "none" });
+    expect(await findViewerRelation(db(), pid, interested.userId)).toEqual({ ownRequestId: null, inviteId: null, interest: { id: interest.id, status: "pending" }, products: [], builder: "approved" });
+    expect(await findViewerRelation(db(), pid, invited.userId)).toEqual({ ownRequestId: null, inviteId: invite.inviteIds[0], interest: null, products: [], builder: "approved" });
+    expect(await findViewerRelation(db(), pid, stranger.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, products: [], builder: "none" });
     expect(JSON.stringify(await findViewerRelation(db(), pid, stranger.id))).not.toContain(live.request.id);
-    expect(await findViewerRelation(db(), "01NOSUCHPUBLICID0000000000", live.client.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, builder: "none" });
+    expect(await findViewerRelation(db(), "01NOSUCHPUBLICID0000000000", live.client.id)).toEqual({ ownRequestId: null, inviteId: null, interest: null, products: [], builder: "none" });
   });
 
   it("gives three builder states: none, approved, not_approved (L9)", async () => {
@@ -510,6 +513,33 @@ describe("db/request-board: H2 findViewerRelation, one query, no foreign request
     const userSuspended = await approvedBuilder("rb-rel-state-us");
     await db().prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(userSuspended.userId).run();
     expect(await state(userSuspended.userId)).toBe("not_approved");
+  });
+
+  it("VNX-2706a: lists the viewer's own published products for the interest form, in the same query (not a draft, not another builder's)", async () => {
+    const live = await published("rb-rel-prod");
+    const me = await approvedBuilder("rb-rel-prod-me");
+    const other = await approvedBuilder("rb-rel-prod-other");
+    const mine = await addLiveProduct(me, "rb-rel-prod B mine");
+    const first = await addLiveProduct(me, "rb-rel-prod A mine");
+    await addLiveProduct(other, "rb-rel-prod theirs");
+    await createProductDraft(db(), { builderId: me.userId, name: "rb-rel-prod draft", now: T0 });
+    const rel = await findViewerRelation(db(), live.publication.publicId, me.userId);
+    expect(rel.products).toEqual([
+      { id: first.id, name: "rb-rel-prod A mine" },
+      { id: mine.id, name: "rb-rel-prod B mine" },
+    ]);
+    expect((await findViewerRelation(db(), live.publication.publicId, other.userId)).products.map((p) => p.name)).toEqual(["rb-rel-prod theirs"]);
+  });
+
+  it("VNX-2706a: the Hub list carries the invitation id of an invited interest, null otherwise", async () => {
+    const live = await published("rb-hub-inv");
+    const builder = await approvedBuilder("rb-hub-inv-b");
+    await express(live.request.id, builder.userId);
+    expect((await listBuilderInterests(db(), builder.userId))[0]?.inviteId).toBeNull();
+    const admin = await ensureUser("owner@vnx.si");
+    const invite = inviteBuildersBatch(db(), { requestId: live.request.id, builderIds: [builder.userId], invitedBy: admin.id, now: at(1000) });
+    await db().batch(invite.statements);
+    expect((await listBuilderInterests(db(), builder.userId))[0]?.inviteId).toBe(invite.inviteIds[0]);
   });
 
 });
@@ -688,7 +718,7 @@ describe("db/request-board: audit guards match a per-write id (VNX-2702c)", () =
     const builder = await approvedBuilder("wid-icr-b");
     const interestId = ulid();
     await raceOnInterest("wid-icr", "request_interest.create", interestId, at(1000), (r) =>
-      createInterestStatement(db(), { id: interestId, writeId: r.writeId, requestId: live.request.id, builderId: builder.userId, note: null, productId: null, now: at(1000), pendingCap: 30 }),
+      createInterestStatement(db(), { id: interestId, writeId: r.writeId, publicId: live.publication.publicId, builderId: builder.userId, note: null, productId: null, now: at(1000), pendingCap: 30 }),
     );
   });
 

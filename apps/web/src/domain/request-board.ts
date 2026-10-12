@@ -141,6 +141,20 @@ export function requestVisibility(requestStatus: RequestStatus, publicationStatu
   return at < closed + CLOSED_VISIBLE_DAYS * DAY_MS ? "closed" : "hidden";
 }
 
+/** What the Hub shows a builder about their interest (addendum §4.4, L4): three states, and nothing for a withdrawn one. */
+export type HubInterestState = "pending" | "invited" | "not_invited";
+
+/**
+ * `pending` while the request is still open; `not_invited` when Ops dismissed it or the request ended without inviting this builder;
+ * `invited` once invited. A withdrawn interest has no state (the Hub does not list it).
+ */
+export function hubInterestState(status: InterestStatus, requestStatus: RequestStatus): HubInterestState | null {
+  if (status === "withdrawn") return null;
+  if (status === "invited") return "invited";
+  if (status === "dismissed") return "not_invited";
+  return OPEN_REQUEST.includes(requestStatus) ? "pending" : "not_invited";
+}
+
 // ---------------------------------------------------------------- parsers
 
 /** Control and format characters (zero-width, bidi overrides, ...). */

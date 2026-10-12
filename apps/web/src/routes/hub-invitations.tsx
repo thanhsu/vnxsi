@@ -1,8 +1,10 @@
 import type { Context, Hono } from "hono";
 import { requireBuilder } from "../auth/middleware.ts";
 import { auditStatement } from "../db/audit.ts";
+import { listBuilderInterests } from "../db/request-board.ts";
 import { declineInviteStatement, findBuilderInvitation, listBuilderInvitations, proposeStatement, returnedInvite } from "../db/requests.ts";
 import { parseDeclineReason } from "../domain/inquiry.ts";
+import { hubInterestState, requestVisibility } from "../domain/request-board.ts";
 import { inviteTransition, parseProposal, proposalValuesFromBody, type Invitation } from "../domain/request.ts";
 import type { AppEnv } from "../env.ts";
 import { localizedPath } from "../i18n/locales.ts";
@@ -10,7 +12,7 @@ import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
 import { notifyProposal } from "../notify/request.ts";
 import { errorResponse } from "../views/error-response.tsx";
-import { InvitationListPage, InvitationPage } from "../views/hub/InvitationsPage.tsx";
+import { InvitationListPage, InvitationPage, type HubInterestRow } from "../views/hub/InvitationsPage.tsx";
 import { page } from "../views/render.ts";
 
 type Extra = Omit<Parameters<typeof InvitationPage>[0], "locale" | "origin" | "item" | "approved">;
@@ -56,8 +58,26 @@ async function respond(c: Context<AppEnv>, action: "propose" | "decline") {
 
 export function registerHubInvitationRoutes(app: Hono<AppEnv>) {
   onLocalized(app, "get", "/hub/invitations", requireBuilder, async (c) => {
-    const items = await listBuilderInvitations(c.env.DB, c.get("builder").userId);
-    return page(c, <InvitationListPage locale={c.get("locale")} origin={requestOrigin(c)} items={items} />);
+    const builderId = c.get("builder").userId;
+    const locale = c.get("locale");
+    const now = new Date();
+    const [items, interests] = await Promise.all([listBuilderInvitations(c.env.DB, builderId), listBuilderInterests(c.env.DB, builderId)]);
+    // VNX-2706a (addendum 4.4, L4): an explicit mapping, so nothing but these fields reaches the view. The title only while the listing may still be seen.
+    const rows: HubInterestRow[] = [];
+    for (const i of interests) {
+      const state = hubInterestState(i.status, i.requestStatus);
+      if (state === null) continue;
+      const visible = requestVisibility(i.requestStatus, i.publicationStatus, i.closedAt, now) !== "hidden";
+      rows.push({
+        id: i.id,
+        publicId: i.publicId,
+        title: visible ? i.publicTitle : null,
+        state,
+        sentOn: i.createdAt.slice(0, 10),
+        inviteHref: state === "invited" && i.inviteId ? localizedPath(locale, `/hub/invitations/${i.inviteId}`) : null,
+      });
+    }
+    return page(c, <InvitationListPage locale={locale} origin={requestOrigin(c)} items={items} interests={rows} />);
   });
 
   onLocalized(app, "get", "/hub/invitations/:id", requireBuilder, async (c) => {
