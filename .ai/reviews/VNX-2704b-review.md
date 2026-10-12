@@ -87,3 +87,27 @@ Căn cứ: Privacy §4 và §3 (§12.2 EN / §12.6 VI, Owner duyệt 2026-10-07)
 - **VNX-2706b:** thẻ "Interests waiting" theo cùng khuôn: một hằng số truy vấn dùng chung cho thẻ, khối và danh sách; thẻ có `state:"error"` riêng; Content chỉ thấy số. Nếu thêm email, gọi sau batch và CAS, đọc lại trạng thái trước khi gửi.
 - **VNX-2709:** kịch bản vòng đời đi qua cả ba email (publish có sửa, unpublish), và trường hợp cổng tắt theo phương án được chọn ở M-1.
 - **Ghi nhận (CURRENT-STATUS):** notice `mail_failed` của Ops ở trang builders/products vẫn dùng `admin.mailFailed` (đúng người nhận ở đó); log `notify_failed` chép `String(err)` của mailer như khuôn M6. Nếu nhà cung cấp mail đưa địa chỉ vào thông báo lỗi thì địa chỉ có thể lọt vào log. Đây là rủi ro chung của mọi notify, không riêng task này; nên xử lý trong một task riêng.
+
+## Re-review (vòng sửa 1, `cf7dee9`)
+
+- **Ngày:** 2026-10-12. **Đã đọc:** diff `eeae120..cf7dee9` (15 file, +190/−47), mục "Vòng sửa 1" của báo cáo. **Quyết định đã có:** M-1 theo phương án (a) (controller vnxsi-72); L-1: Owner duyệt nguyên văn bảng câu chữ ở trên (2026-10-12).
+- **Lệnh đã chạy lại (HEAD `cf7dee9`):**
+  - `npm run typecheck -w apps/web`: exit 0.
+  - `npm test -w apps/web -- test/ops/marketplace-request-board.test.ts test/ops/overview.test.ts test/ops/layout.test.ts test/email/request-board-templates.test.ts test/notify/request-board.test.ts test/i18n/parity.test.ts test/domain/request-board.test.ts test/ops/guard.test.ts --maxWorkers=2 --testTimeout=60000`: **8 file, 154 test xanh**.
+  - `npm run e2e` (một lần): **63 passed, 2 failed** ở `editor.spec.ts` (`browserContext.close: Target page… has been closed`, rồi `worker process exited unexpectedly (code=2147483651)`): worker Playwright bị sập. Chạy lại riêng `npm run e2e -- tests/editor.spec.ts`: **4/4 xanh**. Vòng sửa không chạm editor, Hub hay `e2e/`, nên đây là bất ổn định hạ tầng (máy thiếu bộ nhớ, ổ C ~4 GB trống), không phải finding. Các ca của bảng (`request-board-forms.spec.ts`, kể cả Ops Publish với cổng bật nhờ seed cờ + `REQUEST_BOARD_GO_LIVE` của `serve.mjs`) đều xanh. Sau khi chạy không còn tiến trình `workerd`/`node` nào của worktree.
+  - Bộ đầy đủ không chạy lại (Implementer: 198 file / 2518 + 2 skipped; Reviewer chạy 2513 + 2 skipped ở vòng trước, +5 đúng bằng số test mới).
+- **Kiểm byte câu chữ:** script so 12 khóa `email.board*` trong `en.ts`/`vi.ts` với bảng "Câu chữ cho Owner duyệt" ở trên: **24/24 khớp từng byte**. zh-Hans/zh-Hant được dịch lại từ EN đã duyệt (你, 公开需求板 / 公開需求板, thứ tự finalNote như `me.board.finalNote` zh); đọc lại thấy đúng nghĩa, chờ VNX-0801.
+
+| # | Trạng thái | Bằng chứng |
+|---|---|---|
+| M-1 | **Đóng** | `opsBoardActions(status, requestStatus, boardOn)`: publish cần `boardOn`; reject/edit/unpublish không đọc cổng. Route truyền `c.get("requestBoard")` (cờ **và** ngày), view nhận `boardOn` từ cùng nguồn nên route và khối không lệch. Cổng tắt: không có form Publish, có câu `ops.board.gateOff`, POST giả mạo → 409, publication không đổi, 0 audit, 0 email. Có ca riêng cho từng nửa của cổng (cờ tắt; cờ bật nhưng ngày rỗng). Bật lại cổng thì cùng form publish được. Reject, edit, unpublish khi cổng tắt → 303. File test Ops nay chạy với cổng bật (`beforeAll` bật cờ, `env` có ngày; `afterAll` tắt lại). |
+| L-1 | **Đóng** | 12 khóa đúng bảng Owner duyệt (24/24 byte); test "Owner-approved copy, byte for byte" ghim lại; assertion cũ đã đổi. |
+| L-2 | **Đóng** | `Notice` nhận `mailFailed` (mặc định `admin.mailFailed`, kiểu chỉ cho hai khóa); trang danh sách và chi tiết request truyền `admin.requests.mailFailed`. Test: "some emails couldn't be sent", không có "to the builder". Trang builders/products giữ nguyên. |
+| L-3 | **Đóng** | `ORDER BY max(p.opted_in_at, COALESCE(r.submitted_at, p.opted_in_at)), r.id` (cùng biểu thức với tuổi của thẻ), có test thứ tự hai request; chân bảng dùng `ops.list.shown` khi có bộ lọc; `ops.requests.publicEmpty` (chỉ EN) cho hàng chờ rỗng, test render thẳng view. |
+| S-1 | Ghi nhận | Phán quyết 5 giữ nguyên. |
+
+**Mới, SUGGESTION (không chặn):** câu `ops.board.gateOff` ("Publishing opens when the public request board goes live. You can still reject this listing.") hiện cả khi request đã đóng (vốn không publish được dù cổng bật) và trong trường hợp công tắc khẩn cấp sau go-live ("goes live" khi bảng đã từng live). Câu chỉ dành cho Ops nội bộ, không sai về hành động được phép; có thể đổi thành "Publishing is off while the public request board is off. You can still reject this listing." và chỉ hiện khi `publicationTransition(publish)` hợp lệ. Ghi vào "Ghi nhận", không làm ở task này.
+
+### Verdict cuối
+
+**APPROVE.** Mọi phát hiện đã đóng. Nghĩa vụ ở mục "Nghĩa vụ để lại cho task sau" giữ nguyên (trừ dòng vòng sửa 2704b); VNX-2709 thêm kịch bản publish khi cổng tắt theo phán quyết M-1. Đã ghi vào `.ai/context/CURRENT-STATUS.md`.
