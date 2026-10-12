@@ -173,7 +173,7 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
           ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)).slice(0, HISTORY_LIMIT) }
           : { state: "error" };
     }
-    return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form } : undefined} {...rest} />, status);
+    return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form, boardOn: c.get("requestBoard") } : undefined} {...rest} />, status);
   }
 
   /** Ops's answer to each outcome of the shared request functions; `doneTo` is where a success goes. */

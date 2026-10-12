@@ -55,7 +55,8 @@ export const SearchForm: FC<{ action: string; q: string | null; keep: Record<str
 
 export type OpsNotice = "done" | "mail_failed" | "conflict" | null;
 
-export const Notice: FC<{ notice: OpsNotice }> = ({ notice }) =>
+/** `mailFailed`: the text for a failed e-mail; the default names the builder, a page that e-mails someone else passes its own. */
+export const Notice: FC<{ notice: OpsNotice; mailFailed?: "admin.mailFailed" | "admin.requests.mailFailed" }> = ({ notice, mailFailed = "admin.mailFailed" }) =>
   notice === "done" ? (
     <p class="ops-notice ops-notice-ok" role="status">
       {tr("admin.done")}
@@ -63,7 +64,7 @@ export const Notice: FC<{ notice: OpsNotice }> = ({ notice }) =>
   ) : notice ? (
     <p class="ops-notice ops-notice-warn" role="alert">
       <AlertIcon />
-      {tr(notice === "mail_failed" ? "admin.mailFailed" : "ops.notice.conflict")}
+      {tr(notice === "mail_failed" ? mailFailed : "ops.notice.conflict")}
     </p>
   ) : null;
 

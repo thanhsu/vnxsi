@@ -43,7 +43,7 @@ describe("request board notifications", () => {
     await notifyPublicationPublished(testEnv, a.request.id, { edited: true });
     const b = await listing("nb-ed2", "published");
     await notifyPublicationPublished(testEnv, b.request.id, { edited: false });
-    expect(outbox[0]!.text).toContain("edited the wording");
+    expect(outbox[0]!.text).toContain("edited the title or description");
     expect(outbox[1]!.text).not.toContain("edited");
   });
 

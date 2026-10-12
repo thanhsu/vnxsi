@@ -1,7 +1,10 @@
 import { ulid } from "../../src/lib/ulid.ts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { createApp } from "../../src/app.ts";
+import { resetFlagCache, setFlag } from "../../src/db/flags.ts";
+import type { OpsShell } from "../../src/views/ops/OpsLayout.tsx";
+import { RequestsListPage } from "../../src/views/ops/RequestsPages.tsx";
 import { countPublicationReviewQueue, findPublicationByRequestId, findPublicListing, optInStatement, rejectStatement, returnedPublication, type Publication } from "../../src/db/request-board.ts";
 import type { GrantableRole, OpsRole } from "../../src/domain/ops.ts";
 import { opsBoardActions, PUBLIC_DESCRIPTION_MAX, wordingEdited } from "../../src/domain/request-board.ts";
@@ -17,7 +20,17 @@ import { testEnv } from "../helpers.ts";
 
 const tag = () => crypto.randomUUID().slice(0, 8);
 const ROOT = "owner@vnx.si";
-const env = { ...testEnv, ADMIN_EMAILS: ROOT } as Bindings;
+const GO_LIVE = "2026-01-01";
+const env = { ...testEnv, ADMIN_EMAILS: ROOT, REQUEST_BOARD_GO_LIVE: GO_LIVE } as Bindings;
+
+/** The request_board flag (the gate is this flag AND REQUEST_BOARD_GO_LIVE; env above has the date). */
+async function boardFlag(enabled: boolean): Promise<void> {
+  const admin = await ensureUser(ROOT);
+  await setFlag(testEnv.DB, { key: "request_board", enabled, actorUserId: admin.id, now: new Date().toISOString() });
+  resetFlagCache();
+}
+beforeAll(() => boardFlag(true));
+afterAll(() => boardFlag(false));
 const BASE = "/ops/marketplace/requests";
 const DESC = "We need online booking with SMS reminders for three salons in Hanoi.";
 const ORIGINAL = "ORIGINAL-SECRET-TITLE";
@@ -594,11 +607,12 @@ describe("VNX-2704a review fixes (round 1)", () => {
     const g = await listing();
     const [ok] = await testEnv.DB.batch([rejectStatement(testEnv.DB, { writeId: ulid(), requestId: g.requestId, expectedUpdatedAt: g.publication.updatedAt, reviewNote: "fine", reviewedBy: ops.id, now: new Date().toISOString() })]);
     expect(returnedPublication(ok)?.status).toBe("rejected");
-    expect(opsBoardActions("pending_review", "pending_verification")).toEqual([]);
-    expect(opsBoardActions("pending_review", "submitted")).toEqual(["publish", "reject"]);
-    expect(opsBoardActions("pending_review", "builder_selected")).toEqual(["reject"]);
-    expect(opsBoardActions("published", "removed")).toEqual(["edit", "unpublish"]);
-    expect(opsBoardActions("rejected", "submitted")).toEqual([]);
+    expect(opsBoardActions("pending_review", "pending_verification", true)).toEqual([]);
+    expect(opsBoardActions("pending_review", "submitted", true)).toEqual(["publish", "reject"]);
+    expect(opsBoardActions("pending_review", "submitted", false)).toEqual(["reject"]);
+    expect(opsBoardActions("pending_review", "builder_selected", true)).toEqual(["reject"]);
+    expect(opsBoardActions("published", "removed", false)).toEqual(["edit", "unpublish"]);
+    expect(opsBoardActions("rejected", "submitted", true)).toEqual([]);
   });
 
   it("L-4a: a wrong-state action with an invalid text is a 409, not a 400 (state is checked first)", async () => {
@@ -781,7 +795,7 @@ describe("VNX-2704b: the e-mails to the client after Ops moderates", () => {
     expect(outbox[0]).toMatchObject({ to: edited.email });
     expect(outbox[0]!.text).toContain(`https://vnx.si/vi/requests/${publicId}`);
     expect(outbox[0]!.text).toContain(`https://vnx.si/vi/me/requests/${edited.requestId}`);
-    expect(outbox[0]!.text).toContain("chỉnh sửa câu chữ");
+    expect(outbox[0]!.text).toContain("sửa tiêu đề hoặc mô tả");
     // Published exactly as the client wrote it: nothing to say about an edit.
     const description = "A description that is exactly as the client wrote it, long enough to publish as it is.";
     const same = await fresh({ title: `Same title ${tag()}`, description });
@@ -834,7 +848,8 @@ describe("VNX-2704b: the e-mails to the client after Ops moderates", () => {
       expect(lines).toHaveLength(1);
       expect(lines[0]).not.toContain(f.email);
       const shown = await get(`${location.pathname}${location.search}`, cookie);
-      expect(mainOf(shown.html)).toContain("couldn&#39;t be sent");
+      expect(mainOf(shown.html)).toContain("some emails couldn&#39;t be sent");
+      expect(mainOf(shown.html)).not.toContain("to the builder");
     } finally {
       log.mockRestore();
     }
@@ -845,5 +860,80 @@ describe("VNX-2704b: the e-mails to the client after Ops moderates", () => {
     expect(wordingEdited({ title: "A ", description: "x\ny" }, { title: "A", description: "x\ny\n" })).toBe(false);
     expect(wordingEdited({ title: "A", description: "x\ny" }, { title: "B", description: "x\ny" })).toBe(true);
     expect(wordingEdited({ title: "A", description: "x\ny" }, { title: "A", description: "x\nz" })).toBe(true);
+  });
+});
+
+describe("VNX-2704b review M-1: Publish needs the board gate; reject, edit and unpublish do not", () => {
+  afterEach(async () => {
+    clearOutbox();
+    await boardFlag(true);
+  });
+
+  it("gate off: the block has no Publish button and says why; the forged POST is 409 with no write, no audit and no e-mail", async () => {
+    const { cookie } = await asRole("owner");
+    const f = await listing();
+    await boardFlag(false);
+    const main = mainOf((await get(`${BASE}/${f.requestId}`, cookie)).html);
+    expect(main).toContain("pl-block");
+    expect(main).not.toContain(`action="${url(f.requestId, "publish")}"`);
+    expect(main).toContain(`action="${url(f.requestId, "reject")}"`);
+    expect(main).toContain("Publishing opens when the public request board goes live");
+    clearOutbox();
+    const res = await post(url(f.requestId, "publish"), cookie, formFor(f, wording(f.text)));
+    expect(res.status).toBe(409);
+    expect(await pubOf(f.requestId)).toEqual(f.publication);
+    expect(await auditCount(f.requestId)).toBe(0);
+    expect(outbox).toHaveLength(0);
+    // The date alone is a gate too: the flag on, no go-live date.
+    await boardFlag(true);
+    const noDate = { ...env, REQUEST_BOARD_GO_LIVE: "" } as Bindings;
+    expect((await post(url(f.requestId, "publish"), cookie, formFor(f, wording(f.text)), noDate)).status).toBe(409);
+    expect(await auditCount(f.requestId)).toBe(0);
+    // Gate on again: the same form publishes.
+    expect((await post(url(f.requestId, "publish"), cookie, formFor(f, wording(f.text)))).status).toBe(303);
+    expect(await auditCount(f.requestId)).toBe(1);
+  });
+
+  it("gate off: reject, edit and unpublish still work", async () => {
+    const { cookie } = await asRole("owner");
+    const pending = await listing();
+    const published = await listing({ state: "published" });
+    const second = await listing({ state: "published" });
+    await boardFlag(false);
+    expect((await post(url(pending.requestId, "reject"), cookie, formFor(pending, { review_note: "Too vague." }))).status).toBe(303);
+    expect((await post(url(published.requestId, "edit"), cookie, formFor(published, { public_title: "E2E board retitled", public_description: `Retitled wording. ${DESC}` }))).status).toBe(303);
+    expect((await post(url(second.requestId, "unpublish"), cookie, formFor(second, { review_note: "No longer fits." }))).status).toBe(303);
+  });
+});
+
+describe("VNX-2704b review L-3: the review-queue list", () => {
+  const rowIds = (html: string) => [...html.matchAll(/href="\/ops\/marketplace\/requests\/([0-9A-Z]{26})[?"]/g)].map((m) => m[1]!);
+  const shell: OpsShell = { role: "owner", email: "o@vnx.si", environment: "local", menu: [] };
+
+  it("orders by when the listing entered the queue: a request submitted long ago but opted in later comes after one that was waiting", async () => {
+    const { cookie } = await asRole("owner");
+    const old = await listing({ title: `Order needle old ${tag()}` });
+    const late = await listing({ title: `Order needle late ${tag()}` });
+    const t = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    // `old` was submitted 10 days ago and opted in 9 days ago; `late` was submitted 30 days ago but opted in 1 day ago.
+    await testEnv.DB.prepare("UPDATE requests SET submitted_at = ?2 WHERE id = ?1").bind(old.requestId, t(10)).run();
+    await testEnv.DB.prepare("UPDATE request_publications SET opted_in_at = ?2 WHERE request_id = ?1").bind(old.requestId, t(9)).run();
+    await testEnv.DB.prepare("UPDATE requests SET submitted_at = ?2 WHERE id = ?1").bind(late.requestId, t(30)).run();
+    await testEnv.DB.prepare("UPDATE request_publications SET opted_in_at = ?2 WHERE request_id = ?1").bind(late.requestId, t(1)).run();
+    const ids = rowIds(mainOf((await get(`${BASE}?public=pending&q=order%20needle`, cookie)).html));
+    expect(ids).toEqual([old.requestId, late.requestId]);
+  });
+
+  it("the footer counts what is shown (no 'of {total}'), and an empty queue has its own sentence", async () => {
+    const { cookie } = await asRole("owner");
+    await listing();
+    const main = mainOf((await get(`${BASE}?public=pending`, cookie)).html);
+    expect(main).toMatch(/\d+ shown/);
+    expect(main).not.toMatch(/\d+ of \d+/);
+    const empty = String(
+      RequestsListPage({ shell, status: null, publicPending: true, q: null, counts: {}, items: [], publications: new Map(), notice: null }),
+    );
+    expect(empty).toContain("No public listings are waiting for review.");
+    expect(empty).not.toContain("No requests with this status.");
   });
 });

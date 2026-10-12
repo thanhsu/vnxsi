@@ -71,10 +71,12 @@ export type OpsBoardAction = "publish" | "edit" | "reject" | "unpublish";
  * The one rule for which moderation actions Ops has on a listing: the route refuses any other and the block shows only these.
  * Publish needs an open request (7.1); edit only a published listing; reject and unpublish follow 7.1, and a listing whose request still
  * waits for the client's e-mail confirmation cannot be rejected (it is not in the review queue, and no e-mail may go to an unconfirmed address).
+ * Publish also needs the board gate (`boardOn`: the flag and REQUEST_BOARD_GO_LIVE): with the gate off the public page answers 404, so
+ * publishing would make a listing that is not visible and e-mail the client that it is. Reject, edit and unpublish never depend on the gate.
  */
-export function opsBoardActions(status: PublicationStatus | null, requestStatus: RequestStatus): OpsBoardAction[] {
+export function opsBoardActions(status: PublicationStatus | null, requestStatus: RequestStatus, boardOn: boolean): OpsBoardAction[] {
   const out: OpsBoardAction[] = [];
-  if (publicationTransition(status, "publish", "ops", requestStatus).ok) out.push("publish");
+  if (boardOn && publicationTransition(status, "publish", "ops", requestStatus).ok) out.push("publish");
   if (canEditPublication(status)) out.push("edit");
   if (requestStatus !== "pending_verification" && publicationTransition(status, "reject", "ops", requestStatus).ok) out.push("reject");
   if (publicationTransition(status, "unpublish", "ops", requestStatus).ok) out.push("unpublish");

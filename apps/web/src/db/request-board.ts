@@ -548,10 +548,10 @@ export async function countPublicationReviewQueue(db: D1Database): Promise<numbe
   return (await publicationReviewQueue(db)).count;
 }
 
-/** The Requests list filter `public=pending`: the ids in the review queue, oldest first (as the submitted tab), narrowed to titles containing `q`. */
+/** The Requests list filter `public=pending`: the ids in the review queue, oldest waiting first (the same instant as the Overview card's age), narrowed to titles containing `q`. */
 export async function listReviewQueueRequestIds(db: D1Database, q: string | null, limit = 200): Promise<string[]> {
   const { results } = await db
-    .prepare(`SELECT r.id ${REVIEW_QUEUE} AND (?1 IS NULL OR instr(lower(r.title), ?1) > 0) ORDER BY COALESCE(r.submitted_at, r.created_at), r.id LIMIT ?2`)
+    .prepare(`SELECT r.id ${REVIEW_QUEUE} AND (?1 IS NULL OR instr(lower(r.title), ?1) > 0) ORDER BY max(p.opted_in_at, COALESCE(r.submitted_at, p.opted_in_at)), r.id LIMIT ?2`)
     .bind(q === null ? null : q.toLowerCase(), limit)
     .all<{ id: string }>();
   return results.map((r) => r.id);

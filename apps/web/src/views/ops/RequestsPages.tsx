@@ -86,7 +86,7 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, 
         <h1>{tr("ops.nav.requests")}</h1>
         <p>{tr("ops.requests.lead")}</p>
       </div>
-      <Notice notice={notice} />
+      <Notice notice={notice} mailFailed="admin.requests.mailFailed" />
       <section class="ops-card ops-queue-list" aria-label={tr("ops.requests.queue")}>
         <Tabs tabs={tabs} />
         {publicPending ? (
@@ -96,7 +96,7 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, 
         ) : null}
         <SearchForm action={REQUESTS_PATH} q={q} keep={publicPending ? { public: "pending" } : { status: tab }} label={tr("ops.requests.search")} placeholder={tr("ops.requests.searchHint")} />
         {items.length === 0 ? (
-          <p class="ops-state">{tr(q ? "ops.requests.noMatch" : "ops.requests.empty")}</p>
+          <p class="ops-state">{tr(q ? "ops.requests.noMatch" : publicPending ? "ops.requests.publicEmpty" : "ops.requests.empty")}</p>
         ) : (
           <>
             <div class="ops-table-wrap">
@@ -139,7 +139,7 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, 
                 </tbody>
               </table>
             </div>
-            <p class="ops-table-foot">{q ? tr("ops.list.shown", { n: items.length }) : tr("ops.list.count", { n: items.length, total })}</p>
+            <p class="ops-table-foot">{q || publicPending ? tr("ops.list.shown", { n: items.length }) : tr("ops.list.count", { n: items.length, total })}</p>
           </>
         )}
       </section>
@@ -182,7 +182,7 @@ type DetailProps = {
   values?: { note?: string; handle?: string };
   history: HistoryView;
   /** EPIC 27: the Public listing block, present only for a role that may act and a request that has a publication. `form` is a refused form coming back. */
-  board?: { publication: PublicationView; form?: BoardFormState };
+  board?: { publication: PublicationView; form?: BoardFormState; boardOn: boolean };
 };
 
 /** The suggestions with their reasons; with `canAct` a checkbox per builder, inside the invite form. */
@@ -241,7 +241,7 @@ export const RequestDetailPage: FC<DetailProps> = (props) => {
         <h1>{r.title}</h1>
         <StatusPill status={r.status} />
       </div>
-      <Notice notice={notice} />
+      <Notice notice={notice} mailFailed="admin.requests.mailFailed" />
       <div class="ops-split">
         <div class="ops-stack">
           <section class="ops-card ops-sec" aria-labelledby="ops-request-h">
@@ -279,7 +279,7 @@ export const RequestDetailPage: FC<DetailProps> = (props) => {
               </>
             ) : null}
           </section>
-          {board ? <PublicListingBlock request={r} publication={board.publication} actionBase={`${REQUESTS_PATH}/${r.id}/publication`} query={qs(filter)} form={board.form} /> : null}
+          {board ? <PublicListingBlock request={r} publication={board.publication} boardOn={board.boardOn} actionBase={`${REQUESTS_PATH}/${r.id}/publication`} query={qs(filter)} form={board.form} /> : null}
           <section class="ops-card ops-sec" aria-labelledby="ops-invites-h">
             <h2 id="ops-invites-h">{tr("admin.requests.invites")}</h2>
             <p class="ops-muted">{invitesLine(item)}</p>

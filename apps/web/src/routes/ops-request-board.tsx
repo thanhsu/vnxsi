@@ -60,7 +60,7 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     // A 409 shows the current state (fresh values, fresh token), never what was typed: typed text would invite overwriting the other change (M-1).
     const conflict: BoardFormState = { action, errors: {}, conflict: true, values: {} };
     // The move is not allowed in the state it is in now: 409, nothing written.
-    if (!opsBoardActions(publication.status, item.request.status).includes(action)) return refused(c, id, 409, conflict);
+    if (!opsBoardActions(publication.status, item.request.status, c.get("requestBoard")).includes(action)) return refused(c, id, 409, conflict);
 
     const user = c.get("user")!;
     const now = new Date().toISOString();

@@ -108,11 +108,13 @@ type Props = {
   actionBase: string;
   /** The list filter as a query string ("" or "?public=pending&q=..."), added to every action so the filter survives the post (S-2). */
   query?: string;
+  /** The board gate. Off: no Publish (the public page would answer 404) and a line saying so. */
+  boardOn: boolean;
   form?: BoardFormState;
 };
 
-export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, actionBase, query = "", form }) => {
-  const actions = opsBoardActions(p.status, r.status);
+export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, actionBase, query = "", boardOn, form }) => {
+  const actions = opsBoardActions(p.status, r.status, boardOn);
   const publishable = actions.includes("publish");
   const waiting = p.status === "pending_review" && r.status === "pending_verification";
   const rejectable = actions.includes("reject");
@@ -192,6 +194,7 @@ export const PublicListingBlock: FC<Props> = ({ request: r, publication: p, acti
       </dl>
 
       {waiting ? <p class="ops-note">{tr("ops.board.waitingConfirm")}</p> : null}
+      {!boardOn && p.status === "pending_review" && r.status !== "pending_verification" && r.status !== "removed" ? <p class="ops-note">{tr("ops.board.gateOff")}</p> : null}
 
       {actions.length > 0 ? (
         <>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { requestBoardPublishedEmail, requestBoardRejectedEmail, requestBoardUnpublishedEmail } from "../../src/email/templates/request-board.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
+import { en } from "../../src/i18n/messages/en.ts";
+import { vi } from "../../src/i18n/messages/vi.ts";
 
 /** VNX-2704b: the three client e-mails about the public request board (addendum §9.2, Q19). */
 
@@ -36,7 +38,7 @@ describe("request board e-mails", () => {
       expect(edited.html, locale).not.toBe(plain.html);
     }
     const en = requestBoardPublishedEmail("en", { title: "T", edited: true, publicUrl, manageUrl });
-    expect(en.text).toContain("edited the wording");
+    expect(en.text).toContain("edited the title or description");
     expect(requestBoardPublishedEmail("en", { title: "T", edited: false, publicUrl, manageUrl }).text).not.toContain("edited");
   });
 
@@ -55,5 +57,40 @@ describe("request board e-mails", () => {
       expect(mail.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt; &amp; more");
       expect(mail.text).toContain(reason);
     }
+  });
+});
+
+/** The Owner-approved copy (2026-10-12), byte for byte. zh-Hans and zh-Hant are AI translations of the EN. */
+const APPROVED: Record<string, { en: string; vi: string }> = {
+  "email.boardPublished.subject": { en: "Your request is now on the public request board: {title}", vi: "Nhu cầu của bạn đã hiện trên bảng nhu cầu công khai: {title}" },
+  "email.boardPublished.intro": {
+    en: "Our team approved your request “{title}” for the public request board. Anyone, including search engines, can now see the published version, its category, budget range, country, deadline and languages, but never your name, email address or account.",
+    vi: "Đội ngũ của chúng tôi đã duyệt nhu cầu “{title}” của bạn để hiện trên bảng nhu cầu công khai. Từ giờ, bất kỳ ai, kể cả công cụ tìm kiếm, đều thấy được bản chúng tôi đã công khai, cùng danh mục, khoảng ngân sách, quốc gia, hạn chót và ngôn ngữ, nhưng không bao giờ thấy tên, email hay tài khoản của bạn.",
+  },
+  "email.boardPublished.edited": {
+    en: "Before publishing, our team edited the title or description, for example to remove details that could identify you or others. The public page shows the edited version.",
+    vi: "Trước khi công khai, đội ngũ của chúng tôi đã sửa tiêu đề hoặc mô tả, ví dụ để bỏ những chi tiết có thể nhận ra bạn hoặc người khác. Trang công khai hiện bản đã sửa.",
+  },
+  "email.boardPublished.view": { en: "View the public page:", vi: "Xem trang công khai:" },
+  "email.boardPublished.manage": {
+    en: "You can remove it from the board at any time from your account; this takes effect straight away:",
+    vi: "Bạn có thể gỡ nhu cầu khỏi bảng bất cứ lúc nào từ tài khoản của mình; việc gỡ có hiệu lực ngay:",
+  },
+  "email.boardRejected.subject": { en: "Your request will not be shown on the public request board: {title}", vi: "Nhu cầu của bạn sẽ không hiện trên bảng nhu cầu công khai: {title}" },
+  "email.boardRejected.intro": { en: "Our team decided not to show “{title}” on the public request board.", vi: "Đội ngũ của chúng tôi quyết định không hiện nhu cầu “{title}” trên bảng nhu cầu công khai." },
+  "email.boardUnpublished.subject": { en: "Your request was removed from the public request board: {title}", vi: "Nhu cầu của bạn đã bị gỡ khỏi bảng nhu cầu công khai: {title}" },
+  "email.boardUnpublished.intro": { en: "Our team removed “{title}” from the public request board.", vi: "Đội ngũ của chúng tôi đã gỡ nhu cầu “{title}” khỏi bảng nhu cầu công khai." },
+  "email.board.reason": { en: "Reason:", vi: "Lý do:" },
+  "email.board.finalNote": { en: "This request cannot be shown on the board again. Your request itself is not affected.", vi: "Không thể hiện lại nhu cầu này trên bảng. Bản thân nhu cầu của bạn không bị ảnh hưởng." },
+  "email.board.cta": { en: "View your request:", vi: "Xem nhu cầu của bạn:" },
+};
+
+describe("Owner-approved copy, byte for byte", () => {
+  it("has the 12 approved keys in EN and VI exactly", () => {
+    for (const [key, copy] of Object.entries(APPROVED)) {
+      expect((en as Record<string, string>)[key], `en ${key}`).toBe(copy.en);
+      expect((vi as Record<string, string>)[key], `vi ${key}`).toBe(copy.vi);
+    }
+    expect(Object.keys(APPROVED)).toHaveLength(12);
   });
 });
