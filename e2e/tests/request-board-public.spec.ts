@@ -104,3 +104,52 @@ test("/vi/requests and /vi/requests/<id>: the interface is Vietnamese, the reque
   await expect(page.getByRole("link", { name: "Tôi là builder — tôi quan tâm" })).toHaveAttribute("href", `/vi/login?next=%2Fvi%2Frequests%2F${Q(1)}`);
   await expect(page.locator("main")).toContainText("E2E board public description 1");
 });
+
+// VNX-2705b: SEO and entry links. The seed has 8 open listings (>= 5), so the list is indexable. GET only: no POST budget.
+test("/requests is indexable with 5 or more open: no noindex, a canonical and hreflang, and the footer links to it but the header does not", async ({ page }) => {
+  await page.goto("/requests");
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/requests$/);
+  await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(5);
+  await expect(page.locator('footer .footer-grid a[href="/requests"]')).toHaveText("Public request board");
+  await expect(page.locator('header nav a[href="/requests"]')).toHaveCount(0);
+  // A filtered view is a thin duplicate of the list: out of the index.
+  await page.goto("/requests?category=crm");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+});
+
+test("/for-builders links to the board while it is open", async ({ page }) => {
+  await page.goto("/for-builders");
+  await expect(page.locator('main a[href="/requests"]')).toHaveText("Public request board");
+  await expect(page.locator('header nav a[href="/requests"]')).toHaveCount(0);
+});
+
+test("an open listing has a canonical, four hreflang plus x-default, og:type and a description of at most 160 characters, and no JSON-LD; a closed one has none of the first two", async ({ page }) => {
+  await page.goto(`/requests/${Q(1)}`);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", new RegExp(`/requests/${Q(1)}$`));
+  await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(5);
+  await expect(page.locator('meta[property="og:type"]')).toHaveAttribute("content", "website");
+  const description = (await page.locator('meta[name="description"]').getAttribute("content")) ?? "";
+  expect(description).toContain("E2E board public description 1");
+  expect([...description].length).toBeLessThanOrEqual(160);
+  await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+
+  await page.goto(`/requests/${Q(2001)}`);
+  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+});
+
+test("sitemap.xml lists the open listings in four locales with hreflang, not the closed or hidden ones, and /requests; robots.txt does not mention /requests", async ({ page }) => {
+  const res = await page.request.get("/sitemap.xml");
+  expect(res.status()).toBe(200);
+  const xml = await res.text();
+  const origin = new URL(res.url()).origin;
+  for (const prefix of ["", "/vi", "/zh-hans", "/zh-hant"]) expect(xml).toContain(`<loc>${origin}${prefix}/requests/${Q(1)}</loc>`);
+  expect(xml).toContain(`hreflang="x-default" href="${origin}/requests/${Q(1)}"`);
+  expect(xml).toContain(`${origin}/requests</loc>`);
+  for (const n of [2001, ...HIDDEN]) expect(xml, `Q${n}`).not.toContain(Q(n));
+  for (const secret of ["E2E board request", "E2E private original", CLIENT.email, CLIENT.name, ...requestIds]) expect(xml, secret).not.toContain(secret);
+  const robots = await (await page.request.get("/robots.txt")).text();
+  expect(robots).not.toMatch(/Disallow: \/requests/);
+});

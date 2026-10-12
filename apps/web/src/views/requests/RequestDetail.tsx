@@ -1,5 +1,5 @@
 import type { FC } from "hono/jsx";
-import { publicExcerpt } from "../../domain/request-board.ts";
+import { publicMetaDescription } from "../../domain/request-board.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 import { countryName } from "../country.ts";
@@ -20,7 +20,7 @@ export const RequestDetail: FC<Props> = ({ locale, origin, item, closed, cta, si
   const title = item.publicTitle ?? "";
   const description = item.publicDescription ?? "";
   return (
-    <Layout locale={locale} title={`${title} · VNX.SI`} description={publicExcerpt(description)} origin={origin} rest={`/requests/${item.publicId}`} noindex={closed} signedIn={signedIn}>
+    <Layout locale={locale} title={`${title} · VNX.SI`} description={publicMetaDescription(description)} origin={origin} rest={`/requests/${item.publicId}`} noindex={closed} signedIn={signedIn}>
       <p>
         <a href={localizedPath(locale, "/requests")}>{tr("board.detail.back")}</a>
       </p>

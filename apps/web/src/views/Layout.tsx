@@ -4,6 +4,7 @@ import { translator, type Translate } from "../i18n/t.ts";
 import { CONTACT_EMAIL } from "../domain/feedback.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { jsonLdScript } from "./json-ld.ts";
+import { boardOpen } from "./request-board-nav.tsx";
 import { PRIVACY_NOTICE_SCRIPT, PrivacyNotice, privacyNoticeDate } from "./privacy-notice.tsx";
 
 export type LayoutProps = {
@@ -136,6 +137,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
   const nav = mainNav(locale, rest);
   const isSignedIn = signedIn === true;
   const noticeDate = privacyNoticeDate(locale, isSignedIn);
+  const showBoardLink = boardOpen();
   const pageScripts = [...new Set([...(scripts ?? []), ...(noticeDate !== null ? [PRIVACY_NOTICE_SCRIPT] : [])])];
   const notice = noticeDate !== null ? <PrivacyNotice locale={locale} date={noticeDate} tr={tr} /> : null;
   return (
@@ -224,6 +226,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
               <a href={localizedPath(locale, "/products")}>{tr("nav.products")}</a>
               <a href={localizedPath(locale, "/builders")}>{tr("nav.findBuilders")}</a>
               <a href={anchorOn(locale, "/", "how")}>{tr("nav.howItWorks")}</a>
+              {showBoardLink ? <a href={localizedPath(locale, "/requests")}>{tr("board.title")}</a> : null}
             </nav>
             <nav class="footer-nav" aria-label={tr("footer.builders")}>
               <p class="footer-h" aria-hidden="true">{tr("footer.builders")}</p>

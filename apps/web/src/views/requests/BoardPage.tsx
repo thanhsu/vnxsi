@@ -11,7 +11,7 @@ import { Pagination } from "../Pagination.tsx";
 import { SelectFilter } from "../SelectFilter.tsx";
 import { RequestCard, type BoardItem } from "./RequestCard.tsx";
 
-type Props = { locale: Locale; origin: string; query: BoardQuery; items: readonly BoardItem[]; total: number; signedIn: boolean };
+type Props = { locale: Locale; origin: string; query: BoardQuery; items: readonly BoardItem[]; total: number; indexable: boolean; signedIn: boolean };
 
 /** The query string of a page: only the filters that are set, then the page number past the first. Never a sort. */
 export function boardParams(query: BoardQuery, page: number): string {
@@ -26,13 +26,13 @@ export function boardParams(query: BoardQuery, page: number): string {
 
 /**
  * /requests (addendum §4.1): open listings, newest publication first, one order. The three filters are a GET form that works without script.
- * Indexing rules (the five-listing threshold, canonical, sitemap) are VNX-2705b's; until then the list stays out of the index.
+ * Indexing (VNX-2705b, Q13): `indexable` is the route's decision (at least 5 open listings, no filter set); otherwise noindex with no canonical or hreflang.
  */
-export const BoardPage: FC<Props> = ({ locale, origin, query, items, total, signedIn }) => {
+export const BoardPage: FC<Props> = ({ locale, origin, query, items, total, indexable, signedIn }) => {
   const tr = translator(locale);
   const filtered = query.category !== null || query.budget !== null || query.lang !== null;
   return (
-    <Layout locale={locale} title={`${tr("board.title")} · VNX.SI`} description={tr("board.intro")} origin={origin} rest={`/requests${boardParams(query, query.page)}`} noindex signedIn={signedIn}>
+    <Layout locale={locale} title={`${tr("board.title")} · VNX.SI`} description={tr("board.intro")} origin={origin} rest={`/requests${boardParams(query, query.page)}`} noindex={!indexable} signedIn={signedIn}>
       <h1>{tr("board.title")}</h1>
       <p>{tr("board.intro")}</p>
       <form class="filters" method="get" action={localizedPath(locale, "/requests")} role="search">

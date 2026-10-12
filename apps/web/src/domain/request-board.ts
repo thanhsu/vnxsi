@@ -24,6 +24,8 @@ export const INTEREST_PENDING_CAP = 30;
 export const MIN_OPEN_FOR_INDEX = 5;
 export const BOARD_PAGE_SIZE = 24;
 export const EXCERPT_LENGTH = 200;
+/** Search engines show about this much; the ellipsis counts. */
+export const META_DESCRIPTION_LENGTH = 160;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -220,17 +222,27 @@ const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
  * cut between grapheme clusters (never inside a ZWJ emoji, a flag or a letter with its combining marks), with an ellipsis when cut.
  */
 export function publicExcerpt(description: string): string {
+  return cutOneLine(description, EXCERPT_LENGTH, EXCERPT_LENGTH);
+}
+
+/** The meta description of an open listing (VNX-2705b): one line, at most 160 code points INCLUDING the ellipsis, cut between grapheme clusters. */
+export function publicMetaDescription(description: string): string {
+  return cutOneLine(description, META_DESCRIPTION_LENGTH, META_DESCRIPTION_LENGTH - 1);
+}
+
+/** `limit` is the longest text kept whole; a longer one is cut to `keep` code points (at a grapheme boundary) and gets an ellipsis. */
+function cutOneLine(description: string, limit: number, keep: number): string {
   const flat = description.replace(/\s+/g, " ").trim();
-  if (cpLength(flat) <= EXCERPT_LENGTH) return flat;
+  if (cpLength(flat) <= limit) return flat;
   let out = "";
   let used = 0;
   for (const { segment } of GRAPHEMES.segment(flat)) {
     const n = cpLength(segment);
-    if (used + n > EXCERPT_LENGTH) break;
+    if (used + n > keep) break;
     out += segment;
     used += n;
   }
-  if (out === "") out = [...flat].slice(0, EXCERPT_LENGTH).join("");
+  if (out === "") out = [...flat].slice(0, keep).join("");
   return `${out}…`;
 }
 

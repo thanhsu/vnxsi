@@ -163,13 +163,12 @@ describe("gate, headers, cost, ranking words", () => {
     for (const locale of LOCALES) expect((await get(localizedPath(locale, "/requests"))).status, locale).toBe(404);
   });
 
-  it("signed in: no-store; signed out: no public cache; Referrer-Policy is not no-referrer; the list stays out of the index until VNX-2705b", async () => {
+  it("signed in: no-store; signed out: no public cache; Referrer-Policy is not no-referrer; indexing itself is covered by test/seo/request-board.test.ts", async () => {
     const user = await signIn(`zqx-lh-${tag()}@vnx.si`);
     expect((await get("/requests", user.cookie)).headers.get("cache-control")).toBe("no-store");
     const anon = await get("/requests");
     expect(anon.headers.get("cache-control") ?? "").not.toMatch(/public|max-age|s-maxage/);
     expect(anon.headers.get("referrer-policy")).not.toBe("no-referrer");
-    expect(await anon.text()).toContain('<meta name="robots" content="noindex"');
   });
 
   it("at most 8 D1 queries, signed in and signed out", async () => {

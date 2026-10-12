@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { findPublicListing, findViewerRelation, listOpenPublications, countOpenPublications, type BoardFilter } from "../db/request-board.ts";
-import { BOARD_PAGE_SIZE, isPublicIdShape, parseBoardQuery, requestVisibility } from "../domain/request-board.ts";
+import { BOARD_PAGE_SIZE, isBoardIndexable, isPublicIdShape, parseBoardQuery, requestVisibility } from "../domain/request-board.ts";
 import type { AppEnv } from "../env.ts";
 import { onLocalized } from "../http/localized.ts";
 import { siteOrigin } from "../http/origin.ts";
@@ -26,7 +26,11 @@ export function registerRequestBoardRoutes(app: Hono<AppEnv>) {
     // The SQL already limits to open; the one visibility function has the last word.
     const items = listed.filter((l) => l.publicTitle !== null && l.publicDescription !== null && requestVisibility(l.requestStatus, l.publicationStatus, l.closedAt, now) === "open");
     if (query.page > 1 && items.length === 0) return errorResponse(c, "notFound", 404);
-    return page(c, <BoardPage locale={c.get("locale")} origin={siteOrigin(c)} query={query} items={items} total={total} signedIn={c.get("user") !== null} />);
+    // Q13: index the list only with at least 5 open listings, and never a filtered view (a thin duplicate of the list). Unfiltered, `total` already is
+    // countOpenPublicationsAll (same query), so the decision costs no extra D1 read.
+    const filtered = filter.category !== undefined || filter.budget !== undefined || filter.lang !== undefined;
+    const indexable = !filtered && isBoardIndexable(total);
+    return page(c, <BoardPage locale={c.get("locale")} origin={siteOrigin(c)} query={query} items={items} total={total} indexable={indexable} signedIn={c.get("user") !== null} />);
   });
 
   onLocalized(app, "get", "/requests/:publicId", async (c) => {

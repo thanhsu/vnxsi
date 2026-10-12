@@ -75,7 +75,7 @@ describe("card dates (L-2)", () => {
 describe("board page rendered directly", () => {
   const query = { category: null, budget: null, lang: null, page: 1 };
   const render = async (items: unknown[], total: number) =>
-    String(await (<BoardPage locale="en" origin="https://vnx.si" query={query} items={items as never} total={total} signedIn={false} />));
+    String(await (<BoardPage locale="en" origin="https://vnx.si" query={query} items={items as never} total={total} indexable={false} signedIn={false} />));
 
   it("S-3: no items gives the empty state with both calls to action and no card, and no pager", async () => {
     const html = await render([], 0);
