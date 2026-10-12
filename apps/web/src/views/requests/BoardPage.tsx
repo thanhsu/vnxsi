@@ -2,7 +2,7 @@ import type { FC } from "hono/jsx";
 import { BUDGET_BANDS } from "../../domain/inquiry.ts";
 import { WORK_LANGUAGES } from "../../domain/builder.ts";
 import { CATEGORIES } from "../../domain/product.ts";
-import type { BoardQuery } from "../../domain/request-board.ts";
+import { BOARD_PAGE_SIZE, type BoardQuery } from "../../domain/request-board.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 import { BUDGET_KEY, CATEGORY_KEY, LANGUAGE_KEY } from "../labels.ts";
@@ -66,7 +66,7 @@ export const BoardPage: FC<Props> = ({ locale, origin, query, items, total, sign
           </p>
         </div>
       )}
-      <Pagination locale={locale} path="/requests" page={query.page} total={total} href={(n) => boardParams(query, n)} />
+      <Pagination locale={locale} path="/requests" page={query.page} total={total} pageSize={BOARD_PAGE_SIZE} href={(n) => boardParams(query, n)} />
     </Layout>
   );
 };

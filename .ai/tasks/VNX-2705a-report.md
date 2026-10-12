@@ -46,3 +46,12 @@
 | board.cta.closed | This request is closed | Nhu cầu này đã đóng |
 
 zh-hans and zh-hant (AI, 你; 公开需求板 / 公開需求板) are in `apps/web/src/i18n/messages/zh-hans.ts` and `zh-hant.ts` under the same keys.
+
+## Vòng sửa 1 (review e59a510, APPROVE_AFTER_FIXES)
+- **L-1:** all 31 `board.*` keys now match the Owner-approved EN and VI table byte for byte (changed: intro EN/VI, empty.body VI, identityNote VI, closedNote VI, cta.notBuilder, cta.pendingBuilder, cta.ownRequest, cta.closed EN/VI as listed in the review). zh-Hans and zh-Hant re-translated by AI from the approved EN for the changed keys (你; the poster is 发布者 / 發佈者, matching `request.facts.client`; 公开需求板 / 公開需求板 kept). New test `test/views/request-board-copy.test.tsx` pins the 31 EN and VI strings and that no other `board.*` key exists.
+- **L-2:** `RequestCard` shows only "No deadline" when there is none; otherwise `Deadline: <date>`; the posted date is now `Posted: <date>` (same colon style, VI `Ngày đăng: ...`). Test added.
+- **S-2:** `Pagination` has an optional `pageSize` prop (default the catalogue `PAGE_SIZE`); `BoardPage` passes `BOARD_PAGE_SIZE`; tests pin both and that the two sizes are equal.
+- **S-3:** direct render test of `BoardPage` with `items=[]` (empty state, both calls to action, no card, no pager).
+- S-1 left for 2706a as agreed.
+- **Red first:** before the copy and card changes, the byte-exact copy test and the card-date test failed (2 failures); the S-2/S-3 tests are guards that pass on the existing behaviour.
+- **Verification:** typecheck 0 errors; full suite 201 files, 2562 passed, 2 skipped; `npm run e2e` 76 passed; `e2e:typecheck` clean; `test:scripts` 53 pass; no workerd left running.

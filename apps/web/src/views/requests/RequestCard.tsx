@@ -36,8 +36,8 @@ export const RequestCard: FC<{ locale: Locale; item: BoardItem }> = ({ locale, i
       </p>
       <p class="muted">{item.languages.map((l) => tr(LANGUAGE_KEY[l])).join(", ")}</p>
       <p class="muted">
-        {tr("board.card.deadline")}: {item.deadline ?? tr("board.deadline.none")}
-        {item.publishedAt ? ` · ${tr("board.card.posted")} ${item.publishedAt.slice(0, 10)}` : null}
+        {item.deadline ? `${tr("board.card.deadline")}: ${item.deadline}` : tr("board.deadline.none")}
+        {item.publishedAt ? ` · ${tr("board.card.posted")}: ${item.publishedAt.slice(0, 10)}` : null}
       </p>
     </li>
   );
