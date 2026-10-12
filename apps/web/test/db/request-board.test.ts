@@ -109,6 +109,19 @@ describe("db/request-board: publication writes (VNX-2702a)", () => {
     expect(returnedPublication(pubRes)?.requestId).toBe(made.id);
   });
 
+  it("makes a public_id that carries no time: not the request id's timestamp prefix, random between calls (S-3)", async () => {
+    const a = await makeRequest({ tag: "rb-pid-a" });
+    const b = await makeRequest({ tag: "rb-pid-b" });
+    const pa = (await optIn(a.request.id, a.request.createdAt))!;
+    const pb = (await optIn(b.request.id, b.request.createdAt))!;
+    for (const [made, pub] of [[a, pa], [b, pb]] as const) {
+      expect(pub.publicId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+      expect(pub.publicId.slice(0, 10)).not.toBe(made.request.id.slice(0, 10));
+      expect(pub.publicId.slice(0, 8)).not.toBe(made.request.id.slice(0, 8));
+    }
+    expect(pa.publicId).not.toBe(pb.publicId);
+  });
+
   it("checks the owner when a client id is given", async () => {
     const { request } = await makeRequest({ tag: "rb-optin-own" });
     const stranger = await ensureUser("rb-optin-own-x@vnx.si");

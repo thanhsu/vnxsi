@@ -149,3 +149,27 @@ test("the expired token is expired and the others are valid for hours", () => {
 test("every threshold was read from the app source", () => {
   for (const [key, value] of Object.entries(MIN)) assert.ok(Number.isInteger(value) && value > 0, `${key} = ${value}`);
 });
+
+test("the public request board data (VNX-2705a): five or more open listings, the rest in the states the specs expect, all older than the homepage window", () => {
+  const db = seededDb();
+  const rows = db.prepare("SELECT p.public_id, p.status AS pub, r.status AS req, r.closed_at, p.public_title, r.title FROM request_publications p JOIN requests r ON r.id = p.request_id").all();
+  const by = (n) => rows.find((r) => r.public_id === id("Q", n));
+  const open = rows.filter((r) => r.pub === "published" && (r.req === "submitted" || r.req === "matching"));
+  assert.ok(open.length >= 5, `${open.length} open listings`);
+  for (let n = 1; n <= 8; n++) {
+    assert.equal(by(n)?.pub, "published", `Q${n}`);
+    assert.match(by(n).public_title, /^E2E board/);
+    assert.notEqual(by(n).public_title, by(n).title, "the public wording differs from the original");
+  }
+  assert.equal(by(2001).req, "builder_selected");
+  assert.ok(by(2001).closed_at > new Date(NOW.getTime() - 86_400_000 * 2).toISOString(), "closed yesterday");
+  assert.equal(by(2002).req, "expired");
+  assert.ok(by(2002).closed_at < new Date(NOW.getTime() - 86_400_000 * 30).toISOString(), "closed more than 30 days ago");
+  assert.equal(by(2003).pub, "withdrawn");
+  assert.equal(by(2004).pub, "rejected");
+  assert.equal(by(2011).req, "pending_verification");
+  assert.equal(by(2011).pub, "pending_review");
+  const homepageWindow = new Date(NOW.getTime() - 30 * 86_400_000).toISOString();
+  const recent = db.prepare("SELECT id FROM requests WHERE submitted_at >= ?1 AND id >= ?2").all(homepageWindow, id("R", 2001));
+  assert.deepEqual(recent, [], "no new request inside the 30-day window");
+});

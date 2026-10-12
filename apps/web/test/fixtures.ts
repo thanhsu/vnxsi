@@ -218,11 +218,12 @@ export async function makeRequest(opts: {
   description?: string;
   now?: string;
   clientLocale?: string;
+  clientName?: string;
 }): Promise<{ client: UserRow; request: ClientRequest }> {
   const client = await ensureUser(`${opts.tag}-c@vnx.si`, opts.clientLocale);
   const request = await createRequest(testEnv.DB, {
     clientUserId: client.id,
-    clientName: "Minh Tran",
+    clientName: opts.clientName ?? "Minh Tran",
     title: opts.title ?? `${opts.tag} booking app`,
     description: opts.description ?? "We need online booking with SMS reminders for three salons in Hanoi.",
     category: opts.category ?? "booking",

@@ -18,6 +18,7 @@ import { registerHubInvitationRoutes } from "./routes/hub-invitations.tsx";
 import { registerMeRoutes } from "./routes/me.tsx";
 import { registerMeRequestRoutes } from "./routes/me-requests.tsx";
 import { registerRequestFormRoutes } from "./routes/request-form.tsx";
+import { registerRequestBoardRoutes } from "./routes/request-board.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
@@ -94,6 +95,7 @@ export function createApp() {
   registerSeoRoutes(app);
   registerInquiryFormRoutes(app);
   registerRequestFormRoutes(app);
+  registerRequestBoardRoutes(app);
   registerProductPageRoutes(app);
   registerToolsRoutes(app);
   registerAdminRoutes(app);

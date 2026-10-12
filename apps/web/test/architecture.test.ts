@@ -143,6 +143,12 @@ const RANKING_FILES = [
   "../src/db/request-board.ts",
   "../src/domain/request-board.ts",
   "../src/routes/ops-request-board.tsx",
+  // VNX-2705a: the public board's route and views.
+  "../src/routes/request-board.tsx",
+  "../src/views/requests/BoardPage.tsx",
+  "../src/views/requests/RequestCard.tsx",
+  "../src/views/requests/RequestDetail.tsx",
+  "../src/views/requests/InterestBlock.tsx",
 ];
 
 // Allowlist: only these files may import a monetization db module or run SQL on a money table. Each task adds

@@ -196,6 +196,11 @@ export function parseReviewNote(raw: string): { ok: true; note: string } | { ok:
 export type InterestFormErrors = Partial<Record<"note" | "productId", "too_long" | "invalid">>;
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
+/** The shape of a public id and of a ULID alike (26 Crockford base32 characters): anything else cannot be a listing, so the route answers 404 without a query. */
+export function isPublicIdShape(value: string): boolean {
+  return ULID_RE.test(value);
+}
+
 /** "I'm interested" form: an optional note up to 500 and an optional product id (a ULID; ownership is checked in SQL). */
 export function parseInterestForm(values: { note: string; productId: string }): { ok: true; input: { note: string | null; productId: string | null } } | { ok: false; errors: InterestFormErrors } {
   const errors: InterestFormErrors = {};

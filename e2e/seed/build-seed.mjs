@@ -143,6 +143,29 @@ export function buildSeed(now = new Date()) {
     add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "pending_review", opted_in_at: when, consent_version: "2026-01-01", created_at: when, updated_at: when, write_id: id("W", n) });
   }
 
+  // EPIC 27 (VNX-2705a): the public board's data. R1-R5 (open, indexable board needs 5) and R6-R8 (one per attempt of the interest spec, 2706a) already exist above:
+  // each gets a published listing Q n, newest first by n, with public wording that starts with "E2E board" and differs from the original "Sample request n".
+  const boardText = (n) => ({ public_title: `E2E board request ${n}`, public_description: `E2E board public description ${n}: a plain text listing used by the end-to-end suite.` });
+  for (let n = 1; n <= 8; n++) {
+    const when = at(now, -n * HOUR);
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "published", ...boardText(n), opted_in_at: when, consent_version: "2026-01-01", reviewed_by: OPS.userId, reviewed_at: when, published_at: when, created_at: when, updated_at: when, write_id: id("W", n) });
+  }
+  // Rows that must NOT be listed. Older than 30 days (submitted_at), so no homepage number moves; their closed_at is what the 30-day rule reads.
+  /** @param {number} n @param {object} request @param {object} publication */
+  const hiddenRow = (n, request, publication) => {
+    const when = at(now, -40 * DAY);
+    add("requests", {
+      id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client with details only Ops may read.`, category: "booking",
+      budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when, ...request,
+    });
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "published", ...boardText(n), opted_in_at: when, consent_version: "2026-01-01", reviewed_by: OPS.userId, reviewed_at: when, published_at: when, created_at: when, updated_at: when, write_id: id("W", n), ...publication });
+  };
+  hiddenRow(2001, { status: "builder_selected", closed_at: at(now, -DAY) }, {}); // Closed: 200, noindex
+  hiddenRow(2002, { status: "expired", closed_at: at(now, -31 * DAY) }, {}); // 404 after 30 days
+  hiddenRow(2003, {}, { status: "withdrawn", ended_at: at(now, -DAY) }); // client withdrew: 404
+  hiddenRow(2004, {}, { status: "rejected", review_note: "E2E review note that stays private", ended_at: at(now, -DAY), published_at: null, public_title: null, public_description: null }); // 404, note never shown
+  hiddenRow(2011, { status: "pending_verification", submitted_at: null }, { status: "pending_review", published_at: null, reviewed_by: null, reviewed_at: null }); // waiting for the e-mail: 404
+
   // EPIC 27: the request board flag is on in this database (the date half of the gate is REQUEST_BOARD_GO_LIVE in e2e/scripts/serve.mjs).
   add("feature_flags", { key: "request_board", enabled: 1, updated_by: null, updated_at: stamp, write_id: null });
 

@@ -2,7 +2,7 @@
 // REQUEST_BOARD_GO_LIVE and the flag is on in the seed (e2e/scripts/serve.mjs, seed/build-seed.mjs), so the gate is open.
 // POST budget: only invalid forms are sent, rejected before any rate limit counts them. A valid one is covered by Vitest.
 import type { Page } from "@playwright/test";
-import { id } from "../seed/fixtures.mjs";
+import { CLIENT, id } from "../seed/fixtures.mjs";
 import { expect, test } from "../support/test";
 
 test.use({ reducedMotion: "reduce" });
@@ -62,8 +62,8 @@ for (const l of [EN, VI]) {
 }
 
 // Part 2, Ops "Public listing" (VNX-2704a). One seeded request per attempt (R 2008 + retry, a publication waiting for review), as the staff user.
-// POST budget: the Ops actions have no rate limit, and this test sends two of them. The public page does not exist yet (VNX-2705a adds the signed-out check of the edited text to this test).
-test("Ops moderates a public listing: the block, a refused Publish with the error pattern, then Publish", async ({ opsPage: page }) => {
+// POST budget: the Ops actions have no rate limit, and this test sends two of them. The signed-out check of the published text at the end is a GET (VNX-2705a).
+test("Ops moderates a public listing: the block, a refused Publish with the error pattern, then Publish", async ({ opsPage: page, request }) => {
   const attempt = 2008 + test.info().retry;
   const requestId = id("R", attempt);
   const path = `/ops/marketplace/requests/${requestId}`;
@@ -103,6 +103,13 @@ test("Ops moderates a public listing: the block, a refused Publish with the erro
   await expect(page.locator("#pl-block")).toContainText("Published");
   await expect(page.locator("#pl-block form[action$='/publication/edit']")).toHaveCount(1);
   await expect(page.locator("#pl-block form[action$='/publication/publish']")).toHaveCount(0);
+
+  // (VNX-2705a) A reader who is not signed in (the `request` fixture has its own, empty cookie jar) gets the public page: 200, the wording Ops published, nothing of the original or the client.
+  const anon = await request.get(`/requests/${id("Q", attempt)}`);
+  expect(anon.status()).toBe(200);
+  const html = await anon.text();
+  expect(html).toContain(`E2E board wording ${attempt}`);
+  for (const secret of ["E2E private original", CLIENT.name, CLIENT.email, requestId]) expect(html, secret).not.toContain(secret);
 });
 
 // Part 3, /me "Public listing" (VNX-2703b). One seeded request per attempt (R 2005 + retry, submitted, no publication), as the seeded client (clientPage:

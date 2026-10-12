@@ -16,6 +16,10 @@ const PUBLIC_EN: Entry[] = [
   { path: `/b/${MAIN.handle}/hire` },
   { path: `/p/${PUBLISHED_PRODUCT.slug}` },
   { path: "/request" },
+  // EPIC 27 public board (VNX-2705a): the list, an open listing and a closed one.
+  { path: "/requests" },
+  { path: `/requests/${id("Q", 1)}` },
+  { path: `/requests/${id("Q", 2001)}` },
   { path: "/for-builders" },
   { path: "/privacy" },
   { path: "/contact" },
@@ -29,7 +33,7 @@ const SIGNED_IN: Entry[] = [{ path: "/hub" }, { path: "/hub/products" }, { path:
 // The seeded client (clientPage): a request with no publication, so the "Public listing" block shows its opt-in (VNX-2703b). R 12 is never given a publication by any spec.
 const SIGNED_IN_CLIENT: Entry[] = [{ path: `/me/requests/${id("R", 12)}` }];
 
-const PUBLIC_VI: Entry[] = [{ path: "/vi/" }, { path: "/vi/login" }, { path: `/vi/b/${MAIN.handle}/hire` }, { path: "/vi/privacy" }];
+const PUBLIC_VI: Entry[] = [{ path: "/vi/" }, { path: "/vi/login" }, { path: "/vi/requests" }, { path: `/vi/b/${MAIN.handle}/hire` }, { path: "/vi/privacy" }];
 
 // Motion is off for the scans (colors measured in the middle of a fade or count-up would be false findings); the homepage is scanned with motion too, below.
 test.describe("axe, motion reduced", () => {
@@ -72,7 +76,7 @@ test.describe("axe, motion reduced", () => {
   // Responsive down to 360 px (spec): the homepage and the form that most people fill in.
   test.describe("360 px wide", () => {
     test.use({ viewport: { width: 360, height: 740 } });
-    for (const path of ["/", `/b/${MAIN.handle}/hire`]) {
+    for (const path of ["/", `/b/${MAIN.handle}/hire`, `/requests/${id("Q", 1)}`]) {
       test(`en ${path}`, async ({ page }) => {
         await page.goto(path);
         await scanA11y(page, { page: path, locale: "en", variant: "mobile" });

@@ -2,7 +2,7 @@ import { WORK_LANGUAGES, type WorkLanguage } from "../domain/builder.ts";
 import type { BudgetBand } from "../domain/inquiry.ts";
 import type { Category } from "../domain/product.ts";
 import type { RequestStatus } from "../domain/request.ts";
-import { ulid } from "../lib/ulid.ts";
+import { publicId } from "../lib/ulid.ts";
 import { jsonList } from "./builders.ts";
 
 // EPIC 27 (public request board, addendum §6). This module is the only writer of request_publications and request_interests
@@ -134,7 +134,7 @@ const BUILDER_APPROVED_ACTIVE = "b.status = 'approved' AND u.status = 'active'";
  * First opt-in: inserts the publication as pending_review, only when the request exists in a state that can take it
  * (pending_verification and submitted for the creation path, matching for a later opt-in), has no publication yet and belongs to
  * `clientUserId` (required, enforced in the SQL). 0 rows when any of that fails (a second opt-in does not insert a second row).
- * On the creation path it follows the request INSERT in the same db.batch, so the request is visible to its EXISTS.
+ * public_id is random with no time part (S-3). On the creation path it follows the request INSERT in the same db.batch, so the request is visible to its EXISTS.
  */
 export function optInStatement(db: D1Database, input: { requestId: string; publicId?: string; consentVersion: string; now: string; clientUserId: string; writeId: string }): D1PreparedStatement {
   return db
@@ -146,7 +146,7 @@ export function optInStatement(db: D1Database, input: { requestId: string; publi
          AND NOT EXISTS (SELECT 1 FROM request_publications x WHERE x.request_id = ?1)
        RETURNING *`,
     )
-    .bind(input.requestId, input.publicId ?? ulid(Date.parse(input.now)), input.consentVersion, input.now, input.clientUserId, input.writeId);
+    .bind(input.requestId, input.publicId ?? publicId(), input.consentVersion, input.now, input.clientUserId, input.writeId);
 }
 
 /**
