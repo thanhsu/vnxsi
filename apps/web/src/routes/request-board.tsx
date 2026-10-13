@@ -177,10 +177,8 @@ async function postInterest(c: Context<AppEnv>) {
   if (returnedInterest(created)) return c.redirect(here, 303);
 
   // Refused in SQL: say why as far as the message needs it. The INSERT alone decided.
-  const [fresh, why] = await Promise.all([
-    findViewerRelation(c.env.DB, publicId, user.id),
-    diagnoseInterestRefusal(c.env.DB, { builderId: user.id, productId: parsed.input.productId, pendingCap: INTEREST_PENDING_CAP }),
-  ]);
+  const why = await diagnoseInterestRefusal(c.env.DB, { publicId, builderId: user.id, productId: parsed.input.productId, pendingCap: INTEREST_PENDING_CAP });
+  const fresh: ViewerRelation = { ...relation, inviteId: why.inviteId, interest: why.interest };
   if (fresh.inviteId) return refuse(409, [{ field: null, key: "board.interest.alreadyInvited" }], values, fresh);
   if (fresh.interest) return refuse(409, [{ field: null, key: "board.interest.already" }], values, fresh);
   if (why.badProduct) return refuse(409, [{ field: "product", key: "board.interest.error.product" }], values, fresh);
@@ -206,7 +204,12 @@ async function postWithdraw(c: Context<AppEnv>) {
   const listing = await findPublicListing(c.env.DB, publicId);
   const visibility = listing ? requestVisibility(listing.requestStatus, listing.publicationStatus, listing.closedAt, new Date()) : "hidden";
   const shown = listing !== null && visibility !== "hidden" && listing.publicTitle !== null && listing.publicDescription !== null;
-  const conflict = () => (shown ? detailPage(c, listing, visibility, ctaFromRelation(c, relation), [{ field: null, key: "board.interest.conflict" }], 409) : errorResponse(c, "conflict", 409));
+  // L-2: a closed page shows only its closed block (as the GET does); otherwise the relation is read again, since the lost write may have changed it.
+  const conflict = async () => {
+    if (!shown) return errorResponse(c, "conflict", 409);
+    const cta: Cta = visibility === "closed" ? { kind: "closed" } : ctaFromRelation(c, await findViewerRelation(c.env.DB, publicId, user.id));
+    return detailPage(c, listing, visibility, cta, [{ field: null, key: "board.interest.conflict" }], 409);
+  };
   if (!interestTransition(mine.status, "withdraw", "builder").ok) return conflict();
   const writeId = ulid();
   const now = new Date().toISOString();

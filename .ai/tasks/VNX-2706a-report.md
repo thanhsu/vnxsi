@@ -85,3 +85,15 @@ ZH (Simplified / Traditional) strings are in `apps/web/src/i18n/messages/zh-hans
 - Detail-page 4xx re-render keeps `Layout` SEO (canonical for open, `noindex` and no canonical for closed), no JSON-LD, <= 8 D1 queries (tests).
 - Decisions 3-6 above.
 - Files: `apps/web/src/routes/request-board.tsx`, `apps/web/src/db/request-board.ts`, `apps/web/src/views/requests/InterestBlock.tsx`, `apps/web/src/views/hub/InvitationsPage.tsx`, `apps/web/src/routes/hub-invitations.tsx`, `e2e/tests/request-board-interest.spec.ts`.
+
+## Vòng sửa 1 (review `.ai/reviews/VNX-2706a-review.md`, e83f33e)
+
+- **M-1 + L-1:** copy table of the review applied verbatim for EN and VI (all 32 keys, incl. the withdraw warning in `board.interest.waiting`). zh-Hans/zh-Hant re-translated from the final EN for the 12 changed keys (你; 已表示兴趣 / 已表示興趣 in `waiting` and `hub.interests.pending`). `request-board-copy.test.tsx`: exclusion removed; new `INTEREST_APPROVED` table pins all 32 keys byte for byte in EN and VI, and the key set under `board.interest.*` + `hub.interests.*` is exact. (This test was red against the old strings before the catalogues were changed.)
+- **L-2:** `postWithdraw` `conflict()` renders `{kind:"closed"}` on a closed listing, else re-reads the relation. Test: withdraw of a `dismissed` interest on a closed listing gives 409, closed block, no withdraw button.
+- **L-3:** `diagnoseInterestRefusal` now takes `publicId` and also returns `inviteId` and the pair's interest, so the post-refusal path is one read (no second `findViewerRelation`). Query-count test: 409 wrong product and 409 full cap are each <= 8 by the project counter.
+- **S-1:** HTTP test: no `request_interest.create` audit row (counted by `actor_user_id`) after 409 in SQL, pre-check 409, closed 409 and duplicate; exactly one after the 303.
+- **S-2:** the Hub route passes `link = requestBoard gate`; with the gate off titles are plain text, status still shown. Test both ways.
+- New L-2, L-3, S-1, S-2 tests were written after their code in this round (not red-first); the copy pin was red-first.
+
+Results: typecheck clean; 2706a files + detail + invitations + parity 129 green; full suite 205 files / 2610 passed + 2 skipped; `e2e:typecheck` clean; `test:scripts` 53 pass.
+**`npm run e2e` was NOT re-run in this round:** drive D: hit 0 bytes free (SQLITE_FULL when the e2e server migrated). I deleted `e2e/.state`, `playwright-report`, `test-results`; a further 110 MB of ignored build output in `apps/web/.wrangler/tmp` needs removal by a person (the safety check refused my `rm`). The e2e assertions that touch changed copy are substrings that still match ("Interest sent — waiting for our team", "You told us you're interested", "You withdrew your interest in this request."). Please re-run `npm run e2e` once D: has space (last full run, before this round: 84 passed).

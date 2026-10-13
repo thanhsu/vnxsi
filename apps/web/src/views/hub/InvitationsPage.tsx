@@ -26,7 +26,7 @@ const ERROR_KEY: Record<ProposalFieldError, MessageKey> = {
 };
 
 /** One row of "Requests you're interested in": what the route chose to show. No request id, no client; `title` is null when the listing is no longer public. */
-export type HubInterestRow = { id: string; publicId: string; title: string | null; state: HubInterestState; sentOn: string; inviteHref: string | null };
+export type HubInterestRow = { id: string; publicId: string; title: string | null; state: HubInterestState; sentOn: string; inviteHref: string | null; link: boolean };
 
 const INTEREST_STATE_KEY: Record<HubInterestState, MessageKey> = {
   pending: "hub.interests.pending",
@@ -47,7 +47,7 @@ const InterestsSection: FC<{ locale: Locale; rows: readonly HubInterestRow[] }> 
             <tbody>
               {rows.map((row) => (
                 <tr>
-                  <td>{row.title === null ? tr("hub.interests.noLongerPublic") : <a href={localizedPath(locale, `/requests/${row.publicId}`)}>{row.title}</a>}</td>
+                  <td>{row.title === null ? tr("hub.interests.noLongerPublic") : !row.link ? row.title : <a href={localizedPath(locale, `/requests/${row.publicId}`)}>{row.title}</a>}</td>
                   <td>
                     <span class="badge">{tr(INTEREST_STATE_KEY[row.state])}</span>
                     {row.inviteHref ? (

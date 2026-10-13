@@ -526,19 +526,31 @@ export async function listBuilderInterests(db: D1Database, builderId: string, li
 }
 
 /**
- * Why the INSERT wrote nothing, for the message only (the INSERT alone decides): the product is not the builder's own published one, or the
- * builder already has `pendingCap` waiting interests on open requests. One read, run only after a refusal.
+ * Why the INSERT wrote nothing, for the message only (the INSERT alone decided), in ONE read: the product is not the builder's own published one,
+ * the builder already has `pendingCap` waiting interests on open requests, and what the builder now has on this listing (an invitation or an interest
+ * that a race may just have created), so the page can be drawn again without a second relation query.
  */
-export async function diagnoseInterestRefusal(db: D1Database, input: { builderId: string; productId: string | null; pendingCap: number }): Promise<{ badProduct: boolean; capped: boolean }> {
+export async function diagnoseInterestRefusal(
+  db: D1Database,
+  input: { publicId: string; builderId: string; productId: string | null; pendingCap: number },
+): Promise<{ badProduct: boolean; capped: boolean; inviteId: string | null; interest: { id: string; status: InterestStatus } | null }> {
   const row = await db
     .prepare(
-      `SELECT (?2 IS NOT NULL AND NOT EXISTS (SELECT 1 FROM products pr WHERE pr.id = ?2 AND pr.builder_id = ?1 AND pr.status = 'published')) AS bad_product,
+      `SELECT (?3 IS NOT NULL AND NOT EXISTS (SELECT 1 FROM products pr WHERE pr.id = ?3 AND pr.builder_id = ?2 AND pr.status = 'published')) AS bad_product,
               ((SELECT COUNT(*) FROM request_interests i JOIN requests ir ON ir.id = i.request_id JOIN request_publications ip ON ip.request_id = i.request_id
-                WHERE i.builder_id = ?1 AND i.status = 'pending' AND ir.status IN ${OPEN_REQUEST} AND ip.status = 'published') >= ?3) AS capped`,
+                WHERE i.builder_id = ?2 AND i.status = 'pending' AND ir.status IN ${OPEN_REQUEST} AND ip.status = 'published') >= ?4) AS capped,
+              (SELECT x.id FROM request_publications p JOIN request_invites x ON x.request_id = p.request_id WHERE p.public_id = ?1 AND x.builder_id = ?2) AS invite_id,
+              (SELECT i.id FROM request_publications p JOIN request_interests i ON i.request_id = p.request_id WHERE p.public_id = ?1 AND i.builder_id = ?2) AS interest_id,
+              (SELECT i.status FROM request_publications p JOIN request_interests i ON i.request_id = p.request_id WHERE p.public_id = ?1 AND i.builder_id = ?2) AS interest_status`,
     )
-    .bind(input.builderId, input.productId, input.pendingCap)
-    .first<{ bad_product: number; capped: number }>();
-  return { badProduct: row?.bad_product === 1, capped: row?.capped === 1 };
+    .bind(input.publicId, input.builderId, input.productId, input.pendingCap)
+    .first<{ bad_product: number; capped: number; invite_id: string | null; interest_id: string | null; interest_status: InterestStatus | null }>();
+  return {
+    badProduct: row?.bad_product === 1,
+    capped: row?.capped === 1,
+    inviteId: row?.invite_id ?? null,
+    interest: row?.interest_id && row.interest_status ? { id: row.interest_id, status: row.interest_status } : null,
+  };
 }
 
 export async function findInterestFor(db: D1Database, requestId: string, builderId: string): Promise<Interest | null> {

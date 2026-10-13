@@ -105,4 +105,18 @@ describe("Hub: Requests you're interested in", () => {
     expect(sectionOf(viHtml)).toContain(esc(vi["hub.interests.empty"]));
     expect(sectionOf(viHtml)).toContain(esc(vi["hub.interests.title"]));
   });
+
+  it("S-2: with the board switched off the titles are plain text (no link to a 404), the status still shows", async () => {
+    const { builder, cookie } = await builderOf();
+    const l = await listed({ publicTitle: `ZQX switched-off ${tag()}` });
+    await interest(l, builder.userId);
+    await boardFlag(false);
+    const html = await (await hub(cookie)).text();
+    const section = sectionOf(html);
+    expect(section).toContain("ZQX switched-off");
+    expect(section).not.toContain(`/requests/${l.publicId}`);
+    expect(section).toContain(en["hub.interests.pending"]);
+    await boardFlag(true);
+    expect(sectionOf(await (await hub(cookie)).text())).toContain(`/requests/${l.publicId}`);
+  });
 });

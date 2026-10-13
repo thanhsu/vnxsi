@@ -380,3 +380,59 @@ describe("error pattern (VNX-0807) and the page keeps its SEO", () => {
     expect(shown.queries()).toBeLessThanOrEqual(8);
   });
 });
+
+describe("VNX-2706a review round 1", () => {
+  const createAudits = async (actorId: string) => (await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'request_interest.create' AND actor_user_id = ?1").bind(actorId).first<{ n: number }>())?.n ?? 0;
+
+  it("S-1: a 409 writes no request_interest.create audit row; the 303 writes exactly one", async () => {
+    const l = await listed();
+    const { builder, cookie } = await builderOf();
+    const other = await makeBuilder(`zqx-s1-${tag()}@vnx.si`, `zqxs1${tag()}`, "approved");
+    const theirs = await addLiveProduct(other, `Theirs ${tag()}`);
+    expect((await post(interestPath(l), cookie, { note: "", productId: theirs.id })).status).toBe(409); // refused in SQL
+    expect(await createAudits(builder.userId)).toBe(0);
+    const pending = await builderOf("pending");
+    expect((await post(interestPath(l), pending.cookie, { note: "", productId: "" })).status).toBe(409); // pre-check
+    expect(await createAudits(pending.builder.userId)).toBe(0);
+    const closed = await listed({ requestStatus: "closed", closedAt: new Date(Date.now() - 3600_000).toISOString() });
+    expect((await post(interestPath(closed), cookie, { note: "", productId: "" })).status).toBe(409);
+    expect(await createAudits(builder.userId)).toBe(0);
+    expect((await post(interestPath(l), cookie, { note: "", productId: "" })).status).toBe(303);
+    expect(await createAudits(builder.userId)).toBe(1);
+    expect((await post(interestPath(l), cookie, { note: "", productId: "" })).status).toBe(409);
+    expect(await createAudits(builder.userId)).toBe(1);
+  });
+
+  it("L-3: the 409 refused in SQL (another builder's product; full cap) costs at most 8 D1 statements", async () => {
+    const l = await listed();
+    const { builder, cookie } = await builderOf();
+    const other = await makeBuilder(`zqx-l3-${tag()}@vnx.si`, `zqxl3${tag()}`, "approved");
+    const theirs = await addLiveProduct(other, `Theirs ${tag()}`);
+    const counted = countD1Queries(boardEnv);
+    const res = await app().request(formPost(interestPath(l), { note: "", productId: theirs.id }, { cookie }), undefined, counted.env);
+    expect(res.status).toBe(409);
+    expectErrorSummary(await res.text(), ["ib-product"]);
+    expect(counted.queries()).toBeLessThanOrEqual(8);
+
+    for (let i = 0; i < INTEREST_PENDING_CAP; i++) expect(await express((await listed()).publicId, builder.userId)).not.toBeNull();
+    const counted2 = countD1Queries(boardEnv);
+    const res2 = await app().request(formPost(interestPath(l), { note: "", productId: "" }, { cookie }), undefined, counted2.env);
+    expect(res2.status).toBe(409);
+    expect(await res2.text()).toContain(esc(en["board.interest.capReached"].replace("{n}", String(INTEREST_PENDING_CAP))));
+    expect(counted2.queries()).toBeLessThanOrEqual(8);
+  }, 60_000);
+
+  it("L-2: a withdraw refused on a closed listing shows only the closed block, no withdraw button", async () => {
+    const l = await listed({ requestStatus: "closed", closedAt: new Date(Date.now() - 3600_000).toISOString() });
+    const { builder, cookie } = await builderOf();
+    await testEnv.DB.prepare("INSERT INTO request_interests (id, request_id, builder_id, status, created_at, updated_at, write_id) VALUES (?1, ?2, ?3, 'dismissed', ?4, ?4, ?5)")
+      .bind(ulid(), l.requestId, builder.userId, new Date().toISOString(), ulid())
+      .run();
+    const res = await post(withdrawPath(l), cookie);
+    expect(res.status).toBe(409);
+    const html = mainOf(await res.text());
+    expect(html).toContain(en["board.cta.closed"]);
+    expect(html).not.toContain(en["board.interest.withdraw"]);
+    expect(html).not.toContain('id="ib-note"');
+  });
+});

@@ -61,6 +61,7 @@ export function registerHubInvitationRoutes(app: Hono<AppEnv>) {
     const builderId = c.get("builder").userId;
     const locale = c.get("locale");
     const now = new Date();
+    const boardOn = c.get("requestBoard") === true;
     const [items, interests] = await Promise.all([listBuilderInvitations(c.env.DB, builderId), listBuilderInterests(c.env.DB, builderId)]);
     // VNX-2706a (addendum 4.4, L4): an explicit mapping, so nothing but these fields reaches the view. The title only while the listing may still be seen.
     const rows: HubInterestRow[] = [];
@@ -72,6 +73,8 @@ export function registerHubInvitationRoutes(app: Hono<AppEnv>) {
         id: i.id,
         publicId: i.publicId,
         title: visible ? i.publicTitle : null,
+        // S-2: with the board switched off its pages are 404, so the title stays plain text.
+        link: boardOn,
         state,
         sentOn: i.createdAt.slice(0, 10),
         inviteHref: state === "invited" && i.inviteId ? localizedPath(locale, `/hub/invitations/${i.inviteId}`) : null,
