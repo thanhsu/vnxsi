@@ -9,13 +9,16 @@ const byId = (checks, id) => checks.find((c) => c.id === id);
 const res = (status, headers = {}, body = "") => ({ status, headers: new Headers(headers), body });
 
 // A model of the app that answers every check in the real table correctly.
-function goodResponse(path) {
+// `board` = the request board is on (the --board mode); default off, the state after the first deploy.
+function goodResponse(path, board = false) {
   const prefix = (path.match(/^\/(vi|zh-hans|zh-hant)(?=\/|$)/) ?? [""])[0];
   const rest = path.slice(prefix.length) || "/";
   const sec = { "content-security-policy": CSP, "x-content-type-options": "nosniff", "x-frame-options": "DENY", "strict-transport-security": "max-age=31536000", "referrer-policy": "strict-origin-when-cross-origin" };
   const html = { ...sec, "content-type": "text/html; charset=UTF-8" };
   const notFound = '<html><meta name="robots" content="noindex"/></html>';
   const sealed = { ...html, "cache-control": "no-store", "x-robots-tag": "noindex, nofollow" };
+  if (rest === "/requests") return board ? res(200, html, "board list") : res(404, html, notFound);
+  if (rest.startsWith("/requests/zz-")) return res(404, html, notFound);
   if (/^\/(admin|hub|me)$/.test(rest)) return res(303, { ...sec, location: `${prefix}/login?next=${encodeURIComponent(path)}` });
   if (rest === "/ops" || rest.startsWith("/ops/")) return prefix ? res(404, { ...html, "cache-control": "no-store" }, notFound) : res(404, sealed, notFound);
   if (rest.startsWith("/p/zz-")) return res(404, html, notFound);
@@ -30,7 +33,7 @@ function goodResponse(path) {
 }
 
 // Fake clock: sleep advances time, fetch records when it was called.
-function world(responder = goodResponse) {
+function world(responder = (path) => goodResponse(path)) {
   let t = 1_000_000;
   const calls = [];
   return {
@@ -150,15 +153,27 @@ test("429 waits and retries once with a warning instead of failing at once", asy
   assert.ok(lines.some((l) => l.includes("rate limited")));
 });
 
-test("rate-limited paths <= 8 in the real table, window <= 10 on the clock", async () => {
-  assert.ok(buildBudgetPlan(buildChecks({ slug: "x" })).covered <= 8);
-  assert.ok(buildBudgetPlan(buildChecks()).covered <= 8);
+test("rate-limited paths per mode in the real table (EPIC 27: /requests* counts), window <= 10 on the clock", async () => {
+  // 6 today (4x /p/ 404, 2x /go 404) + the board checks: off = 4x /requests + 1 missing listing, --board = /requests + 1 missing listing; --slug adds 2 HEAD checks.
+  assert.equal(buildBudgetPlan(buildChecks()).covered, 11);
+  assert.equal(buildBudgetPlan(buildChecks({ slug: "x" })).covered, 13);
+  assert.equal(buildBudgetPlan(buildChecks({ board: true })).covered, 8);
+  assert.equal(buildBudgetPlan(buildChecks({ board: true, slug: "x" })).covered, 10);
+  assert.equal(isRateCovered("/requests"), true);
+  assert.equal(isRateCovered("/vi/requests"), true);
+  assert.equal(isRateCovered("/zh-hant/requests/ABC"), true);
+  assert.equal(isRateCovered("/requestsx"), false);
+  assert.equal(isRateCovered("/me/requests/ABC"), false);
   assert.equal(isRateCovered("/vi/p/a"), true);
   assert.equal(isRateCovered("/go/a"), true);
   assert.equal(isRateCovered("/products"), false);
-  const w = world();
-  await runWith(w, ["--slug", "some-product"]);
-  assertWindow(w.calls.filter((c) => isRateCovered(c.path)).map((c) => c.at));
+  for (const argv of [["--slug", "some-product"], ["--slug", "some-product", "--board"], ["--board"], []]) {
+    const w = world((path) => goodResponse(path, argv.includes("--board")));
+    const { code, lines } = await runWith(w, argv);
+    // The model of the app has no real product, so a --slug run is not expected to pass; only the pacing is asserted for it.
+    if (!argv.includes("--slug")) assert.equal(code, 0, lines.join("\n"));
+    assertWindow(w.calls.filter((c) => isRateCovered(c.path)).map((c) => c.at));
+  }
 });
 
 test("the limiter holds for a table far above the real budget (30 covered checks)", async () => {
@@ -173,7 +188,8 @@ test("the limiter holds for a table far above the real budget (30 covered checks
 });
 
 test("parseArgs: defaults, env, trailing slash, rejects foreign schemes and bad slugs", () => {
-  assert.deepEqual(parseArgs([], {}), { base: "https://vnx.si", slug: null });
+  assert.deepEqual(parseArgs([], {}), { base: "https://vnx.si", slug: null, board: false });
+  assert.equal(parseArgs(["--board"], {}).board, true);
   assert.equal(parseArgs([], { BASE_URL: "https://example.test/" }).base, "https://example.test");
   assert.equal(parseArgs(["--base", "http://localhost:8787"], { BASE_URL: "https://x.test" }).base, "http://localhost:8787");
   assert.equal(parseArgs(["--base", "http://127.0.0.1:8787/"], {}).base, "http://127.0.0.1:8787");
@@ -282,4 +298,98 @@ test("a successful check resets the consecutive network error count", async () =
   };
   const { lines } = await runWith(w);
   assert.ok(!lines.some((l) => l.startsWith("ABORT")));
+});
+
+// ---------------------------------------------------------------- EPIC 27 (VNX-2709): the board off (default) and --board
+
+const PID = "0123456789ABCDEFGHJKMNPQRS"; // 26 characters of the ULID alphabet: a public id
+const sitemapOf = (...paths) => `<urlset><url><loc>https://vnx.si/privacy</loc></url><url><loc>https://vnx.si/for-builders</loc></url>${paths.map((p) => `<url><loc>https://vnx.si${p}</loc></url>`).join("")}</urlset>`;
+const fourLocales = (rest) => ["", "/vi", "/zh-hans", "/zh-hant"].map((p) => `${p}${rest}`);
+const sitemapRes = (body) => res(200, { "content-type": "application/xml" }, body);
+const HTML = { "content-type": "text/html" };
+
+test("default (board off): / and /for-builders have no link to /requests; /requests is 404 in four locales; /requests/<none> is 404", () => {
+  const checks = buildChecks();
+  for (const id of ["page /", "page /vi/", "page /for-builders", "page /zh-hant/for-builders"]) {
+    const check = byId(checks, id);
+    assert.ok(check, id);
+    assert.deepEqual(evaluate(check, goodResponse(check.path), CTX), [], id);
+    for (const link of ['<a href="/requests">', '<a href="/vi/requests">', '<a href="/zh-hans/requests/ABC">']) {
+      assert.ok(evaluate(check, res(200, HTML, link), CTX).some((m) => m.includes("links to /requests")), `${id} ${link}`);
+    }
+    // Other hrefs that merely start with the word are not the board link.
+    assert.deepEqual(evaluate(check, res(200, HTML, '<a href="/requests-help">'), CTX), [], id);
+  }
+  assert.equal(byId(checks, "page /products").asserts.length, 1, "other pages are not checked for the link");
+  for (const prefix of ["", "/vi", "/zh-hans", "/zh-hant"]) {
+    const check = byId(checks, `board-off ${prefix}/requests`);
+    assert.equal(check.status, 404);
+    assert.deepEqual(evaluate(check, goodResponse(check.path), CTX), []);
+    assert.ok(evaluate(check, res(200, HTML, "board"), CTX).some((m) => m.includes("status 200")), "a live board fails the default mode");
+  }
+  assert.equal(byId(checks, "board /requests"), undefined);
+  assert.equal(byId(checks, "board-404 /requests/<none>").status, 404);
+});
+
+test("default (board off): the sitemap names nothing under /requests, in any locale", () => {
+  const check = byId(buildChecks(), "sitemap.xml");
+  assert.deepEqual(evaluate(check, sitemapRes(sitemapOf()), CTX), []);
+  for (const loc of ["/requests", "/vi/requests", `/requests/${PID}`, `/zh-hans/requests/${PID}`]) {
+    assert.ok(evaluate(check, sitemapRes(sitemapOf(loc)), CTX).some((m) => m.includes("while the board is off")), loc);
+  }
+  assert.deepEqual(evaluate(check, sitemapRes(sitemapOf("/requests-guide")), CTX), []); // a different path, not under /requests
+});
+
+test("--board: /requests is 200 HTML without public caching or no-referrer; an unknown listing is a noindex 404", () => {
+  const checks = buildChecks({ board: true });
+  assert.equal(byId(checks, "board-off /requests"), undefined);
+  const list = byId(checks, "board /requests");
+  assert.equal(list.status, 200);
+  assert.deepEqual(evaluate(list, goodResponse("/requests", true), CTX), []);
+  assert.ok(evaluate(list, res(404, HTML, "x"), CTX).some((m) => m.includes("status 404")));
+  assert.ok(evaluate(list, res(200, { ...HTML, "cache-control": "public, max-age=60" }, "x"), CTX).some((m) => m.includes("cache-control")));
+  assert.ok(evaluate(list, res(200, { ...HTML, "cache-control": "s-maxage=5" }, "x"), CTX).some((m) => m.includes("cache-control")));
+  assert.deepEqual(evaluate(list, res(200, { ...HTML, "cache-control": "private, no-store" }, "x"), CTX), []);
+  assert.ok(evaluate(list, res(200, { ...HTML, "referrer-policy": "no-referrer" }, "x"), CTX).some((m) => m.includes("referrer-policy")));
+  assert.ok(evaluate(list, res(200, { "content-type": "application/json" }, "x"), CTX).length > 0);
+  const missing = byId(checks, "board-404 /requests/<none>");
+  assert.deepEqual(evaluate(missing, goodResponse(missing.path, true), CTX), []);
+  assert.ok(evaluate(missing, res(404, HTML, "no robots"), CTX).some((m) => m.includes("noindex")));
+  // The footer link is not asserted either way once the board is on.
+  assert.deepEqual(evaluate(byId(checks, "page /"), res(200, HTML, '<a href="/requests">'), CTX), []);
+});
+
+test("--board: the sitemap may list the board, and only as /requests and /requests/<public id> in four locales (nothing private)", () => {
+  const check = byId(buildChecks({ board: true }), "sitemap.xml");
+  const ok = sitemapOf(...fourLocales("/requests"), ...fourLocales(`/requests/${PID}`));
+  assert.deepEqual(evaluate(check, sitemapRes(ok), CTX), []);
+  assert.deepEqual(evaluate(check, sitemapRes(sitemapOf()), CTX), [], "no listing yet is fine");
+  const bad = [
+    [sitemapOf(`/requests/${PID}`), "3 locales missing: the id is in the sitemap once"],
+    [sitemapOf(...fourLocales("/requests/short")), "not a public id"],
+    [sitemapOf(...fourLocales("/requests/lowercase0123456789abcdefgh")), "not a public id"],
+    [sitemapOf(...fourLocales(`/requests/${PID}/interest`)), "unexpected board path"],
+    [sitemapOf(`/me/requests/${PID}`), "private path"],
+    [sitemapOf(`/ops/marketplace/requests/${PID}`), "private path"],
+  ];
+  for (const [body, why] of bad) assert.ok(evaluate(check, sitemapRes(body), CTX).length > 0, why);
+  assert.ok(evaluate(check, sitemapRes(ok.replace("</urlset>", "<!-- request_id: 1 --></urlset>")), CTX).some((m) => m.includes("request_id")));
+  // The existing rules still hold in this mode.
+  assert.ok(evaluate(check, sitemapRes(sitemapOf("/ops")), CTX).some((m) => m.includes("private path")));
+});
+
+test("both modes run end to end against a model of the app and send GET/HEAD only", async () => {
+  for (const board of [false, true]) {
+    const w = world((path) => goodResponse(path, board));
+    const { code, lines } = await runWith(w, board ? ["--board"] : []);
+    assert.equal(code, 0, lines.join("\n"));
+    assert.equal(lines[0].includes("--board"), board);
+    assert.ok(w.calls.some((c) => c.path === "/requests"));
+    for (const c of w.calls) assert.ok(c.method === "GET" || c.method === "HEAD");
+  }
+  // The wrong mode fails: a live board under the default, a missing board under --board.
+  const live = world((path) => goodResponse(path, true));
+  assert.equal((await runWith(live)).code, 1);
+  const off = world((path) => goodResponse(path, false));
+  assert.equal((await runWith(off, ["--board"])).code, 1);
 });

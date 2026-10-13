@@ -3,7 +3,7 @@ import { listSitemapBuilders } from "../db/builders.ts";
 import { isFlagEnabled } from "../db/flags.ts";
 import { listSitemapMerchants } from "../db/merchants.ts";
 import { listSitemapProducts } from "../db/products.ts";
-import { countOpenPublicationsAll, listSitemapRequests } from "../db/request-board.ts";
+import { listSitemapRequests } from "../db/request-board.ts";
 import { isBoardIndexable } from "../domain/request-board.ts";
 import type { AppEnv } from "../env.ts";
 import { siteOrigin } from "../http/origin.ts";
@@ -20,7 +20,7 @@ export function registerSeoRoutes(app: Hono<AppEnv>) {
     const tools = (await isFlagEnabled(c.env.DB, "content_indexing")) ? await listSitemapMerchants(c.env.DB) : [];
     // EPIC 27 (VNX-2705b, L7): the FULL gate (flag AND go-live date, from the site middleware). Gate off: no query, no entry. The query lives in db/request-board.ts.
     const board = c.get("requestBoard");
-    const [listings, openCount] = board ? await Promise.all([listSitemapRequests(c.env.DB), countOpenPublicationsAll(c.env.DB)]) : [[], 0];
+    const listings = board ? await listSitemapRequests(c.env.DB) : [];
     const entries: SitemapEntry[] = [
       { rest: "/", localized: true },
       { rest: "/products", localized: true },
@@ -35,7 +35,7 @@ export function registerSeoRoutes(app: Hono<AppEnv>) {
       ...products.map((p) => ({ rest: `/p/${p.slug}`, lastmod: p.updatedAt, localized: true })),
       ...builders.map((b) => ({ rest: `/b/${b.handle}`, lastmod: b.updatedAt, localized: true })),
       ...tools.map((m) => ({ rest: `/tools/${m.slug}`, lastmod: m.updatedAt, localized: true })),
-      ...(board && isBoardIndexable(openCount) ? [{ rest: "/requests", localized: true }] : []),
+      ...(board && isBoardIndexable(listings.length) ? [{ rest: "/requests", localized: true }] : []),
       ...listings.map((l) => ({ rest: `/requests/${l.publicId}`, lastmod: l.lastmod, localized: true })),
     ];
     return c.body(renderSitemap(siteOrigin(c), entries), 200, { "content-type": "application/xml; charset=utf-8", "cache-control": CACHE });

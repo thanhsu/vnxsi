@@ -59,12 +59,15 @@ describe("/requests indexing follows isBoardIndexable(countOpenPublicationsAll) 
   });
 
   it("stays within 8 D1 queries over and under the threshold, filtered or not", async () => {
-    await openUpTo(MIN_OPEN_FOR_INDEX);
-    for (const path of ["/requests", "/requests?category=booking", "/requests?page=1"]) {
-      const counted = countD1Queries(boardEnv);
-      const res = await app().request(getReq(path), undefined, counted.env);
-      expect(res.status, path).toBe(200);
-      expect(counted.queries(), path).toBeLessThanOrEqual(8);
+    // The route has no query that depends on the threshold; measure on both sides of it (the second pass has MIN_OPEN_FOR_INDEX or more open).
+    for (const side of ["whatever is open now", "at the threshold"]) {
+      if (side === "at the threshold") await openUpTo(MIN_OPEN_FOR_INDEX);
+      for (const path of ["/requests", "/requests?category=booking", "/requests?page=1"]) {
+        const counted = countD1Queries(boardEnv);
+        const res = await app().request(getReq(path), undefined, counted.env);
+        expect(res.status, `${side} ${path}`).toBe(200);
+        expect(counted.queries(), `${side} ${path}`).toBeLessThanOrEqual(8);
+      }
     }
   });
 });

@@ -99,7 +99,9 @@ Biến `--var` (chỉ có hiệu lực trong tiến trình `wrangler dev` cục 
 | `a11y.spec.ts` | axe với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa` trên 12 trang công khai `en`, 3 trang builder đã đăng nhập, 1 trang client đã đăng nhập (`/me/requests/:id`, khối "Public request board", VNX-2703b), 4 trang `vi`, `/` và form Inquiry ở 360 px, `/` có chuyển động sau khi count-up và mọi animation hữu hạn xong, và `/`, `/vi/` khi `landing.js` + `home.js` bị chặn (biến thể `nojs`, mục dưới). |
 | `meta.spec.ts` | Chứng minh công cụ không "xanh rỗng": axe bắt `image-alt` và `color-contrast`, bộ nghe CSP bắt script inline bị chặn và `console.error`, cơ chế `KNOWN_A11Y` vừa che được vi phạm vừa làm đỏ mục thừa, `settle()` dừng với `E2E infrastructure` khi một asset cùng origin nạp lỗi và cho qua khi test đã khai báo request đó. |
 
-Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, request board (trừ form `/request`, khối Ops "Public listing", khối Ops "Interested builders" và khối client `/me` "Public request board" ở trên; phần còn lại thêm theo từng task EPIC 27), trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
+Request board (EPIC 27) đã được phủ bởi các dòng ở trên; vòng đời đầy đủ (opt-in, publish, interest, mời, chọn, đóng, gỡ, cổng tắt) do một test Vitest qua HTTP phủ (`apps/web/test/public/request-board-gate.test.ts`, VNX-2709), VNX-2709 không thêm spec e2e hay POST mới nên bảng ngân sách POST giữ nguyên.
+
+Chưa kiểm (P2 của plan): upload ảnh R2, gửi duyệt và xuất bản product, inquiry khi đã đăng nhập và `/p/:slug/inquiry/*`, trang tool, admin/ops, zh-Hans/zh-Hant, chế độ tối, trang lỗi 4xx, Firefox/WebKit, cảm ứng thật.
 Từ VNX-0807, chỉ có Vitest (chưa có E2E): mẫu lỗi chung trên các form hub (apply, portfolio, products, pricing, media, invitations), thread inquiry (`/hub/inquiries/:id`, `/me/inquiries/:id`); deck homepage ở chế độ thẻ product khi không JS (seed E2E chưa có đủ 3 product công khai, nên lượt `nojs` chỉ phủ chế độ thẻ danh mục).
 
 ### Biến thể `nojs` và chờ animation
