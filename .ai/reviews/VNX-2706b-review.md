@@ -77,3 +77,25 @@ Phải làm trước khi đóng task: M-1 (hoặc vnxsi-72 hoãn có tên task),
 - **VNX-2707a/b (pháp lý):** Privacy/Terms phiên bản `board` nói đúng hành vi đã làm: interest chỉ đội ngũ thấy (khối Ops chỉ cho `marketplace.act`; Viewer, Content không thấy), client không thấy trừ khi builder được mời, Ops có thể bỏ qua (dismiss) không lý do và không email (Q12), interest được giữ cùng lời mời để cải thiện việc ghép (§9.5: "dữ liệu interest → mời → đề xuất → được chọn được giữ để Wave 2"). Không thêm câu hứa nào về điểm gợi ý (interest không cộng điểm).
 - **VNX-2709 (cổng ra):** khẳng định lại ADR-004 trên đường mời (`suggestBuilders` không đổi, bảng gợi ý byte-identical khi có interest); nếu L-3 hoãn thì làm ở đây; kiểm thẻ "Interests waiting" dẫn tới bộ lọc (M-1) trước khi Owner bật cờ (VNX-2708); `isRateCovered` và runbook không cần dòng mới cho Dismiss (không rate limit, chỉ `marketplace.act`).
 - **Ghi nhận:** `listCandidates` có `LIMIT 1000` theo `user_id` (M6): khi số builder vượt 1000, cả bảng gợi ý lẫn cột điểm của khối có thể thiếu builder. Không thuộc EPIC 27.
+
+## Re-review (vòng sửa 1, `ec6b34f`)
+
+- **Ngày:** 2026-10-13. **Đã đọc:** diff `631a5f9..ec6b34f` (12 file, +219/−71) và mục "Vòng sửa 1" của báo cáo.
+- **Lệnh đã chạy lại (HEAD `ec6b34f`):** `npm run typecheck -w apps/web` exit 0; bộ file `test/ops/interested-builders|overview|layout|marketplace-requests|marketplace-request-board`, `test/admin/requests`, `test/db/request-board`: **7 file, 196 test xanh**; **toàn bộ** `npm test -w apps/web -- --maxWorkers=2 --testTimeout=60000`: **206 file, 2642 passed + 2 skipped** (gồm `test/ops/layout.test.ts` mà Implementer chỉ chạy riêng sau khi sửa); `npm run e2e` một lần: **85 passed** (1.3 phút). Đã xóa `e2e/.state`, `playwright-report`, `test-results`; không còn `workerd`/`wrangler`.
+
+### Đối chiếu từng phát hiện
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| M-1 | ✓ Đóng | Hằng số `INTEREST_QUEUE` (một `FROM … WHERE` theo L9) dùng chung cho `interestQueue` (thẻ) và `listInterestQueueRequestIds` (bộ lọc, `GROUP BY r.id ORDER BY MIN(i.created_at), r.id`, cùng cách tìm theo tiêu đề như `public=pending`). Thẻ trỏ `?interests=pending`; `requestFilter` mang bộ lọc qua trang chi tiết, mọi `action` và redirect (không fragment); `public=pending` thắng khi có cả hai; câu trạng thái rỗng riêng. Test theo id: request đóng, interest đã dismiss, builder bị khóa, request không có interest bị loại; thứ tự interest cũ nhất trước; bộ lọc mang qua Dismiss rồi request rời danh sách; Viewer thấy danh sách lọc (như `public=pending`). `overview.test.ts`, `layout.test.ts` cập nhật link. |
+| L-1 | ✓ Đóng | `AuditInterestFlipGuard` trong `db/audit.ts`: `INSERT … SELECT … i.id … FROM request_interests i WHERE request_id AND builder_id AND write_id = <writeId của batch>`; `entity_id` lấy từ chính dòng vừa chuyển, tối đa một dòng (`UNIQUE (request_id, builder_id)`), 0 dòng khi batch không chuyển. Bỏ lần đọc trước (`findPendingInterestIds`). `data` vẫn `{ requestId, inviteId }`. Test race mới (proxy chèn interest `pending` trước batch) → `invited` + đúng 1 dòng; các test 0 dòng (thua cổng, bị khóa, bị dismiss giữa chừng, interest `dismissed`/`withdrawn`, không interest) vẫn xanh. **Bằng chứng đỏ:** chấp nhận. Mã cũ cho 0 dòng trong đúng kịch bản này (đầu dò B của review), test mới đòi 1; Implementer làm guard không bao giờ khớp thì 4 test đỏ, gồm test race. Hai điều đó cùng nhau chứng minh test bắt được lỗi. |
+| L-2 | ✓ Đóng | (a) Điểm của khối so với `requestMatching(...).scores` không điều kiện (khẳng định builder là ứng viên); test mới: `suggestions` bằng đúng `suggestBuilders` với giới hạn mặc định trên cùng ứng viên, và `scores` khớp từng điểm. (b) Sau Dismiss, `/requests/:publicId` với cookie builder có `board.interest.notInvited` và không có form rút. |
+| L-3 | ✓ Đóng | `listRequestInterestAudit` (một truy vấn, `entity_id IN (SELECT id FROM request_interests WHERE request_id = ?)`, cùng projection không `data`) chạy trong `Promise.all` có sẵn, chỉ khi `canAct`; gộp vào History cùng thứ tự, cùng `HISTORY_LIMIT`, lỗi chung. Test: Owner và Operator thấy `request_interest.dismiss` và `.invite`; Viewer không thấy. |
+| S-1, S-3 | ✓ Làm | `ops.interests.noInvite` thêm câu "No score is shown…"; `dismissHelp` thêm "This cannot be undone." Đúng sự thật. |
+| S-2 | Không làm | Tùy chọn; giữ phán quyết 5. |
+
+Không có phát hiện mới. Không đổi hành vi M6 (`admin/requests`, `ops/marketplace-requests`, `me/select` không đổi kỳ vọng). Không thay đổi ngoài phạm vi.
+
+### Verdict cuối
+
+**APPROVE.**
