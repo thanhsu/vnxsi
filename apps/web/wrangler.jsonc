@@ -36,6 +36,9 @@
     // (a) B must be at least 14 days after the deploy that first carries it (the advance notice of the new Privacy and Terms), and not before PRIVACY_NOTICE_GO_LIVE.
     // (b) Empty or malformed = the board is off everywhere (pages 404, no opt-in box, no footer link).
     // (c) Commit B here on main in a chore: commit. Never set it via --var or the dashboard, and never clear it.
+    // (d) From B minus 14 days /privacy and /terms switch to the board texts (Last updated = B) and the advance notice appears (window B-14 to B+31); the switch is by date alone, not by the DB flag.
+    //     So B must be at least 14 days after the deploy that carries it, and EVERY later deploy, from any session or branch, must come from a tree that contains the date commit: a tree without it
+    //     puts /privacy and /terms back on the pre-board texts while public requests already exist. Never clear it. The board texts are required to exist whenever B is set (wrangler-guard test).
     "REQUEST_BOARD_GO_LIVE": ""
   },
   "workers_dev": true,
