@@ -80,7 +80,7 @@ export function registerHubInvitationRoutes(app: Hono<AppEnv>) {
         inviteHref: state === "invited" && i.inviteId ? localizedPath(locale, `/hub/invitations/${i.inviteId}`) : null,
       });
     }
-    return page(c, <InvitationListPage locale={locale} origin={requestOrigin(c)} items={items} interests={rows} />);
+    return page(c, <InvitationListPage locale={locale} origin={requestOrigin(c)} items={items} interests={boardOn || rows.length > 0 ? rows : undefined} />);
   });
 
   onLocalized(app, "get", "/hub/invitations/:id", requireBuilder, async (c) => {

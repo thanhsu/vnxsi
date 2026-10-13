@@ -119,4 +119,26 @@ describe("Hub: Requests you're interested in", () => {
     await boardFlag(true);
     expect(sectionOf(await (await hub(cookie)).text())).toContain(`/requests/${l.publicId}`);
   });
+
+  it("VNX-2706c: gate off and no interest rows: no section and no mention of the public request board (EN and VI; flag off, and date empty)", async () => {
+    const { cookie } = await builderOf();
+    await boardFlag(false);
+    for (const env of [boardEnv, { ...boardEnv, REQUEST_BOARD_GO_LIVE: "" }]) {
+      for (const locale of ["en", "vi"] as const) {
+        const res = await app().request(getReq(localizedPath(locale, "/hub/invitations"), cookie), undefined, env);
+        expect(res.status).toBe(200);
+        const html = await res.text();
+        expect(html).not.toContain('id="interests"');
+        expect(html).not.toContain(esc(en["hub.interests.title"]));
+        expect(html).not.toContain("public request board");
+        expect(html).not.toContain("bảng nhu cầu công khai");
+      }
+    }
+  });
+
+  it("VNX-2706c: gate on and no interest rows: the section shows its approved empty state", async () => {
+    const { cookie } = await builderOf();
+    const html = await (await hub(cookie)).text();
+    expect(sectionOf(html)).toContain(esc(en["hub.interests.empty"]));
+  });
 });

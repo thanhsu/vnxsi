@@ -41,12 +41,15 @@ const html = async (path: string, cookie?: string, env: Bindings = boardEnv) => 
 };
 
 /** Every public (signed-out or builder-facing) page fetched in the scenario: swept for private strings at the end. */
-const seen: { label: string; text: string }[] = [];
-async function pub(path: string, cookie?: string, env: Bindings = boardEnv) {
+const seen: { label: string; text: string; allow?: string[] }[] = [];
+async function pub(path: string, cookie?: string, env: Bindings = boardEnv, allow?: string[]) {
   const out = await html(path, cookie, env);
-  seen.push({ label: `${cookie ? "signed-in" : "signed-out"} ${path} -> ${out.res.status}`, text: out.text });
+  seen.push({ label: `${cookie ? "signed-in" : "signed-out"} ${path} -> ${out.res.status}`, text: out.text, allow });
   return out;
 }
+
+/** The Hub invitations list is the builder's own M6 invitation: it names the request as the client typed it. Every other private string still fails the sweep. */
+const hubPage = (cookie: string) => pub("/hub/invitations", cookie, boardEnv, [main.title]);
 
 async function opsMember(email: string, role: GrantableRole) {
   const owner = await ensureUser(ROOT);
@@ -296,7 +299,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
     expect(outbox).toEqual([]); // no e-mail to the client, to Ops or to the builders
     // The builder's own view and Hub.
     expect(mainOf((await pub(`/requests/${main.publicId}`, A.cookie)).text)).toContain(esc(en["board.interest.sent"]));
-    expect(hubSection((await html("/hub/invitations", A.cookie)).text)).toContain(en["hub.interests.pending"]);
+    expect(hubSection((await hubPage(A.cookie)).text)).toContain(en["hub.interests.pending"]);
     // The client does not see it, neither on the page of the request nor in anything with a builder's name.
     const clientPage = (await html(`/me/requests/${main.requestId}`, main.cookie)).text;
     for (const hidden of [NOTE_A, A.builder.handle, "Builder a", `Builder b ${T}`, esc(en["ops.interests.title"])]) expect(clientPage, hidden).not.toContain(hidden);
@@ -332,7 +335,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
     expect(invites.map((i) => i.builder_id)).toEqual([A.builder.userId]);
     invitedLinkId = invites[0]!.id;
     expect(outbox.map((m) => m.to)).toEqual([A.email]); // the existing M6 invitation e-mail, and only that
-    const hub = hubSection((await html("/hub/invitations", A.cookie)).text);
+    const hub = hubSection((await hubPage(A.cookie)).text);
     expect(hub).toContain(en["hub.interests.invited"]);
     expect(hub).toContain(`href="/hub/invitations/${invitedLinkId}"`);
     const page = await pub(`/requests/${main.publicId}`, A.cookie);
@@ -345,7 +348,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
     expect(await findInterestById(testEnv.DB, idB)).toMatchObject({ status: "dismissed", decidedBy: ops.user.id });
     expect(await actionsOf(idB)).toEqual(["request_interest.create", "request_interest.dismiss"]);
     expect(outbox).toEqual([]);
-    expect(hubSection((await html("/hub/invitations", B.cookie)).text)).toContain(en["hub.interests.notInvited"]);
+    expect(hubSection((await hubPage(B.cookie)).text)).toContain(en["hub.interests.notInvited"]);
     expect(mainOf((await pub(`/requests/${main.publicId}`, B.cookie)).text)).toContain(esc(en["board.interest.notInvited"]));
     // The waiting count is back to zero, and the audit rows carry ids only, never the note or a name.
     expect(queueCount((await html("/ops", ops.cookie)).text, "interests")).toBe(0);
@@ -377,7 +380,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
     expect(mainOf((await pub("/requests")).text)).not.toContain(main.publicId);
     // The invited builder's page no longer offers anything; B's Hub still says Not invited.
     expect(mainOf((await pub(`/requests/${main.publicId}`, A.cookie)).text)).not.toContain(`/requests/${main.publicId}/interest`);
-    expect(hubSection((await html("/hub/invitations", B.cookie)).text)).toContain(en["hub.interests.notInvited"]);
+    expect(hubSection((await hubPage(B.cookie)).text)).toContain(en["hub.interests.notInvited"]);
     // Indexability by difference: 5 open before, 4 now.
     expect(await countOpenPublicationsAll(testEnv.DB)).toBe(MIN_OPEN_FOR_INDEX - 1);
     const list = await pub("/requests");
@@ -447,7 +450,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
       expect((await pub("/")).text).not.toContain('href="/requests"');
       expect((await pub("/request")).text).not.toContain('name="publish"');
       // The Hub still shows the state, with the title and no link.
-      const hubC = hubSection((await html("/hub/invitations", C.cookie)).text);
+      const hubC = hubSection((await hubPage(C.cookie)).text);
       expect(hubC).toContain(en["hub.interests.pending"]);
       expect(hubC).not.toContain(`/requests/${hold.publicId}`);
 
@@ -480,7 +483,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
       expect((await findInterestById(testEnv.DB, idC))!.status).toBe("dismissed");
       expect(await actionsOf(idC)).toEqual(["request_interest.create", "request_interest.dismiss"]);
       expect(outbox).toEqual([]);
-      expect(hubSection((await html("/hub/invitations", C.cookie)).text)).toContain(en["hub.interests.notInvited"]);
+      expect(hubSection((await hubPage(C.cookie)).text)).toContain(en["hub.interests.notInvited"]);
       // The client's withdraw never reads the flag.
       expect((await send(`/me/requests/${gone.requestId}/publication/withdraw`, {}, gone.cookie)).status).toBe(303);
       expect((await pubRow(gone.requestId)).status).toBe("withdrawn");
@@ -499,7 +502,7 @@ describe("EPIC 27 exit gate: one request, whole life, over HTTP", { timeout: 60_
     expect(seen.length).toBeGreaterThan(30);
     const everyone = [main, second, ...secretsOf];
     for (const page of seen) {
-      for (const c of everyone) for (const secret of c.secrets) expect(page.text, `${page.label}: ${secret}`).not.toContain(secret);
+      for (const c of everyone) for (const secret of c.secrets) if (!page.allow?.includes(secret)) expect(page.text, `${page.label}: ${secret}`).not.toContain(secret);
       expect(page.text, page.label).not.toContain(`ZQX-NOTE-A-${T}`);
       expect(page.text, page.label).not.toContain(`ZQX-ADMIN-NOTE-${T}`);
     }
