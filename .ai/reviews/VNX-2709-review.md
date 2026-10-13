@@ -118,3 +118,14 @@ Kiểm chỉ đọc, sau `git fetch origin` (`origin/main` = `04b3bc9`, "docs: r
 - **VNX-2708 (Owner):** theo `docs/runbooks/deploy.md` mục 4 "Thứ tự bật" (6 bước), mục 6 (rule `/requests*`), mục 7 (`--board` sau go-live). Khi commit B: Reviewer ghi SHA vào runbook mục 4 và mục 2 bước 2.
 - **Khi mở PR:** kiểm CI job `e2e` xanh trên nhánh (plan 2709, chưa kiểm được vì chưa push).
 - S-2 (smoke `/requests` 0 hoặc 4 lần): tùy chọn, có thể làm cùng task smoke sau.
+
+## Re-review sau VNX-2706c (2026-10-13)
+
+- **M-1:** **Đóng** ở `d519213` (review `.ai/reviews/VNX-2706c-review.md`: APPROVE). `/hub/invitations` chỉ có mục interest khi cổng bật hoặc builder có dòng interest; test mới cho cổng tắt (cờ tắt và ngày rỗng, EN và VI) xanh.
+- **S-1:** **Đã làm** ở `d519213` (Hub qua `pub()`), kèm một LOW mới (L-1 của review 2706c: miễn trừ `main.title` áp cho mọi builder thay vì chỉ builder được mời sau khi mời; không chặn).
+- **L-1, S-2 của review này:** giữ nguyên, không chặn.
+- **Lệnh:** typecheck exit 0; `test/hub/interests.test.ts` + `test/public/request-board-gate.test.ts` 18/18; toàn bộ 211 file / 2739 passed. `npm run e2e` không chạy lại (D: dưới 300 MB); lần chạy 85/85 ở trên là trên `a0f91fd`.
+
+### Verdict merge cuối
+
+**READY để merge với bảng tắt** (`REQUEST_BOARD_GO_LIVE = ""`, cờ `request_board` tắt). Mọi điều kiện ở mục "Merge readiness" đạt; danh sách "những gì thay đổi khi cờ tắt" giờ không còn mục nào người dùng ngoài staff thấy được (Hub đã sửa). Điều kiện còn lại khi mở PR: CI job `e2e` xanh trên nhánh. Merge, push, deploy vẫn chờ lệnh rõ ràng; VNX-2708 là của Owner.
