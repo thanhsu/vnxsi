@@ -359,6 +359,11 @@ describe("OAuth sessions never reach /ops (ADR-012 §6, decision 9)", () => {
       ["/ops", {}],
       ["/ops/marketplace/builders", {}],
       ["/ops/marketplace/builders/x/approve", { method: "POST" }],
+      // EPIC 27 (VNX-2704a): the public-listing actions of a request.
+      ["/ops/marketplace/requests/x/publication/publish", { method: "POST" }],
+      ["/ops/marketplace/requests/x/publication/edit", { method: "POST" }],
+      ["/ops/marketplace/requests/x/publication/reject", { method: "POST" }],
+      ["/ops/marketplace/requests/x/publication/unpublish", { method: "POST" }],
     ];
     for (const method of OAUTH_METHODS) {
       const oauth = await signIn(ROOT, { method });

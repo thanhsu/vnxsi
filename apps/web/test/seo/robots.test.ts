@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { testEnv } from "../helpers.ts";
+import { boardFlag } from "../public/request-board-helpers.ts";
 
 describe("/robots.txt (spec §8.8)", () => {
   it("blocks private areas in every locale, allows product images and names the sitemap on APP_ORIGIN", async () => {
@@ -19,5 +20,14 @@ describe("/robots.txt (spec §8.8)", () => {
     expect(lines).toContain("Allow: /media/products/");
     expect(lines).toContain("Sitemap: https://vnx.si/sitemap.xml");
     expect(lines.filter((l) => l.startsWith("Disallow: /products") || l.startsWith("Disallow: /builders") || l.startsWith("Disallow: /p/"))).toEqual([]);
+  });
+
+  it("has no line for /requests, with the board on or off (VNX-2705b: the board is crawlable, not blocked)", async () => {
+    for (const goLive of ["", "2026-01-01"]) {
+      await boardFlag(goLive !== ""); // the second pass really has the gate on (flag and date)
+      const res = await createApp().request(new Request("https://vnx.si/robots.txt"), undefined, { ...testEnv, REQUEST_BOARD_GO_LIVE: goLive });
+      expect(await res.text()).not.toMatch(/requests/);
+    }
+    await boardFlag(false);
   });
 });

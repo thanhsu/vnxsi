@@ -1,5 +1,6 @@
 import type { FC } from "hono/jsx";
 import { builderFacingName, DECLINE_REASON_MAX } from "../../domain/inquiry.ts";
+import type { HubInterestState } from "../../domain/request-board.ts";
 import { APPROACH_MAX, INVITE_TTL_MS, isTerminalRequest, PRICE_MODES, PRICE_NOTE_MAX, type Invitation, type InvitationListItem, type PriceMode, type ProposalErrors, type ProposalFieldError, type ProposalFormValues } from "../../domain/request.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import type { MessageKey } from "../../i18n/messages/en.ts";
@@ -24,7 +25,50 @@ const ERROR_KEY: Record<ProposalFieldError, MessageKey> = {
   days: "proposal.error.days",
 };
 
-export const InvitationListPage: FC<{ locale: Locale; origin: string; items: InvitationListItem[] }> = ({ locale, origin, items }) => {
+/** One row of "Requests you're interested in": what the route chose to show. No request id, no client; `title` is null when the listing is no longer public. */
+export type HubInterestRow = { id: string; publicId: string; title: string | null; state: HubInterestState; sentOn: string; inviteHref: string | null; link: boolean };
+
+const INTEREST_STATE_KEY: Record<HubInterestState, MessageKey> = {
+  pending: "hub.interests.pending",
+  invited: "hub.interests.invited",
+  not_invited: "hub.interests.notInvited",
+};
+
+const InterestsSection: FC<{ locale: Locale; rows: readonly HubInterestRow[] }> = ({ locale, rows }) => {
+  const tr = translator(locale);
+  return (
+    <section id="interests" aria-labelledby="interests-title">
+      <h2 id="interests-title">{tr("hub.interests.title")}</h2>
+      {rows.length === 0 ? (
+        <p class="muted">{tr("hub.interests.empty")}</p>
+      ) : (
+        <div class="table-wrap">
+          <table class="data">
+            <tbody>
+              {rows.map((row) => (
+                <tr>
+                  <td>{row.title === null ? tr("hub.interests.noLongerPublic") : !row.link ? row.title : <a href={localizedPath(locale, `/requests/${row.publicId}`)}>{row.title}</a>}</td>
+                  <td>
+                    <span class="badge">{tr(INTEREST_STATE_KEY[row.state])}</span>
+                    {row.inviteHref ? (
+                      <>
+                        {" "}
+                        <a href={row.inviteHref}>{tr("board.interest.invitedLink")}</a>
+                      </>
+                    ) : null}
+                  </td>
+                  <td class="muted">{tr("hub.interests.clicked", { date: row.sentOn })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+};
+
+export const InvitationListPage: FC<{ locale: Locale; origin: string; items: InvitationListItem[]; interests?: readonly HubInterestRow[] }> = ({ locale, origin, items, interests }) => {
   const tr = translator(locale);
   return (
     <HubLayout locale={locale} origin={origin} title={tr("hub.invitations.title")} rest="/hub/invitations" active="invitations">
@@ -51,6 +95,7 @@ export const InvitationListPage: FC<{ locale: Locale; origin: string; items: Inv
           </table>
         </div>
       )}
+      {interests ? <InterestsSection locale={locale} rows={interests} /> : null}
     </HubLayout>
   );
 };

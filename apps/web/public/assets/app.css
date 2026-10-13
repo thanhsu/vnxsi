@@ -459,6 +459,8 @@ table.data th { font-weight: 600; color: var(--text-2); }
 .lp-perks li { display: flex; align-items: flex-start; gap: 12px; color: #e4e9f2; }
 .lp-perks .icon { margin-top: 2px; color: #6ee7b7; }
 .lp-builders-cta { margin: 12px 0 0; }
+.lp-builders-link { margin: 0; }
+.lp-builders-link a { color: #9db7ff; text-decoration: underline; }
 .lp-builders :focus-visible { outline-color: #9db7ff; }
 .lp-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: step; }
 .lp-step { counter-increment: step; display: grid; grid-template-columns: 48px 1fr; gap: 16px; padding: 22px 24px; background: #121d33; border: 1px solid #2a3550; border-radius: var(--r-lg); }

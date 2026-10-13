@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import { requireAdmin } from "../auth/middleware.ts";
 import { auditStatement } from "../db/audit.ts";
+import { interestFlipAuditGuard, markInterestsInvitedStatements } from "../db/request-board.ts";
 import { findPublicBuilderByHandle } from "../db/builders.ts";
 import { endRequestBatch, findAdminRequest, inviteBuildersBatch, listCandidates, listRequestInvites, listRequestsForAdmin } from "../db/requests.ts";
 import { HANDLE_RE } from "../domain/builder-input.ts";
@@ -10,6 +11,7 @@ import {
   parseAdminNote,
   REQUEST_STATUSES,
   requestTransition,
+  SUGGESTION_LIMIT,
   suggestBuilders,
   type AdminRequest,
   type ClientRequest,
@@ -18,6 +20,7 @@ import {
   type Suggestion,
   type TerminalRequestStatus,
 } from "../domain/request.ts";
+import { ulid } from "../lib/ulid.ts";
 import type { AppEnv } from "../env.ts";
 import { onLocalized } from "../http/localized.ts";
 import { requestOrigin } from "../http/origin.ts";
@@ -34,12 +37,14 @@ type DetailExtra = { inviteError?: InviteError; noteError?: boolean; values?: { 
  * What the request's detail page shows besides the request, for /admin and /ops (VNX-2504b): its invitations and, while
  * it can take more, the suggested builders with their reasons (`null` = no more invitations: status or full).
  */
-export async function requestMatching(db: D1Database, item: AdminRequest): Promise<{ invites: InviteWithBuilder[]; suggestions: Suggestion[] | null }> {
+export async function requestMatching(db: D1Database, item: AdminRequest): Promise<{ invites: InviteWithBuilder[]; suggestions: Suggestion[] | null; scores: ReadonlyMap<string, number> }> {
   const invites = await listRequestInvites(db, item.request.id);
   const canInvite = requestTransition(item.request.status, "invite", "admin").ok && item.activeInvites < MAX_ACTIVE_INVITES;
   const since = new Date(Date.now() - EXPIRED_PENALTY_WINDOW_MS).toISOString();
-  const suggestions = canInvite ? suggestBuilders(item.request, await listCandidates(db, item.request, since)) : null;
-  return { invites, suggestions };
+  // One read of the candidates, one scoring (§8.10, unchanged): the list is its ten best, and `scores` gives every candidate's score by builder id, for the
+  // "Interested builders" block (a reference only; a builder who is not a candidate has none).
+  const ranked = canInvite ? suggestBuilders(item.request, await listCandidates(db, item.request, since), Number.MAX_SAFE_INTEGER) : null;
+  return { invites, suggestions: ranked ? ranked.slice(0, SUGGESTION_LIMIT) : null, scores: new Map((ranked ?? []).map((s) => [s.candidate.userId, s.score])) };
 }
 
 async function detailPage(c: Context<AppEnv>, item: AdminRequest, extra: DetailExtra = {}, status: 200 | 400 = 200) {
@@ -94,12 +99,29 @@ export async function inviteToRequest(c: Context<AppEnv>): Promise<RequestDecisi
 
   const admin = c.get("user")!;
   const now = new Date().toISOString();
-  const batch = inviteBuildersBatch(c.env.DB, { requestId: item.request.id, builderIds: [...picked], invitedBy: admin.id, now });
-  const results = await c.env.DB.batch([
-    ...batch.statements,
+  const builderIds = [...picked];
+  const batch = inviteBuildersBatch(c.env.DB, { requestId: item.request.id, builderIds, invitedBy: admin.id, now });
+  // EPIC 27 (VNX-2706b): a builder who showed interest and is invited here has the interest flipped to `invited` in this same batch, only if their
+  // invitation was inserted in it (so an invite that loses the 5-invite cap leaves it pending). Each flip gets an audit row built FROM the row the
+  // batch moved (guard on request + builder + THIS batch's write id): no earlier read, so one row per interest moved and none for an interest not moved.
+  const writeId = ulid();
+  const flips = markInterestsInvitedStatements(c.env.DB, { requestId: item.request.id, builderIds, inviteIds: batch.inviteIds, decidedBy: admin.id, now, writeId });
+  // The audit data is ids only: never the builder's note or name. entityId is replaced by the moved row's id in SQL.
+  const interestAudits = builderIds.map((builderId, i) =>
     auditStatement(
       c.env.DB,
-      { actorUserId: admin.id, action: "request.invite", entity: "request", entityId: item.request.id, data: { from: item.request.status, requested: [...picked] }, now },
+      { actorUserId: admin.id, action: "request_interest.invite", entity: "request_interest", entityId: null, data: { requestId: item.request.id, inviteId: batch.inviteIds[i]! }, now },
+      interestFlipAuditGuard({ requestId: item.request.id, builderId, writeId }),
+    ),
+  );
+  // Order: the invitations and the request move (batch.read reads them by position), then the flips and their audit rows, then the request's own audit row.
+  const results = await c.env.DB.batch([
+    ...batch.statements,
+    ...flips,
+    ...interestAudits,
+    auditStatement(
+      c.env.DB,
+      { actorUserId: admin.id, action: "request.invite", entity: "request", entityId: item.request.id, data: { from: item.request.status, requested: builderIds }, now },
       { requestId: item.request.id, inviteIds: batch.inviteIds },
     ),
   ]);

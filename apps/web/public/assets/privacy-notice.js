@@ -1,23 +1,26 @@
 (() => {
-  const KEY = "vnxsi:privacy-notice-dismissed:v1";
-  const read = () => {
+  // One key per notice: closing the board notice must not close the M7 one (VNX-2707a).
+  const KEYS = { m7: "vnxsi:privacy-notice-dismissed:v1", board: "vnxsi:board-notice-dismissed:v1" };
+  const keyOf = (notice) => KEYS[notice.dataset.noticeId] || KEYS.m7;
+  const read = (key) => {
     try {
-      return window.localStorage.getItem(KEY) === "1";
+      return window.localStorage.getItem(key) === "1";
     } catch {
       return false;
     }
   };
-  const remember = () => {
+  const remember = (key) => {
     try {
-      window.localStorage.setItem(KEY, "1");
+      window.localStorage.setItem(key, "1");
     } catch {
       // Storage denied: the native <details> close still works for this page.
     }
   };
   document.querySelectorAll('details[data-privacy-notice="true"]').forEach((notice) => {
-    if (read()) notice.open = false;
+    const key = keyOf(notice);
+    if (read(key)) notice.open = false;
     notice.addEventListener("toggle", () => {
-      if (!notice.open) remember();
+      if (!notice.open) remember(key);
     });
   });
 })();

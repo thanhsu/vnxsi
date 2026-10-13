@@ -319,3 +319,46 @@ describe("admin requests (spec §5.5, §5.7 step 2, §8.10)", () => {
     expect(audit?.n).toBe(1);
   });
 });
+
+describe("VNX-2706b: /admin/requests/:id/invite flips the interest in the same batch (the shared invite path)", () => {
+  const interestFor = async (requestId: string, builderId: string, status = "pending") => {
+    const id = crypto.randomUUID().replaceAll("-", "").slice(0, 26).toUpperCase();
+    const now = new Date().toISOString();
+    await testEnv.DB.prepare("INSERT INTO request_interests (id, request_id, builder_id, note, status, created_at, updated_at, write_id) VALUES (?1, ?2, ?3, 'ADMIN-PATH-NOTE', ?4, ?5, ?5, ?6)").bind(id, requestId, builderId, status, now, `W${id}`).run();
+    return id;
+  };
+  const statusOf = async (id: string) => (await testEnv.DB.prepare("SELECT status, decided_by FROM request_interests WHERE id = ?1").bind(id).first<{ status: string; decided_by: string | null }>())!;
+  const auditOf = async (id: string) => (await testEnv.DB.prepare("SELECT action, actor_user_id, data FROM audit_log WHERE entity = 'request_interest' AND entity_id = ?1").bind(id).all<{ action: string; actor_user_id: string; data: string }>()).results;
+
+  it("an invite from /admin moves a pending interest to invited with one audit row (no note, no name), and leaves other interests and builders without one alone", async () => {
+    const { cookie, user } = await admin();
+    const { request } = await makeRequest({ tag: "ar-2706b" });
+    const [pending, dismissed, none] = await builders("ar-2706b-b", 3);
+    const ip = await interestFor(request.id, pending!.userId);
+    const id = await interestFor(request.id, dismissed!.userId, "dismissed");
+    const res = await post(`/admin/requests/${request.id}/invite`, cookie, { builder: [pending!.userId, dismissed!.userId, none!.userId] });
+    expect(res.status).toBe(303);
+    expect((await invitesOf(request.id)).map((i) => i.builderId).sort()).toEqual([pending!.userId, dismissed!.userId, none!.userId].sort());
+    expect(await statusOf(ip)).toEqual({ status: "invited", decided_by: user.id });
+    expect((await statusOf(id)).status).toBe("dismissed");
+    const rows = await auditOf(ip);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ action: "request_interest.invite", actor_user_id: user.id });
+    expect(rows[0]!.data).not.toContain("ADMIN-PATH-NOTE");
+    expect(rows[0]!.data).not.toContain("ar-2706b-b-0");
+    expect(await auditOf(id)).toEqual([]);
+    const total = await testEnv.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity = 'request_interest' AND json_extract(data, '$.requestId') = ?1").bind(request.id).first<{ n: number }>();
+    expect(total!.n).toBe(1);
+  });
+
+  it("a refused invite (the request is not open to invitations) leaves the interest pending and writes no interest audit", async () => {
+    const { cookie } = await admin();
+    const { request } = await makeRequest({ tag: "ar-2706b-closed" });
+    const [b] = await builders("ar-2706b-c", 1);
+    const ib = await interestFor(request.id, b!.userId);
+    await testEnv.DB.prepare("UPDATE requests SET status = 'closed' WHERE id = ?1").bind(request.id).run();
+    expect((await post(`/admin/requests/${request.id}/invite`, cookie, { builder: b!.userId })).status).toBe(409);
+    expect((await statusOf(ib)).status).toBe("pending");
+    expect(await auditOf(ib)).toEqual([]);
+  });
+});

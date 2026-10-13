@@ -31,6 +31,16 @@ export type AuditFlagGuard = { flagKey: string; writeId: string };
  * (the id is a fresh ULID, so the row exists only if that INSERT went through). Unlink: before the batch's DELETE, since the row is gone after it.
  */
 export type AuditIdentityGuard = { identityId: string; userId: string };
+/** Written only when the batch's publication compare-and-set went through: the row exists with this status and updated_at (EPIC 27, see request-board.ts). */
+export type AuditPublicationGuard = { publicationRequestId: string; writeId: string };
+/** Written only when the batch's interest compare-and-set went through: the row exists with this status and updated_at (EPIC 27). */
+export type AuditInterestGuard = { interestId: string; writeId: string };
+/**
+ * Written only for the interest row this batch just moved to `invited` (VNX-2706b): the row of that request and builder whose `write_id` is the batch's. The audit row is
+ * built FROM that row (its id is the entity id), so it needs no earlier read: an interest created between the route's reads and the batch still gets exactly one row,
+ * and one this batch did not move (dismissed, withdrawn, none) gets none.
+ */
+export type AuditInterestFlipGuard = { interestFlipRequestId: string; builderId: string; writeId: string };
 /** Written only when that merchant / program / offer row's last write carries this write id, i.e. this batch's statement created or changed it (see runAudited). Reads the table only for that. */
 export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs" | "offers"; id: string; writeId: string };
 
@@ -39,18 +49,46 @@ export type AuditPartnerGuard = { partnerTable: "merchants" | "partner_programs"
  * With a guard the row is written only when the same batch's compare-and-set went through (a lost compare-and-set
  * writes no audit row): `userId` guards on the user's status, `productId` on the product's, `inquiryId` on the inquiry's, `requestId` on the request's,
  * `inviteId` on the invitation's, `feedbackId` on the feedback row's, `flagKey` on the feature flag's last write id,
- * `partnerTable` + `id` on that merchant / program / offer row's last write id, `identityId` + `userId` on the identity row existing for that user.
+ * `partnerTable` + `id` on that merchant / program / offer row's last write id, `identityId` + `userId` on the identity row existing for that user,
+ * `publicationRequestId` on the publication's `write_id`, `interestId` on the interest's (EPIC 27, VNX-2702c).
  */
 export function auditStatement(
   db: D1Database,
   input: AuditInput,
-  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard | AuditIdentityGuard,
+  onlyIf?: AuditUserGuard | AuditProductGuard | AuditInquiryGuard | AuditRequestGuard | AuditInvitesGuard | AuditInviteGuard | AuditFeedbackGuard | AuditFlagGuard | AuditPartnerGuard | AuditIdentityGuard | AuditPublicationGuard | AuditInterestGuard | AuditInterestFlipGuard,
 ): D1PreparedStatement {
   const id = ulid(Date.parse(input.now));
   const data = JSON.stringify(input.data ?? {});
   const values = [id, input.actorUserId, input.action, input.entity, input.entityId, data, input.now];
   if (!onlyIf) {
     return db.prepare("INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)").bind(...values);
+  }
+  if ("publicationRequestId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM request_publications WHERE request_id = ?8 AND write_id = ?9)`,
+      )
+      .bind(...values, onlyIf.publicationRequestId, onlyIf.writeId);
+  }
+  if ("interestFlipRequestId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, COALESCE(i.id, ?5), ?6, ?7 FROM request_interests i
+         WHERE i.request_id = ?8 AND i.builder_id = ?9 AND i.write_id = ?10`,
+      )
+      .bind(...values, onlyIf.interestFlipRequestId, onlyIf.builderId, onlyIf.writeId);
+  }
+  if ("interestId" in onlyIf) {
+    return db
+      .prepare(
+        `INSERT INTO audit_log (id, actor_user_id, action, entity, entity_id, data, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM request_interests WHERE id = ?8 AND write_id = ?9)`,
+      )
+      .bind(...values, onlyIf.interestId, onlyIf.writeId);
   }
   if ("identityId" in onlyIf) {
     return db
@@ -228,6 +266,15 @@ function toListing(r: ListingRow): AuditListing {
 /** The newest audit rows, newest first (Ops Overview, VNX-2503). Selects no `data`. Read only. */
 export async function listRecentAudit(db: D1Database, limit: number): Promise<AuditListing[]> {
   const { results } = await db.prepare(`${LISTING_SELECT} ORDER BY a.created_at DESC, a.id DESC LIMIT ?1`).bind(limit).all<ListingRow>();
+  return results.map(toListing);
+}
+
+/** The audit rows of the interests of one request (dismiss, invite), newest first, in one query (Ops request History, VNX-2706b). Same projection: no `data`. Read only. */
+export async function listRequestInterestAudit(db: D1Database, requestId: string, limit: number): Promise<AuditListing[]> {
+  const { results } = await db
+    .prepare(`${LISTING_SELECT} WHERE a.entity = 'request_interest' AND a.entity_id IN (SELECT id FROM request_interests WHERE request_id = ?1) ORDER BY a.created_at DESC, a.id DESC LIMIT ?2`)
+    .bind(requestId, limit)
+    .all<ListingRow>();
   return results.map(toListing);
 }
 

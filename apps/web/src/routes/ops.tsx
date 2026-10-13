@@ -6,6 +6,7 @@ import { countBuilderReviewQueue } from "../db/builders.ts";
 import { countNewFeedback } from "../db/feedback.ts";
 import { countOverdueInquiries } from "../db/inquiries.ts";
 import { countProductReviewQueue } from "../db/products.ts";
+import { interestQueue, publicationReviewQueue } from "../db/request-board.ts";
 import { countRequestsToMatch } from "../db/requests.ts";
 import { REMIND_AFTER_MS } from "../domain/inquiry.ts";
 import { can, type OpsCapability, type OpsRole } from "../domain/ops.ts";
@@ -60,12 +61,14 @@ export async function opsShell(c: Context<AppEnv>, isRegistered: IsRegistered, c
   return { role, email: c.get("user")?.email ?? "", environment: opsEnvironment(c.env.APP_ORIGIN), menu: visibleMenu(role, isRegistered, currentPath, OPS_MENU, counts) };
 }
 
-/** Each queue, the list page it opens (once that route exists) and the capability that page will declare. */
-const QUEUE_TARGETS: Record<QueueId, { path: string; capability: OpsCapability }> = {
+/** Each queue, the list page it opens (once that route exists), the capability that page will declare, and a query the link adds (not part of the route). */
+const QUEUE_TARGETS: Record<QueueId, { path: string; capability: OpsCapability; query?: string }> = {
   builders: { path: "/ops/marketplace/builders", capability: "marketplace.view" },
   products: { path: "/ops/marketplace/products", capability: "marketplace.view" },
   feedback: { path: "/ops/inbox/feedback", capability: "feedback.view" },
   requests: { path: "/ops/marketplace/requests", capability: "marketplace.view" },
+  publicRequests: { path: "/ops/marketplace/requests", capability: "marketplace.view", query: "?public=pending" },
+  interests: { path: "/ops/marketplace/requests", capability: "marketplace.view", query: "?interests=pending" },
   inquiries: { path: "/ops/marketplace/inquiries", capability: "marketplace.view" },
 };
 
@@ -98,6 +101,8 @@ export function registerOpsRoutes(app: Hono<AppEnv>) {
       products: countProductReviewQueue(db),
       feedback: countNewFeedback(db),
       requests: countRequestsToMatch(db),
+      publicRequests: publicationReviewQueue(db),
+      interests: interestQueue(db),
       inquiries: countOverdueInquiries(db, remindBefore),
     };
     const ids = Object.keys(reads) as QueueId[];
@@ -117,7 +122,7 @@ export function registerOpsRoutes(app: Hono<AppEnv>) {
         count,
         oldestMs: detail && oldest ? Math.max(0, now.getTime() - Date.parse(oldest)) : null,
         unsent: detail && unsent !== undefined ? unsent : null,
-        href: detail && reachable(role, target.path, target.capability, isRegistered) ? target.path : null,
+        href: detail && reachable(role, target.path, target.capability, isRegistered) ? target.path + (target.query ?? "") : null,
       };
     });
 

@@ -7,6 +7,7 @@ import { builderCtaHref } from "../../src/views/Layout.tsx";
 import type { Bindings } from "../../src/env.ts";
 import { signIn } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
+import { boardFlag } from "./request-board-helpers.ts";
 
 // VNX-0705b (Owner D2): the page is built only from the approved landing copy.
 const get = (path: string, cookie?: string) =>
@@ -73,5 +74,22 @@ describe("/for-builders (VNX-0705b)", () => {
     }
     const other = await (await get("/products")).text();
     expect(other).toContain('<a href="/for-builders">');
+  });
+
+  it("VNX-2705b: with the board gate on, <main> adds one link to /requests (the approved board title); gate off: none", async () => {
+    await boardFlag(true);
+    const env = { ...testEnv, REQUEST_BOARD_GO_LIVE: "2026-01-01" } as Bindings;
+    for (const locale of LOCALES) {
+      const html = await (await createApp().request(new Request(`https://vnx.si${PATH(locale)}`), undefined, env)).text();
+      const main = mainOf(html);
+      const links = [...main.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([^<]*)</g)].map((m) => [decode(m[1]!), m[2]]);
+      expect(links, locale).toEqual([[builderCtaHref(locale, false), t(locale, "landing.builders.apply")], [localizedPath(locale, "/requests"), t(locale, "board.title")]]);
+    }
+    for (const date of ["", "2999-01-01"]) {
+      const html = await (await createApp().request(new Request("https://vnx.si/for-builders"), undefined, { ...testEnv, REQUEST_BOARD_GO_LIVE: date } as Bindings)).text();
+      expect(mainOf(html), date).not.toContain("/requests");
+    }
+    await boardFlag(false);
+    expect(mainOf(await (await createApp().request(new Request("https://vnx.si/for-builders"), undefined, env)).text())).not.toContain("/requests");
   });
 });

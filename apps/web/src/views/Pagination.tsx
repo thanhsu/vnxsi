@@ -3,11 +3,11 @@ import { PAGE_SIZE } from "../domain/catalog.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
 
-type Props = { locale: Locale; path: string; page: number; total: number; href: (page: number) => string };
+type Props = { locale: Locale; path: string; page: number; total: number; href: (page: number) => string; pageSize?: number };
 
 /** Previous / next links; nothing when everything fits on one page. */
-export const Pagination: FC<Props> = ({ locale, path, page, total, href }) => {
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+export const Pagination: FC<Props> = ({ locale, path, page, total, href, pageSize = PAGE_SIZE }) => {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
   const tr = translator(locale);
   const url = (n: number) => localizedPath(locale, path) + href(n);

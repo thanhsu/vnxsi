@@ -30,6 +30,7 @@ type Row = {
   languages: string;
   status: RequestStatus;
   locale: string;
+  country: string | null;
   admin_note: string | null;
   selected_invite_id: string | null;
   submitted_at: string | null;
@@ -52,6 +53,7 @@ export function toRequest(r: Row): ClientRequest {
     languages: jsonList(r.languages).filter((l): l is WorkLanguage => (WORK_LANGUAGES as readonly string[]).includes(l)),
     status: r.status,
     locale: r.locale,
+    country: r.country,
     adminNote: r.admin_note,
     selectedInviteId: r.selected_invite_id,
     submittedAt: r.submitted_at,
@@ -120,19 +122,30 @@ export type NewRequest = {
   languages: WorkLanguage[];
   status: "submitted" | "pending_verification";
   locale: string;
+  /** ISO 3166-1 alpha-2 (EPIC 27); optional, never inferred. */
+  country?: string | null;
   now: string;
 };
 
-export async function createRequest(db: D1Database, input: NewRequest): Promise<ClientRequest> {
-  const row = await db
+/**
+ * The request INSERT as a statement (RETURNING *), with its id generated up front so a caller can batch rows that refer to it
+ * (EPIC 27: the publication row of an opt-in) in the same db.batch. `id` may be given by the caller.
+ */
+export function createRequestStatements(db: D1Database, input: NewRequest & { id?: string }): { id: string; statements: D1PreparedStatement[] } {
+  const id = input.id ?? ulid(Date.parse(input.now));
+  const insert = db
     .prepare(
-      `INSERT INTO requests (id, client_user_id, client_name, title, description, category, budget_band, deadline, languages, status, locale,
+      `INSERT INTO requests (id, client_user_id, client_name, title, description, category, budget_band, deadline, languages, status, locale, country,
          submitted_at, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CASE WHEN ?10 = 'submitted' THEN ?12 END, ?12, ?12)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?13, CASE WHEN ?10 = 'submitted' THEN ?12 END, ?12, ?12)
        RETURNING *`,
     )
-    .bind(ulid(Date.parse(input.now)), input.clientUserId, input.clientName, input.title, input.description, input.category, input.budgetBand, input.deadline, JSON.stringify(input.languages), input.status, input.locale, input.now)
-    .first<Row>();
+    .bind(id, input.clientUserId, input.clientName, input.title, input.description, input.category, input.budgetBand, input.deadline, JSON.stringify(input.languages), input.status, input.locale, input.now, input.country ?? null);
+  return { id, statements: [insert] };
+}
+
+export async function createRequest(db: D1Database, input: NewRequest): Promise<ClientRequest> {
+  const row = await createRequestStatements(db, input).statements[0]!.first<Row>();
   if (!row) throw new Error("request insert failed");
   return toRequest(row);
 }
@@ -366,6 +379,14 @@ export async function searchRequestsForAdmin(db: D1Database, status: RequestStat
     .bind(status, q.toLowerCase(), limit)
     .all<AdminRow>();
   return results.map(toAdmin);
+}
+
+/** The requests with these ids, in the order of `ids` (the Ops list filtered by something another module decides, e.g. the review queue). Admin only: carries the client's e-mail. */
+export async function listAdminRequestsByIds(db: D1Database, ids: readonly string[]): Promise<AdminRequest[]> {
+  if (ids.length === 0) return [];
+  const { results } = await db.prepare(`${ADMIN_SELECT} WHERE r.id IN (SELECT value FROM json_each(?1))`).bind(JSON.stringify(ids)).all<AdminRow>();
+  const byId = new Map(results.map((r) => [r.id, toAdmin(r)]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
 }
 
 /** Ops Requests tabs (VNX-2504b): how many requests are in each status. Read only. */

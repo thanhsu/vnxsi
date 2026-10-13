@@ -111,9 +111,9 @@ describe("Ops shell on /ops (AC2, AC7)", () => {
         if (marketplace) expect(nav, role).toMatch(/<p class="ops-group-h" id="[^"]+">Marketplace<\/p>/);
         else expect(nav, role).not.toContain("ops-group-h");
       }
-      // Every link in the page goes to a page that exists: /ops, the skip target and, for roles with marketplace.view, Builders, Products and Requests.
+      // Every link in the page goes to a page that exists: /ops, the skip target and, for roles with marketplace.view, Builders, Products and Requests (and the Public requests to review card link).
       const hrefs = new Set([...body.matchAll(/href="([^"]*)"/g)].map((m) => m[1]));
-      expect([...hrefs].sort(), role).toEqual(marketplace ? ["#ops-main", "/ops", "/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", ...merchants] : ["#ops-main", "/ops"]);
+      expect([...hrefs].sort(), role).toEqual(marketplace ? ["#ops-main", "/ops", "/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", "/ops/marketplace/requests?interests=pending", "/ops/marketplace/requests?public=pending", ...merchants] : ["#ops-main", "/ops"]);
     }
   });
 

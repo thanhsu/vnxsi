@@ -25,11 +25,11 @@ export class UsageError extends Error {}
 
 // ---------------------------------------------------------------- arguments
 
-/** @returns {{base: string, slug: string | null}} @throws {UsageError} */
+/** @returns {{base: string, slug: string | null, board: boolean}} @throws {UsageError} */
 export function parseArgs(argv, env = {}) {
   let values;
   try {
-    ({ values } = nodeParseArgs({ args: argv, options: { base: { type: "string" }, slug: { type: "string" } }, strict: true, allowPositionals: false }));
+    ({ values } = nodeParseArgs({ args: argv, options: { base: { type: "string" }, slug: { type: "string" }, board: { type: "boolean" } }, strict: true, allowPositionals: false }));
   } catch (err) {
     throw new UsageError(String(err.message ?? err));
   }
@@ -45,7 +45,7 @@ export function parseArgs(argv, env = {}) {
   if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash || url.username) throw new UsageError(`base must be an origin only, got: ${raw}`);
   const slug = values.slug ?? null;
   if (slug !== null && !SLUG_OK.test(slug)) throw new UsageError(`invalid --slug: ${slug}`);
-  return { base: url.origin, slug };
+  return { base: url.origin, slug, board: values.board === true };
 }
 
 // ---------------------------------------------------------------- assertions
@@ -91,6 +91,38 @@ const robotsAssert = (res, ctx) => {
   return null;
 };
 
+// EPIC 27 (VNX-2709). A public id is 26 characters of the same alphabet as a ULID (lib/ulid.ts), so a smoke run cannot tell a public id from a
+// request id by shape; what it can prove is that the sitemap only ever names /requests and /requests/<26 characters>, four times each (one per locale).
+const PUBLIC_ID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const locPath = (loc) => new URL(loc).pathname.replace(/^\/(vi|zh-hans|zh-hant)(?=\/|$)/, "");
+const sitemapLocs = (body) => [...body.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
+
+/** Board off: the sitemap names nothing under /requests. */
+const sitemapNoBoard = (res) => {
+  const hit = sitemapLocs(res.body).find((l) => /^\/requests(\/|$)/.test(locPath(l)));
+  return hit ? `sitemap lists ${hit} while the board is off` : null;
+};
+
+/** Board on: only /requests and /requests/<public id shape>, each public id in 4 locales, and nothing of the client's side or the Ops console. */
+const sitemapBoard = (res) => {
+  const perId = new Map();
+  for (const loc of sitemapLocs(res.body)) {
+    const path = locPath(loc);
+    if (/\/(me|ops|hub|admin)\/requests/.test(path) || /^\/(me|ops|hub|admin)(\/|$)/.test(path)) return `sitemap lists private path ${loc}`;
+    if (path === "/requests") continue;
+    const m = /^\/requests\/([^/]*)$/.exec(path);
+    if (!m) {
+      if (path.startsWith("/requests")) return `sitemap lists an unexpected board path ${loc}`;
+      continue;
+    }
+    if (!PUBLIC_ID_SHAPE.test(m[1])) return `sitemap lists a board path that is not a public id: ${loc}`;
+    perId.set(m[1], (perId.get(m[1]) ?? 0) + 1);
+  }
+  for (const [id, n] of perId) if (n !== LOCALE_PREFIXES.length) return `public id ${id} is in the sitemap ${n} times, want ${LOCALE_PREFIXES.length} (one per locale)`;
+  if (/request_id|requestId/.test(res.body)) return "sitemap mentions request_id";
+  return null;
+};
+
 const sitemapAssert = (res) => {
   if (!res.body.includes("<urlset")) return "sitemap has no <urlset";
   for (const want of ["/privacy", "/for-builders"]) if (!res.body.includes(want)) return `sitemap lacks ${want}`;
@@ -118,14 +150,25 @@ const privacyAssert = (res) => (extractLastUpdated(res.body) ? null : 'privacy p
 /** True when the request falls under the Cloudflare rate-limit rule (/p/* in every locale, and /go/*). */
 export function isRateCovered(path) {
   const rest = path.replace(/^\/(vi|zh-hans|zh-hant)(?=\/|$)/, "");
-  return rest.startsWith("/p/") || rest.startsWith("/go/");
+  // EPIC 27 (VNX-2709): /requests and /requests/* are covered too (VNX-2708 adds the Cloudflare rule before the flag goes on); counted in both modes.
+  return rest.startsWith("/p/") || rest.startsWith("/go/") || rest === "/requests" || rest.startsWith("/requests/");
 }
+
+/** A link to the board (footer, /for-builders): `href="/requests"`, `href="/vi/requests"`, or a listing under them. */
+const BOARD_LINK = /href="(\/(vi|zh-hans|zh-hant))?\/requests[\/"?#]/;
+export const noBoardLink = (res) => (BOARD_LINK.test(res.body) ? "page links to /requests while the board is off" : null);
+/** The board list is dynamic and must never be cached by an edge or browser (signed-in views are private, signed-out ones are cheap to render). */
+export const notPubliclyCached = (res) => {
+  const cc = lower(hdr(res, "cache-control"));
+  return /\b(public|max-age|s-maxage)\b/.test(cc) ? `cache-control is "${hdr(res, "cache-control")}", want no public/max-age` : null;
+};
+export const referrerNotNone = (res) => (lower(hdr(res, "referrer-policy")) === "no-referrer" ? "referrer-policy is no-referrer (breaks the Origin check on POST forms)" : null);
 
 /**
  * Check = { id, path, method: GET|HEAD, status, asserts: [fn], capture?: fn(res) -> string|null }.
  * Verified against apps/web/src (app.ts, routes/, http/security-headers.ts, views/seo.ts) and real responses.
  */
-export function buildChecks({ slug = null } = {}) {
+export function buildChecks({ slug = null, board = false } = {}) {
   const checks = [];
   const add = (c) => checks.push({ method: "GET", asserts: [], ...c });
 
@@ -133,7 +176,9 @@ export function buildChecks({ slug = null } = {}) {
   for (const prefix of LOCALE_PREFIXES) {
     for (const rest of ["/", "/products", "/builders", "/request", "/for-builders", "/privacy", "/terms", "/contact", "/login"]) {
       const path = rest === "/" ? prefix + "/" : prefix + rest;
-      add({ id: `page ${path}`, path, status: 200, asserts: [isHtml] });
+      // Board off (the state after the first deploy): the footer and /for-builders carry no link to /requests (VNX-2705b).
+      const offLink = !board && (rest === "/" || rest === "/for-builders") ? [noBoardLink] : [];
+      add({ id: `page ${path}`, path, status: 200, asserts: [isHtml, ...offLink] });
     }
   }
 
@@ -161,7 +206,16 @@ export function buildChecks({ slug = null } = {}) {
 
   // 5-6. robots and sitemap.
   add({ id: "robots.txt", path: "/robots.txt", status: 200, asserts: [robotsAssert] });
-  add({ id: "sitemap.xml", path: "/sitemap.xml", status: 200, asserts: [contentTypeIs("application/xml"), sitemapAssert] });
+  add({ id: "sitemap.xml", path: "/sitemap.xml", status: 200, asserts: [contentTypeIs("application/xml"), sitemapAssert, board ? sitemapBoard : sitemapNoBoard] });
+
+  // 6b. EPIC 27 public request board (VNX-2709). Read-only, and it never looks for real requests: production has no fixed data and smoke writes nothing.
+  //     Default (flag off): every surface answers 404. `--board` (after go-live and after every later deploy): the list is 200 and an unknown listing is still 404.
+  if (board) {
+    add({ id: "board /requests", path: "/requests", status: 200, asserts: [isHtml, notPubliclyCached, referrerNotNone] });
+  } else {
+    for (const prefix of LOCALE_PREFIXES) add({ id: `board-off ${prefix}/requests`, path: `${prefix}/requests`, status: 404, asserts: [noindexAny] });
+  }
+  add({ id: "board-404 /requests/<none>", path: `/requests/${MISSING}`, status: 404, asserts: [noindexAny] });
 
   // 7. Security headers on a normal page and on a localized 404 page.
   const referrerNormal = headerIs("referrer-policy", "strict-origin-when-cross-origin");
@@ -225,11 +279,11 @@ export async function run({ argv = [], env = {}, fetch: doFetch, sleep, now, log
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
     log(`smoke: ${err.message}`);
-    log("usage: npm run smoke -- [--base <url>] [--slug <product-slug>]   (BASE_URL env also accepted)");
+    log("usage: npm run smoke -- [--base <url>] [--slug <product-slug>] [--board]   (BASE_URL env also accepted)");
     return 2;
   }
   const ctx = { base: opts.base, isProd: new URL(opts.base).hostname === "vnx.si" };
-  const checks = override ?? buildChecks({ slug: opts.slug });
+  const checks = override ?? buildChecks({ slug: opts.slug, board: opts.board });
   const stamps = []; // times of rate-covered requests inside the sliding window
   let lastCovered = null;
 
@@ -283,7 +337,7 @@ export async function run({ argv = [], env = {}, fetch: doFetch, sleep, now, log
   let netErrors = 0;
   let aborted = false;
   const w = Math.max(5, ...checks.map((c) => c.id.length));
-  log(`smoke ${opts.base}${ctx.isProd ? "" : " (non-production: HSTS and sitemap origin not asserted)"}`);
+  log(`smoke ${opts.base}${opts.board ? " [--board: board on]" : ""}${ctx.isProd ? "" : " (non-production: HSTS and sitemap origin not asserted)"}`);
   log(`${pad("STATUS", 13)} ${pad("check", w)} detail`);
   for (const check of checks) {
     let r = await attempt(check);

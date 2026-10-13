@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { auditStatement } from "../../src/db/audit.ts";
 import { createInquiryStatements, findInquiryById, listMessages } from "../../src/db/inquiries.ts";
 import {
+  createRequest,
+  createRequestStatements,
   endRequestBatch,
   findClientRequest,
   findRequestById,
@@ -30,6 +32,18 @@ describe("db/requests (VNX-0601)", () => {
     expect(request).toMatchObject({ status: "submitted", clientName: "Minh Tran", languages: ["vi", "zh"], submittedAt: request.createdAt, matchedAt: null });
     const pending = await makeRequest({ tag: "rq-pend", status: "pending_verification" });
     expect(pending.request.submittedAt).toBeNull();
+  });
+
+  it("country: null by default, writable, read back (EPIC 27)", async () => {
+    const plain = await makeRequest({ tag: "rq-cty-none" });
+    expect(plain.request.country).toBeNull();
+    const client = await ensureUser("rq-cty-c@vnx.si");
+    const made = createRequestStatements(db(), { clientUserId: client.id, clientName: "Minh Tran", title: "t", description: "d", category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "submitted", locale: "en", country: "VN", now: new Date().toISOString() });
+    await db().batch(made.statements);
+    expect((await findRequestById(db(), made.id))?.country).toBe("VN");
+    const wrapped = await createRequest(db(), { clientUserId: client.id, clientName: "Minh Tran", title: "t", description: "d", category: "booking", budgetBand: "2k-10k", deadline: null, languages: ["en"], status: "submitted", locale: "en", country: "DE", now: new Date().toISOString() });
+    expect(wrapped.country).toBe("DE");
+    expect((await findRequestById(db(), wrapped.id))?.country).toBe("DE");
   });
 
   it("hides removed requests from their client and other clients' requests entirely", async () => {

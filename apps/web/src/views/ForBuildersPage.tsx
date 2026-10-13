@@ -1,8 +1,9 @@
 import type { FC } from "hono/jsx";
-import type { Locale } from "../i18n/locales.ts";
+import { localizedPath, type Locale } from "../i18n/locales.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { translator } from "../i18n/t.ts";
 import { builderCtaHref, Layout } from "./Layout.tsx";
+import { boardOpen } from "./request-board-nav.tsx";
 import { CHECK, Icon } from "./landing/Icon.tsx";
 
 // Owner D2 (2026-10-05): only the approved landing copy. Adding a sentence here is a business decision, not an edit.
@@ -15,6 +16,7 @@ const STEPS = [
 
 export const ForBuildersPage: FC<{ locale: Locale; origin: string; signedIn: boolean }> = ({ locale, origin, signedIn }) => {
   const tr = translator(locale);
+  const showBoardLink = boardOpen();
   return (
     <Layout locale={locale} title={`${tr("nav.forBuilders")} · VNX.SI`} description={tr("landing.builders.sub")} origin={origin} rest="/for-builders" signedIn={signedIn} fullWidth>
       <section class="lp-builders" aria-labelledby="builders-title">
@@ -36,6 +38,11 @@ export const ForBuildersPage: FC<{ locale: Locale; origin: string; signedIn: boo
                 {tr("landing.builders.apply")}
               </a>
             </p>
+            {showBoardLink ? (
+              <p class="lp-builders-link">
+                <a href={localizedPath(locale, "/requests")}>{tr("board.title")}</a>
+              </p>
+            ) : null}
           </div>
           <ol class="lp-steps">
             {STEPS.map(([title, body]) => (

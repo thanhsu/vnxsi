@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CLIENT, COUNTRIES, DRAFT_PRODUCT, id, MAIN, MARKET_BUILDERS, OTHER, OTHER_PRODUCT, PUBLISHED_PRODUCT, SESSION_RAW, TOKENS } from "./fixtures.mjs";
+import { CLIENT, COUNTRIES, DRAFT_PRODUCT, id, MAIN, MARKET_BUILDERS, OPS, OTHER, OTHER_PRODUCT, PUBLISHED_PRODUCT, SESSION_RAW, SESSION_RAW_CLIENT, SESSION_RAW_OPS, TOKENS } from "./fixtures.mjs";
 
 // Deterministic SQL for the E2E database (same `now`, same text). It writes SOURCE tables only (users, builders, products,
 // requests, audit_log ...), never `public_stats`: the hourly cron runs for real and computes the homepage blocks from them.
@@ -34,8 +34,8 @@ export function buildSeed(now = new Date()) {
   const add = (table, row) => rows.push(insert(table, row));
   const stamp = at(now, 0);
 
-  const user = (u, locale = "en") =>
-    add("users", { id: u.userId, email: u.email, display_name: u.name, locale, is_admin: 0, status: "active", created_at: at(now, -60 * DAY), updated_at: stamp });
+  const user = (u, locale = "en", isAdmin = 0) =>
+    add("users", { id: u.userId, email: u.email, display_name: u.name, locale, is_admin: isAdmin, status: "active", created_at: at(now, -60 * DAY), updated_at: stamp });
   const builder = (u, extra) =>
     add("builders", {
       user_id: u.userId, handle: u.handle, name: u.name, kind: "individual", headline: `${u.name} builds small business tools`, bio: `${u.name} is sample data for the E2E suite.`,
@@ -53,6 +53,7 @@ export function buildSeed(now = new Date()) {
   user(MAIN);
   user(OTHER);
   user(CLIENT);
+  user(OPS, "en", 1);
   builder(MAIN, { approved_at: at(now, -45 * DAY) });
   builder(OTHER, { approved_at: at(now, -44 * DAY) });
 
@@ -120,8 +121,66 @@ export function buildSeed(now = new Date()) {
     add("audit_log", { id: id("A", 30 + n), actor_user_id: null, action: "request.submit", entity: "request", entity_id: id("R", n), data: JSON.stringify({ category: requestCategory(n), languages: ["en"] }), created_at: at(now, -(n + 18) * HOUR) });
   }
 
+  // EPIC 27 (VNX-2703b): three submitted requests with NO publication, for the client's opt-in from /me (request-board-forms.spec.ts takes one per attempt,
+  // R 2005 + retry). Older than 30 days so no homepage number moves; the original title starts with "E2E private original".
+  for (let n = 2005; n <= 2007; n++) {
+    const when = at(now, -40 * DAY);
+    add("requests", {
+      id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client before the board existed.`, category: "booking",
+      budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when,
+    });
+  }
+
+  // EPIC 27 (VNX-2704a): three submitted requests whose client opted in to the public board, each with a publication waiting for review. The Ops spec
+  // (request-board-forms.spec.ts) moderates one per attempt (R 2008 + retry). Older than 30 days so no homepage number moves; the client's original title
+  // starts with "E2E private original" and the public wording Ops writes starts with "E2E board", so a leak of the original is detectable.
+  for (let n = 2008; n <= 2010; n++) {
+    const when = at(now, -40 * DAY);
+    add("requests", {
+      id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client with details only Ops may read.`, category: "booking",
+      budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when,
+    });
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "pending_review", opted_in_at: when, consent_version: "2026-01-01", created_at: when, updated_at: when, write_id: id("W", n) });
+  }
+
+  // EPIC 27 (VNX-2705a): the public board's data. R1-R5 (open, indexable board needs 5) and R6-R8 (one per attempt of the interest spec, 2706a) already exist above:
+  // each gets a published listing Q n, newest first by n, with public wording that starts with "E2E board" and differs from the original "Sample request n".
+  const boardText = (n) => ({ public_title: `E2E board request ${n}`, public_description: `E2E board public description ${n}: a plain text listing used by the end-to-end suite.` });
+  for (let n = 1; n <= 8; n++) {
+    const when = at(now, -n * HOUR);
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "published", ...boardText(n), opted_in_at: when, consent_version: "2026-01-01", reviewed_by: OPS.userId, reviewed_at: when, published_at: when, created_at: when, updated_at: when, write_id: id("W", n) });
+  }
+  // EPIC 27 (VNX-2706b): one pending interest of the other approved builder on each of R3-R5 (published listings Q3-Q5), for the Ops spec that dismisses one per
+  // attempt (request-board-interests-ops.spec.ts, R 3 + retry). Seeded rows, not POSTs: they cost none of the interest budget of MAIN. The note is plain text for Ops only.
+  for (let n = 3; n <= 5; n++) {
+    const when = at(now, -n * HOUR + 5 * 60 * 1000);
+    add("request_interests", { id: id("I", n), request_id: id("R", n), builder_id: OTHER.userId, note: `E2E interest note ${n}: I can build this.`, product_id: null, status: "pending", created_at: when, updated_at: when, write_id: id("W", 3000 + n) });
+  }
+  // Rows that must NOT be listed. Older than 30 days (submitted_at), so no homepage number moves; their closed_at is what the 30-day rule reads.
+  /** @param {number} n @param {object} request @param {object} publication */
+  const hiddenRow = (n, request, publication) => {
+    const when = at(now, -40 * DAY);
+    add("requests", {
+      id: id("R", n), client_user_id: CLIENT.userId, client_name: CLIENT.name, title: `E2E private original ${n}`, description: `E2E private original description ${n}, written by the client with details only Ops may read.`, category: "booking",
+      budget_band: "unsure", deadline: null, languages: '["en"]', status: "submitted", locale: "en", submitted_at: when, created_at: when, updated_at: when, ...request,
+    });
+    add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "published", ...boardText(n), opted_in_at: when, consent_version: "2026-01-01", reviewed_by: OPS.userId, reviewed_at: when, published_at: when, created_at: when, updated_at: when, write_id: id("W", n), ...publication });
+  };
+  hiddenRow(2001, { status: "builder_selected", closed_at: at(now, -DAY) }, {}); // Closed: 200, noindex
+  hiddenRow(2002, { status: "expired", closed_at: at(now, -31 * DAY) }, {}); // 404 after 30 days
+  hiddenRow(2003, {}, { status: "withdrawn", ended_at: at(now, -DAY) }); // client withdrew: 404
+  hiddenRow(2004, {}, { status: "rejected", review_note: "E2E review note that stays private", ended_at: at(now, -DAY), published_at: null, public_title: null, public_description: null }); // 404, note never shown
+  hiddenRow(2011, { status: "pending_verification", submitted_at: null }, { status: "pending_review", published_at: null, reviewed_by: null, reviewed_at: null }); // waiting for the e-mail: 404
+
+  // EPIC 27: the request board flag is on in this database (the date half of the gate is REQUEST_BOARD_GO_LIVE in e2e/scripts/serve.mjs).
+  add("feature_flags", { key: "request_board", enabled: 1, updated_by: null, updated_at: stamp, write_id: null });
+
   // Session of the main builder (no mail needed) and the one-use login links.
   add("sessions", { id_hash: sha256(SESSION_RAW), user_id: MAIN.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
+  // The staff user's session (method defaults to magic_link, the only one /ops accepts).
+  add("sessions", { id_hash: sha256(SESSION_RAW_OPS), user_id: OPS.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
+  // The seeded client's session (VNX-2703b; method defaults to magic_link): the owner of every seeded request, for /me.
+  add("sessions", { id_hash: sha256(SESSION_RAW_CLIENT), user_id: CLIENT.userId, expires_at: at(now, 30 * DAY), created_at: stamp });
   for (const [name, raw] of Object.entries(TOKENS)) {
     add("login_tokens", {
       token_hash: sha256(raw), email: MAIN.email, purpose: "login", locale: "en", inquiry_id: null, request_id: null, invite_code_hash: null,

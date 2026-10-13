@@ -25,6 +25,8 @@ export type OpsLayoutProps = OpsShell & {
   page: string;
   /** Breadcrumbs between "Ops" and the page, such as the menu group. */
   trail?: string[];
+  /** VNX-0807: the page is a form that came back with errors, so its <title> starts with the error prefix. Absent or false leaves the <title> as it is. */
+  invalid?: boolean;
 };
 
 const tr = (key: OpsMessageKey, params?: Record<string, string | number>) => t("en", key, params);
@@ -118,12 +120,12 @@ const Sep: FC = () => (
   </span>
 );
 
-export const OpsLayout: FC<PropsWithChildren<OpsLayoutProps>> = ({ page, trail = [], role, email, environment, menu, children }) => (
+export const OpsLayout: FC<PropsWithChildren<OpsLayoutProps>> = ({ page, trail = [], invalid, role, email, environment, menu, children }) => (
   <html lang="en">
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{tr("ops.layout.title", { page })}</title>
+      <title>{invalid ? `${t("en", "form.error.titlePrefix")} ${tr("ops.layout.title", { page })}` : tr("ops.layout.title", { page })}</title>
       <meta name="robots" content="noindex, nofollow" />
       <link rel="preload" href="/assets/fonts/be-vietnam-pro-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
       <link rel="stylesheet" href="/assets/app.css" />

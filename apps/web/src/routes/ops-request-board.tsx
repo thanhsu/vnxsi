@@ -1,0 +1,141 @@
+import { ulid } from "../lib/ulid.ts";
+import type { Context, Hono } from "hono";
+import { opsNotFound, requireOps } from "../auth/ops.ts";
+import { auditStatement } from "../db/audit.ts";
+import { findAdminRequest } from "../db/requests.ts";
+import { dismissInterestStatement, editPublicStatement, findPublicationByRequestId, interestAuditGuard, listInterestsForRequest, publicationAuditGuard, publishStatement, rejectStatement, returnedInterest, returnedPublication, unpublishStatement } from "../db/request-board.ts";
+import { opsBoardActions, opsInterestActions, parsePublicListing, parseReviewNote, wordingEdited, type PublicationStatus } from "../domain/request-board.ts";
+import type { AppEnv } from "../env.ts";
+import { notifyPublicationPublished, notifyPublicationRejected, notifyPublicationUnpublished } from "../notify/request-board.ts";
+import type { NotifyOutcome } from "../notify/request.ts";
+import { qs } from "../views/ops/parts.tsx";
+import { requestFilter } from "./ops-marketplace.tsx";
+import type { InterestsFormState } from "../views/ops/InterestedBuilders.tsx";
+import type { BoardAction, BoardFormState } from "../views/ops/PublicListingBlock.tsx";
+import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
+
+/**
+ * Ops moderation of the public request board (VNX-2704a; addendum §3.2, §5, §7.1): publish, edit, reject and unpublish a request's
+ * public listing. Every route needs marketplace.act (Owner, Operator); anyone else, an OAuth session included, gets the sealed 404 of
+ * requireOps, and there is no role or admin check here. Each write is ONE db.batch: the compare-and-set on status and updated_at
+ * (db/request-board.ts) and its audit row, which is written only when that compare-and-set went through. The audit data holds the
+ * request id and the two states, never the wording or the reason. After the batch (VNX-2704b) publish, reject and unpublish e-mail the
+ * client (notify/request-board.ts, never throws); a failed e-mail only turns the redirect's notice into mail_failed. The redirect keeps
+ * the Requests list filter (S-2), so Ops can go on down the queue.
+ *
+ * VNX-2706b: Dismiss of a pending interest (the "Interested builders" block) is the same shape: marketplace.act only, one batch with a
+ * compare-and-set and its audit row guarded on the interest and this write's id (the audit data is the request id, never the note or the name),
+ * no e-mail to the builder (Q12), and no board gate (it only closes the interest). Invite is NOT here: the block posts to the existing
+ * POST :id/invite, which flips the interest in its own batch (routes/admin-requests.tsx).
+ */
+
+export type RequestDetailRender = (
+  c: Context<AppEnv>,
+  item: NonNullable<Awaited<ReturnType<typeof findAdminRequest>>>,
+  notice: null,
+  status: 400 | 409,
+  errors: { board?: BoardFormState; interests?: InterestsFormState },
+) => Promise<Response>;
+
+const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
+/** Where each action goes: its target state. */
+const TARGET: Record<BoardAction, PublicationStatus> = { publish: "published", edit: "published", reject: "rejected", unpublish: "unpublished" };
+
+export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: RequestDetailRender) {
+  /** The current page with a refused form on it. Nothing was written: the page is the state as it is now. */
+  async function refused(c: Context<AppEnv>, id: string, status: 400 | 409, form: BoardFormState) {
+    const current = await findAdminRequest(c.env.DB, id);
+    return current ? render(c, current, null, status, { board: form }) : opsNotFound(c);
+  }
+
+  /** The client's e-mail for a move: publish, reject and unpublish only (not edit; nothing for the client's own withdrawal or an interest). */
+  async function tellClient(c: Context<AppEnv>, action: BoardAction, requestId: string, edited: boolean): Promise<NotifyOutcome> {
+    if (action === "publish") return notifyPublicationPublished(c.env, requestId, { edited });
+    if (action === "reject") return notifyPublicationRejected(c.env, requestId);
+    if (action === "unpublish") return notifyPublicationUnpublished(c.env, requestId);
+    return "skipped";
+  }
+
+  async function act(c: Context<AppEnv>, action: BoardAction) {
+    const id = c.req.param("id") ?? "";
+    const [item, publication] = await Promise.all([findAdminRequest(c.env.DB, id), findPublicationByRequestId(c.env.DB, id)]);
+    if (!item || !publication) return opsNotFound(c);
+    const body = await c.req.parseBody();
+    const values = { title: text(body.public_title), description: text(body.public_description), note: text(body.review_note) };
+    // A 409 shows the current state (fresh values, fresh token), never what was typed: typed text would invite overwriting the other change (M-1).
+    const conflict: BoardFormState = { action, errors: {}, conflict: true, values: {} };
+    // The move is not allowed in the state it is in now: 409, nothing written.
+    if (!opsBoardActions(publication.status, item.request.status, c.get("requestBoard")).includes(action)) return refused(c, id, 409, conflict);
+
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    const token = text(body.updated_at);
+    const writeId = ulid();
+    const move = { requestId: id, expectedUpdatedAt: token, reviewedBy: user.id, now, writeId };
+    let change: D1PreparedStatement;
+    // Publish only: did Ops change the client's own wording? Decided from what is saved, so the e-mail says what the client will see.
+    let edited = false;
+    if (action === "publish" || action === "edit") {
+      const parsed = parsePublicListing({ title: values.title, description: values.description });
+      if (!parsed.ok) return refused(c, id, 400, { action, errors: { title: parsed.errors.title, description: parsed.errors.description }, values });
+      edited = wordingEdited(item.request, parsed.input);
+      const wording = { ...move, title: parsed.input.title, description: parsed.input.description };
+      change = action === "publish" ? publishStatement(c.env.DB, wording) : editPublicStatement(c.env.DB, wording);
+    } else {
+      const parsed = parseReviewNote(values.note);
+      if (!parsed.ok) return refused(c, id, 400, { action, errors: { note: parsed.error }, values });
+      const reason = { ...move, reviewNote: parsed.note };
+      change = action === "reject" ? rejectStatement(c.env.DB, reason) : unpublishStatement(c.env.DB, reason);
+    }
+
+    const to = TARGET[action];
+    const results = await c.env.DB.batch([
+      change,
+      auditStatement(
+        c.env.DB,
+        { actorUserId: user.id, action: `request_publication.${action}`, entity: "request_publication", entityId: id, data: { requestId: id, from: publication.status, to }, now },
+        publicationAuditGuard({ requestId: id, writeId }),
+      ),
+    ]);
+    // The compare-and-set lost (an old form, or someone else acted first): nothing was written, not even the audit row.
+    if (!returnedPublication(results[0])) return refused(c, id, 409, conflict);
+    // The batch has committed. The client's e-mail follows and can only add the mail_failed notice: it never undoes the moderation.
+    const outcome = await tellClient(c, action, id, edited);
+    return c.redirect(`${REQUESTS_PATH}/${id}${qs({ ...requestFilter(c), done: outcome === "failed" ? "mail_failed" : "1" })}`, 303);
+  }
+
+  app.post(`${REQUESTS_PATH}/:id/interests/:interestId/dismiss`, requireOps("marketplace.act"), async (c) => {
+    const id = c.req.param("id") ?? "";
+    const interestId = c.req.param("interestId") ?? "";
+    const [item, interests] = await Promise.all([findAdminRequest(c.env.DB, id), listInterestsForRequest(c.env.DB, id)]);
+    const current = interests.find((x) => x.interest.id === interestId);
+    if (!item || !current) return opsNotFound(c);
+    // A 409 shows the interests as they are now (fresh token), never anything typed: the form has no typed values (M-1 of 2704a).
+    const conflict = () => render(c, item, null, 409, { interests: { conflict: true } });
+    if (!opsInterestActions({ status: current.interest.status, builderPublic: current.builderPublic, invitable: false }).includes("dismiss")) return conflict();
+
+    const body = await c.req.parseBody();
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    const writeId = ulid();
+    const results = await c.env.DB.batch([
+      dismissInterestStatement(c.env.DB, { interestId, expectedUpdatedAt: text(body.updated_at), decidedBy: user.id, now, writeId }),
+      auditStatement(
+        c.env.DB,
+        { actorUserId: user.id, action: "request_interest.dismiss", entity: "request_interest", entityId: interestId, data: { requestId: id }, now },
+        interestAuditGuard({ interestId, writeId }),
+      ),
+    ]);
+    // The compare-and-set lost (an old form, or someone else acted first): nothing was written, not even the audit row. No e-mail either way.
+    if (!returnedInterest(results[0])) {
+      const fresh = await findAdminRequest(c.env.DB, id);
+      return fresh ? render(c, fresh, null, 409, { interests: { conflict: true } }) : opsNotFound(c);
+    }
+    return c.redirect(`${REQUESTS_PATH}/${id}${qs({ ...requestFilter(c), done: "1" })}`, 303);
+  });
+
+  for (const action of ["publish", "edit", "reject", "unpublish"] as const) {
+    app.post(`${REQUESTS_PATH}/:id/publication/${action}`, requireOps("marketplace.act"), (c) => act(c, action));
+  }
+}

@@ -1,22 +1,29 @@
 import type { FC, PropsWithChildren } from "hono/jsx";
+import type { ClientBoardAction } from "../../domain/request-board.ts";
 import type { ClientRequest } from "../../domain/request.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
 import { REQUEST_STATUS_KEY } from "../labels.ts";
 import { Layout } from "../Layout.tsx";
 import { PlainText } from "../PlainText.tsx";
+import { FormErrorSummary } from "../FormErrorSummary.tsx";
 import { RequestFacts } from "../RequestFacts.tsx";
+import { PublicListingBlock, type ListingView } from "./PublicListingBlock.tsx";
 
-/** Spec §5.4: the client's request, its status and (Task 6) the proposals passed as children. */
-export const RequestPage: FC<PropsWithChildren<{ locale: Locale; origin: string; request: ClientRequest; sent: boolean }>> = ({ locale, origin, request, sent, children }) => {
+/**
+ * Spec §5.4: the client's request, its status and (Task 6) the proposals passed as children. VNX-2703b: the "Public listing" block; `conflict` is a refused
+ * opt-in or withdrawal (409): the page then shows the current state under the shared error summary (VNX-0807), one item that belongs to no field.
+ */
+export const RequestPage: FC<PropsWithChildren<{ locale: Locale; origin: string; request: ClientRequest; sent: boolean; listing: ListingView | null; boardActions: readonly ClientBoardAction[]; conflict?: boolean }>> = ({ locale, origin, request, sent, listing, boardActions, conflict, children }) => {
   const tr = translator(locale);
   const base = localizedPath(locale, `/me/requests/${request.id}`);
   const open = request.status === "submitted" || request.status === "matching";
   return (
-    <Layout locale={locale} title={`${request.title} · VNX.SI`} origin={origin} rest={`/me/requests/${request.id}`} noindex signedIn>
+    <Layout locale={locale} title={`${request.title} · VNX.SI`} origin={origin} rest={`/me/requests/${request.id}`} noindex signedIn invalid={conflict}>
       <p>
         <a href={localizedPath(locale, "/me")}>{tr("me.title")}</a>
       </p>
+      <FormErrorSummary tr={tr} items={conflict ? [{ href: "", message: tr("me.board.error.conflict") }] : []} />
       <h1>{request.title}</h1>
       <p>
         <span class={`badge badge-request-${request.status}`}>{tr(REQUEST_STATUS_KEY[request.status])}</span>
@@ -47,6 +54,7 @@ export const RequestPage: FC<PropsWithChildren<{ locale: Locale; origin: string;
       <section class="card wide">
         <RequestFacts locale={locale} request={request} />
       </section>
+      <PublicListingBlock locale={locale} base={base} listing={listing} actions={boardActions} />
       {children}
       {open ? (
         <form method="post" action={`${base}/close`}>

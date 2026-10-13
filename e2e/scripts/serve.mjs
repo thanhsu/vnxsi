@@ -56,6 +56,8 @@ const vars = {
   TURNSTILE_DRIVER: "fake",
   ADMIN_EMAILS: "e2e-admin@example.test",
   PRIVACY_NOTICE_GO_LIVE: "",
+  // EPIC 27: a fixed past date, so the board gate is open on this local server (the flag itself is on in the seed).
+  REQUEST_BOARD_GO_LIVE: "2026-01-01",
   // Empty = no view counting and no visitor cookie, even if a developer's .dev.vars sets a salt.
   ANALYTICS_SALT: "",
 };

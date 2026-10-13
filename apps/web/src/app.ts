@@ -18,6 +18,7 @@ import { registerHubInvitationRoutes } from "./routes/hub-invitations.tsx";
 import { registerMeRoutes } from "./routes/me.tsx";
 import { registerMeRequestRoutes } from "./routes/me-requests.tsx";
 import { registerRequestFormRoutes } from "./routes/request-form.tsx";
+import { registerRequestBoardRoutes } from "./routes/request-board.tsx";
 import { registerPortfolioRoutes } from "./routes/hub-portfolio.tsx";
 import { registerProductMediaRoutes } from "./routes/hub-media.tsx";
 import { registerProductEditorRoutes } from "./routes/hub-products.tsx";
@@ -37,6 +38,7 @@ import { registerAdminFeedbackRoutes } from "./routes/admin-feedback.tsx";
 import { registerAdminRoutes } from "./routes/admin.tsx";
 import { registerInviteAdminRoutes } from "./routes/admin-invites.tsx";
 import { registerUserAdminRoutes } from "./routes/admin-users.tsx";
+import { isRequestBoardEnabled } from "./http/request-board.ts";
 import { registerAdminFlagRoutes } from "./routes/admin-flags.tsx";
 import { registerAdminMerchantRoutes } from "./routes/admin-merchants.tsx";
 import { registerJoinRoutes } from "./routes/join.ts";
@@ -46,6 +48,7 @@ import { registerLegalRoutes } from "./routes/legal.tsx";
 import { registerContactRoutes } from "./routes/contact.tsx";
 import { registerOpsRoutes } from "./routes/ops.tsx";
 import { registerOpsMarketplaceRoutes } from "./routes/ops-marketplace.tsx";
+import { registerOpsRequestBoardRoutes } from "./routes/ops-request-board.tsx";
 import { registerOpsMonetizationRoutes } from "./routes/ops-monetization.tsx";
 import { errorResponse } from "./views/error-response.tsx";
 
@@ -61,6 +64,11 @@ export function createApp() {
   app.use("*", originCheck);
   app.use("*", requestBodyLimit);
   app.use("*", sessionMiddleware);
+  // EPIC 27 (M1): the board gate. Checks the date first, so no D1 read happens before REQUEST_BOARD_GO_LIVE.
+  app.use("*", async (c, next) => {
+    c.set("requestBoard", await isRequestBoardEnabled(c.env));
+    await next();
+  });
   app.use("*", noStorePrivate);
 
   registerLandingRoutes(app);
@@ -87,6 +95,7 @@ export function createApp() {
   registerSeoRoutes(app);
   registerInquiryFormRoutes(app);
   registerRequestFormRoutes(app);
+  registerRequestBoardRoutes(app);
   registerProductPageRoutes(app);
   registerToolsRoutes(app);
   registerAdminRoutes(app);
@@ -100,7 +109,8 @@ export function createApp() {
   registerAdminMerchantRoutes(app);
   // Ops console pages (VNX-2503), each behind requireOps(capability); before the /ops catch-all below.
   registerOpsRoutes(app);
-  registerOpsMarketplaceRoutes(app);
+  const opsMarketplace = registerOpsMarketplaceRoutes(app);
+  registerOpsRequestBoardRoutes(app, opsMarketplace.requestDetail);
   registerOpsMonetizationRoutes(app);
   // Last in the Ops group: an unknown /ops path gets the same sealed 404 as a refused one (plan O1).
   app.all("/ops", opsNotFound);

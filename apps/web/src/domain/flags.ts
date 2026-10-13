@@ -13,6 +13,8 @@ export const FLAG_KEYS = [
   "oauth_google",
   "oauth_github",
   "oauth_linkedin",
+  // EPIC 27: the public request board. Takes effect only on and after REQUEST_BOARD_GO_LIVE (http/request-board.ts).
+  "request_board",
 ] as const;
 
 export type FlagKey = (typeof FLAG_KEYS)[number];

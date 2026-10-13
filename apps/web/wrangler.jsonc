@@ -31,7 +31,15 @@
     // (b) Empty or malformed = no view counting, no /go/p/ click hashing, no notice, and the old Privacy text.
     // (c) Commit D here on main in a chore: commit. Never set it via --var or the dashboard, and never clear it. Every later deploy, from any session or branch, must come from a tree
     //     that contains the date commit; otherwise Privacy reverts to the old text while hashes already exist.
-    "PRIVACY_NOTICE_GO_LIVE": "2026-10-21"
+    "PRIVACY_NOTICE_GO_LIVE": "2026-10-21",
+    // Public request board go-live B (EPIC 27, YYYY-MM-DD, UTC). The board needs B reached AND the DB flag request_board on (Admin > Flags).
+    // (a) B must be at least 14 days after the deploy that first carries it (the advance notice of the new Privacy and Terms), and not before PRIVACY_NOTICE_GO_LIVE.
+    // (b) Empty or malformed = the board is off everywhere (pages 404, no opt-in box, no footer link).
+    // (c) Commit B here on main in a chore: commit. Never set it via --var or the dashboard, and never clear it.
+    // (d) From B minus 14 days /privacy and /terms switch to the board texts (Last updated = B) and the advance notice appears (window B-14 to B+31); the switch is by date alone, not by the DB flag.
+    //     So B must be at least 14 days after the deploy that carries it, and EVERY later deploy, from any session or branch, must come from a tree that contains the date commit: a tree without it
+    //     puts /privacy and /terms back on the pre-board texts while public requests already exist. Never clear it. The board texts are required to exist whenever B is set (wrangler-guard test).
+    "REQUEST_BOARD_GO_LIVE": ""
   },
   "workers_dev": true,
   "routes": [
@@ -64,6 +72,8 @@
   // 0017_user_identities (EPIC 26) ships with its code the same way: migrate first, then deploy. It also adds sessions.method (default 'magic_link'),
   // which the new createSession writes, so the old code keeps working after the migration but the new code does not work before it.
   // The three OAuth flags (oauth_google, oauth_github, oauth_linkedin) stay off until the Owner turns them on (VNX-2608).
+  // 0018_request_board (EPIC 27: requests.country, request_publications, request_interests) ships with its code the same way: migrate first, then deploy.
+  // It only adds a NULL column and two tables, so the code already running keeps working after the migration; the new code does not work before it.
   // (g) Migration order: 0013 (Ops) first, then 0014-0016, all applied before the code that uses them.
   // (f) Before go-live add Cloudflare rate limits for /p/* and /go/p/*.
   // (d) ANALYTICS_SALT (secret) may be set any time; counting starts only at D 00:00 UTC.
