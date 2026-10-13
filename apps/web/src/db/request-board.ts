@@ -479,19 +479,21 @@ export interface InterestWithBuilder {
   builderHandle: string;
   builderPublic: boolean;
   productName: string | null;
+  /** The attached product's public page (/p/:slug) exists only while it is published. */
+  productSlug: string | null;
 }
 
 export async function listInterestsForRequest(db: D1Database, requestId: string): Promise<InterestWithBuilder[]> {
   const { results } = await db
     .prepare(
-      `SELECT i.*, b.name AS builder_name, b.handle AS builder_handle, (${BUILDER_APPROVED_ACTIVE}) AS builder_public, pr.name AS product_name
+      `SELECT i.*, b.name AS builder_name, b.handle AS builder_handle, (${BUILDER_APPROVED_ACTIVE}) AS builder_public, pr.name AS product_name, CASE WHEN pr.status = 'published' THEN pr.slug END AS product_slug
        FROM request_interests i JOIN builders b ON b.user_id = i.builder_id JOIN users u ON u.id = b.user_id
          LEFT JOIN products pr ON pr.id = i.product_id
        WHERE i.request_id = ?1 ORDER BY i.created_at, i.id`,
     )
     .bind(requestId)
-    .all<InterestRow & { builder_name: string; builder_handle: string; builder_public: number; product_name: string | null }>();
-  return results.map((r) => ({ interest: toInterest(r), builderName: r.builder_name, builderHandle: r.builder_handle, builderPublic: r.builder_public === 1, productName: r.product_name }));
+    .all<InterestRow & { builder_name: string; builder_handle: string; builder_public: number; product_name: string | null; product_slug: string | null }>();
+  return results.map((r) => ({ interest: toInterest(r), builderName: r.builder_name, builderHandle: r.builder_handle, builderPublic: r.builder_public === 1, productName: r.product_name, productSlug: r.product_slug }));
 }
 
 /** A builder's own interests for the Hub (withdrawn ones are left out, L4): the listing's public id and title, never the request id. Newest first. */
@@ -593,17 +595,39 @@ export async function listReviewQueueRequestIds(db: D1Database, q: string | null
   return results.map((r) => r.id);
 }
 
-/** Ops Overview: pending interests on an open, published request from a builder who is approved on an active account (L9). */
-export async function countInterestQueue(db: D1Database): Promise<number> {
+/**
+ * The interests queue: pending interests on an open, published request from a builder who is approved on an active account (L9). One definition
+ * for the Overview card and, through `listInterestsForRequest` (same builder condition), the block on the request page.
+ * `oldest`: when the oldest of them was sent.
+ */
+export async function interestQueue(db: D1Database): Promise<{ count: number; oldest: string | null }> {
   const row = await db
     .prepare(
-      `SELECT COUNT(*) AS n FROM request_interests i
+      `SELECT COUNT(*) AS n, MIN(i.created_at) AS oldest FROM request_interests i
          JOIN request_publications p ON p.request_id = i.request_id JOIN requests r ON r.id = i.request_id
          JOIN builders b ON b.user_id = i.builder_id JOIN users u ON u.id = b.user_id
        WHERE i.status = 'pending' AND p.status = 'published' AND r.status IN ${OPEN_REQUEST} AND ${BUILDER_APPROVED_ACTIVE}`,
     )
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+    .first<{ n: number; oldest: string | null }>();
+  if (!row) throw new Error("interest queue count returned no row");
+  return { count: row.n, oldest: row.oldest };
+}
+
+/** Ops Overview: pending interests waiting for Ops (see interestQueue). */
+export async function countInterestQueue(db: D1Database): Promise<number> {
+  return (await interestQueue(db)).count;
+}
+
+/** The pending interests of `builderIds` on a request, by builder: read before the invite batch, so each interest the batch flips can get its audit row (guarded on the interest and the batch's write id). */
+export async function findPendingInterestIds(db: D1Database, requestId: string, builderIds: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (builderIds.length === 0) return out;
+  const { results } = await db
+    .prepare("SELECT id, builder_id FROM request_interests WHERE request_id = ?1 AND status = 'pending' AND builder_id IN (SELECT value FROM json_each(?2))")
+    .bind(requestId, JSON.stringify(builderIds))
+    .all<{ id: string; builder_id: string }>();
+  for (const r of results) out.set(r.builder_id, r.id);
+  return out;
 }
 
 /** The Ops requests list column "Public": each request's publication status and updated_at, for the ids on the page. */

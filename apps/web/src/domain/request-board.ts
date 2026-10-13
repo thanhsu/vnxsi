@@ -85,6 +85,23 @@ export function opsBoardActions(status: PublicationStatus | null, requestStatus:
   return out;
 }
 
+export type OpsInterestAction = "invite" | "dismiss";
+
+/**
+ * The one rule for what Ops may do with an interest on the request page (addendum 3.3 steps 6-7, 7.2); the route refuses any other and the
+ * block shows only these. Only a pending interest moves. Dismiss never depends on the board gate or on the request's state (it only closes
+ * the interest). Invite is the existing invite action, so it also needs a request that can take another invitation (`invitable`: status and the
+ * 5-invite cap, decided by the caller with the same rule as the invite route). An interest of a builder who is no longer public (L9) has no action:
+ * the block does not show it.
+ */
+export function opsInterestActions(input: { status: InterestStatus; builderPublic: boolean; invitable: boolean }): OpsInterestAction[] {
+  if (!input.builderPublic) return [];
+  const out: OpsInterestAction[] = [];
+  if (input.invitable && interestTransition(input.status, "invite", "ops").ok) out.push("invite");
+  if (interestTransition(input.status, "dismiss", "ops").ok) out.push("dismiss");
+  return out;
+}
+
 export type ClientBoardAction = "opt_in" | "re_opt_in" | "withdraw";
 
 /**

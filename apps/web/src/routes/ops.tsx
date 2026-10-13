@@ -6,7 +6,7 @@ import { countBuilderReviewQueue } from "../db/builders.ts";
 import { countNewFeedback } from "../db/feedback.ts";
 import { countOverdueInquiries } from "../db/inquiries.ts";
 import { countProductReviewQueue } from "../db/products.ts";
-import { publicationReviewQueue } from "../db/request-board.ts";
+import { interestQueue, publicationReviewQueue } from "../db/request-board.ts";
 import { countRequestsToMatch } from "../db/requests.ts";
 import { REMIND_AFTER_MS } from "../domain/inquiry.ts";
 import { can, type OpsCapability, type OpsRole } from "../domain/ops.ts";
@@ -68,6 +68,7 @@ const QUEUE_TARGETS: Record<QueueId, { path: string; capability: OpsCapability; 
   feedback: { path: "/ops/inbox/feedback", capability: "feedback.view" },
   requests: { path: "/ops/marketplace/requests", capability: "marketplace.view" },
   publicRequests: { path: "/ops/marketplace/requests", capability: "marketplace.view", query: "?public=pending" },
+  interests: { path: "/ops/marketplace/requests", capability: "marketplace.view" },
   inquiries: { path: "/ops/marketplace/inquiries", capability: "marketplace.view" },
 };
 
@@ -101,6 +102,7 @@ export function registerOpsRoutes(app: Hono<AppEnv>) {
       feedback: countNewFeedback(db),
       requests: countRequestsToMatch(db),
       publicRequests: publicationReviewQueue(db),
+      interests: interestQueue(db),
       inquiries: countOverdueInquiries(db, remindBefore),
     };
     const ids = Object.keys(reads) as QueueId[];

@@ -150,6 +150,12 @@ export function buildSeed(now = new Date()) {
     const when = at(now, -n * HOUR);
     add("request_publications", { request_id: id("R", n), public_id: id("Q", n), status: "published", ...boardText(n), opted_in_at: when, consent_version: "2026-01-01", reviewed_by: OPS.userId, reviewed_at: when, published_at: when, created_at: when, updated_at: when, write_id: id("W", n) });
   }
+  // EPIC 27 (VNX-2706b): one pending interest of the other approved builder on each of R3-R5 (published listings Q3-Q5), for the Ops spec that dismisses one per
+  // attempt (request-board-interests-ops.spec.ts, R 3 + retry). Seeded rows, not POSTs: they cost none of the interest budget of MAIN. The note is plain text for Ops only.
+  for (let n = 3; n <= 5; n++) {
+    const when = at(now, -n * HOUR + 5 * 60 * 1000);
+    add("request_interests", { id: id("I", n), request_id: id("R", n), builder_id: OTHER.userId, note: `E2E interest note ${n}: I can build this.`, product_id: null, status: "pending", created_at: when, updated_at: when, write_id: id("W", 3000 + n) });
+  }
   // Rows that must NOT be listed. Older than 30 days (submitted_at), so no homepage number moves; their closed_at is what the 30-day rule reads.
   /** @param {number} n @param {object} request @param {object} publication */
   const hiddenRow = (n, request, publication) => {

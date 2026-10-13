@@ -3,13 +3,14 @@ import type { Context, Hono } from "hono";
 import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { auditStatement } from "../db/audit.ts";
 import { findAdminRequest } from "../db/requests.ts";
-import { editPublicStatement, findPublicationByRequestId, publicationAuditGuard, publishStatement, rejectStatement, returnedPublication, unpublishStatement } from "../db/request-board.ts";
-import { opsBoardActions, parsePublicListing, parseReviewNote, wordingEdited, type PublicationStatus } from "../domain/request-board.ts";
+import { dismissInterestStatement, editPublicStatement, findPublicationByRequestId, interestAuditGuard, listInterestsForRequest, publicationAuditGuard, publishStatement, rejectStatement, returnedInterest, returnedPublication, unpublishStatement } from "../db/request-board.ts";
+import { opsBoardActions, opsInterestActions, parsePublicListing, parseReviewNote, wordingEdited, type PublicationStatus } from "../domain/request-board.ts";
 import type { AppEnv } from "../env.ts";
 import { notifyPublicationPublished, notifyPublicationRejected, notifyPublicationUnpublished } from "../notify/request-board.ts";
 import type { NotifyOutcome } from "../notify/request.ts";
 import { qs } from "../views/ops/parts.tsx";
 import { requestFilter } from "./ops-marketplace.tsx";
+import type { InterestsFormState } from "../views/ops/InterestedBuilders.tsx";
 import type { BoardAction, BoardFormState } from "../views/ops/PublicListingBlock.tsx";
 import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
 
@@ -21,6 +22,11 @@ import { REQUESTS_PATH } from "../views/ops/RequestsPages.tsx";
  * request id and the two states, never the wording or the reason. After the batch (VNX-2704b) publish, reject and unpublish e-mail the
  * client (notify/request-board.ts, never throws); a failed e-mail only turns the redirect's notice into mail_failed. The redirect keeps
  * the Requests list filter (S-2), so Ops can go on down the queue.
+ *
+ * VNX-2706b: Dismiss of a pending interest (the "Interested builders" block) is the same shape: marketplace.act only, one batch with a
+ * compare-and-set and its audit row guarded on the interest and this write's id (the audit data is the request id, never the note or the name),
+ * no e-mail to the builder (Q12), and no board gate (it only closes the interest). Invite is NOT here: the block posts to the existing
+ * POST :id/invite, which flips the interest in its own batch (routes/admin-requests.tsx).
  */
 
 export type RequestDetailRender = (
@@ -28,7 +34,7 @@ export type RequestDetailRender = (
   item: NonNullable<Awaited<ReturnType<typeof findAdminRequest>>>,
   notice: null,
   status: 400 | 409,
-  errors: { board: BoardFormState },
+  errors: { board?: BoardFormState; interests?: InterestsFormState },
 ) => Promise<Response>;
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -98,6 +104,36 @@ export function registerOpsRequestBoardRoutes(app: Hono<AppEnv>, render: Request
     const outcome = await tellClient(c, action, id, edited);
     return c.redirect(`${REQUESTS_PATH}/${id}${qs({ ...requestFilter(c), done: outcome === "failed" ? "mail_failed" : "1" })}`, 303);
   }
+
+  app.post(`${REQUESTS_PATH}/:id/interests/:interestId/dismiss`, requireOps("marketplace.act"), async (c) => {
+    const id = c.req.param("id") ?? "";
+    const interestId = c.req.param("interestId") ?? "";
+    const [item, interests] = await Promise.all([findAdminRequest(c.env.DB, id), listInterestsForRequest(c.env.DB, id)]);
+    const current = interests.find((x) => x.interest.id === interestId);
+    if (!item || !current) return opsNotFound(c);
+    // A 409 shows the interests as they are now (fresh token), never anything typed: the form has no typed values (M-1 of 2704a).
+    const conflict = () => render(c, item, null, 409, { interests: { conflict: true } });
+    if (!opsInterestActions({ status: current.interest.status, builderPublic: current.builderPublic, invitable: false }).includes("dismiss")) return conflict();
+
+    const body = await c.req.parseBody();
+    const user = c.get("user")!;
+    const now = new Date().toISOString();
+    const writeId = ulid();
+    const results = await c.env.DB.batch([
+      dismissInterestStatement(c.env.DB, { interestId, expectedUpdatedAt: text(body.updated_at), decidedBy: user.id, now, writeId }),
+      auditStatement(
+        c.env.DB,
+        { actorUserId: user.id, action: "request_interest.dismiss", entity: "request_interest", entityId: interestId, data: { requestId: id }, now },
+        interestAuditGuard({ interestId, writeId }),
+      ),
+    ]);
+    // The compare-and-set lost (an old form, or someone else acted first): nothing was written, not even the audit row. No e-mail either way.
+    if (!returnedInterest(results[0])) {
+      const fresh = await findAdminRequest(c.env.DB, id);
+      return fresh ? render(c, fresh, null, 409, { interests: { conflict: true } }) : opsNotFound(c);
+    }
+    return c.redirect(`${REQUESTS_PATH}/${id}${qs({ ...requestFilter(c), done: "1" })}`, 303);
+  });
 
   for (const action of ["publish", "edit", "reject", "unpublish"] as const) {
     app.post(`${REQUESTS_PATH}/:id/publication/${action}`, requireOps("marketplace.act"), (c) => act(c, action));

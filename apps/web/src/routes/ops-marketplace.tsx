@@ -4,7 +4,7 @@ import { opsNotFound, requireOps } from "../auth/ops.ts";
 import { listEntityAudit } from "../db/audit.ts";
 import { countBuildersByStatus, findBuilderAccount, searchBuilders } from "../db/builders.ts";
 import { listMedia } from "../db/media.ts";
-import { findPublicationByRequestId, listPublicationsForOps, listReviewQueueRequestIds } from "../db/request-board.ts";
+import { findPublicationByRequestId, listInterestsForRequest, listPublicationsForOps, listReviewQueueRequestIds } from "../db/request-board.ts";
 import { listTiers } from "../db/pricing.ts";
 import { countProductsByStatus, findProductWithBuilder, searchProducts } from "../db/products.ts";
 import { countRequestsByStatus, findAdminRequest, listAdminRequestsByIds, searchRequestsForAdmin } from "../db/requests.ts";
@@ -16,6 +16,7 @@ import { can } from "../domain/ops.ts";
 import type { AppEnv } from "../env.ts";
 import type { IsRegistered } from "../ops/menu.ts";
 import { BUILDERS_PATH, BuilderDetailPage, BuildersListPage, type BuilderFilter } from "../views/ops/BuildersPages.tsx";
+import type { InterestsFormState } from "../views/ops/InterestedBuilders.tsx";
 import type { BoardFormState } from "../views/ops/PublicListingBlock.tsx";
 import { qs, type HistoryView, type OpsNotice } from "../views/ops/parts.tsx";
 import { PRODUCTS_PATH, ProductDetailPage, ProductsListPage, type ProductFilter } from "../views/ops/ProductsPages.tsx";
@@ -149,7 +150,7 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
     return productDone(c, r.productId, true);
   }
 
-  type RequestErrors = { inviteError?: InviteError; noteError?: boolean; values?: { note?: string; handle?: string }; board?: BoardFormState };
+  type RequestErrors = { inviteError?: InviteError; noteError?: boolean; values?: { note?: string; handle?: string }; board?: BoardFormState; interests?: InterestsFormState };
 
   /**
    * The request's detail page. For a role that may act, and a request with a publication, it carries the "Public listing" block (VNX-2704a)
@@ -157,14 +158,37 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
    */
   async function requestDetail(c: Context<AppEnv>, item: AdminRequest, notice: OpsNotice, status: 200 | 400 | 409 = 200, errors: RequestErrors = {}) {
     const canAct = can(c.get("opsRole"), "marketplace.act");
-    const { board: form, ...rest } = errors;
-    const [shell, requestHistory, matching, publication, publicationHistory] = await Promise.all([
+    const { board: form, interests: interestsForm, ...rest } = errors;
+    const [shell, requestHistory, matching, publication, publicationHistory, interestRows] = await Promise.all([
       opsShell(c, isRegistered, REQUESTS_PATH),
       historyOf(c, "request", item.request.id),
       requestMatching(c.env.DB, item),
       canAct ? findPublicationByRequestId(c.env.DB, item.request.id) : Promise.resolve(null),
       canAct ? historyOf(c, "request_publication", item.request.id) : Promise.resolve(null),
+      canAct ? listInterestsForRequest(c.env.DB, item.request.id) : Promise.resolve([]),
     ]);
+    const { scores, ...matchingProps } = matching;
+    // "Interested builders" (VNX-2706b): the interests of builders who are still public (L9); the §8.10 score is a reference from the suggestion pass, "no score" for a builder who is not a candidate.
+    const interests = publication
+      ? {
+          rows: interestRows
+            .filter((x) => x.builderPublic)
+            .map((x) => ({
+              id: x.interest.id,
+              builderId: x.interest.builderId,
+              builderName: x.builderName,
+              builderHandle: x.builderHandle,
+              status: x.interest.status,
+              createdAt: x.interest.createdAt,
+              updatedAt: x.interest.updatedAt,
+              note: x.interest.note,
+              productName: x.productName,
+              productSlug: x.productSlug,
+              score: scores.get(x.interest.builderId) ?? null,
+            })),
+          form: interestsForm,
+        }
+      : undefined;
     let history = requestHistory;
     if (publication && publicationHistory) {
       // One History: both entities, newest first, cut to the limit each has alone, so old rows of one side never pass for the full record.
@@ -173,7 +197,7 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
           ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)).slice(0, HISTORY_LIMIT) }
           : { state: "error" };
     }
-    return page(c, <RequestDetailPage shell={shell} item={item} {...matching} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form, boardOn: c.get("requestBoard") } : undefined} {...rest} />, status);
+    return page(c, <RequestDetailPage shell={shell} item={item} {...matchingProps} interests={interests} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form, boardOn: c.get("requestBoard") } : undefined} {...rest} />, status);
   }
 
   /** Ops's answer to each outcome of the shared request functions; `doneTo` is where a success goes. */
