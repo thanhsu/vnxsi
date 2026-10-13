@@ -128,3 +128,31 @@ Căn cứ: phụ lục §3.3 ("You told us you're interested"), §4.2, §4.4 (nh
 | 30 | `hub.interests.notInvited` | Not invited | Không được mời | — |
 | 31 | `hub.interests.noLongerPublic` | No longer public | Không còn công khai | — |
 | 32 | `hub.interests.clicked` | Sent {date} | Đã gửi {date} | — |
+
+## Re-review (vòng sửa 1: code `8267f7a`, báo cáo `b309d54`)
+
+- **Ngày:** 2026-10-13. **Đã đọc:** diff `e83f33e..b309d54` (12 file, +203/−64), phần "Vòng sửa 1" của báo cáo.
+- **Owner:** duyệt nguyên văn bảng 32 khóa (EN + VI) của review này, 2026-10-13.
+- **Lệnh đã chạy lại (HEAD `b309d54`):**
+  - `npm run typecheck -w apps/web`: exit 0.
+  - `npm test -w apps/web -- --maxWorkers=2 --testTimeout=60000 test/public/request-board-interest.test.ts test/hub/interests.test.ts test/hub/invitations.test.ts test/i18n/parity.test.ts test/db/request-board.test.ts test/views/request-board-copy.test.tsx test/public/request-board-detail.test.ts`: **7 file, 129 test xanh**.
+  - Toàn bộ: **205 file, 2610 passed + 2 skipped** (329 s). Khớp báo cáo.
+  - `npm run e2e` (một lần, ổ D còn ~0,66 GB, `e2e/.state` chỉ 12 MB): **84 passed, 1.3 phút**, exit 0. Sau đó đã xóa `e2e/.state`, `playwright-report`, `test-results` (đều bị `.gitignore`); không còn tiến trình `workerd`/`node` nào của worktree.
+  - So câu chữ bằng script (đọc bảng của review, đối chiếu `en.ts`/`vi.ts` và các cặp ghim trong test): **32/32 khóa khớp từng byte EN và VI**, 0 lệch; zh-Hans/zh-Hant đủ 32 khóa.
+
+### Kết quả từng phát hiện
+
+| # | Kết quả | Bằng chứng |
+|---|---|---|
+| M-1 | ĐÃ SỬA | `board.interest.waiting` có câu cảnh báo rút là cuối (EN/VI/zh), nằm ngay trên nút rút. Câu chữ Owner đã duyệt. |
+| L-1 | ĐÃ SỬA | 12 khóa đổi đúng bảng; zh dịch lại từ EN cuối (你, "已表示兴趣 / 已表示興趣", "已公开 / 已公開" cho product, "Builder Hub"). `request-board-copy.test.tsx`: bảng `APPROVED` 31 khóa còn nguyên (dòng 11–46, có `toHaveLength(31)`), bảng mới `INTEREST_APPROVED` 32 khóa (dòng 49–82, `toHaveLength(32)`); tập khóa `board.*` ngoài interest và tập `board.interest.*` + `hub.interests.*` đều được so **chính xác** với cả hai catalogue; vòng so byte chạy qua cả 63 cặp. File đủ 143 dòng, kết thúc đúng (khối test `Pagination` cuối còn nguyên); so với `3fcb761`, diff chỉ thêm, không mất dòng nào của bảng cũ, nên việc khôi phục từ HEAD lúc ổ đầy không làm cụt file. |
+| L-2 | ĐÃ SỬA | `conflict()` của rút: listing `closed` → `{ kind: "closed" }`; còn lại đọc lại `findViewerRelation` sau lần ghi thua. Test: rút interest `dismissed` trên listing đóng → 409, có `board.cta.closed`, không nút rút, không form. **Có đỏ khi thiếu code không:** có. Code cũ dựng CTA `approved/dismissed` (câu "Not invited…"), không có `board.cta.closed`, nên khẳng định đầu tiên đỏ. |
+| L-3 | ĐÃ SỬA | `diagnoseInterestRefusal` nhận `publicId` và trả thêm `inviteId` + interest của cặp (subquery theo `public_id`, không `request_id` nào ra ngoài); route dựng `fresh` từ `relation` đầu cộng hai giá trị đó, bỏ lần đọc relation thứ hai. Test: 409 product sai và 409 đủ trần đều ≤ 8 câu lệnh (cache cờ lạnh). **Có đỏ khi thiếu code không:** có. Đầu dò của Reviewer ở review đầu đo đúng hai nhánh này là 9. Hệ quả nhỏ chấp nhận được: `fresh.builder` lấy từ lần đọc đầu, nên nếu builder bị khóa đúng giữa hai bước thì trang 409 vẫn hiện form với câu `conflict`; lần gửi sau bị 409 "not eligible". |
+| S-1 | ĐÃ LÀM | Test HTTP: 0 dòng audit `request_interest.create` (theo `actor_user_id`) sau 409 do SQL, 409 tiền kiểm, 409 listing đóng, 409 trùng; đúng 1 sau 303. Test này ghim hành vi vốn đúng (đầu dò của Reviewer đã thấy), nên không đỏ khi thiếu code. Đó là bản chất của S-1 (thiếu độ phủ, không phải lỗi). |
+| S-2 | ĐÃ LÀM | Route Hub truyền `link = c.get("requestBoard") === true`; view hiện tiêu đề dạng chữ khi cổng tắt, trạng thái vẫn hiện. Test cả hai chiều. **Có đỏ khi thiếu code không:** có. Code cũ luôn có `href="/requests/<publicId>"`, nên `not.toContain` đỏ. |
+
+Không có phát hiện mới. Không thay đổi nào ngoài phạm vi các phát hiện đã duyệt.
+
+### Verdict cuối
+
+**APPROVE.** VNX-2706a xong: code `36024f3` + sửa R1 `8267f7a`, báo cáo `3fcb761` + `b309d54`. Phán quyết các sai khác (1–10) giữ nguyên như trên; không mục nào cần Owner quyết nghiệp vụ.
