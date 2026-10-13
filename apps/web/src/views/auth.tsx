@@ -3,6 +3,7 @@ import { type OAuthProvider, PROVIDER_NAME } from "../domain/identity.ts";
 import { safeNext } from "../http/next.ts";
 import { localizedPath, type Locale } from "../i18n/locales.ts";
 import { translator } from "../i18n/t.ts";
+import { FormErrorSummary, type FormErrorItem } from "./FormErrorSummary.tsx";
 import { Layout } from "./Layout.tsx";
 
 type Base = { locale: Locale; origin: string };
@@ -17,11 +18,17 @@ export function oauthStartPath(provider: OAuthProvider, locale: Locale, next: st
 
 export const LoginPage: FC<Base & { email?: string; next?: string | null; error?: string; providers?: readonly OAuthProvider[] }> = (props) => {
   const tr = translator(props.locale);
+  // The route passes one message for three outcomes. Only the bad-address message belongs to the field (linked, aria-invalid);
+  // rate limit (429) and mail failure (502) are form-level: listed in the summary with no link and no mark on the field.
+  // OAuth failures never come here: they have their own pages (OAuthNotLinkedPage, OAuthErrorPage), which carry no form.
+  const fieldError = props.error !== undefined && props.error === tr("login.error.email");
+  const summary: FormErrorItem[] = props.error ? [{ href: fieldError ? "#email" : "", message: props.error }] : [];
   return (
-    <Layout locale={props.locale} title={tr("login.title")} origin={props.origin} rest="/login" noindex>
+    <Layout locale={props.locale} title={tr("login.title")} origin={props.origin} rest="/login" noindex invalid={summary.length > 0}>
       <section class="card">
         <h1>{tr("login.title")}</h1>
         <p>{tr("login.intro")}</p>
+        <FormErrorSummary tr={tr} items={summary} />
         <form method="post" action={localizedPath(props.locale, "/login")}>
           <div class="field">
             <label for="email">{tr("login.emailLabel")}</label>
@@ -32,11 +39,11 @@ export const LoginPage: FC<Base & { email?: string; next?: string | null; error?
               autocomplete="email"
               required
               value={props.email ?? ""}
-              aria-invalid={props.error ? "true" : undefined}
-              aria-describedby={props.error ? "email-error" : undefined}
+              aria-invalid={fieldError ? "true" : undefined}
+              aria-describedby={fieldError ? "email-error" : undefined}
             />
-            {props.error ? (
-              <p id="email-error" class="error-msg" role="alert">
+            {fieldError ? (
+              <p id="email-error" class="error-msg">
                 {props.error}
               </p>
             ) : null}

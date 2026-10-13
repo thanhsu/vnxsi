@@ -116,3 +116,38 @@ Reviewer cập nhật `e2e/README.md` (59 test, waitlist trong `form-errors.spec
 - Nghĩa vụ T6: login, hồ sơ hub, tiền tố title của `/me` thread, E2E login (checklist trong review).
 - Chờ Owner: F6 (ID: task HUMAN "mời ~100 builder" chuyển VNX-0807 → VNX-0808), F7 (dấu cách sau `：` ở tiền tố zh).
 - Ghi nhận: form `/admin/*`, `/ops/*` vẫn mẫu lỗi cũ (ngoài phạm vi); `form.error.*` zh do AI dịch vào danh sách người bản xứ đọc (VNX-0801); `autofocus` trên `tabindex=-1` chỉ kiểm ở Chromium; lượt `nojs` cho chế độ thẻ product khi seed E2E có >= 3 product công khai (F9); form hub/thread/invitations mới chỉ có Vitest cho mẫu lỗi; AC14 (CI xanh) sau khi Owner cho push.
+
+## T6 review (`1362ab4..ceb5f38`, nhánh `feat/vnx-0807-t6`)
+
+- **Ngày:** 2026-10-10. **Nền:** `origin/main` `1362ab4` (EPIC 26 đã merge, có T1–T5). **Đã đọc:** mục T6 của báo cáo, toàn bộ diff `ceb5f38` (8 tệp: `views/auth.tsx`, `views/hub/ProfilePage.tsx`, `routes/me.tsx`, 3 tệp Vitest, `e2e/tests/login.spec.ts`, báo cáo), `routes/auth.tsx` (không đổi) để kiểm cách route truyền `error`, các trang `OAuthNotLinkedPage`/`OAuthErrorPage`, chuỗi `login.error.*` ở 4 locale.
+- **Lệnh đã chạy lại (worktree `D:/DOCS/SUPHAM/GIT/vnxsi-0807t6`, trên `ceb5f38`):**
+  - `npm run typecheck -w apps/web`: exit 0.
+  - `npm test -w apps/web -- --maxWorkers=2 --testTimeout=60000`: 188 file, 2285 test xanh (423 s; tổng setup 482 s so với 155 s chạy test, tức thời gian dồn vào khởi tạo pool/migration trên máy đang tải, không phải ở test). Không chạy lại với timeout mặc định; theo báo cáo, 4 timeout ở lượt đầu nằm ở file không liên quan và hết khi tăng timeout: đánh giá là do tải máy, không phải lỗi code.
+  - `npm run e2e` một lần: 59 passed (1,8 phút), không retry; sau khi chạy không còn listener 8799/9329. Hai `workerd.exe` còn chạy thuộc Vitest của worktree `vnxsi-epic27` (phiên khác), không phải của Reviewer, không đụng tới.
+  - `npm run e2e:typecheck`: sạch. `npm run test:scripts`: 52/52.
+  - `grep -rn 'role="alert"' apps/web/src --include=*.tsx` (trừ admin/ops): chỉ còn một dòng chú thích trong `FormErrorSummary.tsx`. `autofocus` chỉ có ở `FormErrorSummary`.
+
+### Đối chiếu checklist T6
+
+| Mục | Kết quả |
+|---|---|
+| 1. `LoginPage` | Đạt. Tóm tắt ngay trước `<form>` (trong card, sau đoạn giới thiệu), `invalid` lên `<Layout>`. 400: mục liên kết `#email`, giữ `aria-invalid`/`aria-describedby`/`#email-error` (bỏ `role="alert"`). 429/502: mục không liên kết, ô email không bị đánh dấu, không có `#email-error`. `routes/auth.tsx` không đổi. |
+| 1b. Phân biệt bằng `tr("login.error.email")` | Chấp nhận (xem T6-F1). Route chỉ truyền ba chuỗi từ cùng `tr` của cùng locale, nên so sánh là chính xác hôm nay; bốn locale đều có ba chuỗi khác nhau. |
+| 1c. Trang thông báo OAuth của EPIC 26 | Đồng ý để ngoài tóm tắt: `OAuthNotLinkedPage`/`OAuthErrorPage` là trang riêng có tiêu đề riêng, không có form để sửa, cùng loại với `ErrorPage`/`InvalidLinkPage` mà plan đã loại khỏi phạm vi; không dùng `role="alert"`. |
+| 2. `ProfilePage` | Đạt. `invalid={builderErrorItems(p.errors, tr).length > 0}`; khối huy hiệu EPIC 26 không có `autofocus`; `expectErrorSummary(html, ["name"])` kiểm đúng một `autofocus` trên trang 400. |
+| 3. `me.tsx` `threadPage` | Đạt. `invalid` từ `threadErrorItems({ summary, viewer: "client", ...extra }, tr)`; test `/me` dùng `expectErrorSummary(html, ["th-body"])` (có kiểm tiền tố), ghi chú T6 đã bỏ. Đóng F2. |
+| 4. Vitest | Đạt. Login 400 `["email"]` + `aria-*`; GET sạch (không `form-errors`, không `aria-invalid`, title không `Error:`); 429 `formLevel: 1`, không `aria-invalid`, không `#email-error`; VI `Lỗi:`. Profile 400. |
+| 5. E2E `login.spec.ts` | Đạt. Title `Error:`, `#form-errors` có focus, heading "There is a problem", đúng một liên kết, không `[role=alert]`, bấm liên kết đưa focus vào ô email, `aria-invalid` và giá trị giữ nguyên. Số POST `/login` được đếm không đổi (form sai bị từ chối trước bước đếm). |
+| 6. Lệnh kiểm | Đạt (ở trên). |
+
+### Phát hiện T6
+
+| # | Mức | File:dòng | Vấn đề | Đề xuất | Ai |
+|---|---|---|---|---|---|
+| T6-F1 | LOW | `apps/web/src/views/auth.tsx:24` | Lỗi field hay lỗi cấp form được suy ra bằng so sánh chuỗi đã dịch. Đúng hôm nay, nhưng nếu sau này một bản dịch làm `login.error.email` trùng `login.error.rateLimited`/`sendFailed` (hoặc route đổi câu cho lỗi email), 429/502 sẽ hiện như lỗi field (liên kết `#email`, `aria-invalid`): sai ngữ nghĩa nhưng không mất thông tin. | Không chặn. Khi có dịp: một test khẳng định ba chuỗi `login.error.*` khác nhau ở cả 4 locale; hoặc lần tới phải sửa `routes/auth.tsx` thì truyền loại lỗi (`field`/`form`) thay vì suy từ chuỗi. | Task sau (tùy chọn) |
+
+Không có phát hiện khác. Phạm vi đúng checklist, không cải tiến lân cận, không đụng tệp ngoài danh sách T6.
+
+**Verdict T6: APPROVE.** Cùng T1–T5 (đã APPROVE ở re-review), VNX-0807 hoàn tất: AC1–AC13 đạt; AC11 (login và hồ sơ hub cùng mẫu, E2E login xanh) nay đạt; AC14 (CI) sau khi Owner cho push. Reviewer cập nhật `e2e/README.md` (hàng login theo mẫu tóm tắt), backlog VNX-0807 → ✅, roadmap ghi T6 xong.
+
+**Mục cần ghi vào `CURRENT-STATUS.md`:** VNX-0807 xong (T1–T5 trên `main`; T6 `feat/vnx-0807-t6` `ceb5f38` + commit docs/review của Reviewer, chờ Owner merge); F2 đóng; còn chờ Owner F6 (ID VNX-0808) và F7 (dấu cách sau `：` ở zh); Ghi nhận: T6-F1 (test chuỗi `login.error.*` khác nhau, tùy chọn), F9 (lượt `nojs` cho thẻ product khi seed có >= 3 product), Vitest cần `--testTimeout=60000` khi máy đang tải (lỗi timeout ở file nguội là do tải, không phải code).

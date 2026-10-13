@@ -4,7 +4,7 @@ import type { BuilderFormValues, FieldErrors } from "../../domain/builder-input.
 import { PROVIDER_NAME, type UserIdentity } from "../../domain/identity.ts";
 import { localizedPath, type Locale } from "../../i18n/locales.ts";
 import { translator } from "../../i18n/t.ts";
-import { BuilderForm } from "./BuilderForm.tsx";
+import { builderErrorItems, BuilderForm } from "./BuilderForm.tsx";
 import { HubLayout } from "./HubLayout.tsx";
 
 export const BADGE_NOTICES = ["shown", "hidden", "notLinked"] as const;
@@ -17,7 +17,7 @@ type Props = { locale: Locale; origin: string; builder: Builder; values: Builder
 export const ProfilePage: FC<Props> = (p) => {
   const tr = translator(p.locale);
   return (
-    <HubLayout locale={p.locale} origin={p.origin} title={tr("profile.title")} rest="/hub/profile" active="profile">
+    <HubLayout locale={p.locale} origin={p.origin} title={tr("profile.title")} rest="/hub/profile" active="profile" invalid={builderErrorItems(p.errors, tr).length > 0}>
       <section class="card wide">
         <h1>{tr("profile.title")}</h1>
         {p.saved ? (

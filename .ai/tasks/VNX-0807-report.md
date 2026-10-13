@@ -80,3 +80,15 @@ Test theo AC (tên tệp):
 - **F5:** xóa `hasFormErrors` và dòng test dùng nó.
 - **F8:** `e2e/support/a11y.ts`: một định nghĩa "unfinished" cài vào trang (`window.__unfinished`), dùng cho cả chờ và thông báo lỗi.
 - Kết quả: typecheck 0 lỗi; Vitest 165 file / 1919 test xanh; `npm run e2e` hai lần: 59 passed mỗi lần; `e2e:typecheck` sạch; `test:scripts` 52/52.
+
+## T6 (login, hub profile, client thread)
+
+Base: origin/main 1362ab4 (EPIC 26 + T1-T5). Changes:
+
+- `views/auth.tsx` `LoginPage`: `FormErrorSummary` before `<form>`; `invalid` on `<Layout>`. The view tells the 400 from 429/502 by comparing `props.error` with `tr("login.error.email")` (no change to `routes/auth.tsx`). 400: linked item `#email`, keeps `aria-invalid`/`aria-describedby`/`#email-error` (without `role="alert"`). 429/502: unlinked form-level item, no `aria-invalid`, no `#email-error`. EPIC 26 OAuth failures render on their own pages (`OAuthNotLinkedPage`, `OAuthErrorPage`, no form), not through `LoginPage`'s `error` prop, so they are outside the summary and unchanged.
+- `views/hub/ProfilePage.tsx`: `invalid={builderErrorItems(errors, tr).length > 0}` on `HubLayout`. The EPIC 26 badge block has no `autofocus`; the 400 page has exactly one (checked by `expectErrorSummary`).
+- `routes/me.tsx` `threadPage`: `invalid={threadErrorItems(...)}` on `<Layout>`.
+- Tests: `login-flow.test.ts` (400 `["email"]`, 429 formLevel 1 with no aria-invalid, GET clean, VI pass `Lỗi:`), `profile.test.ts` (400 `["name"]`), `me/inquiries.test.ts` (`["th-body"]`, T6 note removed). E2E `login.spec.ts`: title `Error:`, `#form-errors` focused, heading, one link, no `[role=alert]`, link focuses `#email`. POST /login budget unchanged (2).
+- Remaining `role="alert"` outside admin/ops: none (only a comment in `FormErrorSummary.tsx`).
+- Verify: typecheck 0; Vitest 2285/2285 (188 files); `npm run e2e` 59/59 twice, no retry; `e2e:typecheck` clean; `test:scripts` 52/52.
+- Note: on this loaded machine the default 5000 ms Vitest timeout fails first tests in cold files (4 unrelated timeouts in the first full run, 607 s); with `--testTimeout=60000` everything passes. Not a code issue.

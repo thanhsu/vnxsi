@@ -5,7 +5,7 @@ import { findUserById } from "../../src/db/users.ts";
 import { clearOutbox, outbox } from "../../src/email/fake.ts";
 import { zhHant } from "../../src/i18n/messages/zh-hant.ts";
 import { makeInquiry, signIn } from "../fixtures.ts";
-import { formPost, getReq, testEnv } from "../helpers.ts";
+import { expectErrorSummary, formPost, getReq, testEnv } from "../helpers.ts";
 
 const app = () => createApp();
 const get = (path: string, cookie?: string) => app().request(getReq(path, cookie), undefined, testEnv);
@@ -75,9 +75,7 @@ describe("/me (spec §5.4)", () => {
     const res = await post(`/me/inquiries/${inquiry.id}/reply`, { body: " " }, cookie);
     expect(res.status).toBe(400);
     const html = await res.text();
-    // The summary comes from the shared thread view. The page title prefix needs `invalid` on the Layout in routes/me.tsx, which is T6 (EPIC 26 touches that file).
-    expect(html).toMatch(/<section id="form-errors"[^>]*tabindex="-1"[^>]*autofocus/);
-    expect(html).toContain('<a href="#th-body">Reply: Write a message first.</a>');
+    expect(expectErrorSummary(html, ["th-body"])).toContain("Reply: Write a message first.");
     expect(html).toContain('aria-describedby="th-body-error"');
     expect(html).not.toContain('role="alert"');
   });
