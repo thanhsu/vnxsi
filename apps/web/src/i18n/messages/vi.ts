@@ -16,6 +16,7 @@ export const vi: Messages = {
   "footer.terms": "Điều khoản",
   "footer.privacy": "Quyền riêng tư",
   "privacyNotice.message": "Chúng tôi cập nhật Chính sách quyền riêng tư: từ {date}, chúng tôi đếm lượt truy cập trang product bằng một cookie hết hạn vào cuối mỗi ngày.",
+  "privacyNotice.boardMessage": "Từ {date}, bạn có thể chọn hiện một nhu cầu trên bảng nhu cầu công khai. Nhu cầu vẫn riêng tư trừ khi bạn chọn công khai cho từng nhu cầu; các nhu cầu bạn đã đăng không thay đổi.",
   "privacyNotice.readChanges": "Xem thay đổi.",
   "privacyNotice.dismiss": "Đóng",
   "footer.mediaKit": "Media kit",

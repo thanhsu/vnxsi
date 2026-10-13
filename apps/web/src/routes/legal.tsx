@@ -1,10 +1,10 @@
 import type { Hono } from "hono";
-import { privacyVersion } from "../domain/privacy-notice.ts";
 import { listActiveProgramMerchants } from "../db/merchants.ts";
 import type { AppEnv } from "../env.ts";
 import { onLocalized } from "../http/localized.ts";
 import { siteOrigin } from "../http/origin.ts";
-import { DISCLOSURE_PARTNERS_SECTION, LEGAL, PRIVACY_M7, type LegalPageId } from "../legal/content.ts";
+import { DISCLOSURE_PARTNERS_SECTION, LEGAL, type LegalPageId } from "../legal/content.ts";
+import { selectLegal } from "../legal/select.ts";
 import { ActivePartners } from "../views/Disclosure.tsx";
 import { LegalPage } from "../views/LegalPage.tsx";
 import { page } from "../views/render.ts";
@@ -18,9 +18,8 @@ export function registerLegalRoutes(app: Hono<AppEnv>) {
         id === "disclosure"
           ? { [DISCLOSURE_PARTNERS_SECTION]: <ActivePartners locale={locale} partners={await listActiveProgramMerchants(c.env.DB)} /> }
           : undefined;
-      const goLive = c.env.PRIVACY_NOTICE_GO_LIVE;
-      const m7 = id === "privacy" && privacyVersion(goLive, new Date()) === "m7";
-      return page(c, <LegalPage locale={locale} origin={siteOrigin(c)} signedIn={c.get("user") !== null} id={id} extras={extras} docs={m7 ? PRIVACY_M7 : undefined} updatedAt={m7 ? goLive : undefined} />);
+      const { docs, updatedAt } = selectLegal(id, { m7: c.env.PRIVACY_NOTICE_GO_LIVE, board: c.env.REQUEST_BOARD_GO_LIVE }, new Date());
+      return page(c, <LegalPage locale={locale} origin={siteOrigin(c)} signedIn={c.get("user") !== null} id={id} extras={extras} docs={docs} updatedAt={updatedAt} />);
     });
   }
 }

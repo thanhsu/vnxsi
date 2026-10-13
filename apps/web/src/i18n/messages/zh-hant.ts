@@ -16,6 +16,8 @@ export const zhHant: Messages = {
   "footer.terms": "條款",
   "footer.privacy": "隱私",
   "privacyNotice.message": "我們正在更新隱私權政策：自 {date} 起，我們會使用一個在每天結束時到期的 Cookie 來統計產品頁面瀏覽次數。",
+  // AI translation of the Owner-approved EN/VI sentence (OP-2a, 2026-10-07), addressing the reader as 你; to be approved verbatim by the Owner like the M7 notice.
+  "privacyNotice.boardMessage": "自 {date} 起，你可以選擇將一則需求顯示在公開需求板上。除非你對每則需求逐一選擇公開，否則需求仍保持私密；你已發布的需求不會有任何變化。",
   "privacyNotice.readChanges": "查看變更。",
   "privacyNotice.dismiss": "關閉",
   "footer.mediaKit": "媒體資料",

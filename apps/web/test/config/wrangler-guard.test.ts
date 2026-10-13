@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parsePrivacyNoticeDate } from "../../src/domain/privacy-notice.ts";
+import { testEnv } from "../helpers.ts";
 
 const WRANGLER = import.meta.glob("../../wrangler.jsonc", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
@@ -32,6 +33,16 @@ describe("wrangler.jsonc guard (M7 deploy sequencing)", () => {
       expect(privacy, "PRIVACY_NOTICE_GO_LIVE must be set when the board date is").not.toBeNull();
       expect(parsePrivacyNoticeDate(board)!.getTime()).toBeGreaterThanOrEqual(privacy!.getTime());
     }
+  });
+
+  it("REQUEST_BOARD_GO_LIVE, when set, is at least 2026-10-21 (EPIC 27: M7 date and the first possible 14-day notice)", () => {
+    const board = config.vars.REQUEST_BOARD_GO_LIVE!;
+    if (board !== "") expect(parsePrivacyNoticeDate(board)!.getTime()).toBeGreaterThanOrEqual(Date.UTC(2026, 9, 21));
+  });
+
+  it("the Vitest bindings pin both go-live dates to empty, so no test depends on the calendar", () => {
+    expect(testEnv.REQUEST_BOARD_GO_LIVE).toBe("");
+    expect(testEnv.PRIVACY_NOTICE_GO_LIVE).toBe("");
   });
 
   it("has no secret in vars", () => {

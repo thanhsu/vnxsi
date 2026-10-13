@@ -956,3 +956,10 @@ export const LEGAL: Record<LegalPageId, LegalPage> = {
 
 /** The Privacy text shown from the start of the notice window (VNX-0701b); `LEGAL.privacy` stays the live text until then. Mirrors docs/legal/privacy-m7.md. */
 export const PRIVACY_M7: { en: LegalDoc; vi: LegalDoc } = { en: privacyEnM7, vi: privacyViM7 };
+
+/**
+ * The board versions of Privacy and Terms (EPIC 27). VNX-2707a ships the selection framework only: both are null until VNX-2707b registers
+ * the approved texts (privacyEnBoard/privacyViBoard, termsEnBoard/termsViBoard). While null, `selectLegal` serves the previous version, so a
+ * board date set early can never show an empty or missing page.
+ */
+export const BOARD_LEGAL: { privacy: { en: LegalDoc; vi: LegalDoc } | null; terms: { en: LegalDoc; vi: LegalDoc } | null } = { privacy: null, terms: null };

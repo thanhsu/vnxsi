@@ -239,6 +239,7 @@ describe("privacy-notice.js (VNX-0701c)", () => {
     expect(js).not.toMatch(/\bimport\b|\brequire\(/);
     expect(js).not.toMatch(/\bfetch\(|XMLHttpRequest|sendBeacon|https?:\/\/|document\.cookie/);
     expect(js).toContain("vnxsi:privacy-notice-dismissed:v1");
+    expect(js).toContain("vnxsi:board-notice-dismissed:v1"); // one key per notice (VNX-2707a)
     expect(js.match(/\btry\s*\{/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(js.match(/\bcatch\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });

@@ -14,6 +14,7 @@ export const en = {
   "footer.terms": "Terms",
   "footer.privacy": "Privacy",
   "privacyNotice.message": "We are updating our Privacy Policy: from {date} we count visits to product pages using a cookie that expires at the end of each day.",
+  "privacyNotice.boardMessage": "From {date} you can choose to show a request on a public request board. Requests stay private unless you choose this for each one; nothing changes for requests you have already posted.",
   "privacyNotice.readChanges": "Read the changes.",
   "privacyNotice.dismiss": "Dismiss",
   "footer.mediaKit": "Media kit",

@@ -5,7 +5,7 @@ import { CONTACT_EMAIL } from "../domain/feedback.ts";
 import type { MessageKey } from "../i18n/messages/en.ts";
 import { jsonLdScript } from "./json-ld.ts";
 import { boardOpen } from "./request-board-nav.tsx";
-import { PRIVACY_NOTICE_SCRIPT, PrivacyNotice, privacyNoticeDate } from "./privacy-notice.tsx";
+import { PRIVACY_NOTICE_SCRIPT, PrivacyNotice, activeNotices } from "./privacy-notice.tsx";
 
 export type LayoutProps = {
   locale: Locale;
@@ -136,10 +136,10 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
   const canonical = origin + localizedPath(locale, rest);
   const nav = mainNav(locale, rest);
   const isSignedIn = signedIn === true;
-  const noticeDate = privacyNoticeDate(locale, isSignedIn);
+  const notices = activeNotices(locale, isSignedIn);
   const showBoardLink = boardOpen();
-  const pageScripts = [...new Set([...(scripts ?? []), ...(noticeDate !== null ? [PRIVACY_NOTICE_SCRIPT] : [])])];
-  const notice = noticeDate !== null ? <PrivacyNotice locale={locale} date={noticeDate} tr={tr} /> : null;
+  const pageScripts = [...new Set([...(scripts ?? []), ...(notices.length > 0 ? [PRIVACY_NOTICE_SCRIPT] : [])])];
+  const notice = notices.length > 0 ? <>{notices.map((n) => <PrivacyNotice locale={locale} id={n.id} date={n.date} tr={tr} />)}</> : null;
   return (
     <html lang={locale}>
       <head>
