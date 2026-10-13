@@ -9,7 +9,6 @@ import {
   dismissInterestStatement,
   editPublicStatement,
   findInterestFor,
-  findPendingInterestIds,
   interestQueue,
   findPublicationByRequestId,
   findPublicListing,
@@ -387,19 +386,6 @@ describe("db/request-board: interest writes (VNX-2702a)", () => {
     await db().batch([...invite.statements, ...mark]);
     expect((await findInterestFor(db(), live.request.id, six[5]!.userId))?.status).toBe("pending");
     expect((await findInterestFor(db(), live.request.id, six[0]!.userId))?.status).toBe("invited");
-  });
-
-  it("2706b: findPendingInterestIds gives the id of each pending interest among the builders, and nothing for a dismissed, withdrawn or missing one", async () => {
-    const live = await published("rb-fpi");
-    const [a, b, c, d] = await Promise.all(["rb-fpi-a", "rb-fpi-b", "rb-fpi-c", "rb-fpi-d"].map(approvedBuilder));
-    const ia = await express(live.request.id, a!.userId);
-    await express(live.request.id, b!.userId);
-    await express(live.request.id, c!.userId);
-    await db().prepare("UPDATE request_interests SET status = 'dismissed' WHERE request_id = ?1 AND builder_id = ?2").bind(live.request.id, b!.userId).run();
-    await db().prepare("UPDATE request_interests SET status = 'withdrawn' WHERE request_id = ?1 AND builder_id = ?2").bind(live.request.id, c!.userId).run();
-    const found = await findPendingInterestIds(db(), live.request.id, [a!.userId, b!.userId, c!.userId, d!.userId]);
-    expect([...found.entries()]).toEqual([[a!.userId, ia!.id]]);
-    expect((await findPendingInterestIds(db(), live.request.id, [])).size).toBe(0);
   });
 
   it("2706b: interestQueue gives the count and the oldest pending interest it counts (same rule as countInterestQueue)", async () => {

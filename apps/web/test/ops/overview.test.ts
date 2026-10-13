@@ -281,8 +281,8 @@ describe("queues (AC4)", () => {
     for (const role of ["owner", "operator", "viewer"] as const) {
       const { cookie } = await asRole(role);
       const main = mainOf((await getOverview(cookie)).html);
-      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", "/ops/marketplace/requests?public=pending", "/ops/marketplace/requests"]);
-      expect(card(main, "interests"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/requests">Open queue/);
+      expect([...main.matchAll(/href="([^"]*)"/g)].map((m) => m[1]), role).toEqual(["/ops/marketplace/builders", "/ops/marketplace/products", "/ops/marketplace/requests", "/ops/marketplace/requests?public=pending", "/ops/marketplace/requests?interests=pending"]);
+      expect(card(main, "interests"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/requests\?interests=pending">Open queue/);
       expect(card(main, "publicRequests"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/requests\?public=pending">Open queue/);
       expect(card(main, "builders"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/builders">Open queue/);
       expect(card(main, "products"), role).toMatch(/<a class="ops-queue-link" href="\/ops\/marketplace\/products">Open queue/);
@@ -499,7 +499,7 @@ describe("VNX-2706b: the Interests waiting card (addendum 5, plan 2704b card pat
     expect(contentCard).not.toContain("Oldest waiting");
     for (const role of ["viewer", "operator", "owner"] as const) {
       const { cookie } = await asRole(role);
-      expect(card(mainOf((await getOverview(cookie)).html), "interests"), role).toContain('href="/ops/marketplace/requests"');
+      expect(card(mainOf((await getOverview(cookie)).html), "interests"), role).toContain('href="/ops/marketplace/requests?interests=pending"');
     }
   });
 

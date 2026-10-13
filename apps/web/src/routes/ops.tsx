@@ -68,7 +68,7 @@ const QUEUE_TARGETS: Record<QueueId, { path: string; capability: OpsCapability; 
   feedback: { path: "/ops/inbox/feedback", capability: "feedback.view" },
   requests: { path: "/ops/marketplace/requests", capability: "marketplace.view" },
   publicRequests: { path: "/ops/marketplace/requests", capability: "marketplace.view", query: "?public=pending" },
-  interests: { path: "/ops/marketplace/requests", capability: "marketplace.view" },
+  interests: { path: "/ops/marketplace/requests", capability: "marketplace.view", query: "?interests=pending" },
   inquiries: { path: "/ops/marketplace/inquiries", capability: "marketplace.view" },
 };
 

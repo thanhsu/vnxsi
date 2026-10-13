@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { requireAdmin } from "../auth/middleware.ts";
 import { auditStatement } from "../db/audit.ts";
-import { findPendingInterestIds, interestAuditGuard, markInterestsInvitedStatements } from "../db/request-board.ts";
+import { interestFlipAuditGuard, markInterestsInvitedStatements } from "../db/request-board.ts";
 import { findPublicBuilderByHandle } from "../db/builders.ts";
 import { endRequestBatch, findAdminRequest, inviteBuildersBatch, listCandidates, listRequestInvites, listRequestsForAdmin } from "../db/requests.ts";
 import { HANDLE_RE } from "../domain/builder-input.ts";
@@ -102,18 +102,18 @@ export async function inviteToRequest(c: Context<AppEnv>): Promise<RequestDecisi
   const builderIds = [...picked];
   const batch = inviteBuildersBatch(c.env.DB, { requestId: item.request.id, builderIds, invitedBy: admin.id, now });
   // EPIC 27 (VNX-2706b): a builder who showed interest and is invited here has the interest flipped to `invited` in this same batch, only if their
-  // invitation was inserted in it (so an invite that loses the 5-invite cap leaves it pending). The interests are read first, by builder, so each
-  // flip gets an audit row guarded on the interest and on THIS batch's write id: no row for an interest the batch did not move.
-  const pendingInterests = await findPendingInterestIds(c.env.DB, item.request.id, builderIds);
+  // invitation was inserted in it (so an invite that loses the 5-invite cap leaves it pending). Each flip gets an audit row built FROM the row the
+  // batch moved (guard on request + builder + THIS batch's write id): no earlier read, so one row per interest moved and none for an interest not moved.
   const writeId = ulid();
   const flips = markInterestsInvitedStatements(c.env.DB, { requestId: item.request.id, builderIds, inviteIds: batch.inviteIds, decidedBy: admin.id, now, writeId });
-  const interestAudits = builderIds.flatMap((builderId, i) => {
-    const interestId = pendingInterests.get(builderId);
-    if (!interestId) return [];
-    // The audit data is ids only: never the builder's note or name.
-    const data = { requestId: item.request.id, inviteId: batch.inviteIds[i]! };
-    return [auditStatement(c.env.DB, { actorUserId: admin.id, action: "request_interest.invite", entity: "request_interest", entityId: interestId, data, now }, interestAuditGuard({ interestId, writeId }))];
-  });
+  // The audit data is ids only: never the builder's note or name. entityId is replaced by the moved row's id in SQL.
+  const interestAudits = builderIds.map((builderId, i) =>
+    auditStatement(
+      c.env.DB,
+      { actorUserId: admin.id, action: "request_interest.invite", entity: "request_interest", entityId: null, data: { requestId: item.request.id, inviteId: batch.inviteIds[i]! }, now },
+      interestFlipAuditGuard({ requestId: item.request.id, builderId, writeId }),
+    ),
+  );
   // Order: the invitations and the request move (batch.read reads them by position), then the flips and their audit rows, then the request's own audit row.
   const results = await c.env.DB.batch([
     ...batch.statements,

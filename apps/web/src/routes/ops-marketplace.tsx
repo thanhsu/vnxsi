@@ -1,10 +1,10 @@
 import type { Context, Hono } from "hono";
 import { adminEmails } from "../auth/admin.ts";
 import { opsNotFound, requireOps } from "../auth/ops.ts";
-import { listEntityAudit } from "../db/audit.ts";
+import { listEntityAudit, listRequestInterestAudit } from "../db/audit.ts";
 import { countBuildersByStatus, findBuilderAccount, searchBuilders } from "../db/builders.ts";
 import { listMedia } from "../db/media.ts";
-import { findPublicationByRequestId, listInterestsForRequest, listPublicationsForOps, listReviewQueueRequestIds } from "../db/request-board.ts";
+import { findPublicationByRequestId, listInterestQueueRequestIds, listInterestsForRequest, listPublicationsForOps, listReviewQueueRequestIds } from "../db/request-board.ts";
 import { listTiers } from "../db/pricing.ts";
 import { countProductsByStatus, findProductWithBuilder, searchProducts } from "../db/products.ts";
 import { countRequestsByStatus, findAdminRequest, listAdminRequestsByIds, searchRequestsForAdmin } from "../db/requests.ts";
@@ -73,6 +73,7 @@ export function requestFilter(c: Context<AppEnv>): RequestFilter {
   const status = c.req.query("status");
   const q = searchOf(c.req.query("q"));
   if (c.req.query("public") === "pending") return { public: "pending", ...(q ? { q } : {}) };
+  if (c.req.query("interests") === "pending") return { interests: "pending", ...(q ? { q } : {}) };
   return { ...(status === "all" || isRequestStatus(status) ? { status } : {}), ...(q ? { q } : {}) };
 }
 
@@ -84,6 +85,18 @@ export async function historyOf(c: Context<AppEnv>, entity: string, entityId: st
     return { state: "ok", rows: rows.map((r) => ({ id: r.id, at: r.createdAt, actor: actorOf(r, owners), action: r.action, entity: r.entity, entityId: r.entityId })) };
   } catch (err) {
     console.error(JSON.stringify({ requestId: c.get("requestId"), event: "ops.history_failed", entity, error: String(err) }));
+    return { state: "error" };
+  }
+}
+
+/** The History rows of the interests of one request (VNX-2706b), same projection and error state as historyOf. */
+async function interestHistoryOf(c: Context<AppEnv>, requestId: string): Promise<HistoryView> {
+  try {
+    const owners = adminEmails(c.env);
+    const rows = await listRequestInterestAudit(c.env.DB, requestId, HISTORY_LIMIT);
+    return { state: "ok", rows: rows.map((r) => ({ id: r.id, at: r.createdAt, actor: actorOf(r, owners), action: r.action, entity: r.entity, entityId: r.entityId })) };
+  } catch (err) {
+    console.error(JSON.stringify({ requestId: c.get("requestId"), event: "ops.history_failed", entity: "request_interest", error: String(err) }));
     return { state: "error" };
   }
 }
@@ -159,13 +172,14 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
   async function requestDetail(c: Context<AppEnv>, item: AdminRequest, notice: OpsNotice, status: 200 | 400 | 409 = 200, errors: RequestErrors = {}) {
     const canAct = can(c.get("opsRole"), "marketplace.act");
     const { board: form, interests: interestsForm, ...rest } = errors;
-    const [shell, requestHistory, matching, publication, publicationHistory, interestRows] = await Promise.all([
+    const [shell, requestHistory, matching, publication, publicationHistory, interestRows, interestHistory] = await Promise.all([
       opsShell(c, isRegistered, REQUESTS_PATH),
       historyOf(c, "request", item.request.id),
       requestMatching(c.env.DB, item),
       canAct ? findPublicationByRequestId(c.env.DB, item.request.id) : Promise.resolve(null),
       canAct ? historyOf(c, "request_publication", item.request.id) : Promise.resolve(null),
       canAct ? listInterestsForRequest(c.env.DB, item.request.id) : Promise.resolve([]),
+      canAct ? interestHistoryOf(c, item.request.id) : Promise.resolve(null),
     ]);
     const { scores, ...matchingProps } = matching;
     // "Interested builders" (VNX-2706b): the interests of builders who are still public (L9); the §8.10 score is a reference from the suggestion pass, "no score" for a builder who is not a candidate.
@@ -190,11 +204,11 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
         }
       : undefined;
     let history = requestHistory;
-    if (publication && publicationHistory) {
-      // One History: both entities, newest first, cut to the limit each has alone, so old rows of one side never pass for the full record.
+    if (publication && publicationHistory && interestHistory) {
+      // One History: the three entities, newest first, cut to the limit each has alone, so old rows of one side never pass for the full record.
       history =
-        requestHistory.state === "ok" && publicationHistory.state === "ok"
-          ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)).slice(0, HISTORY_LIMIT) }
+        requestHistory.state === "ok" && publicationHistory.state === "ok" && interestHistory.state === "ok"
+          ? { state: "ok", rows: [...requestHistory.rows, ...publicationHistory.rows, ...interestHistory.rows].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1)).slice(0, HISTORY_LIMIT) }
           : { state: "error" };
     }
     return page(c, <RequestDetailPage shell={shell} item={item} {...matchingProps} interests={interests} filter={requestFilter(c)} canAct={canAct} notice={notice} history={history} board={publication ? { publication, form, boardOn: c.get("requestBoard") } : undefined} {...rest} />, status);
@@ -278,13 +292,19 @@ export function registerOpsMarketplaceRoutes(app: Hono<AppEnv>) {
   app.get(REQUESTS_PATH, requireOps("marketplace.view"), async (c) => {
     const given = c.req.query("status");
     const publicPending = requestFilter(c).public === "pending";
-    const status = publicPending || given === "all" ? null : isRequestStatus(given) ? given : "submitted";
+    const interestsPending = !publicPending && requestFilter(c).interests === "pending";
+    const status = publicPending || interestsPending || given === "all" ? null : isRequestStatus(given) ? given : "submitted";
     const q = searchOf(c.req.query("q"));
     // `public=pending` lists the review queue (open and confirmed requests with a listing waiting), whatever tab would have been open.
-    const found = publicPending ? listReviewQueueRequestIds(c.env.DB, q).then((ids) => listAdminRequestsByIds(c.env.DB, ids)) : searchRequestsForAdmin(c.env.DB, status, q);
+    // `interests=pending` lists the requests with a pending interest in the queue (same rule as the Overview card), longest waiting first.
+    const found = publicPending
+      ? listReviewQueueRequestIds(c.env.DB, q).then((ids) => listAdminRequestsByIds(c.env.DB, ids))
+      : interestsPending
+        ? listInterestQueueRequestIds(c.env.DB, q).then((ids) => listAdminRequestsByIds(c.env.DB, ids))
+        : searchRequestsForAdmin(c.env.DB, status, q);
     const [shell, counts, items] = await Promise.all([opsShell(c, isRegistered, REQUESTS_PATH), countRequestsByStatus(c.env.DB), found]);
     const publications = await listPublicationsForOps(c.env.DB, items.map((r) => r.request.id));
-    return page(c, <RequestsListPage shell={shell} status={status} publicPending={publicPending} q={q} counts={counts} items={items} publications={publications} notice={noticeOf(c.req.query("done"))} />);
+    return page(c, <RequestsListPage shell={shell} status={status} publicPending={publicPending} interestsPending={interestsPending} q={q} counts={counts} items={items} publications={publications} notice={noticeOf(c.req.query("done"))} />);
   });
 
   app.get(`${REQUESTS_PATH}/:id`, requireOps("marketplace.view"), async (c) => {

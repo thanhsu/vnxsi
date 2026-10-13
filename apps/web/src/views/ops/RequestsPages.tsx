@@ -21,7 +21,7 @@ import { Confirm, History, Notice, Pill, qs, ReasonField, SearchForm, Tabs, tr, 
 export const REQUESTS_PATH = "/ops/marketplace/requests";
 
 /** The list filter, from the URL (allowlisted by the route): a status or "all", and a search. */
-export type RequestFilter = { status?: RequestStatus | "all"; public?: "pending"; q?: string };
+export type RequestFilter = { status?: RequestStatus | "all"; public?: "pending"; interests?: "pending"; q?: string };
 
 const TONE: Record<RequestStatus, PillTone> = {
   pending_verification: "mute",
@@ -63,6 +63,8 @@ type ListProps = {
   status: RequestStatus | null;
   /** `?public=pending`: the list is the review queue of public listings. */
   publicPending: boolean;
+  /** `?interests=pending`: the list is the requests that have an interest waiting for Ops. */
+  interestsPending?: boolean;
   q: string | null;
   counts: Partial<Record<RequestStatus, number>>;
   items: AdminRequest[];
@@ -71,15 +73,15 @@ type ListProps = {
   notice: OpsNotice;
 };
 
-export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, q, counts, items, publications, notice }) => {
+export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, interestsPending, q, counts, items, publications, notice }) => {
   const tab = status ?? "all";
   /** What the list's links carry to the request page and back: the tab, or the review-queue filter, and the search. */
-  const carried = publicPending ? { public: "pending", q } : { status: tab, q };
+  const carried = publicPending ? { public: "pending", q } : interestsPending ? { interests: "pending", q } : { status: tab, q };
   const all = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
   const total = status ? (counts[status] ?? 0) : all;
   const tabs = [
     ...REQUEST_STATUSES.map((s) => ({ href: REQUESTS_PATH + qs({ status: s, q }), label: tr(STATUS_KEY[s]), count: counts[s] ?? 0, current: s === status })),
-    { href: REQUESTS_PATH + qs({ status: "all", q }), label: tr("ops.requests.all"), count: all, current: status === null && !publicPending },
+    { href: REQUESTS_PATH + qs({ status: "all", q }), label: tr("ops.requests.all"), count: all, current: status === null && !publicPending && !interestsPending },
   ];
   return (
     <OpsLayout {...shell} page={tr("ops.nav.requests")} trail={[tr("ops.group.marketplace")]}>
@@ -95,9 +97,14 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, 
             {tr("ops.requests.publicFilter")} <a href={REQUESTS_PATH + qs({ q })}>{tr("ops.requests.publicFilterClear")}</a>
           </p>
         ) : null}
-        <SearchForm action={REQUESTS_PATH} q={q} keep={publicPending ? { public: "pending" } : { status: tab }} label={tr("ops.requests.search")} placeholder={tr("ops.requests.searchHint")} />
+        {interestsPending ? (
+          <p class="ops-note">
+            {tr("ops.requests.interestsFilter")} <a href={REQUESTS_PATH + qs({ q })}>{tr("ops.requests.publicFilterClear")}</a>
+          </p>
+        ) : null}
+        <SearchForm action={REQUESTS_PATH} q={q} keep={publicPending ? { public: "pending" } : interestsPending ? { interests: "pending" } : { status: tab }} label={tr("ops.requests.search")} placeholder={tr("ops.requests.searchHint")} />
         {items.length === 0 ? (
-          <p class="ops-state">{tr(q ? "ops.requests.noMatch" : publicPending ? "ops.requests.publicEmpty" : "ops.requests.empty")}</p>
+          <p class="ops-state">{tr(q ? "ops.requests.noMatch" : publicPending ? "ops.requests.publicEmpty" : interestsPending ? "ops.requests.interestsEmpty" : "ops.requests.empty")}</p>
         ) : (
           <>
             <div class="ops-table-wrap">
@@ -140,7 +147,7 @@ export const RequestsListPage: FC<ListProps> = ({ shell, status, publicPending, 
                 </tbody>
               </table>
             </div>
-            <p class="ops-table-foot">{q || publicPending ? tr("ops.list.shown", { n: items.length }) : tr("ops.list.count", { n: items.length, total })}</p>
+            <p class="ops-table-foot">{q || publicPending || interestsPending ? tr("ops.list.shown", { n: items.length }) : tr("ops.list.count", { n: items.length, total })}</p>
           </>
         )}
       </section>

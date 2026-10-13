@@ -595,6 +595,12 @@ export async function listReviewQueueRequestIds(db: D1Database, q: string | null
   return results.map((r) => r.id);
 }
 
+/** The interests queue's rows (one definition for the Overview card and the Requests list filter `interests=pending`; joins `r` = the request). */
+const INTEREST_QUEUE = `FROM request_interests i
+         JOIN request_publications p ON p.request_id = i.request_id JOIN requests r ON r.id = i.request_id
+         JOIN builders b ON b.user_id = i.builder_id JOIN users u ON u.id = b.user_id
+       WHERE i.status = 'pending' AND p.status = 'published' AND r.status IN ${OPEN_REQUEST} AND ${BUILDER_APPROVED_ACTIVE}`;
+
 /**
  * The interests queue: pending interests on an open, published request from a builder who is approved on an active account (L9). One definition
  * for the Overview card and, through `listInterestsForRequest` (same builder condition), the block on the request page.
@@ -602,15 +608,19 @@ export async function listReviewQueueRequestIds(db: D1Database, q: string | null
  */
 export async function interestQueue(db: D1Database): Promise<{ count: number; oldest: string | null }> {
   const row = await db
-    .prepare(
-      `SELECT COUNT(*) AS n, MIN(i.created_at) AS oldest FROM request_interests i
-         JOIN request_publications p ON p.request_id = i.request_id JOIN requests r ON r.id = i.request_id
-         JOIN builders b ON b.user_id = i.builder_id JOIN users u ON u.id = b.user_id
-       WHERE i.status = 'pending' AND p.status = 'published' AND r.status IN ${OPEN_REQUEST} AND ${BUILDER_APPROVED_ACTIVE}`,
-    )
+    .prepare(`SELECT COUNT(*) AS n, MIN(i.created_at) AS oldest ${INTEREST_QUEUE}`)
     .first<{ n: number; oldest: string | null }>();
   if (!row) throw new Error("interest queue count returned no row");
   return { count: row.n, oldest: row.oldest };
+}
+
+/** The Requests list filter `interests=pending`: the requests that have a pending interest in the queue, the one waiting longest first (the card's age), narrowed to titles containing `q`. */
+export async function listInterestQueueRequestIds(db: D1Database, q: string | null, limit = 200): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT r.id ${INTEREST_QUEUE} AND (?1 IS NULL OR instr(lower(r.title), ?1) > 0) GROUP BY r.id ORDER BY MIN(i.created_at), r.id LIMIT ?2`)
+    .bind(q === null ? null : q.toLowerCase(), limit)
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
 }
 
 /** Ops Overview: pending interests waiting for Ops (see interestQueue). */
@@ -618,16 +628,9 @@ export async function countInterestQueue(db: D1Database): Promise<number> {
   return (await interestQueue(db)).count;
 }
 
-/** The pending interests of `builderIds` on a request, by builder: read before the invite batch, so each interest the batch flips can get its audit row (guarded on the interest and the batch's write id). */
-export async function findPendingInterestIds(db: D1Database, requestId: string, builderIds: readonly string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  if (builderIds.length === 0) return out;
-  const { results } = await db
-    .prepare("SELECT id, builder_id FROM request_interests WHERE request_id = ?1 AND status = 'pending' AND builder_id IN (SELECT value FROM json_each(?2))")
-    .bind(requestId, JSON.stringify(builderIds))
-    .all<{ id: string; builder_id: string }>();
-  for (const r of results) out.set(r.builder_id, r.id);
-  return out;
+/** The guard of the audit row for an interest the invite batch moved: keyed on the request, the builder and the batch's write id (see AuditInterestFlipGuard). */
+export function interestFlipAuditGuard(g: { requestId: string; builderId: string; writeId: string }): { interestFlipRequestId: string; builderId: string; writeId: string } {
+  return { interestFlipRequestId: g.requestId, builderId: g.builderId, writeId: g.writeId };
 }
 
 /** The Ops requests list column "Public": each request's publication status and updated_at, for the ids on the page. */

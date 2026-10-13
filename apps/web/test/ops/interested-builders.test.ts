@@ -8,7 +8,9 @@ import type { GrantableRole, OpsRole } from "../../src/domain/ops.ts";
 import type { Bindings } from "../../src/env.ts";
 import { en } from "../../src/i18n/messages/en.ts";
 import { ulid } from "../../src/lib/ulid.ts";
-import { findClientRequest } from "../../src/db/requests.ts";
+import { requestMatching } from "../../src/routes/admin-requests.tsx";
+import { suggestBuilders, EXPIRED_PENALTY_WINDOW_MS } from "../../src/domain/request.ts";
+import { findAdminRequest, findClientRequest, listCandidates } from "../../src/db/requests.ts";
 import { addLiveProduct, ensureUser, inviteBuilders, makeBuilder, makeRequest, signIn } from "../fixtures.ts";
 import { testEnv } from "../helpers.ts";
 
@@ -173,10 +175,21 @@ describe("the Interested builders block", () => {
     expect(suggestionsOf(html)).toBe(before);
     const row = new RegExp(`<tr[^>]*data-builder="${builder.userId}"[\\s\\S]*?</tr>`).exec(blockOf(html))?.[0] ?? "";
     const score = /data-score="(\d+)"/.exec(row)?.[1];
-    expect(score).toBeDefined();
-    // The same number the suggestion table gives that builder, when it lists them (it lists the ten best).
-    const inTable = new RegExp(`for="sg-${builder.userId}"[\\s\\S]*?<td class="ops-mono">(\\d+)</td>`).exec(before)?.[1];
-    if (inTable !== undefined) expect(score).toBe(inTable);
+    // The number is the one the suggestion pass gives this builder (requestMatching.scores), with no condition.
+    const item = (await findAdminRequest(testEnv.DB, l.requestId))!;
+    const { scores } = await requestMatching(testEnv.DB, item);
+    expect(scores.has(builder.userId)).toBe(true);
+    expect(score).toBe(String(scores.get(builder.userId)));
+  });
+
+  it("the suggestion list is exactly suggestBuilders with its default limit over the same candidates (the interest pass changed nothing)", async () => {
+    const l = await listed();
+    const item = (await findAdminRequest(testEnv.DB, l.requestId))!;
+    const { suggestions, scores } = await requestMatching(testEnv.DB, item);
+    const since = new Date(Date.now() - EXPIRED_PENALTY_WINDOW_MS).toISOString();
+    const expected = suggestBuilders(item.request, await listCandidates(testEnv.DB, item.request, since));
+    expect(suggestions!.map((x) => [x.candidate.userId, x.score])).toEqual(expected.map((x) => [x.candidate.userId, x.score]));
+    for (const x of expected) expect(scores.get(x.candidate.userId)).toBe(x.score);
   });
 
   it("shows a dash for a builder who is not a candidate (availability closed)", async () => {
@@ -242,6 +255,10 @@ describe("Dismiss", () => {
       expect(outbox, role).toEqual([]);
       const hub = await (await createApp().request(req("/hub/invitations", { cookie: builderCookie }), undefined, env)).text();
       expect(hub, role).toContain(en["hub.interests.notInvited"]);
+      // ... and on the public page of the (still open) listing: "Not invited", no withdraw button.
+      const pub = await (await createApp().request(req(`/requests/${l.publicId}`, { cookie: builderCookie }), undefined, env)).text();
+      expect(pub, role).toContain(en["board.interest.notInvited"]);
+      expect(pub, role).not.toContain(`/requests/${l.publicId}/interest/withdraw`);
     }
   });
 
@@ -494,5 +511,84 @@ describe("Invite from the block (the existing invite route)", () => {
     expect(await invitesOf(l.requestId)).toEqual([builder.userId]);
     expect((await findInterestById(testEnv.DB, iid))!.status).toBe("dismissed");
     expect(await interestAudit(iid)).toEqual([]);
+  });
+});
+
+describe("VNX-2706b review round 1", () => {
+  it("L-1: an interest created between the route's reads and the batch is moved to invited and gets exactly one audit row", async () => {
+    const l = await listed();
+    const { builder } = await builderWithCookie();
+    const { cookie } = await asRole("owner");
+    const late = ulid();
+    const db = racing(
+      "INSERT INTO request_interests (id, request_id, builder_id, status, created_at, updated_at, write_id) VALUES (?1, ?2, ?3, 'pending', ?4, ?4, ?5)",
+      late,
+      l.requestId,
+      builder.userId,
+      new Date().toISOString(),
+      ulid(),
+    );
+    const r = await post(`${BASE}/${l.requestId}/invite`, cookie, { builder: builder.userId }, { ...env, DB: db } as Bindings);
+    expect(r.status).toBe(303);
+    expect((await findInterestById(testEnv.DB, late))!.status).toBe("invited");
+    const rows = await interestAudit(late);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.action).toBe("request_interest.invite");
+  });
+
+  it("M-1: ?interests=pending lists the requests with an interest in the queue, longest waiting first, and none of the others (by id)", async () => {
+    const { cookie } = await asRole("owner");
+    const older = await listed();
+    const newer = await listed();
+    const dismissed = await listed();
+    const closed = await listed("builder_selected");
+    const locked = await listed();
+    const none = await listed();
+    const mk = async () => (await builderWithCookie()).builder.userId;
+    await interestOf(newer, await mk());
+    await testEnv.DB.prepare("UPDATE request_interests SET created_at = '2020-01-01T00:00:00.000Z' WHERE request_id = ?1").bind(newer.requestId).run();
+    await interestOf(older, await mk());
+    await testEnv.DB.prepare("UPDATE request_interests SET created_at = '2019-01-01T00:00:00.000Z' WHERE request_id = ?1").bind(older.requestId).run();
+    await interestOf(dismissed, await mk(), { status: "dismissed" });
+    await interestOf(closed, await mk());
+    const lockedBuilder = await mk();
+    await interestOf(locked, lockedBuilder);
+    await testEnv.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?1").bind(lockedBuilder).run();
+    const html = mainOf((await get(`${BASE}?interests=pending`, cookie)).html);
+    const ids = [...html.matchAll(new RegExp(`${BASE}/([0-9A-Z]{26})`, "g"))].map((m) => m[1]!);
+    expect(ids.indexOf(older.requestId)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(older.requestId)).toBeLessThan(ids.indexOf(newer.requestId));
+    for (const f of [dismissed, closed, locked, none]) expect(ids, f.requestId).not.toContain(f.requestId);
+    expect(html).toContain(en["ops.requests.interestsFilter"].replace(/'/g, "&#39;"));
+    // The filter is carried to the request page, its actions and the redirect (no fragment).
+    const detail = (await get(`${BASE}/${older.requestId}?interests=pending`, cookie)).html;
+    expect(blockOf(detail)).toContain("?interests=pending");
+    const iid = (await testEnv.DB.prepare("SELECT id FROM request_interests WHERE request_id = ?1").bind(older.requestId).first<{ id: string }>())!.id;
+    const r = await post(`${dismissUrl(older, iid)}?interests=pending`, cookie, { updated_at: (await findInterestById(testEnv.DB, iid))!.updatedAt });
+    expect(r.headers.get("location")).toBe(`${BASE}/${older.requestId}?interests=pending&done=1`);
+    const after = mainOf((await get(`${BASE}?interests=pending`, cookie)).html);
+    expect(after).not.toContain(older.requestId);
+    expect(after).toContain(newer.requestId);
+    // Viewer (marketplace.view) sees the filtered list too.
+    const viewer = await asRole("viewer");
+    expect(mainOf((await get(`${BASE}?interests=pending`, viewer.cookie)).html)).toContain(newer.requestId);
+  });
+
+  it("L-3: the request History shows who dismissed and who invited, for Owner and Operator; a Viewer sees neither", async () => {
+    const l = await listed();
+    const a = await builderWithCookie();
+    const b = await builderWithCookie();
+    const ia = await interestOf(l, a.builder.userId);
+    await interestOf(l, b.builder.userId);
+    const owner = await asRole("owner");
+    expect((await post(dismissUrl(l, ia), owner.cookie, { updated_at: (await findInterestById(testEnv.DB, ia))!.updatedAt })).status).toBe(303);
+    expect((await post(`${BASE}/${l.requestId}/invite`, owner.cookie, { builder: b.builder.userId })).status).toBe(303);
+    for (const cookie of [owner.cookie, (await asRole("operator")).cookie]) {
+      const html = mainOf((await get(`${BASE}/${l.requestId}`, cookie)).html);
+      expect(html).toContain("request_interest.dismiss");
+      expect(html).toContain("request_interest.invite");
+    }
+    const viewer = mainOf((await get(`${BASE}/${l.requestId}`, (await asRole("viewer")).cookie)).html);
+    expect(viewer).not.toContain("request_interest.");
   });
 });
